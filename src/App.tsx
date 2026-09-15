@@ -17,6 +17,7 @@ import TitleBar from './components/TitleBar';
 import WslControl from './components/WslControl';
 import ToastProvider, { useToast } from './components/Toast';
 import { useLaunchActions } from './hooks/useLaunchActions';
+import { useMaximized } from './hooks/useMaximized';
 import { useProjects } from './hooks/useProjects';
 import { useRuntime } from './hooks/useRuntime';
 import { useWorkspaces } from './hooks/useWorkspaces';
@@ -42,6 +43,7 @@ const showError = (e: unknown): string => {
 
 const AppInner = () => {
 	const runtime = useRuntime();
+	const maximized = useMaximized();
 	const { workspaces, refresh: refreshWorkspaces } = useWorkspaces();
 	const {
 		filtered,
@@ -533,7 +535,13 @@ const AppInner = () => {
 	}, [selected, workspaces]);
 
 	return (
-		<div className='flex flex-col h-screen w-screen rounded-xl overflow-hidden'>
+		// the radius belongs to a floating window; flush with the screen it
+		// only clips the app
+		<div
+			className={`flex flex-col h-screen w-screen overflow-hidden ${
+				maximized ? '' : 'rounded-xl'
+			}`}
+		>
 			<TitleBar>
 				<div className='flex items-center gap-2'>
 					<WslControl
