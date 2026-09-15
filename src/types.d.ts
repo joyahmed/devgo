@@ -403,6 +403,11 @@ interface ClonePickerProps {
 	preselect?: string;
 	onStart: (repos: GithubRepo[], workspace: string) => void;
 	onDone: () => void;
+	/// group: the same list and checkboxes, but the destination is a group
+	/// name (typed, or picked from the ones that exist) and nothing is cloned
+	mode?: 'clone' | 'group';
+	groups?: GithubGroup[];
+	onGroup?: (repos: GithubRepo[], group: string) => Promise<void>;
 }
 
 interface OnboardingProps {

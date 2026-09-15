@@ -22,8 +22,14 @@ const ClonePicker = ({
 	workspaces,
 	preselect,
 	onStart,
-	onDone
+	onDone,
+	mode = 'clone',
+	groups = [],
+	onGroup
 }: ClonePickerProps) => {
+	const grouping = mode === 'group';
+	const [groupName, setGroupName] = useState(groups[0]?.name ?? '');
+	const [error, setError] = useState<string | null>(null);
 	const [query, setQuery] = useState('');
 	const [picked, setPicked] = useState<Set<string>>(
 		() => new Set(preselect ? [preselect] : [])
@@ -54,10 +60,24 @@ const ClonePicker = ({
 			return next;
 		});
 
-	const cloneable = visible.filter(r => !local[r.full_name]);
+	// in group mode every row is a candidate: a clone that is here can be
+	// grouped as well as one that is not
+	const cloneable = grouping ? visible : visible.filter(r => !local[r.full_name]);
 	const allOn =
 		cloneable.length > 0 && cloneable.every(r => picked.has(r.full_name));
 	const count = picked.size;
+
+	const group = async () => {
+		const chosen = repos.filter(r => picked.has(r.full_name));
+		if (chosen.length === 0 || !groupName.trim() || !onGroup) return;
+		setError(null);
+		try {
+			await onGroup(chosen, groupName);
+			onDone();
+		} catch (e) {
+			setError(String(e));
+		}
+	};
 
 	const start = () => {
 		const chosen = repos.filter(r => picked.has(r.full_name));
@@ -106,7 +126,7 @@ const ClonePicker = ({
 			</div>
 			<ul className='flex flex-col gap-1 max-h-[46vh] overflow-y-auto'>
 				{visible.map(r => {
-					const here = local[r.full_name];
+					const here = grouping ? undefined : local[r.full_name];
 					const on = Boolean(here) || picked.has(r.full_name);
 					return (
 						<li key={r.full_name}>
@@ -126,7 +146,7 @@ const ClonePicker = ({
 									{r.name}
 								</span>
 								<span className='text-[11px] text-text-muted shrink-0'>
-									{here ? 'local' : relativeTime(r.updated_at)}
+									{local[r.full_name] ? 'local' : relativeTime(r.updated_at)}
 								</span>
 							</label>
 						</li>
@@ -138,6 +158,35 @@ const ClonePicker = ({
 					</li>
 				)}
 			</ul>
+			{error && <p className='text-xs text-danger mt-2'>{error}</p>}
+			{grouping ? (
+				<div className='flex items-center justify-between gap-3 mt-4'>
+					<label className='flex items-center gap-2 min-w-0 flex-1 text-[13px] text-text-secondary'>
+						<span className='shrink-0'>group</span>
+						<input
+							type='text'
+							list='devgo-group-names'
+							className={`${field} min-w-0 flex-1 px-2 py-1.5 text-[13px]`}
+							placeholder='a name, new or existing'
+							value={groupName}
+							onChange={e => setGroupName(e.target.value)}
+						/>
+						<datalist id='devgo-group-names'>
+							{groups.map(g => (
+								<option key={g.name} value={g.name} />
+							))}
+						</datalist>
+					</label>
+					<Button
+						variant='primary'
+						className='shrink-0'
+						onClick={group}
+						disabled={count === 0 || !groupName.trim()}
+					>
+						Add {count === 1 ? '1 repo' : `${count} repos`} to group
+					</Button>
+				</div>
+			) : (
 			<div className='flex items-center justify-between gap-3 mt-4'>
 				<label className='flex items-center gap-2 min-w-0 text-[13px] text-text-secondary'>
 					<span className='shrink-0'>into</span>
@@ -163,6 +212,7 @@ const ClonePicker = ({
 					Clone {count === 1 ? '1 repo' : `${count} repos`}
 				</Button>
 			</div>
+			)}
 		</div>
 	);
 };
