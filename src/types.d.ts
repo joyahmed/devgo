@@ -191,6 +191,8 @@ interface SettingsProps {
 	onRemoveWorkspace: (index: number) => void;
 	summonHotkey: string;
 	onError: (message: string) => void;
+	/// a panel to land on when opened this way, else the last one used
+	panel?: string;
 }
 
 interface ShortcutTableProps {

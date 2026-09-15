@@ -104,12 +104,15 @@ const AppInner = () => {
 	// Escape handler would clear the query on the keystroke that closes the
 	// dialog. So opening Settings takes focus away and closing it gives it back.
 	const [showSettings, setShowSettings] = useState(false);
-	const openSettings = () => {
+	const [settingsPanel, setSettingsPanel] = useState<string | undefined>();
+	const openSettings = (panel?: string) => {
 		searchRef.current?.blur();
+		setSettingsPanel(panel);
 		setShowSettings(true);
 	};
 	const closeSettings = () => {
 		setShowSettings(false);
+		setSettingsPanel(undefined);
 		searchRef.current?.focus();
 	};
 
@@ -277,9 +280,9 @@ const AppInner = () => {
 			if (fire('focusSearch', () => searchRef.current?.select())) return;
 			if (fire('clearSearch', () => setQuery(''))) return;
 			if (fire('refresh', handleRefresh)) return;
-			if (fire('settings', openSettings)) return;
+			if (fire('settings', () => openSettings())) return;
 			if (fire('quit', () => invoke('quit_app').catch(() => {}))) return;
-			if (fire('addWorkspace', openSettings)) return;
+			if (fire('addWorkspace', () => openSettings('workspaces'))) return;
 			// Delete is the one bare typing key in the table: in the search box it
 			// deletes a character, and that stays the search box's.
 			if (!isTypingTarget(e) && fire('removeWorkspace', handleRemoveShortcut))
@@ -332,7 +335,8 @@ const AppInner = () => {
 						onAddWorkspace: addWorkspace,
 						onRemoveWorkspace: (i: number) => setRemoveIndex(i),
 						summonHotkey,
-						onError: (m: string) => toast(m, 'error')
+						onError: (m: string) => toast(m, 'error'),
+						panel: settingsPanel
 					}}
 				/>
 			</Suspense>
@@ -415,7 +419,7 @@ const AppInner = () => {
 				<ActionButtons
 					{...{
 						hasSelection: selected !== null,
-						onAddWorkspace: openSettings,
+						onAddWorkspace: () => openSettings('workspaces'),
 						onRemoveWorkspace: handleRemoveShortcut,
 						onEditor: handleOpenEditor,
 						onTerminal: handleOpenTerminal,

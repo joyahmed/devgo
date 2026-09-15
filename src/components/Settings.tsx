@@ -66,7 +66,8 @@ const Settings = ({
 	onAddWorkspace,
 	onRemoveWorkspace,
 	summonHotkey,
-	onError
+	onError,
+	panel
 }: SettingsProps) => {
 	const targets = useTargets();
 
@@ -117,6 +118,13 @@ const Settings = ({
 		setActive(id);
 		localStorage.setItem(LAST_PANEL, id);
 	};
+
+	// a requested panel wins over the remembered one, once per request
+	const [requested, setRequested] = useState(panel);
+	if (panel !== requested) {
+		setRequested(panel);
+		if (panel) choose(panel);
+	}
 
 	// Registered only while open: the shell is mounted on every render, and a
 	// closed dialog must not own a global key.
