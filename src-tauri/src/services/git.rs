@@ -256,6 +256,35 @@ pub fn remote_branches(project: &Project, running: &[String]) -> Vec<String> {
     }
 }
 
+/// The browser URL for one branch of a repo whose root URL is `remote`.
+/// The path segment is the host's, not GitHub's: gitlab is /-/tree/,
+/// bitbucket is /branch/, github, gitea, codeberg and forgejo share /tree/.
+/// An unknown host gets the repo root: a wrong guess is a 404 in the user's
+/// browser, and the root is always right. A `/` in a branch name is left
+/// alone, every host here reads the rest of the path as the ref.
+pub fn branch_url(remote: &str, branch: &str) -> String {
+    let host = remote
+        .trim_start_matches("https://")
+        .trim_start_matches("http://")
+        .split('/')
+        .next()
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    let segment = if host.contains("gitlab") {
+        "/-/tree/"
+    } else if host.contains("bitbucket") {
+        "/branch/"
+    } else if ["github", "gitea", "codeberg", "forgejo"]
+        .iter()
+        .any(|h| host.contains(h))
+    {
+        "/tree/"
+    } else {
+        return remote.to_string();
+    };
+    format!("{}{segment}{branch}", remote.trim_end_matches('/'))
+}
+
 /// Read git state for every project.
 ///
 /// `running` is the live-distro list. A WSL project whose distro is stopped is
@@ -363,6 +392,34 @@ mod tests {
         // then listed as a branch. a stray short line is ignored, not mistaken
         assert!(parse_remote_refs("origin\norigin/main").is_empty());
         assert!(parse_remote_refs("").is_empty());
+    }
+
+    /// tree/<branch> is github's path; sent to gitlab it is a 404, and a
+    /// launcher that opens 404s is one you stop clicking.
+    #[test]
+    fn branch_urls_follow_the_host() {
+        assert_eq!(
+            branch_url("https://github.com/joy/app", "feat/x"),
+            "https://github.com/joy/app/tree/feat/x"
+        );
+        assert_eq!(
+            branch_url("https://gitlab.com/joy/app", "main"),
+            "https://gitlab.com/joy/app/-/tree/main"
+        );
+        assert_eq!(
+            branch_url("https://bitbucket.org/joy/app", "main"),
+            "https://bitbucket.org/joy/app/branch/main"
+        );
+        assert_eq!(
+            branch_url("https://codeberg.org/joy/app/", "main"),
+            "https://codeberg.org/joy/app/tree/main",
+            "a trailing slash on the root does not double up"
+        );
+        assert_eq!(
+            branch_url("https://git.example.com/joy/app", "main"),
+            "https://git.example.com/joy/app",
+            "an unknown host opens the repo root rather than guessing"
+        );
     }
 
     #[test]
