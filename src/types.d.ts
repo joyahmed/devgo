@@ -127,6 +127,22 @@ interface Shortcut {
 	needsSelection?: boolean;
 }
 
+/* Command palette */
+
+/// a label, ways to find it, and a handle to an action that lives in App
+interface PaletteCommand {
+	id: string;
+	title: string;
+	subtitle?: string;
+	/// from shortcuts.ts, never typed here
+	hint?: string;
+	/// aliases matched beside the title, so `term` finds "Open terminal"
+	keywords?: string[];
+	/// shown greyed, not hidden, e.g. a project action with nothing selected
+	disabled?: boolean;
+	run: () => void;
+}
+
 /* Component props */
 
 type ButtonVariant =
