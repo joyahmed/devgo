@@ -152,6 +152,39 @@ fn build_tmux_script(session: &str, linux_path: &str) -> String {
     )
 }
 
+/// Open a terminal that runs a command in the project directory.
+pub fn launch_with_command(
+    target: &LaunchTarget,
+    project: &Project,
+    info: &RuntimeInfo,
+    command: &str,
+) -> Result<(), AppError> {
+    let resolved = if is_wsl(project) {
+        let distro = distro_from_project(project, info)?;
+        let linux_path = super::platform::paths::windows_to_wsl_path(
+            &project.full_path,
+            &distro,
+        );
+        target.resolve_run(
+            &project.full_path,
+            Some((&distro, &linux_path)),
+            &escape(command),
+        )
+    } else {
+        target.resolve_run(&project.full_path, None, command)
+    };
+
+    let (exe, args) = resolved
+        .ok_or_else(|| AppError::TargetCannotRun(target.name.clone()))?;
+
+    spawn_raw(&exe, &args)
+}
+
+// the command sits inside a double-quoted bash -lc argument
+fn escape(command: &str) -> String {
+    command.replace('\\', "\\\\").replace('"', "\\\"")
+}
+
 pub fn launch_both(
     editor: &LaunchTarget,
     terminal: &LaunchTarget,
