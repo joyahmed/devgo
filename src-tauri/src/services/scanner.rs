@@ -1,7 +1,12 @@
+use std::os::windows::process::CommandExt;
+use std::process::Command;
+
 use serde::Serialize;
 
 use super::platform::wsl;
 use crate::models::Project;
+
+const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 // a nested folder is a project only if it says so. .git is a directory and
 // is handled on its own in both walkers
@@ -227,6 +232,98 @@ fn walk_windows(
             }
         }
     }
+}
+
+// the distro walks, in one spawn: five levels of reads on ext4 instead of
+// one 9p round trip per folder
+fn scan_wsl_nested(
+    path: &str,
+    distro: &str,
+    depth: usize,
+    ignore: &[String],
+) -> ScanOutcome {
+    let linux_root = super::platform::paths::windows_to_wsl_path(path, distro);
+    let script = wsl_find_script(&linux_root, depth, ignore);
+
+    let output = Command::new("wsl")
+        .creation_flags(CREATE_NO_WINDOW)
+        .env("WSL_UTF8", "1")
+        .args(["-d", distro, "-e", "bash", "-lc", &script])
+        .output();
+
+    let text = match output {
+        Ok(out) if out.status.success() => {
+            String::from_utf8_lossy(&out.stdout).into_owned()
+        }
+        // ran and found nothing: an empty scan. only a failed spawn is
+        // unavailable
+        Ok(_) => String::new(),
+        Err(_) => {
+            return ScanOutcome::Unavailable(UnavailableReason::NotMounted)
+        }
+    };
+
+    let prefix = format!("{linux_root}/");
+    let mut seen = std::collections::HashSet::new();
+    let mut out = Vec::new();
+    for line in text
+        .lines()
+        .map(|l| l.trim_end_matches('\r'))
+        .filter(|l| !l.is_empty())
+    {
+        // the root's own .git names the workspace, not a project; a folder
+        // with two markers prints twice
+        if line == linux_root || !seen.insert(line.to_string()) {
+            continue;
+        }
+        let rel = line.strip_prefix(&prefix).unwrap_or(line);
+        if rel.is_empty() {
+            continue;
+        }
+        out.push(Project::new(
+            rel.to_string(),
+            super::platform::paths::wsl_to_windows_path(line, distro),
+            path.to_string(),
+            "WSL".to_string(),
+        ));
+    }
+    out.sort_by_key(|p| p.name.to_lowercase());
+    ScanOutcome::Scanned(out)
+}
+
+// two finds: every immediate child, then every deeper folder with a marker.
+// %h prints the folder that holds the match, so depth N needs find at N+1
+fn wsl_find_script(root: &str, depth: usize, ignore: &[String]) -> String {
+    let q = |s: &str| s.replace('\'', "'\\''");
+    let root_q = q(root);
+
+    let mut prune: Vec<String> =
+        PRUNE_DIRS.iter().map(|s| s.to_string()).collect();
+    prune.extend(ignore.iter().cloned());
+    let not_names = prune
+        .iter()
+        .map(|n| format!("! -name '{}'", q(n)))
+        .collect::<Vec<_>>()
+        .join(" ");
+    let prune_or = prune
+        .iter()
+        .map(|n| format!("-name '{}'", q(n)))
+        .collect::<Vec<_>>()
+        .join(" -o ");
+    let file_markers = FILE_MARKERS
+        .iter()
+        .map(|m| format!("-name '{m}'"))
+        .collect::<Vec<_>>()
+        .join(" -o ");
+    let marker_depth = depth + 1;
+
+    format!(
+        "find '{root_q}' -mindepth 1 -maxdepth 1 -type d ! -name '.*' {not_names} -print 2>/dev/null; \
+         find '{root_q}' -mindepth 1 -maxdepth {marker_depth} \
+           \\( -type d -name '.git' -printf '%h\\n' -prune \\) -o \
+           \\( {prune_or} -o -name '.*' \\) -prune -o \
+           -type f \\( {file_markers} \\) -printf '%h\\n' 2>/dev/null"
+    )
 }
 
 #[cfg(test)]
