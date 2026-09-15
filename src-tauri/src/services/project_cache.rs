@@ -88,6 +88,15 @@ impl ProjectCacheStore {
         Ok(())
     }
 
+    // the machine-local file; a fresh scan rebuilds it
+    pub fn clear(&mut self) -> Result<(), AppError> {
+        if !self.entries.is_empty() {
+            self.entries.clear();
+            self.save()?;
+        }
+        Ok(())
+    }
+
     fn save(&self) -> Result<(), AppError> {
         let data = serde_json::to_string_pretty(&self.entries)?;
         fs::write(&self.file_path, data)?;
