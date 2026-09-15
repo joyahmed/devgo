@@ -125,14 +125,42 @@ fn write_tmux_script(
     linux_path: &str,
     tmux: &TmuxConfig,
 ) -> Result<String, AppError> {
-    let script = build_tmux_script(&project.name, linux_path, tmux);
-    let temp_file = std::env::temp_dir()
-        .join(format!("devgo-{}.sh", sanitize_file_stem(&project.name)));
+    // the same name is the session and the filename: two projects called
+    // api used to share one file, and the second write could land before
+    // the first wsl had read it
+    let session = tmux_session_name(project);
+    let script = build_tmux_script(&session, linux_path, tmux);
+    let temp_file = std::env::temp_dir().join(format!("devgo-{session}.sh"));
     std::fs::write(&temp_file, &script)?;
     Ok(super::platform::paths::windows_to_wsl_path(
         &temp_file.to_string_lossy(),
         distro,
     ))
+}
+
+/// A session name unique to this project. sanitize_file_stem already maps
+/// `.` and `:` (tmux's target separators) to `-`; the suffix is what keeps two
+/// projects called `api` from attaching to each other's shell.
+fn tmux_session_name(project: &Project) -> String {
+    format!(
+        "{}-{}",
+        sanitize_file_stem(&project.name),
+        path_suffix(&project.full_path)
+    )
+}
+
+/// FNV-1a over the normalised path, written out rather than DefaultHasher:
+/// that one is not stable across Rust releases, and a session name that
+/// changes under you is a session you can never reattach to. Lowercased and
+/// slash-flipped because Windows spells the same directory several ways.
+fn path_suffix(path: &str) -> String {
+    let normalized = path.to_lowercase().replace('\\', "/");
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for byte in normalized.as_bytes() {
+        hash ^= *byte as u64;
+        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    format!("{:08x}", (hash & 0xffff_ffff) as u32)
 }
 
 /// Reduce a project name to something safe to embed in a filename. Without this
@@ -261,6 +289,35 @@ mod tests {
             distros: vec![],
             default_distro: None,
         }
+    }
+
+    #[test]
+    fn the_session_name_is_sanitised_and_unique_per_project_path() {
+        let dotted = Project::new(
+            "my.app:2".into(),
+            r"\\wsl.localhost\Ubuntu\home\joy\work\my.app".into(),
+            r"\\wsl.localhost\Ubuntu\home\joy\work".into(),
+            "WSL".into(),
+        );
+        let session = tmux_session_name(&dotted);
+        assert!(
+            !session.contains('.') && !session.contains(':'),
+            "{session}"
+        );
+        assert!(session.starts_with("my-app-2-"), "{session}");
+
+        let work = wsl_project("api", "work");
+        let play = wsl_project("api", "play");
+        assert_ne!(tmux_session_name(&work), tmux_session_name(&play));
+
+        // the same directory under another spelling is the same session
+        let shouted = Project::new(
+            "api".into(),
+            r"//WSL.LOCALHOST/Ubuntu/home/joy/work/api".into(),
+            r"//WSL.LOCALHOST/Ubuntu/home/joy/work".into(),
+            "WSL".into(),
+        );
+        assert_eq!(tmux_session_name(&work), tmux_session_name(&shouted));
     }
 
     /// The shipped default must still be byte-for-byte what the three
