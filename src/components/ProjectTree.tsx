@@ -73,16 +73,20 @@ const StatusPill = ({ state }: StatusPillProps) => {
 /// read. Anything unlisted renders muted rather than being dropped: a new
 /// marker should show up as a plain badge, not vanish.
 const TAG_TONE: Record<string, string> = {
-	turbo: 'text-fuchsia-300 border-fuchsia-400/30',
-	next: 'text-slate-200 border-slate-400/30',
-	rust: 'text-orange-300 border-orange-400/30',
-	go: 'text-cyan-300 border-cyan-400/30',
-	python: 'text-yellow-300 border-yellow-400/30',
-	docker: 'text-blue-300 border-blue-400/30',
-	node: 'text-green-300 border-green-400/30'
+	turbo: 'text-fuchsia-300',
+	next: 'text-slate-200',
+	rust: 'text-orange-300',
+	go: 'text-cyan-300',
+	python: 'text-yellow-300',
+	docker: 'text-blue-300',
+	node: 'text-green-300'
 };
 
 /// Stack badges, plus a marker when dependencies are not installed.
+///
+/// words, not pills: NODE BUN in bordered boxes read as two buttons on
+/// every row, a column of chips down forty rows. the hue carries the
+/// identity; the border carried nothing.
 ///
 /// The missing-deps dot is the one piece of judgement here: a Node or Rust
 /// project with no node_modules or target is one you cannot actually run yet,
@@ -97,15 +101,13 @@ const TechBadges = ({ tech }: TechBadgesProps) => {
 			{tech.tags.map(t => (
 				<span
 					key={t}
-					className={`text-11 border rounded-control px-1 ${
-						TAG_TONE[t] ?? 'text-text-muted border-border'
-					}`}
+					className={`text-11 font-mono ${TAG_TONE[t] ?? 'text-text-muted'}`}
 				>
 					{t}
 				</span>
 			))}
 			{tech.package_manager && (
-				<span className='text-11 text-text-muted'>
+				<span className='text-11 font-mono text-text-muted'>
 					{tech.package_manager}
 				</span>
 			)}
@@ -180,11 +182,15 @@ const RowMeta = ({
 				{rank.hint}
 			</span>
 		)}
+		{/* ☆ on hover only, ★ always: forty hollow stars down the table were
+		    a column of nothing, and the pinned ones are the information */}
 		{onTogglePin && (
 			<Button
 				variant='ghost'
-				className={`text-13 leading-none p-0.5 hover:scale-110 hover:bg-transparent ${
-					rank?.pinned ? 'text-accent' : 'text-text-muted/40'
+				className={`text-13 leading-none p-0.5 hover:scale-110 hover:bg-transparent transition-opacity ${
+					rank?.pinned
+						? 'text-accent'
+						: 'text-text-muted/40 opacity-0 group-hover:opacity-100 focus-visible:opacity-100'
 				}`}
 				title={rank?.pinned ? 'Unpin' : 'Pin to top'}
 				onClick={e => {
@@ -217,7 +223,7 @@ const ProjectRow = ({
 	onContextMenu
 }: ProjectRowProps) => (
 	<div
-		className={`${col} px-3 py-1.5 cursor-pointer select-none transition-colors ${
+		className={`${col} group px-3 py-1.5 cursor-pointer select-none transition-colors ${
 			pinnedStrip ? 'border-l-2' : 'ml-6 border-l border-border'
 		} ${stale ? 'opacity-60' : ''} ${
 			selected
