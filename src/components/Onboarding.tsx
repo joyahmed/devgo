@@ -23,8 +23,10 @@ const Onboarding = ({ onAdd, onAddMany, onError }: OnboardingProps) => {
 	return (
 		<div className='flex-1 flex items-center justify-center min-h-0 overflow-y-auto'>
 			<div className='w-[min(720px,92%)] py-8 text-center'>
-				<div className='text-24 text-accent mb-3'>&#10022;</div>
-				<h2 className='text-24 font-bold text-text-primary mb-1'>
+				<h2 className='flex items-center justify-center gap-3 text-24 font-bold text-text-primary mb-1'>
+					<span className='text-accent leading-none' aria-hidden='true'>
+						&#10022;
+					</span>
 					Welcome to DevGo
 				</h2>
 				<p className='text-15 text-text-secondary mb-6'>
@@ -32,11 +34,17 @@ const Onboarding = ({ onAdd, onAddMany, onError }: OnboardingProps) => {
 					becomes your launchable list.
 				</p>
 
+				{/* the footer's own buttons, the default one and the plain one, so
+				    the first screen and every screen after it press the same */}
 				<div className='flex items-center justify-center gap-2.5 mb-4'>
-					<Button variant='primary' onClick={pickFolder}>
+					<Button variant='target' aria-current='true' onClick={pickFolder}>
 						Choose a folder…
 					</Button>
-					<Button onClick={() => setShowScan(true)} disabled={showScan}>
+					<Button
+						variant='target'
+						onClick={() => setShowScan(true)}
+						disabled={showScan}
+					>
 						Scan for projects
 					</Button>
 				</div>
