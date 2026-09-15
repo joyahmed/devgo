@@ -296,6 +296,31 @@ pub fn search(query: &str) -> Result<Vec<Repo>, AppError> {
     parse_repos(&text)
 }
 
+/// The branches of one repository, on demand: gh api …/branches, one
+/// page of a hundred, names only. Read when the chip is clicked, never in
+/// a pass, the same rule as git::remote_branches for a clone on disk.
+/// Cached for the session by the command: a branch list from yesterday
+/// looks current.
+pub fn branches(full_name: &str) -> Result<Vec<String>, AppError> {
+    let text = gh(&[
+        "api",
+        &format!("repos/{full_name}/branches?per_page=100"),
+        "--jq",
+        ".[].name",
+    ])?;
+    Ok(parse_branch_lines(&text))
+}
+
+/// --jq '.[].name' prints one name per line; blank lines and CRs are gh's
+/// and Windows's, not branches.
+pub fn parse_branch_lines(text: &str) -> Vec<String> {
+    text.lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty())
+        .map(str::to_string)
+        .collect()
+}
+
 /// One repository by name, any owner. gh repo view prints the same shape
 /// gh repo list prints one element of, so the parser is shared.
 pub fn view_repo(full_name: &str) -> Result<Repo, AppError> {
@@ -643,6 +668,13 @@ mod tests {
         assert_eq!(repos[0].default_branch.as_deref(), Some("dev"));
         // and a listed row, which has neither, still parses
         assert_eq!(parse_repos(SAMPLE).unwrap()[0].stars, None);
+    }
+
+    #[test]
+    fn branch_lines_are_trimmed_and_blank_free() {
+        let out = parse_branch_lines("main\r\nfeat/x\n\n  release/1.2  \n");
+        assert_eq!(out, ["main", "feat/x", "release/1.2"]);
+        assert!(parse_branch_lines("").is_empty());
     }
 
     #[test]
