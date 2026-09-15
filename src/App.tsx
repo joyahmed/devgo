@@ -757,9 +757,9 @@ const AppInner = () => {
 				}}
 			/>
 
-			{/* one cap for the search box, the action row and the rows, instead of
-			    a width rule each */}
-			<div className='flex-1 flex flex-col w-full max-w-[1400px] mx-auto p-5 gap-4 overflow-hidden'>
+			{/* the list is a table and wants the window; the search box is the
+			    one thing that reads badly stretched, so it caps alone */}
+			<div className='flex-1 flex flex-col w-full px-6 py-5 gap-4 overflow-hidden'>
 				{workspaces.length === 0 && !loading ? (
 					<Onboarding
 						{...{
@@ -770,19 +770,21 @@ const AppInner = () => {
 					/>
 				) : (
 					<>
-						<SearchBox
-							{...{
-								ref: searchRef,
-								value: query,
-								onChange: setQuery,
-								onEnter: handleSearchEnter,
-								onArrow: handleArrow,
-								sortMode,
-								onToggleSort: toggleSort,
-								enterHint:
-									selected || filtered.length > 0 ? '⏎ Enter' : undefined
-							}}
-						/>
+						<div className='w-full max-w-[1100px] mx-auto shrink-0'>
+							<SearchBox
+								{...{
+									ref: searchRef,
+									value: query,
+									onChange: setQuery,
+									onEnter: handleSearchEnter,
+									onArrow: handleArrow,
+									sortMode,
+									onToggleSort: toggleSort,
+									enterHint:
+										selected || filtered.length > 0 ? '⏎ Enter' : undefined
+								}}
+							/>
+						</div>
 						<ProjectTree
 							{...{
 								ref: treeRef,
