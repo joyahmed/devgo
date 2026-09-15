@@ -1,12 +1,9 @@
 import { invoke } from '@tauri-apps/api/core';
-import { useState } from 'react';
 
 export const useLaunchActions = (
 	selected: Project | null,
 	refreshProjects: () => void
 ) => {
-	const [showWorkspaces, setShowWorkspaces] = useState(false);
-
 	const addWorkspace = async (path: string) => {
 		await invoke('add_workspace', { path });
 		refreshProjects();
@@ -34,8 +31,6 @@ export const useLaunchActions = (
 	};
 
 	return {
-		showWorkspaces,
-		setShowWorkspaces,
 		addWorkspace,
 		removeWorkspace,
 		openVSCode,

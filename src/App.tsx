@@ -3,7 +3,6 @@ import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import ActionButtons from './components/ActionButtons';
-import Button from './components/Button';
 import ConfirmDialog from './components/ConfirmDialog';
 import ProjectTree from './components/ProjectTree';
 import RuntimeIndicator from './components/RuntimeIndicator';
@@ -14,8 +13,12 @@ import { useLaunchActions } from './hooks/useLaunchActions';
 import { useProjects } from './hooks/useProjects';
 import { useRuntime } from './hooks/useRuntime';
 import { useWorkspaces } from './hooks/useWorkspaces';
+import { isTypingTarget, matches, shortcutFor } from './shortcuts';
 
-const WorkspaceManager = lazy(() => import('./components/WorkspaceManager'));
+// Settings pulls in WorkspaceManager and the shortcut table, none of which the
+// launcher needs to start. The split used to sit on WorkspaceManager; now that
+// Settings imports it, the split moves up to Settings or it silently vanishes.
+const Settings = lazy(() => import('./components/Settings'));
 
 const showError = (e: unknown): string => {
 	if (typeof e === 'string') return e;
@@ -49,17 +52,17 @@ const AppInner = () => {
 		toggleSort,
 		togglePin
 	} = useProjects();
-	const {
-		showWorkspaces,
-		setShowWorkspaces,
-		addWorkspace,
-		removeWorkspace,
-		openVSCode,
-		openTerminal,
-		openBoth
-	} = useLaunchActions(selected, refresh);
+	const { addWorkspace, removeWorkspace, openVSCode, openTerminal, openBoth } =
+		useLaunchActions(selected, refresh);
 	const { toast } = useToast();
 	const [removeIndex, setRemoveIndex] = useState<number | null>(null);
+
+	// Read once, on mount. The literal is only what the Shortcuts panel shows
+	// for the frame before the command answers; prefs.json is the value.
+	const [summonHotkey, setSummonHotkey] = useState('Ctrl+Alt+Space');
+	useEffect(() => {
+		invoke<string>('get_summon_hotkey').then(setSummonHotkey).catch(() => {});
+	}, []);
 
 	const treeRef = useRef<ProjectTreeHandle>(null);
 	const handleArrow = (dir: 1 | -1) => treeRef.current?.navigate(dir);
@@ -77,6 +80,19 @@ const AppInner = () => {
 			unlisten.then(f => f()).catch(() => {});
 		};
 	}, []);
+
+	// The search box keeps focus under the dialog's backdrop, and its own
+	// Escape handler would clear the query on the keystroke that closes the
+	// dialog. So opening Settings takes focus away and closing it gives it back.
+	const [showSettings, setShowSettings] = useState(false);
+	const openSettings = () => {
+		searchRef.current?.blur();
+		setShowSettings(true);
+	};
+	const closeSettings = () => {
+		setShowSettings(false);
+		searchRef.current?.focus();
+	};
 
 	const handleSelect = (p: Project) => setSelected(p);
 
@@ -126,21 +142,6 @@ const AppInner = () => {
 		);
 	}, [workspaceStates]);
 
-	useEffect(() => {
-		const handler = (e: KeyboardEvent) => {
-			const mod = e.ctrlKey || e.metaKey;
-			if (e.key === 'F5' || (mod && e.key === 'r')) {
-				e.preventDefault();
-				handleRefresh();
-			} else if (mod && e.key === 'q') {
-				e.preventDefault();
-				invoke('quit_app').catch(() => {});
-			}
-		};
-		window.addEventListener('keydown', handler);
-		return () => window.removeEventListener('keydown', handler);
-	}, []);
-
 	const handleTogglePin = (p: Project) => {
 		togglePin(p).catch(e => toast(showError(e)));
 	};
@@ -156,39 +157,74 @@ const AppInner = () => {
 		openTerminal().catch(e => toast(showError(e)));
 	const handleOpenBoth = () => openBoth().catch(e => toast(showError(e)));
 
+	// Delete acts on the selected project's workspace. With no selection there
+	// is nothing unambiguous to remove, so it opens Settings rather than guess.
+	const handleRemoveShortcut = () => {
+		const idx = selected ? workspaces.indexOf(selected.workspace) : -1;
+		if (idx >= 0) setRemoveIndex(idx);
+		else openSettings();
+	};
+
+	// One handler, driven by the declared shortcut table. Everything here is
+	// either modified or a non-typing key, so it all survives search focus —
+	// which is where the summon hotkey leaves you. The order is the table's:
+	// the bindings that work with nothing selected, then the ones that need one.
+	useEffect(() => {
+		const handler = (e: KeyboardEvent) => {
+			const fire = (id: ShortcutId, run: () => void) => {
+				if (!matches(e, shortcutFor(id))) return false;
+				e.preventDefault();
+				run();
+				return true;
+			};
+
+			if (fire('focusSearch', () => searchRef.current?.select())) return;
+			if (fire('clearSearch', () => setQuery(''))) return;
+			if (fire('refresh', handleRefresh)) return;
+			if (fire('settings', openSettings)) return;
+			if (fire('quit', () => invoke('quit_app').catch(() => {}))) return;
+			if (fire('addWorkspace', openSettings)) return;
+			// Delete is the one bare typing key in the table: in the search box it
+			// deletes a character, and that stays the search box's.
+			if (!isTypingTarget(e) && fire('removeWorkspace', handleRemoveShortcut))
+				return;
+
+			// Ctrl+R is a second binding for refresh, kept because it is muscle
+			// memory from the browser and costs nothing. The table maps one id to
+			// one chord; an alias is written out here rather than widening the type.
+			if ((e.ctrlKey || e.metaKey) && e.key === 'r') {
+				e.preventDefault();
+				handleRefresh();
+				return;
+			}
+
+			if (!selected) return;
+			if (fire('openEditor', handleOpenVSCode)) return;
+			if (fire('openTerminal', handleOpenTerminal)) return;
+			if (fire('openBoth', handleOpenBoth)) return;
+		};
+		window.addEventListener('keydown', handler);
+		return () => window.removeEventListener('keydown', handler);
+	}, [selected, workspaces]);
+
 	return (
 		<div className='flex flex-col h-screen w-screen rounded-xl overflow-hidden'>
 			<TitleBar>
 				<RuntimeIndicator runtime={runtime?.runtime ?? 'windows'} />
 			</TitleBar>
 
-			{showWorkspaces && (
-				<div
-					className='fixed inset-0 bg-black/60 flex items-center justify-center z-40'
-					onClick={() => setShowWorkspaces(false)}
-				>
-					<div
-						className='bg-bg-secondary border border-border rounded-xl p-6 w-screen h-screen min-w-md overflow-y-auto shadow-2xl'
-						onClick={e => e.stopPropagation()}
-					>
-						<Suspense>
-							<WorkspaceManager
-								{...{
-									workspaces,
-									onAdd: addWorkspace,
-									onRemove: (i: number) => setRemoveIndex(i)
-								}}
-							/>
-						</Suspense>
-						<Button
-							className='w-full mt-4'
-							onClick={() => setShowWorkspaces(false)}
-						>
-							Close
-						</Button>
-					</div>
-				</div>
-			)}
+			<Suspense>
+				<Settings
+					{...{
+						open: showSettings,
+						onClose: closeSettings,
+						workspaces,
+						onAddWorkspace: addWorkspace,
+						onRemoveWorkspace: (i: number) => setRemoveIndex(i),
+						summonHotkey
+					}}
+				/>
+			</Suspense>
 
 			<ConfirmDialog
 				{...{
@@ -239,8 +275,8 @@ const AppInner = () => {
 				<ActionButtons
 					{...{
 						hasSelection: selected !== null,
-						onAddWorkspace: () => setShowWorkspaces(true),
-						onRemoveWorkspace: () => setShowWorkspaces(true),
+						onAddWorkspace: openSettings,
+						onRemoveWorkspace: handleRemoveShortcut,
 						onVSCode: handleOpenVSCode,
 						onTerminal: handleOpenTerminal,
 						onBoth: handleOpenBoth,
