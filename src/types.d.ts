@@ -153,6 +153,43 @@ interface GithubUpdated {
 	error: string | null;
 }
 
+/// one clone, as the row shows it
+interface CloneJob {
+	full_name: string;
+	workspace: string;
+	status: 'queued' | 'running' | 'done' | 'failed';
+	/// git's phase (Receiving objects, Resolving deltas) and its percent
+	phase: string;
+	percent: number | null;
+	dest: string | null;
+	error: string | null;
+}
+
+/// what clone_repo answers before the clone has started
+interface CloneStarted {
+	full_name: string;
+	dest: string;
+	protocol: 'ssh' | 'https';
+}
+
+interface CloneProgress {
+	full_name: string;
+	phase: string;
+	percent: number | null;
+}
+
+interface CloneDone {
+	full_name: string;
+	ok: boolean;
+	dest: string;
+	error: string | null;
+}
+
+interface CloneState {
+	jobs: Map<string, CloneJob>;
+	enqueue: (repos: GithubRepo[], workspace: string) => void;
+}
+
 // the --color-* names in index.css; a theme must set every one
 type ThemeKey =
 	| 'bg-primary'
