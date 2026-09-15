@@ -164,3 +164,69 @@ pub fn launch_both(
     std::thread::sleep(std::time::Duration::from_millis(1000));
     launch_target(terminal, project, info)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::target::TargetKind;
+
+    /// End-to-end proof that a template survives into a real process.
+    ///
+    /// The failure this guards is subtle: `Command::args` re-quotes anything
+    /// containing spaces, so a multi-word template arrives as one argument and
+    /// the target sees garbage. Only actually spawning catches that.
+    #[test]
+    fn a_multi_word_template_reaches_the_process_intact() {
+        let marker = std::env::temp_dir().join("devgo-launch-proof.txt");
+        let _ = std::fs::remove_file(&marker);
+
+        let target = LaunchTarget {
+            id: "proof".into(),
+            name: "Proof".into(),
+            kind: TargetKind::Editor,
+            executable: "cmd".into(),
+            // Three separate arguments plus a redirect: exactly the shape that
+            // breaks under re-quoting.
+            args_template: format!(
+                "/c echo {{path}} > \"{}\"",
+                marker.display()
+            ),
+            wsl_executable: None,
+            wsl_args_template: None,
+        };
+
+        let project = Project::new(
+            "proof".into(),
+            r"G:\some\project".into(),
+            r"G:\some".into(),
+            "Windows".into(),
+        );
+        let info = RuntimeInfo {
+            runtime: crate::services::platform::runtime::Runtime::Windows,
+            wsl_available: false,
+            distros: vec![],
+            default_distro: None,
+        };
+
+        launch_target(&target, &project, &info).unwrap();
+
+        // The spawn is async; give the child a moment to finish writing. The
+        // redirect creates the file before echo runs, so wait for bytes, not
+        // for existence — polling on `exists()` read an empty file.
+        let written_len = || std::fs::metadata(&marker).map_or(0, |m| m.len());
+        for _ in 0..40 {
+            if written_len() > 0 {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+
+        let written =
+            std::fs::read_to_string(&marker).expect("target never ran");
+        assert!(
+            written.contains(r"G:\some\project"),
+            "template did not survive into the process: {written:?}"
+        );
+        let _ = std::fs::remove_file(&marker);
+    }
+}
