@@ -233,6 +233,11 @@ interface ContextMenuProps {
 	onClose: () => void;
 }
 
+interface FsCellProps {
+	fs: string;
+	className?: string;
+}
+
 interface WslControlProps {
 	distros: string[];
 	/// Called after every stop attempt, success or not — the caller re-reads.

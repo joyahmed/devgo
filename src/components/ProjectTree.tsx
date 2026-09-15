@@ -20,6 +20,24 @@ const lastSegment = (path: string) =>
 const pill =
 	'inline-block px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider rounded-full bg-bg-panel border border-border shrink-0';
 
+const FS_TONE: Record<string, string> = {
+	WSL: 'text-accent',
+	Network: 'text-amber-400'
+};
+
+const NETWORK_WARNING =
+	'On a network share — file access and dev tooling are slow here. Consider a local drive or a WSL-native path.';
+
+const FsCell = ({ fs, className = '' }: FsCellProps) => (
+	<div
+		className={`${FS_TONE[fs] ?? 'text-text-muted'} ${className}`.trim()}
+		title={fs === 'Network' ? NETWORK_WARNING : undefined}
+	>
+		{fs}
+		{fs === 'Network' && ' ⚠'}
+	</div>
+);
+
 const REASON_LABEL: Record<UnavailableReason, string> = {
 	distro_stopped: 'WSL stopped',
 	not_mounted: 'not mounted',
@@ -205,13 +223,7 @@ const ProjectRow = ({
 		>
 			{project.name}
 		</div>
-		<div
-			className={
-				project.file_system === 'WSL' ? 'text-accent' : 'text-text-muted'
-			}
-		>
-			{project.file_system}
-		</div>
+		<FsCell fs={project.file_system} />
 		<RowMeta {...{ project, rank, git, tech, onTogglePin, onOpenRemote }} />
 	</div>
 );
@@ -477,11 +489,7 @@ const ProjectTree = ({
 								<div className='text-text-muted truncate' title={ws}>
 									{ws}
 								</div>
-								<div
-									className={`font-medium ${fs === 'WSL' ? 'text-accent' : 'text-text-muted'}`}
-								>
-									{fs}
-								</div>
+								<FsCell {...{ fs, className: 'font-medium' }} />
 								<div className='text-right text-text-muted font-mono'>
 									{count}
 								</div>
