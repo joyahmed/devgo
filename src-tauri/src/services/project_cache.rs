@@ -101,3 +101,35 @@ fn now() -> u64 {
         .map(|d| d.as_secs())
         .unwrap_or(0)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn store(name: &str) -> ProjectCacheStore {
+        let dir = std::env::temp_dir().join(format!("devgo-cache-test-{name}"));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        ProjectCacheStore::new(dir).unwrap()
+    }
+
+    fn project(name: &str, workspace: &str) -> Project {
+        Project::new(
+            name.to_string(),
+            format!("{workspace}\\{name}"),
+            workspace.to_string(),
+            "Windows".to_string(),
+        )
+    }
+
+    #[test]
+    fn find_reads_across_workspaces() {
+        let mut s = store("find");
+        s.store(r"G:\a", vec![project("api", r"G:\a")]).unwrap();
+        s.store(r"G:\b", vec![project("web", r"G:\b")]).unwrap();
+
+        assert_eq!(s.all_projects().len(), 2);
+        assert_eq!(s.find(r"G:\b\web").map(|p| p.name), Some("web".into()));
+        assert!(s.find(r"G:\b\gone").is_none());
+    }
+}
