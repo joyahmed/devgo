@@ -1,4 +1,5 @@
 import { useEffect, useImperativeHandle, useState } from 'react';
+import { lastSegment } from '../paths';
 import { isTypingTarget, matches, shortcutFor } from '../shortcuts';
 import Button from './Button';
 
@@ -13,9 +14,6 @@ const COLUMNS = [
 	{ label: 'File System', className: '' },
 	{ label: 'Count', className: 'text-right' }
 ];
-
-const lastSegment = (path: string) =>
-	path.replace(/[\\/]+$/, '').split(/[\\/]/).pop() ?? path;
 
 const pill =
 	'inline-block px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider rounded-full bg-bg-panel border border-border shrink-0';

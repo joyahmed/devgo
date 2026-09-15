@@ -1,4 +1,5 @@
 import { open } from '@tauri-apps/plugin-dialog';
+import { lastSegment } from '../paths';
 import Button from './Button';
 
 const WorkspaceManager = ({
@@ -26,7 +27,12 @@ const WorkspaceManager = ({
 							key={ws}
 							className='flex items-center justify-between px-3 py-2 bg-bg-panel rounded-md font-mono text-xs break-all'
 						>
-							<span className='text-text-secondary flex-1'>{ws}</span>
+							<span className='flex-1 min-w-0'>
+								<span className='block text-text-primary truncate'>
+									{lastSegment(ws)}
+								</span>
+								<span className='block text-text-muted truncate'>{ws}</span>
+							</span>
 							<Button
 								variant='ghost'
 								className='px-2 hover:text-danger hover:bg-danger/10'
