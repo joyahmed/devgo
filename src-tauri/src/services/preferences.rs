@@ -28,6 +28,55 @@ pub struct WindowState {
     pub y: i32,
 }
 
+/// A monitor as (x, y, width, height).
+pub type MonitorRect = (i32, i32, u32, u32);
+
+// below this the rect is a placeholder something wrote, not a window
+// somebody left
+const MIN_RESTORE_W: u32 = 320;
+const MIN_RESTORE_H: u32 = 240;
+
+impl WindowState {
+    /// Does this rect look like a maximized window rather than a restored
+    /// one? Maximizing is not atomic: a Resized arrives while is_maximized()
+    /// still says false, and the screen-filling rect would be stored as the
+    /// restore rect. Windows overhangs a maximized window by its invisible
+    /// border, hence the slack.
+    pub fn covers_a_monitor(&self, monitors: &[MonitorRect]) -> bool {
+        const SLACK: i32 = 24;
+        monitors.iter().any(|&(_, _, mw, mh)| {
+            (self.width as i32 - mw as i32).abs() <= SLACK
+                && (self.height as i32 - mh as i32).abs() <= SLACK * 4
+        })
+    }
+
+    /// Could a person have left the window here? A minimized window reports
+    /// (-32000, -32000) at about 144x19, and a monitor can be unplugged; a
+    /// rect that fails either check strands the window off every screen,
+    /// with a taskbar entry and nothing to click.
+    pub fn is_restorable(&self, monitors: &[MonitorRect]) -> bool {
+        if self.width < MIN_RESTORE_W || self.height < MIN_RESTORE_H {
+            return false;
+        }
+        if monitors.is_empty() {
+            // no monitor info: the size check alone, rather than refusing
+            // every restore
+            return true;
+        }
+        // a real overlap, not a shared edge: one pixel on screen is not
+        // reachable in any useful sense
+        const MARGIN: i32 = 80;
+        let (l, t) = (self.x, self.y);
+        let (r, b) = (l + self.width as i32, t + self.height as i32);
+        monitors.iter().any(|&(mx, my, mw, mh)| {
+            let (mr, mb) = (mx + mw as i32, my + mh as i32);
+            let ox = r.min(mr) - l.max(mx);
+            let oy = b.min(mb) - t.max(my);
+            ox >= MARGIN && oy >= MARGIN
+        })
+    }
+}
+
 // the configured 900x720, so a maximized window that was never restored
 // has somewhere to go
 impl Default for WindowState {
@@ -430,6 +479,84 @@ mod tests {
 
         s.set_window_state(state).unwrap();
         assert!(!dir.join("prefs.json").exists(), "same rect, no write");
+    }
+
+    fn rect(width: u32, height: u32, x: i32, y: i32) -> WindowState {
+        WindowState {
+            maximized: false,
+            width,
+            height,
+            x,
+            y,
+        }
+    }
+
+    const THREE_SCREENS: [MonitorRect; 3] = [
+        (0, 0, 2560, 1440),
+        (-1920, 360, 1920, 1080),
+        (2560, 0, 2560, 1440),
+    ];
+
+    /// The poisoned config, byte for byte: a minimized window's placeholder
+    /// rect, saved, restored a window with a taskbar entry and no screen.
+    #[test]
+    fn the_minimized_placeholder_rect_is_never_restored() {
+        let poisoned = rect(144, 19, -32000, -32000);
+        assert!(!poisoned.is_restorable(&THREE_SCREENS));
+        assert!(!poisoned.is_restorable(&[]), "size alone condemns it");
+    }
+
+    /// The second poisoned value: maximized true with a 2560x1392 restore
+    /// rect on a 2560x1440 screen, written during the maximize transition.
+    #[test]
+    fn a_screen_sized_rect_is_a_maximize_artefact() {
+        let screens = &THREE_SCREENS[..2];
+        assert!(rect(2560, 1392, -8, -8).covers_a_monitor(screens));
+        assert!(
+            rect(1920, 1040, -1920, 360).covers_a_monitor(screens),
+            "the smaller monitor's full size counts too"
+        );
+    }
+
+    #[test]
+    fn an_ordinary_window_is_not_a_maximize_artefact() {
+        let screens = &THREE_SCREENS[..1];
+        for (w, h) in [(900, 720), (1400, 900), (2000, 1200), (2400, 1000)] {
+            assert!(
+                !rect(w, h, 100, 100).covers_a_monitor(screens),
+                "{w}x{h} is a real window size"
+            );
+        }
+    }
+
+    #[test]
+    fn a_normal_window_on_any_monitor_is_restorable() {
+        for (x, y, on) in [
+            (830, 336, "primary"),
+            (-1600, 500, "the monitor to the left"),
+            (3000, 200, "the monitor to the right"),
+        ] {
+            assert!(
+                rect(900, 720, x, y).is_restorable(&THREE_SCREENS),
+                "should restore on {on}"
+            );
+        }
+    }
+
+    /// Unplugging the monitor a window was left on must not strand it.
+    #[test]
+    fn a_window_on_a_monitor_that_is_gone_is_refused() {
+        let only_primary = &THREE_SCREENS[..1];
+        assert!(!rect(900, 720, -1600, 500).is_restorable(only_primary));
+    }
+
+    #[test]
+    fn a_window_barely_touching_a_screen_edge_is_refused() {
+        let only_primary = &THREE_SCREENS[..1];
+        assert!(
+            !rect(900, 720, -880, 100).is_restorable(only_primary),
+            "only 20px on screen"
+        );
     }
 
     /// A prefs.json from before this field must load, not go to .bak.
