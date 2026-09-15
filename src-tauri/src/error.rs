@@ -58,6 +58,11 @@ pub enum AppError {
     #[error("Workspace {0} no longer exists — the list has {1} entries. Refresh and try again")]
     WorkspaceIndexOutOfRange(usize, usize),
 
+    // not a permutation of the stored list; obeying it would drop whatever
+    // the client did not know about
+    #[error("The order sent does not match the stored list ({0} sent, {1} stored). Refresh and try again")]
+    WorkspaceOrderMismatch(usize, usize),
+
     #[error("{0} overlaps the workspace {1}. Nested workspaces scan the same folders twice, so remove one before adding the other")]
     WorkspaceOverlaps(String, String),
 }

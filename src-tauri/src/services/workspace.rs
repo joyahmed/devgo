@@ -79,6 +79,42 @@ impl WorkspaceStore {
         Ok(())
     }
 
+    /// The whole list, not "move index 3 to 1": a client that sends the
+    /// full order saw the full list, and that claim can be checked. An
+    /// order that is not a permutation of what is stored comes from a
+    /// stale view, and obeying it would drop the workspace the client
+    /// never saw. Same rule as remove: not honoured exactly is an error.
+    /// Compared through the normalisation add uses, so forward slashes
+    /// still name the same workspace.
+    pub fn reorder(&mut self, order: Vec<String>) -> Result<(), AppError> {
+        let norm = |p: &str| super::platform::paths::normalize(p);
+        let mut have: Vec<String> =
+            self.workspaces.iter().map(|w| norm(w)).collect();
+        let mut want: Vec<String> = order.iter().map(|w| norm(w)).collect();
+        have.sort();
+        want.sort();
+        if have != want {
+            return Err(AppError::WorkspaceOrderMismatch(
+                order.len(),
+                self.workspaces.len(),
+            ));
+        }
+        // the stored spelling stays; only the positions change
+        let reordered = order
+            .iter()
+            .map(|o| {
+                let key = norm(o);
+                self.workspaces
+                    .iter()
+                    .find(|w| norm(w) == key)
+                    .cloned()
+                    .unwrap_or_else(|| o.clone())
+            })
+            .collect();
+        self.workspaces = reordered;
+        self.save()
+    }
+
     fn save(&self) -> Result<(), AppError> {
         let data = serde_json::to_string_pretty(&self.workspaces)?;
         fs::write(&self.file_path, data)?;
@@ -155,6 +191,65 @@ mod tests {
         s.add(r"G:\dev").unwrap();
         s.add(r"G:\devtools").unwrap();
         assert_eq!(s.list().len(), 2, "G:\\devtools is not inside G:\\dev");
+    }
+
+    /// A client reordering from a stale list: obeying its order would drop
+    /// the workspace it never saw.
+    #[test]
+    fn reorder_refuses_anything_that_is_not_a_permutation() {
+        let mut s = store("reorder-refuse");
+        s.add(r"G:\dev").unwrap();
+        s.add(r"G:\work").unwrap();
+        s.add(r"G:\play").unwrap();
+
+        // missing one
+        assert!(s
+            .reorder(vec![r"G:\work".into(), r"G:\dev".into()])
+            .is_err());
+        // one extra
+        assert!(s
+            .reorder(vec![
+                r"G:\work".into(),
+                r"G:\dev".into(),
+                r"G:\play".into(),
+                r"G:\new".into()
+            ])
+            .is_err());
+        // a stranger with the right count
+        assert!(s
+            .reorder(vec![
+                r"G:\work".into(),
+                r"G:\dev".into(),
+                r"G:\other".into()
+            ])
+            .is_err());
+        assert_eq!(
+            s.list(),
+            vec![r"G:\dev", r"G:\work", r"G:\play"],
+            "a refused reorder changes nothing"
+        );
+    }
+
+    #[test]
+    fn reorder_applies_a_permutation_and_persists_it() {
+        let dir = std::env::temp_dir().join("devgo-ws-test-reorder-ok");
+        let _ = fs::remove_dir_all(&dir);
+        let mut s = WorkspaceStore::new(dir.clone()).unwrap();
+        s.add(r"G:\dev").unwrap();
+        s.add(r"G:\work").unwrap();
+        s.add(r"G:\play").unwrap();
+
+        // forward slashes and a trailing one: still the same workspaces
+        s.reorder(vec!["G:/play/".into(), r"G:\dev".into(), "G:/work".into()])
+            .unwrap();
+        assert_eq!(
+            s.list(),
+            vec![r"G:\play", r"G:\dev", r"G:\work"],
+            "positions change, the stored spelling does not"
+        );
+
+        let again = WorkspaceStore::new(dir).unwrap();
+        assert_eq!(again.list(), vec![r"G:\play", r"G:\dev", r"G:\work"]);
     }
 
     #[test]
