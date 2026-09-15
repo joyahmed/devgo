@@ -40,6 +40,11 @@ pub enum AppError {
     #[error("{0}")]
     CloneRefused(String),
 
+    /// A group edit that must not happen: an empty or duplicate name, an
+    /// order that is not a permutation. Phrased for the dialog that asked.
+    #[error("{0}")]
+    GroupRefused(String),
+
     /// Carries an already-phrased message: the distinction between "timed out"
     /// and "returned but still running" is the useful part, and only the caller
     /// knows which it was.
