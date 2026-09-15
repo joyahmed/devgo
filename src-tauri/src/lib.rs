@@ -18,15 +18,54 @@ use tauri::Manager;
 /// The taskbar button's identity and icon, which tauri leaves half done.
 /// The nsis installer stamps the shortcuts with the bundle identifier as
 /// their AppUserModelID, but nothing sets it on the process, so a pinned
-/// DevGo and a running DevGo are two buttons. Raw imports rather than the
-/// windows crate: it is in the tree through tauri, not a dependency of
-/// ours, and a handful of functions do not earn one.
+/// DevGo and a running DevGo are two buttons. And tao sets ICON_SMALL only,
+/// from the first entry of icon.ico decoded to RGBA; ICON_BIG is never set,
+/// and explorer asks a freshly shown window for it with a timeout that a UI
+/// thread bringing up webview2 is exactly the one to miss. Raw imports
+/// rather than the windows crate: it is in the tree through tauri, not a
+/// dependency of ours, and five functions do not earn one.
 #[cfg(windows)]
 mod win_taskbar {
+    use std::ffi::c_void;
+
+    #[link(name = "user32")]
+    unsafe extern "system" {
+        fn SendMessageW(
+            hwnd: *mut c_void,
+            msg: u32,
+            wparam: usize,
+            lparam: isize,
+        ) -> isize;
+        fn LoadImageW(
+            hinst: *mut c_void,
+            name: *const u16,
+            kind: u32,
+            cx: i32,
+            cy: i32,
+            flags: u32,
+        ) -> *mut c_void;
+        fn GetSystemMetrics(index: i32) -> i32;
+    }
+    #[link(name = "kernel32")]
+    unsafe extern "system" {
+        fn GetModuleHandleW(name: *const u16) -> *mut c_void;
+    }
     #[link(name = "shell32")]
     unsafe extern "system" {
         fn SetCurrentProcessExplicitAppUserModelID(app_id: *const u16) -> i32;
     }
+
+    const WM_SETICON: u32 = 0x0080;
+    const ICON_SMALL: usize = 0;
+    const ICON_BIG: usize = 1;
+    const IMAGE_ICON: u32 = 1;
+    const LR_SHARED: u32 = 0x8000;
+    const SM_CXICON: i32 = 11;
+    const SM_CYICON: i32 = 12;
+    const SM_CXSMICON: i32 = 49;
+    const SM_CYSMICON: i32 = 50;
+    // the id tauri-build gives the exe's icon group
+    const IDI_APPLICATION: usize = 32512;
 
     fn wide(s: &str) -> Vec<u16> {
         s.encode_utf16().chain(std::iter::once(0)).collect()
@@ -43,11 +82,61 @@ mod win_taskbar {
             eprintln!("[DevGo] SetCurrentProcessExplicitAppUserModelID failed: 0x{hr:08x}");
         }
     }
+
+    // from the exe's own resource group, not rebuilt from RGBA: windows
+    // picks the entry for the dpi, and LR_SHARED leaves the handle
+    // system-owned, so nothing to destroy and nothing dangling if tauri
+    // ever replaces ICON_SMALL behind us
+    fn load_icon(cx: i32, cy: i32) -> *mut c_void {
+        unsafe {
+            LoadImageW(
+                GetModuleHandleW(std::ptr::null()),
+                IDI_APPLICATION as *const u16,
+                IMAGE_ICON,
+                cx,
+                cy,
+                LR_SHARED,
+            )
+        }
+    }
+
+    /// Both window icons from the exe's resources. Idempotent and cheap,
+    /// which is the point: a WM_SETICON is the only thing that makes a
+    /// taskbar button that already gave up on us look again.
+    pub fn apply_window_icon(window: &tauri::Window) {
+        let Ok(hwnd) = window.hwnd() else {
+            return;
+        };
+        let hwnd = hwnd.0;
+        let (big, small) = unsafe {
+            (
+                load_icon(
+                    GetSystemMetrics(SM_CXICON),
+                    GetSystemMetrics(SM_CYICON),
+                ),
+                load_icon(
+                    GetSystemMetrics(SM_CXSMICON),
+                    GetSystemMetrics(SM_CYSMICON),
+                ),
+            )
+        };
+        // no resource group means a build that skipped tauri-build's
+        // resource step; tao's small icon is still there, leave it
+        if big.is_null() || small.is_null() {
+            eprintln!("[DevGo] exe carries no icon resource; taskbar icon left to tao");
+            return;
+        }
+        unsafe {
+            SendMessageW(hwnd, WM_SETICON, ICON_BIG, big as isize);
+            SendMessageW(hwnd, WM_SETICON, ICON_SMALL, small as isize);
+        }
+    }
 }
 
 #[cfg(not(windows))]
 mod win_taskbar {
     pub fn set_app_user_model_id(_id: &str) {}
+    pub fn apply_window_icon(_window: &tauri::Window) {}
 }
 
 // only the restored rect is stored: maximized, the window is the screen,
@@ -229,6 +318,12 @@ pub fn run() {
                         let _ = window.maximize();
                     }
                 }
+
+                // icons before the first show, for the same reason as
+                // geometry: the button is created the moment the window is
+                // visible, and what it finds then is what it paints
+                let plain: tauri::Window = window.as_ref().window();
+                win_taskbar::apply_window_icon(&plain);
             }
 
             // A hotkey another app already owns must not stop DevGo from
