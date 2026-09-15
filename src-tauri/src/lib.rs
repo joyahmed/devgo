@@ -164,6 +164,7 @@ pub fn run() {
             commands::set_scan_config,
             commands::export_config_to_file,
             commands::import_config_from_file,
+            commands::reset_cache,
             commands::get_runtime_info,
             commands::open_editor,
             commands::open_terminal,

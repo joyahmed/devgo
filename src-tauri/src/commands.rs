@@ -612,6 +612,16 @@ pub fn import_config_from_file(
     Ok(state.workspace_store.lock().map_err(lock_err)?.list())
 }
 
+#[tauri::command]
+pub fn reset_cache(
+    app: tauri::AppHandle,
+    state: State<AppState>,
+) -> Result<(), AppError> {
+    state.cache_store.lock().map_err(lock_err)?.clear()?;
+    crate::tray::refresh(&app);
+    Ok(())
+}
+
 /// Open the folder in Explorer. Works for WSL projects too: the UNC path is
 /// what Explorer wants. Boots the distro, but the user asked for that.
 #[tauri::command]
