@@ -104,6 +104,17 @@ pub fn remove_workspace(
     Ok(store.list())
 }
 
+// the whole list, so the store can refuse an order built from a stale view
+#[tauri::command]
+pub fn reorder_workspaces(
+    order: Vec<String>,
+    state: State<AppState>,
+) -> Result<Vec<String>, String> {
+    let mut store = state.workspace_store.lock().map_err(|e| e.to_string())?;
+    store.reorder(order).map_err(|e| e.to_string())?;
+    Ok(store.list())
+}
+
 /// Collect projects across every configured workspace.
 ///
 /// Two rules govern this:

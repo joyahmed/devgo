@@ -391,6 +391,7 @@ pub fn run() {
             commands::get_workspaces,
             commands::add_workspace,
             commands::remove_workspace,
+            commands::reorder_workspaces,
             commands::get_projects,
             commands::refresh_projects,
             commands::quit_app,
