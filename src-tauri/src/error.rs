@@ -14,6 +14,12 @@ pub enum AppError {
 
     #[error("Internal lock poisoned: {0}")]
     Lock(String),
+
+    #[error("Could not determine which WSL distro to use for {0}. Check that WSL is installed and has at least one distro registered.")]
+    NoWslDistro(String),
+
+    #[error("Failed to launch: {0}")]
+    LaunchFailed(String),
 }
 
 // std::io::Error and serde_json::Error don't implement Serialize, so we can't
