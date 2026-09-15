@@ -321,6 +321,24 @@ const AppInner = () => {
 				keywords: ['add', 'remove', 'folder'],
 				run: () => openSettings('workspaces')
 			},
+			// one command per target; SHORTCUTS is a fixed table and N editors do
+			// not fit it, the palette is where "the one I want this time" lives
+			...targets.editors.map(t => ({
+				id: `open.editor.${t.id}`,
+				title: `Open in ${t.name}`,
+				subtitle: p?.name ?? 'Select a project first',
+				keywords: ['editor', 'open', t.name.toLowerCase()],
+				disabled: !p || (selectionIsWsl && !t.wsl_args_template),
+				run: () => handleOpenEditor(t.id)
+			})),
+			...targets.terminals.map(t => ({
+				id: `open.terminal.${t.id}`,
+				title: `Open terminal: ${t.name}`,
+				subtitle: p?.name ?? 'Select a project first',
+				keywords: ['terminal', 'shell', t.name.toLowerCase()],
+				disabled: !p || (selectionIsWsl && !t.wsl_args_template),
+				run: () => handleOpenTerminal(t.id)
+			})),
 			{
 				id: 'settings.targets',
 				title: 'Settings: Editors & Terminals',
