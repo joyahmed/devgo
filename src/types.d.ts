@@ -796,8 +796,6 @@ interface RowMetaProps {
 interface ProjectRowProps {
 	project: Project;
 	selected: boolean;
-	/// Rendered in the Pinned strip rather than under its workspace header.
-	pinnedStrip?: boolean;
 	/// Served from cache — the row dims to say so.
 	stale?: boolean;
 	/// a github row has the cursor: the selection stays, dimmed, so the

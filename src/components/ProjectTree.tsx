@@ -34,6 +34,16 @@ const FS_TONE: Record<string, string> = {
 	Network: 'text-amber-400'
 };
 
+// the group's rail: a 2px rule the height of its rows in the file
+// system's hue, the one FsCell uses. it replaces the per-row guide that
+// flipped to accent on selection; the rail belongs to the group, and
+// selection is the row's ground and its name
+const RAIL: Record<string, string> = {
+	WSL: 'border-l-accent/50',
+	Network: 'border-l-amber-400/50',
+	Windows: 'border-l-text-muted/40'
+};
+
 const NETWORK_WARNING =
 	'On a network share — file access and dev tooling are slow here. Consider a local drive or a WSL-native path.';
 
@@ -210,11 +220,10 @@ const RowMeta = ({
 );
 
 /// One project row — the same element whether it sits in the Pinned strip or
-/// under its workspace header; only the left border and the dimming differ.
+/// under its workspace header; only the dimming differs.
 const ProjectRow = ({
 	project,
 	selected,
-	pinnedStrip,
 	stale,
 	quiet,
 	showHints,
@@ -229,15 +238,13 @@ const ProjectRow = ({
 }: ProjectRowProps) => (
 	<div
 		className={`${col} group px-3 py-1.5 cursor-pointer select-none transition-colors ${
-			pinnedStrip ? 'border-l-2' : 'ml-6 border-l border-border'
-		} ${stale ? 'opacity-60' : ''} ${
+			stale ? 'opacity-60' : ''
+		} ${
 			selected
 				? quiet
-					? 'bg-bg-selected/40 text-text-primary border-l-accent/50'
-					: 'bg-bg-selected text-text-primary border-l-accent'
-				: `text-text-secondary hover:bg-bg-hover/50 ${
-						pinnedStrip ? 'border-l-accent/40' : 'border-l-transparent'
-					}`
+					? 'bg-bg-selected/40 text-text-primary'
+					: 'bg-bg-selected text-text-primary'
+				: 'text-text-secondary hover:bg-bg-hover/50'
 		}`}
 		onClick={() => onSelect(project)}
 		onDoubleClick={() => onDoubleClick(project)}
@@ -664,12 +671,14 @@ const ProjectTree = ({
 						<div className='px-3 py-1 text-13 font-semibold text-text-muted'>
 							Pinned
 						</div>
-						{pinned.map(project => (
-							<ProjectRow
-								key={`pinned-${project.full_path}`}
-								{...{ ...rowProps(project), pinnedStrip: true }}
-							/>
-						))}
+						<div className='border-l-2 border-l-accent/40'>
+							{pinned.map(project => (
+								<ProjectRow
+									key={`pinned-${project.full_path}`}
+									{...rowProps(project)}
+								/>
+							))}
+						</div>
 						<div className='mx-3 my-1 border-b border-border' />
 					</div>
 				)}
@@ -737,7 +746,9 @@ const ProjectTree = ({
 								className='grid transition-[grid-template-rows] duration-150 ease-out'
 								style={{ gridTemplateRows: isOpen ? '1fr' : '0fr' }}
 							>
-								<div className='overflow-hidden'>
+								<div
+									className={`overflow-hidden ml-6 border-l-2 ${RAIL[fs] ?? RAIL.Windows}`}
+								>
 									{wsProjects
 										.filter(p => !pinnedPaths.has(p.full_path))
 										.map(project => (

@@ -86,12 +86,12 @@ const RepoRow = ({
 	onShowLocal
 }: RepoRowProps) => (
 	<div
-		className={`${col} px-3 py-1.5 ${nested ? 'ml-12' : 'ml-6'} border-l cursor-pointer select-none transition-colors ${
+		className={`${col} px-3 py-1.5 ${nested ? 'ml-6' : ''} cursor-pointer select-none transition-colors ${
 			repo.archived || gone ? 'opacity-60' : ''
 		} ${
 			isCursor
-				? 'bg-bg-selected text-text-primary border-l-accent'
-				: 'text-text-secondary hover:bg-bg-hover/50 border-l-border'
+				? 'bg-bg-selected text-text-primary'
+				: 'text-text-secondary hover:bg-bg-hover/50'
 		}`}
 		onClick={() => onSelect(repo)}
 		onDoubleClick={() => onOpen(repo)}
@@ -363,19 +363,21 @@ const GithubLane = ({
 				className='grid transition-[grid-template-rows] duration-150 ease-out'
 				style={{ gridTemplateRows: isOpen ? '1fr' : '0fr' }}
 			>
-				<div className='overflow-hidden'>
+				{/* the group's rail, in the strong border: github rows have no
+				    file system hue */}
+				<div className='overflow-hidden ml-6 border-l-2 border-l-border-strong'>
 					{github.lastError && (
-						<div className='ml-6 px-3 py-2 text-13 text-danger'>
+						<div className='px-3 py-2 text-13 text-danger'>
 							{github.lastError}
 						</div>
 					)}
 					{isOpen && total === 0 && !github.refreshing && !github.lastError && (
-						<div className='ml-6 px-3 py-2 text-15 text-text-muted'>
+						<div className='px-3 py-2 text-15 text-text-muted'>
 							{emptyLine(status)}
 						</div>
 					)}
 					{total > 0 && visible.length === 0 && !searching && (
-						<div className='ml-6 px-3 py-2 text-15 text-text-muted'>
+						<div className='px-3 py-2 text-15 text-text-muted'>
 							No repository matches{' '}
 							<span className='font-mono'>{query.trim()}</span>.
 						</div>
@@ -387,7 +389,7 @@ const GithubLane = ({
 						flat.map(part => (
 							<div key={part.key}>
 								{part.show && (
-									<div className='ml-6 px-3 py-1.5 text-11 text-text-muted'>
+									<div className='px-3 py-1.5 text-11 text-text-muted'>
 										{part.label}
 									</div>
 								)}
@@ -402,7 +404,7 @@ const GithubLane = ({
 							<div key={name ?? '\u0000tail'}>
 								{heading && (
 									<div
-										className={`${col} px-3 py-1.5 ml-6 border-l border-l-border select-none ${
+										className={`${col} px-3 py-1.5 select-none ${
 											name !== null ? 'cursor-pointer hover:bg-bg-hover/50' : ''
 										}`}
 										onClick={() => name !== null && toggleGroup(name)}
@@ -439,7 +441,7 @@ const GithubLane = ({
 										rowFor(repo, heading, section.gone.has(repo.full_name))
 									)}
 								{name !== null && !isFolded && section.rows.length === 0 && (
-									<div className='ml-12 px-3 py-2 text-13 text-text-muted'>
+									<div className='ml-6 px-3 py-2 text-13 text-text-muted'>
 										Empty. Right-click a repo and choose Add to group.
 									</div>
 								)}
@@ -449,7 +451,7 @@ const GithubLane = ({
 					{/* say what the default view is, so twenty rows out of a few
 					    hundred never reads as "where are the rest" */}
 					{isOpen && showRecents && tail && tail.total > RECENT_LIMIT && (
-						<div className='ml-6 px-3 py-1.5 text-11 text-text-muted'>
+						<div className='px-3 py-1.5 text-11 text-text-muted'>
 							{RECENT_LIMIT} most recently updated of {tail.total}
 							{sections && sections.length > 1 ? ' not in a group' : ''}. Type
 							to search all of them.
