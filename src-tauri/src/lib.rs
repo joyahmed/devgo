@@ -129,6 +129,34 @@ pub fn run() {
                 ),
             });
 
+            // geometry goes on before the webview calls show(), so the first
+            // paint is already the right shape
+            if let Some(window) = app.get_webview_window("main") {
+                let saved = app
+                    .state::<AppState>()
+                    .pref_store
+                    .lock()
+                    .ok()
+                    .and_then(|p| p.window_state());
+                match saved {
+                    // set_size is ignored on a maximized window
+                    Some(s) if !s.maximized => {
+                        let _ = window.unmaximize();
+                        let _ = window.set_size(tauri::PhysicalSize::new(
+                            s.width, s.height,
+                        ));
+                        let _ = window.set_position(
+                            tauri::PhysicalPosition::new(s.x, s.y),
+                        );
+                    }
+                    // `maximized: true` in the config does not survive
+                    // `visible: false`; this line is what actually does it
+                    _ => {
+                        let _ = window.maximize();
+                    }
+                }
+            }
+
             // A hotkey another app already owns must not stop DevGo from
             // starting — log it and carry on; the tray and window still work.
             let hotkey = app
