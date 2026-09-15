@@ -171,6 +171,7 @@ pub fn run() {
             commands::terminate_distro,
             commands::shutdown_wsl,
             commands::open_remote,
+            commands::reveal_in_explorer,
             commands::get_runtime_info,
             commands::open_editor,
             commands::open_terminal,

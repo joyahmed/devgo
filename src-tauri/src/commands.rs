@@ -444,6 +444,18 @@ pub fn get_project_tech(
     Ok(fresh)
 }
 
+/// Open the folder in Explorer. Works for WSL projects too: the UNC path is
+/// what Explorer wants. Boots the distro, but the user asked for that.
+#[tauri::command]
+pub fn reveal_in_explorer(project: Project) -> Result<(), AppError> {
+    // explorer.exe exits 1 even on success, so don't wait on it
+    std::process::Command::new("explorer")
+        .arg(&project.full_path)
+        .spawn()
+        .map_err(|e| AppError::LaunchFailed(format!("explorer: {e}")))?;
+    Ok(())
+}
+
 /// Open a project's remote in the browser.
 #[tauri::command]
 pub fn open_remote(
