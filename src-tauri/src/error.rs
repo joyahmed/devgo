@@ -48,6 +48,12 @@ pub enum AppError {
 
     #[error("Could not bind {0}: {1}")]
     HotkeyFailed(String, String),
+
+    #[error("Workspace {0} no longer exists — the list has {1} entries. Refresh and try again")]
+    WorkspaceIndexOutOfRange(usize, usize),
+
+    #[error("{0} overlaps the workspace {1}. Nested workspaces scan the same folders twice, so remove one before adding the other")]
+    WorkspaceOverlaps(String, String),
 }
 
 // std::io::Error and serde_json::Error don't implement Serialize, so we can't
