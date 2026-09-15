@@ -67,6 +67,32 @@ body {
 	-webkit-font-smoothing: antialiased;
 }
 
+/* keyboard focus is visible, in the accent: tab used to land on buttons
+   invisibly. buttons, links and tab stops only; an input already says
+   focused through its wrapper's accent border, and a ring on the input as
+   well drew a square outline inside a rounded box in a second blue */
+:where(button, a, [role='button'], [tabindex]):focus-visible {
+	outline: 2px solid var(--color-accent);
+	outline-offset: 2px;
+}
+:where(input, textarea, select):focus-visible {
+	outline: none;
+}
+:focus:not(:focus-visible) {
+	outline: none;
+}
+
+/* someone who asked their os for less motion gets none */
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 0.01ms !important;
+	}
+}
+
 ::-webkit-scrollbar {
 	width: 6px;
 }
