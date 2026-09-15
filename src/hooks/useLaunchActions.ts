@@ -14,16 +14,19 @@ export const useLaunchActions = (
 		refreshProjects();
 	};
 
-	const openEditor = () => {
-		if (!selected) return Promise.resolve();
+	// buttons and shortcuts act on the selection, a context menu on its own row
+	const openEditor = (project?: Project) => {
+		const p = project ?? selected;
+		if (!p) return Promise.resolve();
 		// targetId omitted means "use the default", resolved on the Rust side so
 		// the fallback chain lives in one place.
-		return invoke('open_editor', { project: selected, targetId: null });
+		return invoke('open_editor', { project: p, targetId: null });
 	};
 
-	const openTerminal = () => {
-		if (!selected) return Promise.resolve();
-		return invoke('open_terminal', { project: selected });
+	const openTerminal = (project?: Project) => {
+		const p = project ?? selected;
+		if (!p) return Promise.resolve();
+		return invoke('open_terminal', { project: p, targetId: null });
 	};
 
 	const openBoth = (project?: Project) => {
