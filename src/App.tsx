@@ -1451,6 +1451,7 @@ const AppInner = () => {
 									onArrow: handleGithubArrow,
 									placeholder: 'Search GitHub repos…',
 									lane: 'github' as const,
+									enterHint: hasRepos ? '⏎ Enter' : undefined,
 									className: 'w-[clamp(200px,24%,400px)] shrink-0'
 								}}
 							/>
