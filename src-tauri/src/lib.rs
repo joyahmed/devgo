@@ -39,6 +39,9 @@ pub fn run() {
             commands::remove_workspace,
             commands::get_projects,
             commands::get_runtime_info,
+            commands::open_vscode,
+            commands::open_terminal,
+            commands::open_both,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

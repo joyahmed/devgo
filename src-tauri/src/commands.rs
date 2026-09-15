@@ -3,6 +3,7 @@ use tauri::State;
 
 use crate::error::AppError;
 use crate::models::Project;
+use crate::services::launcher;
 use crate::services::platform::RuntimeInfo;
 use crate::services::WorkspaceStore;
 
@@ -55,4 +56,28 @@ pub fn get_projects(state: State<AppState>) -> Result<Vec<Project>, AppError> {
     }
     projects.sort_by_key(|p| p.name.to_lowercase());
     Ok(projects)
+}
+
+#[tauri::command]
+pub fn open_vscode(
+    project: Project,
+    state: State<AppState>,
+) -> Result<(), AppError> {
+    launcher::launch_vscode(&project, &state.runtime_info)
+}
+
+#[tauri::command]
+pub fn open_terminal(
+    project: Project,
+    state: State<AppState>,
+) -> Result<(), AppError> {
+    launcher::launch_terminal(&project, &state.runtime_info)
+}
+
+#[tauri::command]
+pub fn open_both(
+    project: Project,
+    state: State<AppState>,
+) -> Result<(), AppError> {
+    launcher::launch_both(&project, &state.runtime_info)
 }

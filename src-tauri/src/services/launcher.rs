@@ -122,3 +122,12 @@ fn build_tmux_script(session: &str, linux_path: &str) -> String {
         "#
     )
 }
+
+pub fn launch_both(
+    project: &Project,
+    info: &RuntimeInfo,
+) -> Result<(), AppError> {
+    launch_vscode(project, info)?;
+    std::thread::sleep(std::time::Duration::from_millis(1000));
+    launch_terminal(project, info)
+}
