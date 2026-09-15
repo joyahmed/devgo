@@ -11,6 +11,13 @@ const OPEN_KEY = 'devgo.githubLane';
 // which groups are folded, remembered like the tree's collapse set
 const FOLDED_KEY = 'devgo.githubGroupsFolded';
 
+// live search fires only after the box has been still this long, and
+// only for a query at least this many characters: two of the three gates
+// on the one place a keystroke becomes a network call. the third is the
+// switch in settings, off until turned on
+const LIVE_DEBOUNCE_MS = 400;
+const LIVE_MIN_CHARS = 3;
+
 const loadFolded = (): Set<string> => {
 	try {
 		const raw = JSON.parse(localStorage.getItem(FOLDED_KEY) ?? '[]');
@@ -146,9 +153,62 @@ export const useGithub = (git: Map<string, GitInfo>): GithubState => {
 	const sections = query.trim()
 		? null
 		: laneSections(payload?.cache.repos ?? [], groups);
+	// the cache's matches for the query: instant, no network
+	const cacheMatches = sections
+		? null
+		: visibleRepos(payload?.cache.repos ?? [], query);
+
+	// live hits from all of github for the same query, when the switch is
+	// on. generation stamps each request and an answer to an older one is
+	// dropped, so a fast typist never sees results for a query they left
+	const [live, setLive] = useState<{ query: string; repos: GithubRepo[] }>({
+		query: '',
+		repos: []
+	});
+	const generation = useRef(0);
+	const liveOn = Boolean(payload?.live_search);
+	const q = query.trim();
+	const liveEligible =
+		liveOn && isOpen && q.length >= LIVE_MIN_CHARS && Boolean(status?.login);
+	// searching is not state: it is eligible and not yet answered, which
+	// falls out of the query and the last answer with no flag to clear
+	const searching = liveEligible && live.query !== q;
+	useEffect(() => {
+		if (!searching) return;
+		const gen = ++generation.current;
+		const timer = window.setTimeout(() => {
+			invoke<SearchAnswer>('search_github', { query: q, generation: gen })
+				.then(answer => {
+					if (answer.generation !== generation.current) return;
+					setLive({ query: q, repos: answer.repos });
+				})
+				.catch(() => {
+					// searching stays on for this query; the next keystroke retries
+				});
+		}, LIVE_DEBOUNCE_MS);
+		return () => window.clearTimeout(timer);
+	}, [q, searching]);
+
+	// live rows the cache does not already answer with, for the current
+	// query only: a stale set from the last query would sit under the
+	// wrong heading
+	const have = new Set((cacheMatches ?? []).map(r => r.full_name));
+	const liveExtras =
+		cacheMatches && live.query === q
+			? live.repos.filter(r => !have.has(r.full_name))
+			: [];
+
+	// the flat row order the keyboard walks: the sections with folded
+	// groups contributing nothing, or the cache's matches then the live
+	// extras
 	const visible = sections
 		? sections.flatMap(s => (s.group && folded.has(s.group) ? [] : s.rows))
-		: visibleRepos(payload?.cache.repos ?? [], query);
+		: [...(cacheMatches ?? []), ...liveExtras];
+
+	const setLiveSearch = async (on: boolean) => {
+		await invoke('set_github_live_search', { on });
+		reload();
+	};
 
 	const setOrgs = async (orgs: string[] | null) => {
 		await invoke('set_github_orgs', { orgs });
@@ -167,6 +227,11 @@ export const useGithub = (git: Map<string, GitInfo>): GithubState => {
 		toggleOpen,
 		visible,
 		sections,
+		cacheMatches,
+		liveExtras,
+		searching,
+		liveOn,
+		setLiveSearch,
 		groups,
 		editGroups,
 		folded,

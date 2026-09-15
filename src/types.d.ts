@@ -111,6 +111,8 @@ interface GithubRepo {
 	default_branch: string | null;
 	/// added by hand (any owner) rather than listed by gh; survives a refresh
 	added: boolean;
+	/// only on a live search hit
+	stars: number | null;
 }
 
 /// installed / logged in as / neither, read without the network
@@ -138,6 +140,14 @@ interface GithubPayload {
 	orgs: string[] | null;
 	/// full_name to local project path, for rows cloned on this disk
 	local: Record<string, string>;
+	/// the opt-in for live gh search as you type
+	live_search: boolean;
+}
+
+/// one live search's answer, stamped with the generation that asked
+interface SearchAnswer {
+	generation: number;
+	repos: GithubRepo[];
 }
 
 /// a named group inside the GitHub list: a label over full_names, in the
@@ -546,6 +556,13 @@ interface GithubState {
 	visible: GithubRepo[];
 	/// null while searching: then visible is the flat list of matches
 	sections: LaneSection[] | null;
+	/// while searching, the cache's matches and the live hits it lacked
+	cacheMatches: GithubRepo[] | null;
+	liveExtras: GithubRepo[];
+	/// a live search is eligible and not yet answered
+	searching: boolean;
+	liveOn: boolean;
+	setLiveSearch: (on: boolean) => Promise<void>;
 	groups: GithubGroup[];
 	/// one edit in, the whole list back
 	editGroups: (edit: GroupEdit) => Promise<GithubGroup[]>;

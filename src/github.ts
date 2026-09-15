@@ -45,7 +45,8 @@ const goneRow = (full_name: string): GithubRepo => {
 		private: false,
 		archived: false,
 		default_branch: null,
-		added: false
+		added: false,
+		stars: null
 	};
 };
 
