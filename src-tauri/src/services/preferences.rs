@@ -175,6 +175,10 @@ pub struct Preferences {
     /// reason as every field above it.
     #[serde(default)]
     pub github_orgs: Option<Vec<String>>,
+    /// Named groups inside the GitHub list, in the user's order. Labels
+    /// over full_names; see services::groups. `serde(default)`, as above.
+    #[serde(default)]
+    pub github_groups: Vec<super::groups::GithubGroup>,
 }
 
 // bare names, not globs: a cheap comparison on the listing the scan already has
@@ -403,6 +407,18 @@ impl PreferencesStore {
         orgs: Option<Vec<String>>,
     ) -> Result<(), String> {
         self.prefs.github_orgs = orgs;
+        self.save()
+    }
+
+    pub fn github_groups(&self) -> Vec<super::groups::GithubGroup> {
+        self.prefs.github_groups.clone()
+    }
+
+    pub fn set_github_groups(
+        &mut self,
+        groups: Vec<super::groups::GithubGroup>,
+    ) -> Result<(), String> {
+        self.prefs.github_groups = groups;
         self.save()
     }
 
