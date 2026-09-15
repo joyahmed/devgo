@@ -421,4 +421,48 @@ mod tests {
             ScanOutcome::Unavailable(UnavailableReason::NotMounted)
         ));
     }
+
+    /// A monorepo root and its marked sub-projects surface; containers and
+    /// node_modules do not.
+    #[test]
+    fn nested_scan_finds_root_and_marked_subprojects() {
+        let dir = std::env::temp_dir().join("devgo-scan-nested-test");
+        let _ = std::fs::remove_dir_all(&dir);
+
+        let mono = dir.join("mono");
+        std::fs::create_dir_all(mono.join("apps").join("web")).unwrap();
+        std::fs::create_dir_all(mono.join("packages").join("ui")).unwrap();
+        std::fs::create_dir_all(mono.join("node_modules").join("dep")).unwrap();
+        std::fs::create_dir_all(dir.join("plain")).unwrap();
+        std::fs::write(mono.join("package.json"), "{}").unwrap();
+        std::fs::write(
+            mono.join("apps").join("web").join("package.json"),
+            "{}",
+        )
+        .unwrap();
+        std::fs::write(mono.join("packages").join("ui").join("Cargo.toml"), "")
+            .unwrap();
+        std::fs::write(
+            mono.join("node_modules").join("dep").join("package.json"),
+            "{}",
+        )
+        .unwrap();
+
+        let path = dir.to_string_lossy().to_string();
+        let ScanOutcome::Scanned(projects) =
+            scan_workspace(&path, &[], false, &[], 3)
+        else {
+            panic!("local temp dir should scan");
+        };
+        let mut names: Vec<_> =
+            projects.iter().map(|p| p.name.as_str()).collect();
+        names.sort();
+
+        assert_eq!(
+            names,
+            vec!["mono", "mono/apps/web", "mono/packages/ui", "plain"]
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }
