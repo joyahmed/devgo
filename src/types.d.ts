@@ -386,6 +386,22 @@ type TargetDraft = Record<
 
 /// What useTargets returns. Named so Settings can take it as a prop: App
 /// owns the one copy, and the row and the panel read the same list.
+/// what useGithub hands out; named because ambient types cannot import
+interface GithubState {
+	payload: GithubPayload | null;
+	status: GhStatus | null;
+	refreshing: boolean;
+	lastError: string | null;
+	/// a cache, or a gh to fetch with: whether the lane has anything to say
+	available: boolean;
+	isOpen: boolean;
+	toggleOpen: () => void;
+	visible: GithubRepo[];
+	refresh: () => void;
+	reload: () => void;
+	setOrgs: (orgs: string[] | null) => Promise<void>;
+}
+
 interface TargetRegistry {
 	editors: LaunchTarget[];
 	terminals: LaunchTarget[];
