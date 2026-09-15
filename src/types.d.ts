@@ -84,9 +84,11 @@ interface DevScript {
 	command: string;
 }
 
-/// bare folder names the scan skips, on top of dotfolders
+/// bare folder names the scan skips, on top of dotfolders, and how many
+/// levels deep to look (1 = immediate children only)
 interface ScanConfig {
 	ignore: string[];
+	depth: number;
 }
 
 // the --color-* names in index.css; a theme must set every one

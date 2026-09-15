@@ -131,15 +131,21 @@ const ShortcutTable = ({
 	);
 };
 
-// just the ignore list. depth, monorepo expansion and a watcher were left out:
-// each would cost the scan hot path, this one is a filter on a listing in hand
+const DEPTHS = [1, 2, 3, 4, 5];
+
+// the ignore list, and how deep to look. depth is safe on wsl because the
+// distro walks in one spawn; a watcher is still out, it would never stop
 const ScanningPanel = ({ onSaved, onError }: ScanningPanelProps) => {
 	const [text, setText] = useState<string | null>(null);
+	const [depth, setDepth] = useState(1);
 	const [saving, setSaving] = useState(false);
 
 	useEffect(() => {
 		invoke<ScanConfig>('get_scan_config')
-			.then(c => setText(c.ignore.join('\n')))
+			.then(c => {
+				setText(c.ignore.join('\n'));
+				setDepth(c.depth);
+			})
 			.catch(e => {
 				onError(String(e));
 				setText('');
@@ -157,7 +163,7 @@ const ScanningPanel = ({ onSaved, onError }: ScanningPanelProps) => {
 			)
 		];
 		try {
-			await invoke('set_scan_config', { config: { ignore } });
+			await invoke('set_scan_config', { config: { ignore, depth } });
 			onSaved();
 		} catch (e) {
 			onError(String(e));
@@ -167,7 +173,31 @@ const ScanningPanel = ({ onSaved, onError }: ScanningPanelProps) => {
 	};
 
 	return (
-		<div className='flex flex-col gap-4'>
+		<div className='flex flex-col gap-5'>
+			<div>
+				<h4 className={heading}>Scan depth</h4>
+				<p className='text-xs text-text-muted mb-2'>
+					How many folder levels deep to look for projects. 1 keeps the
+					original scan (every immediate child). Higher also surfaces nested
+					projects — a monorepo's{' '}
+					<code className='text-text-secondary'>apps/web</code>, or any nested
+					layout — as their own launchable rows. On WSL this is one batched
+					lookup, so depth stays cheap.
+				</p>
+				<div className='flex items-center gap-2'>
+					{DEPTHS.map(n => (
+						<Button
+							key={n}
+							variant='choice'
+							aria-pressed={depth === n}
+							onClick={() => setDepth(n)}
+							disabled={text === null}
+						>
+							{n}
+						</Button>
+					))}
+				</div>
+			</div>
 			<div>
 				<h4 className={heading}>Ignore folders</h4>
 				<p className='text-xs text-text-muted mb-2'>
@@ -176,7 +206,7 @@ const ScanningPanel = ({ onSaved, onError }: ScanningPanelProps) => {
 					case-insensitive.
 				</p>
 				<textarea
-					className='w-full h-40 px-3 py-2 bg-bg-panel border border-border rounded-md font-mono text-xs text-text-primary outline-none focus:border-accent resize-none'
+					className='w-full h-32 px-3 py-2 bg-bg-panel border border-border rounded-md font-mono text-xs text-text-primary outline-none focus:border-accent resize-none'
 					placeholder={'node_modules\narchive\nvendor'}
 					value={text ?? ''}
 					onChange={e => setText(e.target.value)}
