@@ -1301,10 +1301,10 @@ const AppInner = () => {
 						    (it capped at 1100px; a heading spans what it heads), the sort
 						    beside it, then the two controls that change what the list
 						    holds, which lived in the title bar; this is the list's row.
-						    the github box sits level with it, over its own rows, at a
-						    third of the width */}
+						    the github box sits level with it at a fixed share, so the
+						    project box is the wider one at every width */}
 						<div className='w-full shrink-0 flex items-center gap-4'>
-						<div className='flex-[2] min-w-0 flex items-center gap-3'>
+						<div className='flex-1 min-w-0 flex items-center gap-3'>
 							<SearchBox
 								{...{
 									ref: searchRef,
@@ -1379,7 +1379,7 @@ const AppInner = () => {
 									onArrow: handleGithubArrow,
 									placeholder: 'Search GitHub repos…',
 									lane: 'github' as const,
-									className: 'flex-1 min-w-0'
+									className: 'w-[clamp(200px,24%,400px)] shrink-0'
 								}}
 							/>
 						)}
