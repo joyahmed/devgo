@@ -316,8 +316,10 @@ pub fn open_editor(
     state: State<AppState>,
 ) -> Result<(), AppError> {
     let info = state.runtime_info.lock().map_err(lock_err)?.clone();
+    // the guard dies on this line: resolve_target locks pref_store itself
+    let tmux = state.pref_store.lock().map_err(lock_err)?.tmux_config();
     let target = resolve_target(&state, TargetKind::Editor, target_id)?;
-    launcher::launch_target(&target, &project, &info)?;
+    launcher::launch_target(&target, &project, &info, &tmux)?;
     record_launch(&state, &project)
 }
 
@@ -328,8 +330,10 @@ pub fn open_terminal(
     state: State<AppState>,
 ) -> Result<(), AppError> {
     let info = state.runtime_info.lock().map_err(lock_err)?.clone();
+    // read at launch, not cached: the next launch reconciles a changed list
+    let tmux = state.pref_store.lock().map_err(lock_err)?.tmux_config();
     let target = resolve_target(&state, TargetKind::Terminal, target_id)?;
-    launcher::launch_target(&target, &project, &info)?;
+    launcher::launch_target(&target, &project, &info, &tmux)?;
     record_launch(&state, &project)
 }
 
@@ -341,9 +345,10 @@ pub fn launch_project_default(
     terminal_id: Option<String>,
 ) -> Result<(), AppError> {
     let info = state.runtime_info.lock().map_err(lock_err)?.clone();
+    let tmux = state.pref_store.lock().map_err(lock_err)?.tmux_config();
     let editor = resolve_target(state, TargetKind::Editor, editor_id)?;
     let terminal = resolve_target(state, TargetKind::Terminal, terminal_id)?;
-    launcher::launch_both(&editor, &terminal, project, &info)?;
+    launcher::launch_both(&editor, &terminal, project, &info, &tmux)?;
     record_launch(state, project)
 }
 

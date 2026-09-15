@@ -2,6 +2,7 @@ use std::os::windows::process::CommandExt;
 use std::process::Command;
 
 use super::platform::RuntimeInfo;
+use super::preferences::TmuxConfig;
 use crate::error::AppError;
 use crate::models::target::{LaunchTarget, TargetKind};
 use crate::models::Project;
@@ -71,6 +72,7 @@ pub fn launch_target(
     target: &LaunchTarget,
     project: &Project,
     info: &RuntimeInfo,
+    tmux: &TmuxConfig,
 ) -> Result<(), AppError> {
     let (resolved, script) = if is_wsl(project) {
         let distro = distro_from_project(project, info)?;
@@ -79,7 +81,7 @@ pub fn launch_target(
             &distro,
         );
         let script = if target.kind == TargetKind::Terminal {
-            Some(write_tmux_script(project, &distro, &linux_path)?)
+            Some(write_tmux_script(project, &distro, &linux_path, tmux)?)
         } else {
             None
         };
@@ -121,8 +123,9 @@ fn write_tmux_script(
     project: &Project,
     distro: &str,
     linux_path: &str,
+    tmux: &TmuxConfig,
 ) -> Result<String, AppError> {
-    let script = build_tmux_script(&project.name, linux_path);
+    let script = build_tmux_script(&project.name, linux_path, tmux);
     let temp_file = std::env::temp_dir()
         .join(format!("devgo-{}.sh", sanitize_file_stem(&project.name)));
     std::fs::write(&temp_file, &script)?;
@@ -153,16 +156,33 @@ fn sanitize_file_stem(name: &str) -> String {
     }
 }
 
-fn build_tmux_script(session: &str, linux_path: &str) -> String {
+fn build_tmux_script(
+    session: &str,
+    linux_path: &str,
+    tmux: &TmuxConfig,
+) -> String {
+    let mut windows = tmux.window_names.iter();
+    let create = match windows.next() {
+        Some(first) => format!(
+            "    tmux new-session -d -s \"{session}\" -n \"{first}\" -c \"{linux_path}\"\n"
+        ),
+        None => format!(
+            "    tmux new-session -d -s \"{session}\" -c \"{linux_path}\"\n"
+        ),
+    };
+    let rest: String = windows
+        .map(|name| {
+            format!(
+                "    tmux new-window -t \"{session}:\" -n \"{name}\" -c \"{linux_path}\"\n"
+            )
+        })
+        .collect();
     format!(
         r#"#!/usr/bin/env bash
-        if ! tmux has-session -t "{session}" 2>/dev/null; then
-            tmux new-session -d -s "{session}" -n code -c "{linux_path}"
-            tmux new-window -t "{session}:" -n agents -c "{linux_path}"
-            tmux new-window -t "{session}:" -n git -c "{linux_path}"
-        fi
-        tmux attach -t "{session}"
-        "#
+if ! tmux has-session -t "{session}" 2>/dev/null; then
+{create}{rest}fi
+tmux attach -t "{session}"
+"#
     )
 }
 
@@ -204,18 +224,62 @@ pub fn launch_both(
     terminal: &LaunchTarget,
     project: &Project,
     info: &RuntimeInfo,
+    tmux: &TmuxConfig,
 ) -> Result<(), AppError> {
-    launch_target(editor, project, info)?;
+    launch_target(editor, project, info, tmux)?;
     // The editor needs a moment to claim the foreground, or the terminal opens
     // behind it.
     std::thread::sleep(std::time::Duration::from_millis(1000));
-    launch_target(terminal, project, info)
+    launch_target(terminal, project, info, tmux)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::models::target::TargetKind;
+
+    fn tmux_with(names: &[&str]) -> TmuxConfig {
+        TmuxConfig {
+            enabled: true,
+            window_names: names.iter().map(|n| n.to_string()).collect(),
+        }
+    }
+
+    fn wsl_project(name: &str, workspace: &str) -> Project {
+        Project::new(
+            name.into(),
+            format!(r"\\wsl.localhost\Ubuntu\home\joy\{workspace}\{name}"),
+            format!(r"\\wsl.localhost\Ubuntu\home\joy\{workspace}"),
+            "WSL".into(),
+        )
+    }
+
+    fn no_distro() -> RuntimeInfo {
+        RuntimeInfo {
+            runtime: crate::services::platform::runtime::Runtime::Windows,
+            wsl_available: false,
+            distros: vec![],
+            default_distro: None,
+        }
+    }
+
+    /// The shipped default must still be byte-for-byte what the three
+    /// hardcoded lines produced, or every existing session gets a new layout.
+    #[test]
+    fn the_default_list_still_opens_code_agents_and_git_in_that_order() {
+        let shipped = TmuxConfig::default();
+        assert!(shipped.enabled, "tmux on, or every install loses it");
+        assert_eq!(shipped.window_names, ["code", "agents", "git"]);
+        let script = build_tmux_script("api", "/home/joy/api", &shipped);
+        let mut cursor = 0;
+        for name in &shipped.window_names {
+            let needle = format!("-n \"{name}\" -c \"/home/joy/api\"");
+            let at = script[cursor..]
+                .find(&needle)
+                .unwrap_or_else(|| panic!("{name} missing or out of order"));
+            cursor += at + needle.len();
+        }
+    }
 
     #[test]
     fn an_editor_that_is_not_installed_reports_instead_of_pretending() {
@@ -243,7 +307,8 @@ mod tests {
             default_distro: None,
         };
 
-        let err = launch_target(&ghost, &project, &info).unwrap_err();
+        let err = launch_target(&ghost, &project, &info, &tmux_with(&[]))
+            .unwrap_err();
         assert!(
             matches!(err, AppError::TargetNotInstalled(ref e) if e == "devgo-no-such-editor"),
             "expected TargetNotInstalled, got {err:?}"
@@ -290,7 +355,7 @@ mod tests {
             default_distro: None,
         };
 
-        launch_target(&target, &project, &info).unwrap();
+        launch_target(&target, &project, &info, &tmux_with(&[])).unwrap();
 
         // The spawn is async; give the child a moment to finish writing. The
         // redirect creates the file before echo runs, so wait for bytes, not
