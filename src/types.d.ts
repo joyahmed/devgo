@@ -351,6 +351,11 @@ interface ScanPickerProps {
 	onDone?: () => void;
 }
 
+interface AddRepoProps {
+	onAdded: (repo: GithubRepo) => void;
+	onDone: () => void;
+}
+
 interface ClonePickerProps {
 	/// every cached repo. rows already on disk are ticked and disabled,
 	/// the way ScanPicker shows folders already added
