@@ -1107,9 +1107,9 @@ const AppInner = () => {
 									? 'A new name for the group. Its repos stay where they are.'
 									: `A name for the group. ${
 											namePrompt.repos.length === 1
-												? namePrompt.repos[0]
-												: `${namePrompt.repos.length} repos`
-										} go in it.`,
+												? `${namePrompt.repos[0]} goes`
+												: `${namePrompt.repos.length} repos go`
+										} in it.`,
 							initial: namePrompt.kind === 'rename' ? namePrompt.from : '',
 							submitLabel: namePrompt.kind === 'rename' ? 'Rename' : 'Create group',
 							onSubmit: async (name: string) => {
