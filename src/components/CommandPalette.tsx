@@ -114,7 +114,7 @@ const CommandPalette = ({ commands, onClose }: CommandPaletteProps) => {
 							<Button
 								ref={i === active ? activeRef : undefined}
 								variant='tab'
-								className='w-full rounded-none px-4 py-2'
+								className='w-full rounded-none px-4 py-2 text-left'
 								aria-current={i === active ? 'page' : undefined}
 								disabled={cmd.disabled}
 								onMouseMove={() => setActive(i)}
