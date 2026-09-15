@@ -24,6 +24,12 @@ pub enum AppError {
     #[error("No browsable remote for {0}")]
     NoRemote(String),
 
+    /// gh could not answer: not installed, not logged in, or it failed.
+    /// Carries the fix (winget install GitHub.cli, gh auth login) or gh's
+    /// own stderr, never an empty repo list that looks like "no repos".
+    #[error("{0}")]
+    GhUnavailable(String),
+
     /// Carries an already-phrased message: the distinction between "timed out"
     /// and "returned but still running" is the useful part, and only the caller
     /// knows which it was.

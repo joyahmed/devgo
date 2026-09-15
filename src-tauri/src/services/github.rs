@@ -8,10 +8,20 @@
 //! errors with the fix in them rather than an empty list that looks like
 //! "you have no repos".
 use std::collections::HashMap;
+use std::os::windows::process::CommandExt;
+use std::process::Command;
 
 use serde::{Deserialize, Serialize};
 
 use crate::error::AppError;
+
+const CREATE_NO_WINDOW: u32 = 0x08000000;
+
+// gh repo list caps at 1000 per call. the lane header shows the count, so
+// a cap would be visible rather than silent
+const LIST_LIMIT: &str = "1000";
+
+const NOT_INSTALLED: &str = "GitHub CLI (gh) is not installed or not on PATH. Install it with: winget install GitHub.cli";
 
 /// One repository, as the lane shows it. Flat on purpose: gh nests the
 /// owner and the default branch, and neither nesting means anything to a
@@ -33,6 +43,133 @@ pub struct Repo {
     /// None for an empty repository: gh prints defaultBranchRef null for
     /// one with no commits, and one such repo must not fail the list
     pub default_branch: Option<String>,
+}
+
+/// The three states the auth answer can be in. login is the point: the
+/// Settings line greets the user by it, and the lane compares an owner
+/// against it.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct GhStatus {
+    pub installed: bool,
+    pub version: Option<String>,
+    pub login: Option<String>,
+}
+
+/// Run gh with args, or say why it could not run.
+///
+/// A missing executable is GhUnavailable with the install command; a
+/// non-zero exit carries gh's own stderr, which for the not-logged-in
+/// case already reads "To get started with GitHub CLI, please run: gh
+/// auth login".
+fn gh(args: &[&str]) -> Result<String, AppError> {
+    let output = Command::new("gh")
+        .creation_flags(CREATE_NO_WINDOW)
+        .args(args)
+        .output()
+        .map_err(|_| AppError::GhUnavailable(NOT_INSTALLED.into()))?;
+    if output.status.success() {
+        Ok(String::from_utf8_lossy(&output.stdout).into_owned())
+    } else {
+        let err = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        Err(AppError::GhUnavailable(if err.is_empty() {
+            format!("gh {} failed", args.join(" "))
+        } else {
+            err
+        }))
+    }
+}
+
+/// Installed? Logged in as whom? Answered without the network.
+///
+/// gh auth status validates the token against the API, a network call
+/// and a slow one. gh config get -h github.com user reads the login
+/// straight out of hosts.yml, which is what a status line that renders
+/// on every Settings open can afford. An empty login is nobody logged in.
+pub fn status() -> GhStatus {
+    let version = match gh(&["--version"]) {
+        Ok(text) => parse_version(&text),
+        Err(_) => return GhStatus::default(),
+    };
+    let login = gh(&["config", "get", "-h", "github.com", "user"])
+        .ok()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
+    GhStatus {
+        installed: true,
+        version,
+        login,
+    }
+}
+
+// gh version 2.97.0 (2026-07-31) -> 2.97.0
+fn parse_version(text: &str) -> Option<String> {
+    text.lines()
+        .next()?
+        .split_whitespace()
+        .nth(2)
+        .map(str::to_string)
+}
+
+/// The login gh is authenticated as, or the typed not-logged-in error.
+fn require_login() -> Result<String, AppError> {
+    let s = status();
+    if !s.installed {
+        return Err(AppError::GhUnavailable(NOT_INSTALLED.into()));
+    }
+    s.login.ok_or_else(|| {
+        AppError::GhUnavailable(
+            "gh is installed but not logged in. Run: gh auth login".into(),
+        )
+    })
+}
+
+/// Every organisation the user belongs to. One gh api call; cached
+/// beside the repos so Settings can draw its checkboxes offline.
+pub fn list_orgs() -> Result<Vec<String>, AppError> {
+    let text = gh(&["api", "user/orgs", "--paginate", "--jq", ".[].login"])?;
+    Ok(text
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty())
+        .map(str::to_string)
+        .collect())
+}
+
+const REPO_FIELDS: &str =
+    "name,owner,url,updatedAt,isPrivate,isArchived,defaultBranchRef";
+
+/// The user's own repositories plus each listed org's, newest first.
+///
+/// One gh repo list per owner. About six seconds for a few hundred repos
+/// on a good day and twenty on a slow one, which is why nothing calls
+/// this on the UI thread.
+pub fn list_repos(orgs: &[String]) -> Result<(String, Vec<Repo>), AppError> {
+    let login = require_login()?;
+    let mut repos = parse_repos(&gh(&[
+        "repo",
+        "list",
+        "--json",
+        REPO_FIELDS,
+        "-L",
+        LIST_LIMIT,
+    ])?)?;
+    for org in orgs {
+        let text = gh(&[
+            "repo",
+            "list",
+            org,
+            "--json",
+            REPO_FIELDS,
+            "-L",
+            LIST_LIMIT,
+        ])?;
+        repos.extend(parse_repos(&text)?);
+    }
+    // newest first across owners, so "the 20 most recently updated" on
+    // the frontend is a slice, not a sort
+    repos.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+    repos.dedup_by(|a, b| a.full_name == b.full_name);
+    Ok((login, repos))
 }
 
 // the shape gh repo list --json prints. private: the nested owner and
@@ -204,6 +341,16 @@ mod tests {
             local["joyahmed/devgo-app-private"],
             r"G:\01_tauri\devgo-app-private"
         );
+    }
+
+    #[test]
+    fn version_line_parses() {
+        assert_eq!(
+            parse_version("gh version 2.97.0 (2026-07-31)\nhttps://…")
+                .as_deref(),
+            Some("2.97.0")
+        );
+        assert_eq!(parse_version(""), None);
     }
 
     #[test]
