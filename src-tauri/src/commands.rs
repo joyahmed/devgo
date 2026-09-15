@@ -323,16 +323,24 @@ pub fn open_terminal(
     record_launch(&state, &project)
 }
 
+// one launch path for the window, the palette and the tray
+pub fn launch_project_default(
+    state: &AppState,
+    project: &Project,
+) -> Result<(), AppError> {
+    let info = state.runtime_info.lock().map_err(lock_err)?.clone();
+    let editor = resolve_target(state, TargetKind::Editor, None)?;
+    let terminal = resolve_target(state, TargetKind::Terminal, None)?;
+    launcher::launch_both(&editor, &terminal, project, &info)?;
+    record_launch(state, project)
+}
+
 #[tauri::command]
 pub fn open_both(
     project: Project,
     state: State<AppState>,
 ) -> Result<(), AppError> {
-    let info = state.runtime_info.lock().map_err(lock_err)?.clone();
-    let editor = resolve_target(&state, TargetKind::Editor, None)?;
-    let terminal = resolve_target(&state, TargetKind::Terminal, None)?;
-    launcher::launch_both(&editor, &terminal, &project, &info)?;
-    record_launch(&state, &project)
+    launch_project_default(&state, &project)
 }
 
 #[tauri::command]
