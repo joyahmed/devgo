@@ -268,6 +268,23 @@ impl PreferencesStore {
         self.save()
     }
 
+    pub fn window_state(&self) -> Option<WindowState> {
+        self.prefs.window_state.clone()
+    }
+
+    /// Drop writes that change nothing: a drag emits one event per frame,
+    /// and each save is a full serialize.
+    pub fn set_window_state(
+        &mut self,
+        state: WindowState,
+    ) -> Result<(), String> {
+        if self.prefs.window_state.as_ref() == Some(&state) {
+            return Ok(());
+        }
+        self.prefs.window_state = Some(state);
+        self.save()
+    }
+
     pub fn scan_config(&self) -> ScanConfig {
         self.prefs.scan_config.clone()
     }
@@ -377,5 +394,55 @@ mod tests {
     fn hotkey_defaults_when_unset() {
         let s = store("hotkey");
         assert_eq!(s.summon_hotkey(), DEFAULT_SUMMON_HOTKEY);
+    }
+
+    #[test]
+    fn window_state_round_trips() {
+        let dir = std::env::temp_dir().join("devgo-prefs-test-window");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+
+        let mut s = PreferencesStore::new(dir.clone()).unwrap();
+        assert!(s.window_state().is_none(), "fresh install opens maximized");
+        let state = WindowState {
+            maximized: false,
+            width: 1200,
+            height: 800,
+            x: 40,
+            y: 60,
+        };
+        s.set_window_state(state.clone()).unwrap();
+
+        let reloaded = PreferencesStore::new(dir).unwrap();
+        assert_eq!(reloaded.window_state(), Some(state));
+    }
+
+    #[test]
+    fn same_window_state_does_not_write() {
+        let dir = std::env::temp_dir().join("devgo-prefs-test-nowrite");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+
+        let mut s = PreferencesStore::new(dir.clone()).unwrap();
+        let state = WindowState::default();
+        s.set_window_state(state.clone()).unwrap();
+        fs::remove_file(dir.join("prefs.json")).unwrap();
+
+        s.set_window_state(state).unwrap();
+        assert!(!dir.join("prefs.json").exists(), "same rect, no write");
+    }
+
+    /// A prefs.json from before this field must load, not go to .bak.
+    #[test]
+    fn prefs_without_window_state_still_load() {
+        let dir = std::env::temp_dir().join("devgo-prefs-test-old");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("prefs.json"), r#"{"pinned":["G:\\a"]}"#).unwrap();
+
+        let s = PreferencesStore::new(dir.clone()).unwrap();
+        assert_eq!(s.pinned(), vec![r"G:\a".to_string()]);
+        assert!(s.window_state().is_none());
+        assert!(!dir.join("prefs.json.bak").exists(), "nothing to back up");
     }
 }
