@@ -28,6 +28,41 @@ pub struct WindowState {
     pub y: i32,
 }
 
+// the three windows a WSL launch has always opened, same names, same order,
+// so an upgrade into this setting is invisible
+fn default_window_names() -> Vec<String> {
+    ["code", "agents", "git"]
+        .iter()
+        .map(|s| s.to_string())
+        .collect()
+}
+
+// bool::default() is false, and that would switch tmux off for every
+// existing install on upgrade
+fn default_enabled() -> bool {
+    true
+}
+
+/// The tmux windows a WSL launch opens, in order. A name list, not a
+/// count: "how many" would produce code, agents, git, window4, window5.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct TmuxConfig {
+    /// Off means one plain login shell in the project directory, no tmux.
+    #[serde(default = "default_enabled")]
+    pub enabled: bool,
+    #[serde(default = "default_window_names")]
+    pub window_names: Vec<String>,
+}
+
+impl Default for TmuxConfig {
+    fn default() -> Self {
+        Self {
+            enabled: default_enabled(),
+            window_names: default_window_names(),
+        }
+    }
+}
+
 /// A monitor as (x, y, width, height).
 pub type MonitorRect = (i32, i32, u32, u32);
 
@@ -118,6 +153,11 @@ pub struct Preferences {
     pub default_terminal: Option<String>,
     #[serde(default)]
     pub scan_config: ScanConfig,
+    /// Absent means the three windows that were hardcoded before this was
+    /// configurable. `serde(default)` again keeps an older prefs.json out of
+    /// `.bak`.
+    #[serde(default)]
+    pub tmux_config: TmuxConfig,
     /// None until the window is first moved or resized; absent means open
     /// maximized. `serde(default)` keeps an older prefs.json out of `.bak`.
     #[serde(default)]
