@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import ActionButtons from './components/ActionButtons';
 import Button from './components/Button';
@@ -211,10 +212,18 @@ const AppInner = () => {
 	);
 };
 
-const App = () => (
-	<ToastProvider>
-		<AppInner />
-	</ToastProvider>
-);
+const App = () => {
+	// The window is created hidden (tauri.conf.json) and shown once React has
+	// painted, so a cold start never flashes a white rectangle.
+	useEffect(() => {
+		getCurrentWindow().show();
+	}, []);
+
+	return (
+		<ToastProvider>
+			<AppInner />
+		</ToastProvider>
+	);
+};
 
 export default App;
