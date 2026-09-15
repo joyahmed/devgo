@@ -289,6 +289,9 @@ type ShortcutId =
 	| 'clearSearch'
 	| 'refresh'
 	| 'settings'
+	| 'textBigger'
+	| 'textSmaller'
+	| 'textReset'
 	| 'quit'
 	| 'addWorkspace'
 	| 'removeWorkspace'
@@ -540,6 +543,12 @@ interface SettingsProps {
 interface AppearancePanelProps {
 	showHints: boolean;
 	onToggleHints: () => void;
+}
+
+/// the text-size stepper's three controls
+interface TextStepProps {
+	scale: number;
+	onScale: (scale: number) => void;
 }
 
 interface ShortcutTableProps {

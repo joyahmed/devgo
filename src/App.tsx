@@ -30,6 +30,7 @@ import { useTargets } from './hooks/useTargets';
 import { useWorkspaces } from './hooks/useWorkspaces';
 import { lastSegment } from './paths';
 import { isTypingTarget, matches, prettyKeys, shortcutFor } from './shortcuts';
+import { applyTextScale, stepTextScale } from './textSize';
 
 // Settings pulls in WorkspaceManager and the shortcut table, none of which the
 // launcher needs to start. The split used to sit on WorkspaceManager; now that
@@ -947,6 +948,9 @@ const AppInner = () => {
 			if (fire('clearSearch', () => setQuery(''))) return;
 			if (fire('refresh', handleRefresh)) return;
 			if (fire('settings', () => openSettings())) return;
+			if (fire('textBigger', () => stepTextScale(1).catch(() => {}))) return;
+			if (fire('textSmaller', () => stepTextScale(-1).catch(() => {}))) return;
+			if (fire('textReset', () => applyTextScale(1).catch(() => {}))) return;
 			if (fire('quit', () => invoke('quit_app').catch(() => {}))) return;
 			if (fire('addWorkspace', pickWorkspaceFolder)) return;
 			// Delete is the one bare typing key in the table: in the search box it

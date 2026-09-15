@@ -3,6 +3,7 @@ import { open as openDialog, save } from '@tauri-apps/plugin-dialog';
 import { useEffect, useState } from 'react';
 import { relativeTime } from '../github';
 import { prettyKeys, SHORTCUTS } from '../shortcuts';
+import { applyTextScale, savedTextScale, stepTextScale, TEXT_STEPS } from '../textSize';
 import { savedThemeId, setTheme, THEMES } from '../themes';
 import Button from './Button';
 import Drawer from './Drawer';
@@ -526,8 +527,52 @@ const HINT_MODES = [
 	{ label: 'Off', value: false }
 ];
 
+// minus, the number, plus, and reset when it is not 100%
+const TextStep = ({ scale, onScale }: TextStepProps) => {
+	const ends = [
+		{ label: '−', dir: -1 as const, title: 'Smaller', at: TEXT_STEPS[0] },
+		{ label: '+', dir: 1 as const, title: 'Bigger', at: TEXT_STEPS[TEXT_STEPS.length - 1] }
+	];
+	const [minus, plus] = ends.map(e => (
+		<Button
+			key={e.label}
+			variant='choice'
+			disabled={scale === e.at}
+			title={e.title}
+			onClick={() => stepTextScale(e.dir).then(onScale)}
+		>
+			{e.label}
+		</Button>
+	));
+	return (
+		<div className='flex items-center gap-2'>
+			{minus}
+			<span className='font-mono text-15 text-text-primary w-14 text-center'>
+				{Math.round(scale * 100)}%
+			</span>
+			{plus}
+			{scale !== 1 && (
+				<Button
+					variant='ghost'
+					className='ml-2 text-13 text-accent'
+					onClick={() => applyTextScale(1).then(onScale)}
+				>
+					Reset
+				</Button>
+			)}
+		</div>
+	);
+};
+
 const AppearancePanel = ({ showHints, onToggleHints }: AppearancePanelProps) => {
 	const [current, setCurrent] = useState(savedThemeId());
+	const [scale, setScale] = useState(savedTextScale());
+	// ctrl+= / ctrl+- while this panel is open must move the number too
+	useEffect(() => {
+		const sync = () => setScale(savedTextScale());
+		window.addEventListener('devgo:textscale', sync);
+		return () => window.removeEventListener('devgo:textscale', sync);
+	}, []);
 	const pick = (id: string) => {
 		setTheme(id);
 		setCurrent(id);
@@ -563,6 +608,16 @@ const AppearancePanel = ({ showHints, onToggleHints }: AppearancePanelProps) => 
 					</Button>
 				))}
 			</div>
+			</div>
+			<div>
+				<h4 className={heading}>Text size</h4>
+				<p className='text-13 text-text-muted mb-2'>
+					The whole window, in steps: the same as{' '}
+					<span className='font-mono'>Ctrl+=</span> and{' '}
+					<span className='font-mono'>Ctrl+-</span>;{' '}
+					<span className='font-mono'>Ctrl+0</span> is 100%.
+				</p>
+				<TextStep {...{ scale, onScale: setScale }} />
 			</div>
 			<div>
 				<h4 className={heading}>Hint words</h4>

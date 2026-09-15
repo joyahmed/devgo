@@ -21,6 +21,9 @@ export const SHORTCUTS: Shortcut[] = [
 	{ id: 'clearSearch', keys: 'Ctrl+L', label: 'Clear search', group: 'Global' },
 	{ id: 'refresh', keys: 'F5', label: 'Refresh projects', group: 'Global' },
 	{ id: 'settings', keys: 'Ctrl+,', label: 'Open settings', group: 'Global' },
+	{ id: 'textBigger', keys: 'Ctrl+=', label: 'Text bigger', group: 'Global' },
+	{ id: 'textSmaller', keys: 'Ctrl+-', label: 'Text smaller', group: 'Global' },
+	{ id: 'textReset', keys: 'Ctrl+0', label: 'Text size 100%', group: 'Global' },
 	{ id: 'quit', keys: 'Ctrl+Q', label: 'Quit DevGo', group: 'Global' },
 
 	{
