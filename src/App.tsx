@@ -48,6 +48,7 @@ const AppInner = () => {
 		workspaceStates,
 		ranks,
 		git,
+		tech,
 		pinnedProjects,
 		sortMode,
 		toggleSort,
@@ -311,6 +312,7 @@ const AppInner = () => {
 						workspaceStates,
 						ranks,
 						gitInfo: git,
+						techInfo: tech,
 						pinnedProjects,
 						onTogglePin: handleTogglePin,
 						onOpenRemote: handleOpenRemote

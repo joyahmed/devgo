@@ -62,6 +62,15 @@ interface GitInfo {
 	last_commit: number;
 }
 
+/// What a project appears to be, from the names in its top directory alone.
+interface ProjectTech {
+	full_path: string;
+	tags: string[];
+	package_manager: string | null;
+	pins_node_version: boolean;
+	has_deps: boolean;
+}
+
 interface LastProject {
 	full_path: string;
 	workspace: string;
@@ -242,6 +251,7 @@ interface ProjectTreeProps {
 	workspaceStates?: WorkspaceState[];
 	ranks?: Map<string, ProjectRank>;
 	gitInfo?: Map<string, GitInfo>;
+	techInfo?: Map<string, ProjectTech>;
 	pinnedProjects?: Project[];
 	onTogglePin?: (p: Project) => void;
 	onOpenRemote?: (p: Project) => void;
@@ -253,6 +263,10 @@ interface GitBadgeProps {
 	onOpenRemote?: () => void;
 }
 
+interface TechBadgesProps {
+	tech?: ProjectTech;
+}
+
 interface StatusPillProps {
 	state: WorkspaceState | undefined;
 }
@@ -261,6 +275,7 @@ interface RowMetaProps {
 	project: Project;
 	rank?: ProjectRank;
 	git?: GitInfo;
+	tech?: ProjectTech;
 	onTogglePin?: (p: Project) => void;
 	onOpenRemote?: (p: Project) => void;
 }
@@ -274,6 +289,7 @@ interface ProjectRowProps {
 	stale?: boolean;
 	rank?: ProjectRank;
 	git?: GitInfo;
+	tech?: ProjectTech;
 	onSelect: (p: Project) => void;
 	onDoubleClick: (p: Project) => void;
 	onTogglePin?: (p: Project) => void;

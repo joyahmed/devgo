@@ -2,7 +2,10 @@ import { useEffect, useImperativeHandle, useState } from 'react';
 import { isTypingTarget, matches, shortcutFor } from '../shortcuts';
 import Button from './Button';
 
-const col = 'grid grid-cols-[1fr_1fr_80px_52px] items-center text-sm';
+// The last column carries a workspace's count or a row's meta — badges, branch,
+// hint, star — so it is sized for the meta and the count right-aligns in it.
+const col =
+	'grid grid-cols-[1fr_1fr_80px_minmax(150px,0.9fr)] items-center gap-x-3 text-sm';
 
 const COLUMNS = [
 	{ label: 'Workspace', className: '' },
@@ -35,6 +38,58 @@ const StatusPill = ({ state }: StatusPillProps) => {
 			}
 		>
 			{cached ? `cached · ${label}` : label}
+		</span>
+	);
+};
+
+/// Stack colours — the ecosystems' own, so a badge is recognised without being
+/// read. Anything unlisted renders muted rather than being dropped: a new
+/// marker should show up as a plain badge, not vanish.
+const TAG_TONE: Record<string, string> = {
+	turbo: 'text-fuchsia-300 border-fuchsia-400/30',
+	next: 'text-slate-200 border-slate-400/30',
+	rust: 'text-orange-300 border-orange-400/30',
+	go: 'text-cyan-300 border-cyan-400/30',
+	python: 'text-yellow-300 border-yellow-400/30',
+	docker: 'text-blue-300 border-blue-400/30',
+	node: 'text-green-300 border-green-400/30'
+};
+
+/// Stack badges, plus a marker when dependencies are not installed.
+///
+/// The missing-deps dot is the one piece of judgement here: a Node or Rust
+/// project with no node_modules or target is one you cannot actually run yet,
+/// and that is worth knowing before you open it. Docker-only projects are
+/// exempt — their dependencies live in an image, and a warning that can never
+/// be cleared is one you learn to ignore.
+const TechBadges = ({ tech }: TechBadgesProps) => {
+	if (!tech || tech.tags.length === 0) return null;
+	const runnable = tech.tags.some(t => t !== 'docker');
+	return (
+		<span className='flex items-center gap-1 shrink-0'>
+			{tech.tags.map(t => (
+				<span
+					key={t}
+					className={`text-[9px] uppercase tracking-wider border rounded px-1 ${
+						TAG_TONE[t] ?? 'text-text-muted border-border'
+					}`}
+				>
+					{t}
+				</span>
+			))}
+			{tech.package_manager && (
+				<span className='text-[9px] uppercase tracking-wider text-text-muted'>
+					{tech.package_manager}
+				</span>
+			)}
+			{runnable && !tech.has_deps && (
+				<span
+					className='text-text-muted leading-none'
+					title='Dependencies do not appear to be installed'
+				>
+					○
+				</span>
+			)}
 		</span>
 	);
 };
@@ -76,10 +131,12 @@ const RowMeta = ({
 	project,
 	rank,
 	git,
+	tech,
 	onTogglePin,
 	onOpenRemote
 }: RowMetaProps) => (
 	<div className='flex items-center justify-end gap-1.5 min-w-0'>
+		<TechBadges {...{ tech }} />
 		<GitBadge {...{ info: git, onOpenRemote: () => onOpenRemote?.(project) }} />
 		{rank?.hint && (
 			<span className='text-[9px] uppercase tracking-wider text-text-muted shrink-0'>
@@ -114,6 +171,7 @@ const ProjectRow = ({
 	stale,
 	rank,
 	git,
+	tech,
 	onSelect,
 	onDoubleClick,
 	onTogglePin,
@@ -147,7 +205,7 @@ const ProjectRow = ({
 		>
 			{project.file_system}
 		</div>
-		<RowMeta {...{ project, rank, git, onTogglePin, onOpenRemote }} />
+		<RowMeta {...{ project, rank, git, tech, onTogglePin, onOpenRemote }} />
 	</div>
 );
 
@@ -162,6 +220,7 @@ const ProjectTree = ({
 	workspaceStates,
 	ranks,
 	gitInfo,
+	techInfo,
 	pinnedProjects,
 	onTogglePin,
 	onOpenRemote,
@@ -346,6 +405,7 @@ const ProjectTree = ({
 		selected: selected?.full_path === project.full_path,
 		rank: ranks?.get(project.full_path),
 		git: gitInfo?.get(project.full_path),
+		tech: techInfo?.get(project.full_path),
 		onSelect,
 		onDoubleClick,
 		onTogglePin,

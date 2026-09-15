@@ -23,6 +23,7 @@ export const useProjects = () => {
 	);
 	const [ranks, setRanks] = useState<Map<string, ProjectRank>>(new Map());
 	const [git, setGit] = useState<Map<string, GitInfo>>(new Map());
+	const [tech, setTech] = useState<Map<string, ProjectTech>>(new Map());
 	const [query, setQuery] = useState('');
 	const [selected, setSelected] = useState<Project | null>(null);
 	const [loading, setLoading] = useState(true);
@@ -32,13 +33,19 @@ export const useProjects = () => {
 	const retryTimer = useRef<number | null>(null);
 	const retryStep = useRef(0);
 
-	// Git reads spawn processes, so they never gate the list. This fires after
-	// the payload is already on screen and merges results in as they arrive.
-	const loadGit = (list: Project[]) => {
+	// Git and stack detection both spawn processes, so neither gates the list.
+	// These fire after the payload is already on screen and merge in as they
+	// arrive — independently, so a slow git pass does not hold up the badges.
+	const loadDetails = (list: Project[]) => {
 		if (list.length === 0) return;
 		invoke<GitInfo[]>('get_git_info', { projects: list })
 			.then(infos => {
 				setGit(new Map(infos.map(i => [i.full_path, i])));
+			})
+			.catch(() => {});
+		invoke<ProjectTech[]>('get_project_tech', { projects: list })
+			.then(infos => {
+				setTech(new Map(infos.map(i => [i.full_path, i])));
 			})
 			.catch(() => {});
 	};
@@ -47,7 +54,7 @@ export const useProjects = () => {
 		setProjects(payload.projects);
 		setWorkspaceStates(payload.workspaces);
 		setRanks(new Map(payload.ranks.map(r => [r.full_path, r])));
-		loadGit(payload.projects);
+		loadDetails(payload.projects);
 		return payload;
 	};
 
@@ -190,6 +197,7 @@ export const useProjects = () => {
 		workspaceStates,
 		ranks,
 		git,
+		tech,
 		filtered,
 		pinnedProjects,
 		query,
