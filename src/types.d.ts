@@ -193,7 +193,8 @@ type ButtonVariant =
 	| 'pill'
 	| 'tab'
 	| 'badge'
-	| 'card';
+	| 'card'
+	| 'choice';
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
 	variant?: ButtonVariant;
