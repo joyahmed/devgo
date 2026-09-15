@@ -41,6 +41,30 @@ pub struct Preferences {
     pub default_editor: Option<String>,
     #[serde(default)]
     pub default_terminal: Option<String>,
+    #[serde(default)]
+    pub scan_config: ScanConfig,
+}
+
+// bare names, not globs: a cheap comparison on the listing the scan already has
+fn default_ignore() -> Vec<String> {
+    ["node_modules", "archive", "vendor"]
+        .iter()
+        .map(|s| s.to_string())
+        .collect()
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScanConfig {
+    #[serde(default = "default_ignore")]
+    pub ignore: Vec<String>,
+}
+
+impl Default for ScanConfig {
+    fn default() -> Self {
+        Self {
+            ignore: default_ignore(),
+        }
+    }
 }
 
 pub fn now_secs() -> u64 {
@@ -183,6 +207,18 @@ impl PreferencesStore {
                 self.prefs.default_terminal = Some(id.to_string())
             }
         }
+        self.save()
+    }
+
+    pub fn scan_config(&self) -> ScanConfig {
+        self.prefs.scan_config.clone()
+    }
+
+    pub fn set_scan_config(
+        &mut self,
+        config: ScanConfig,
+    ) -> Result<(), String> {
+        self.prefs.scan_config = config;
         self.save()
     }
 
