@@ -1,12 +1,7 @@
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { type ReactNode } from 'react';
 import TitleBarButton, { TITLE_BAR_BUTTONS } from './TitleBarButton';
 
 const appWindow = getCurrentWindow();
-
-interface TitleBarProps {
-	children?: ReactNode;
-}
 
 const TitleBar = ({ children }: TitleBarProps) => (
 	<header className='flex items-center justify-between h-12 px-4 bg-bg-secondary border-b border-border shrink-0 select-none'>

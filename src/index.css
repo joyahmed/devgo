@@ -16,6 +16,19 @@
 	--font-sans: 'Segoe UI', system-ui, sans-serif;
 	--font-mono: 'Cascadia Code', 'Consolas', monospace;
 	--radius-panel: 12px;
+
+	/* Toast entrance. Tailwind v4 mints `animate-fade-in` from this variable. */
+	--animate-fade-in: fade-in 0.18s ease-out;
+	@keyframes fade-in {
+		from {
+			opacity: 0;
+			transform: translateY(4px);
+		}
+		to {
+			opacity: 1;
+			transform: none;
+		}
+	}
 }
 
 html,
