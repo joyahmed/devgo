@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
+import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import ActionButtons from './components/ActionButtons';
@@ -151,6 +152,27 @@ const AppInner = () => {
 		refreshWorkspaces();
 		refresh();
 	};
+
+	// tauri owns file drag-drop, so this is the webview event, not html5
+	const [dragOver, setDragOver] = useState(false);
+	useEffect(() => {
+		let unlisten: (() => void) | undefined;
+		getCurrentWebview()
+			.onDragDropEvent(event => {
+				const p = event.payload;
+				if (p.type === 'enter' || p.type === 'over') setDragOver(true);
+				else if (p.type === 'leave') setDragOver(false);
+				else if (p.type === 'drop') {
+					setDragOver(false);
+					if (p.paths.length) handleAddMany(p.paths);
+				}
+			})
+			.then(f => {
+				unlisten = f;
+			})
+			.catch(() => {});
+		return () => unlisten?.();
+	}, []);
 
 	const handleRemove = async (index: number) => {
 		try {
@@ -598,6 +620,14 @@ const AppInner = () => {
 					</>
 				)}
 			</div>
+
+			{dragOver && (
+				<div className='fixed inset-0 z-50 flex items-center justify-center bg-accent/10 border-2 border-dashed border-accent m-2 rounded-xl pointer-events-none'>
+					<span className='text-lg font-semibold text-accent bg-bg-secondary/90 px-5 py-2.5 rounded-lg border border-accent'>
+						Drop a folder to add a workspace
+					</span>
+				</div>
+			)}
 
 			<StatusBar {...{ onOpenPalette: () => setPaletteOpen(true) }} />
 		</div>
