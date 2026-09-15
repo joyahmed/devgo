@@ -2,6 +2,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import ActionButtons from './components/ActionButtons';
 import Button from './components/Button';
@@ -150,6 +151,16 @@ const AppInner = () => {
 			toast(showError(e));
 		}
 		refreshWorkspaces();
+	};
+
+	// the picker is three lines; every door to it used to open a settings
+	// panel with a button that opened the picker
+	const pickWorkspaceFolder = () => {
+		openDialog({ directory: true })
+			.then(picked => {
+				if (typeof picked === 'string') handleAddWorkspace(picked);
+			})
+			.catch(e => toast(showError(e)));
 	};
 
 	const handleAddMany = async (paths: string[]) => {
@@ -511,7 +522,7 @@ const AppInner = () => {
 			if (fire('refresh', handleRefresh)) return;
 			if (fire('settings', () => openSettings())) return;
 			if (fire('quit', () => invoke('quit_app').catch(() => {}))) return;
-			if (fire('addWorkspace', () => openSettings('workspaces'))) return;
+			if (fire('addWorkspace', pickWorkspaceFolder)) return;
 			// Delete is the one bare typing key in the table: in the search box it
 			// deletes a character, and that stays the search box's.
 			if (!isTypingTarget(e) && fire('removeWorkspace', handleRemoveShortcut))
@@ -558,6 +569,36 @@ const AppInner = () => {
 						}}
 					/>
 					<RuntimeIndicator runtime={runtime?.runtime ?? 'windows'} />
+					{/* add and refresh are not launch actions; the title bar already
+					    holds this class of control, and the row below does one job */}
+					<Button
+						variant='ghost'
+						className='w-7 h-7'
+						onClick={pickWorkspaceFolder}
+						title={`Add workspace (${prettyKeys(shortcutFor('addWorkspace'))})`}
+					>
+						+
+					</Button>
+					<Button
+						variant='ghost'
+						className='w-7 h-7'
+						onClick={handleRefresh}
+						title={`Refresh (${prettyKeys(shortcutFor('refresh'))})`}
+					>
+						<svg
+							width='15'
+							height='15'
+							viewBox='0 0 24 24'
+							fill='none'
+							stroke='currentColor'
+							strokeWidth='2'
+							strokeLinecap='round'
+							strokeLinejoin='round'
+						>
+							<path d='M21 12a9 9 0 1 1-2.64-6.36' />
+							<polyline points='21 3 21 9 15 9' />
+						</svg>
+					</Button>
 					<Button
 						variant='ghost'
 						onClick={() => openSettings()}
