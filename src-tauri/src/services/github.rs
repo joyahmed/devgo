@@ -56,6 +56,10 @@ pub struct Repo {
     /// bring them back on its own
     #[serde(default)]
     pub added: bool,
+    /// only a live search hit carries this, the one field that helps
+    /// rank strangers' repositories. None for the user's own list
+    #[serde(default)]
+    pub stars: Option<u64>,
 }
 
 /// The three states the auth answer can be in. login is the point: the
@@ -233,6 +237,9 @@ pub fn list_orgs() -> Result<Vec<String>, AppError> {
 const REPO_FIELDS: &str =
     "name,owner,url,updatedAt,isPrivate,isArchived,defaultBranchRef";
 
+/// gh search repos spells the branch flat and adds the star count.
+const SEARCH_FIELDS: &str = "name,owner,url,updatedAt,isPrivate,isArchived,defaultBranch,stargazersCount";
+
 /// owner/name out of whatever a person pastes: the bare form, a GitHub
 /// url (with or without .git, a trailing slash, a /tree/… tail), or an
 /// ssh remote. Anything else is None; a guess here would send gh a
@@ -259,6 +266,34 @@ pub fn parse_spec(input: &str) -> Option<String> {
         return None;
     }
     Some(format!("{owner}/{name}"))
+}
+
+/// How many live hits one search asks for. Thirty is a screen; the box
+/// is the way to narrow, not a scrollbar.
+const SEARCH_LIMIT: &str = "30";
+
+/// All of GitHub, live: gh search repos, any owner, in GitHub's own
+/// best-match order. Not --sort updated: tried first, and the top hit
+/// for "tauri" was a stranger's repo pushed a minute earlier. One
+/// network call per settled keystroke; the frontend debounces and
+/// drops late answers. The query goes after "--" so one starting with
+/// a dash is a query, not a flag.
+pub fn search(query: &str) -> Result<Vec<Repo>, AppError> {
+    let q = query.trim();
+    if q.is_empty() {
+        return Ok(Vec::new());
+    }
+    let text = gh(&[
+        "search",
+        "repos",
+        "--json",
+        SEARCH_FIELDS,
+        "-L",
+        SEARCH_LIMIT,
+        "--",
+        q,
+    ])?;
+    parse_repos(&text)
 }
 
 /// One repository by name, any owner. gh repo view prints the same shape
@@ -316,7 +351,15 @@ struct GhRepo {
     updated_at: String,
     is_private: bool,
     is_archived: bool,
+    /// gh repo list nests the branch; gh search repos prints it flat
+    /// as defaultBranch and has no defaultBranchRef at all, so both are
+    /// optional and the row takes whichever came
+    #[serde(default)]
     default_branch_ref: Option<GhRef>,
+    #[serde(default)]
+    default_branch: Option<String>,
+    #[serde(default)]
+    stargazers_count: Option<u64>,
 }
 
 #[derive(Deserialize)]
@@ -342,8 +385,12 @@ pub fn parse_repos(text: &str) -> Result<Vec<Repo>, AppError> {
             updated_at: r.updated_at,
             private: r.is_private,
             archived: r.is_archived,
-            default_branch: r.default_branch_ref.map(|b| b.name),
+            default_branch: r
+                .default_branch_ref
+                .map(|b| b.name)
+                .or(r.default_branch),
             added: false,
+            stars: r.stargazers_count,
         })
         .collect())
 }
@@ -585,6 +632,17 @@ mod tests {
             1
         );
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_search_hit_has_stars_and_a_flat_branch() {
+        let text = r#"[{"name":"tauri","owner":{"login":"tauri-apps"},"url":"https://github.com/tauri-apps/tauri","updatedAt":"2026-09-12T00:00:00Z","isPrivate":false,"isArchived":false,"defaultBranch":"dev","stargazersCount":95000}]"#;
+        let repos = parse_repos(text).unwrap();
+        assert_eq!(repos[0].full_name, "tauri-apps/tauri");
+        assert_eq!(repos[0].stars, Some(95000));
+        assert_eq!(repos[0].default_branch.as_deref(), Some("dev"));
+        // and a listed row, which has neither, still parses
+        assert_eq!(parse_repos(SAMPLE).unwrap()[0].stars, None);
     }
 
     #[test]
