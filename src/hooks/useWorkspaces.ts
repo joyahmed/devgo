@@ -23,5 +23,14 @@ export const useWorkspaces = () => {
 		setWorkspaces(ws);
 	};
 
-	return { workspaces, add, remove, refresh };
+	// the whole order, not a move: the store refuses one that is not a
+	// permutation of what it holds, so a reorder from a stale list fails
+	// loudly instead of dropping a workspace. the list comes back from the
+	// store, so what renders is what was saved
+	const reorder = async (order: string[]) => {
+		const ws = await invoke<string[]>('reorder_workspaces', { order });
+		setWorkspaces(ws);
+	};
+
+	return { workspaces, add, remove, refresh, reorder };
 };
