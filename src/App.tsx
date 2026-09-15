@@ -19,6 +19,7 @@ import StatusBar from './components/StatusBar';
 import TitleBar from './components/TitleBar';
 import WslControl from './components/WslControl';
 import ToastProvider, { useToast } from './components/Toast';
+import { useGithub } from './hooks/useGithub';
 import { useLaunchActions } from './hooks/useLaunchActions';
 import { useMaximized } from './hooks/useMaximized';
 import { useProjects } from './hooks/useProjects';
@@ -71,6 +72,7 @@ const AppInner = () => {
 		reorder: reorderWorkspaces
 	} = useWorkspaces();
 	const {
+		projects,
 		filtered,
 		query,
 		setQuery,
@@ -89,6 +91,9 @@ const AppInner = () => {
 	} = useProjects();
 	const { addWorkspace, removeWorkspace, openEditor, openTerminal, openBoth } =
 		useLaunchActions(selected, refresh);
+	// the github group. reads its cache on mount and re-reads after every
+	// badge pass (git is the dependency) so the local marks track the disk
+	const github = useGithub(query, git);
 	// one registry: a second useTargets in Settings would leave the row stale
 	// after an add until the next mount
 	const targets = useTargets();
@@ -168,6 +173,8 @@ const AppInner = () => {
 	};
 
 	const handleSearchEnter = () => {
+		// a repo under the cursor takes the key: its page, not a launch
+		if (treeRef.current?.openRepo()) return;
 		const target = selected ?? filtered[0];
 		if (target) handleLaunch(target);
 	};
@@ -268,9 +275,27 @@ const AppInner = () => {
 	const handleOpenRemote = (p: Project, branch?: string) => {
 		invoke('open_remote', {
 			fullPath: p.full_path,
+			url: null,
 			branch: branch ?? null
 		}).catch(e => toast(showError(e)));
 	};
+
+	// the same open_remote, through its url door
+	const openUrl = (url: string) => {
+		invoke('open_remote', { fullPath: null, url, branch: null }).catch(e =>
+			toast(showError(e))
+		);
+	};
+	const handleOpenRepo = (repo: GithubRepo) => openUrl(repo.url);
+
+	// the local mark: a github row cloned here selects its disk row
+	const showLocal = (path: string) => {
+		const match = projects.find(p => p.full_path === path);
+		if (match) setSelected(match);
+		else toast('That clone is not in a workspace DevGo scans', 'info');
+	};
+
+	const [repoMenu, setRepoMenu] = useState<RepoMenu | null>(null);
 
 	// the branch popover: the repo on its host, then every branch the last
 	// git fetch left in refs/remotes, read when the chip is clicked and
@@ -318,6 +343,33 @@ const AppInner = () => {
 				? [{ label: current, hint: 'current', onClick: open(current) }]
 				: []),
 			...rest
+		];
+	};
+
+	// navigation and the two clone urls. no git operation, no pull request,
+	// no clone: that is what keeps this a menu and not a second app
+	const buildRepoMenu = (repo: GithubRepo): MenuEntry[] => {
+		const localPath = github.payload?.local[repo.full_name];
+		const copyClone = (which: 0 | 1, label: string) => () =>
+			invoke<[string, string]>('github_clone_urls', {
+				fullName: repo.full_name
+			})
+				.then(urls => copyText(urls[which], label))
+				.catch(e => toast(showError(e), 'error'));
+		return [
+			{ label: 'Open on GitHub', hint: 'Enter', onClick: () => handleOpenRepo(repo) },
+			'separator',
+			{ label: 'Copy clone URL (ssh)', onClick: copyClone(0, 'SSH clone URL') },
+			{
+				label: 'Copy clone URL (https)',
+				onClick: copyClone(1, 'HTTPS clone URL')
+			},
+			...(localPath
+				? [
+						'separator' as const,
+						{ label: 'Show local project', onClick: () => showLocal(localPath) }
+					]
+				: [])
 		];
 	};
 
@@ -429,6 +481,32 @@ const AppInner = () => {
 				title: 'Settings: Shortcuts',
 				keywords: ['keybindings', 'keys', 'hotkey'],
 				run: () => openSettings('shortcuts')
+			},
+			{
+				id: 'settings.github',
+				title: 'Settings: GitHub',
+				keywords: ['gh', 'orgs', 'repos'],
+				run: () => openSettings('github')
+			},
+			{
+				id: 'github.refresh',
+				title: 'GitHub: refresh repos',
+				subtitle: github.status?.login
+					? `runs gh as ${github.status.login}`
+					: 'gh is not logged in',
+				keywords: ['gh', 'fetch', 'repositories'],
+				disabled: !github.status?.login || github.refreshing,
+				run: github.refresh
+			},
+			{
+				id: 'github.profile',
+				title: 'GitHub: open profile',
+				subtitle: github.status?.login
+					? `github.com/${github.status.login}`
+					: 'gh is not logged in',
+				keywords: ['gh', 'me', 'browser'],
+				disabled: !github.status?.login,
+				run: () => openUrl(`https://github.com/${github.status?.login ?? ''}`)
 			},
 			{
 				id: 'sort',
@@ -823,6 +901,17 @@ const AppInner = () => {
 				/>
 			)}
 
+			{repoMenu && (
+				<ContextMenu
+					{...{
+						x: repoMenu.x,
+						y: repoMenu.y,
+						items: buildRepoMenu(repoMenu.repo),
+						onClose: () => setRepoMenu(null)
+					}}
+				/>
+			)}
+
 			{branchMenu && (
 				<ContextMenu
 					{...{
@@ -958,7 +1047,12 @@ const AppInner = () => {
 									reorderWorkspaces(order).catch(e => {
 										toast(showError(e));
 										refreshWorkspaces();
-									})
+									}),
+								github,
+								onRepoOpen: handleOpenRepo,
+								onRepoContextMenu: (r: GithubRepo, x: number, y: number) =>
+									setRepoMenu({ repo: r, x, y }),
+								onShowLocal: showLocal
 							}}
 						/>
 						<ActionButtons

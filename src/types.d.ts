@@ -490,6 +490,12 @@ interface BranchMenu {
 	branches: string[] | null;
 }
 
+interface RepoMenu {
+	repo: GithubRepo;
+	x: number;
+	y: number;
+}
+
 interface MenuAction {
 	label: string;
 	hint?: string;
