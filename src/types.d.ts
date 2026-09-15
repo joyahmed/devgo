@@ -33,10 +33,24 @@ interface WorkspaceState {
 	count: number;
 }
 
+/// Ranking metadata travels beside Project, not on it — Project stays the four
+/// fields the scanner produces.
+interface ProjectRank {
+	full_path: string;
+	score: number;
+	launch_count: number;
+	last_opened: number;
+	hint: 'recent' | 'frequent' | null;
+	pinned: boolean;
+}
+
 interface ProjectsPayload {
 	projects: Project[];
 	workspaces: WorkspaceState[];
+	ranks: ProjectRank[];
 }
+
+type SortMode = 'frecency' | 'name';
 
 interface LastProject {
 	full_path: string;
@@ -81,6 +95,9 @@ interface SearchBoxProps {
 	onEnter?: () => void;
 	onArrow?: (dir: 1 | -1) => void;
 	enterHint?: string;
+	sortMode?: SortMode;
+	onToggleSort?: () => void;
+	ref?: React.Ref<HTMLInputElement>;
 }
 
 interface RuntimeIndicatorProps {
@@ -100,11 +117,33 @@ interface ProjectTreeProps {
 	query: string;
 	loading?: boolean;
 	workspaceStates?: WorkspaceState[];
+	ranks?: Map<string, ProjectRank>;
+	pinnedProjects?: Project[];
+	onTogglePin?: (p: Project) => void;
 	ref?: React.Ref<ProjectTreeHandle>;
 }
 
 interface StatusPillProps {
 	state: WorkspaceState | undefined;
+}
+
+interface RowMetaProps {
+	project: Project;
+	rank?: ProjectRank;
+	onTogglePin?: (p: Project) => void;
+}
+
+interface ProjectRowProps {
+	project: Project;
+	selected: boolean;
+	/// Rendered in the Pinned strip rather than under its workspace header.
+	pinnedStrip?: boolean;
+	/// Served from cache — the row dims to say so.
+	stale?: boolean;
+	rank?: ProjectRank;
+	onSelect: (p: Project) => void;
+	onDoubleClick: (p: Project) => void;
+	onTogglePin?: (p: Project) => void;
 }
 
 interface ActionButtonsProps {

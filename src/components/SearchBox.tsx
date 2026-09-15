@@ -6,11 +6,15 @@ const SearchBox = ({
 	onChange,
 	onEnter,
 	onArrow,
-	enterHint
+	enterHint,
+	sortMode,
+	onToggleSort,
+	ref
 }: SearchBoxProps) => {
 	const keys: Record<string, (() => void) | undefined> = {
 		ArrowDown: () => onArrow?.(1),
 		ArrowUp: () => onArrow?.(-1),
+		Escape: () => onChange(''),
 		Enter: onEnter
 	};
 
@@ -23,12 +27,27 @@ const SearchBox = ({
 
 	return (
 		<div className='shrink-0'>
-			<label className='block text-xs font-semibold uppercase tracking-wider text-text-secondary mb-2'>
-				Search Projects
-			</label>
+			<div className='flex items-baseline justify-between mb-2'>
+				<label className='block text-xs font-semibold uppercase tracking-wider text-text-secondary'>
+					Search Projects
+				</label>
+				{onToggleSort && (
+					<Button
+						variant='ghost'
+						className='text-[10px] uppercase tracking-wider p-0 hover:text-accent hover:bg-transparent'
+						title='Toggle sort order'
+						onClick={onToggleSort}
+					>
+						sort: {sortMode === 'name' ? 'A–Z' : 'frecency'}
+					</Button>
+				)}
+			</div>
 			<div className='relative bg-bg-panel rounded-lg border border-border focus-within:border-accent transition-colors'>
 				<input
+					ref={ref}
 					type='text'
+					// The launcher's whole job is to be typed into the instant it appears.
+					autoFocus
 					className='w-full py-2.5 pl-3.5 pr-20 bg-transparent outline-none text-sm text-text-primary placeholder:text-text-muted'
 					placeholder='Type to filter...'
 					value={value}

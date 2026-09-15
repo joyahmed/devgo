@@ -13,20 +13,27 @@ const RETRY_DELAYS = [2000, 5000, 15000];
 const isRetryable = (w: WorkspaceState) =>
 	w.status !== 'live' && w.reason !== 'distro_stopped';
 
+const SORT_KEY = 'devgo.sortMode';
+
 export const useProjects = () => {
 	const [projects, setProjects] = useState<Project[]>([]);
 	const [workspaceStates, setWorkspaceStates] = useState<WorkspaceState[]>(
 		[]
 	);
+	const [ranks, setRanks] = useState<Map<string, ProjectRank>>(new Map());
 	const [query, setQuery] = useState('');
 	const [selected, setSelected] = useState<Project | null>(null);
 	const [loading, setLoading] = useState(true);
+	const [sortMode, setSortMode] = useState<SortMode>(
+		() => (localStorage.getItem(SORT_KEY) as SortMode) ?? 'frecency'
+	);
 	const retryTimer = useRef<number | null>(null);
 	const retryStep = useRef(0);
 
 	const apply = (payload: ProjectsPayload) => {
 		setProjects(payload.projects);
 		setWorkspaceStates(payload.workspaces);
+		setRanks(new Map(payload.ranks.map(r => [r.full_path, r])));
 		return payload;
 	};
 
@@ -112,20 +119,63 @@ export const useProjects = () => {
 		}
 	};
 
+	const toggleSort = () => {
+		setSortMode(prev => {
+			const next: SortMode = prev === 'frecency' ? 'name' : 'frecency';
+			localStorage.setItem(SORT_KEY, next);
+			return next;
+		});
+	};
+
+	// Patch one rank from the command's answer rather than rescanning every
+	// workspace to change a star.
+	const togglePin = async (project: Project) => {
+		const pinned = await invoke<boolean>('toggle_pin', {
+			fullPath: project.full_path
+		});
+		setRanks(prev => {
+			const next = new Map(prev);
+			const existing = prev.get(project.full_path);
+			if (existing) next.set(project.full_path, { ...existing, pinned });
+			return next;
+		});
+	};
+
 	const q = query.trim().toLowerCase();
-	const filtered = q
+	const matched = q
 		? projects.filter(p => p.name.toLowerCase().includes(q))
 		: projects;
+
+	// Frecency descending, falling back to name so equal-scored projects (the
+	// long tail, all zero) keep a stable alphabetical order rather than
+	// whatever the scan happened to return. `[...matched]` because sort mutates.
+	const filtered =
+		sortMode === 'name'
+			? matched
+			: [...matched].sort((a, b) => {
+					const sa = ranks.get(a.full_path)?.score ?? 0;
+					const sb = ranks.get(b.full_path)?.score ?? 0;
+					if (sb !== sa) return sb - sa;
+					return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+				});
+
+	// Derived from `filtered`, not `projects`, so pins respect the search.
+	const pinnedProjects = filtered.filter(p => ranks.get(p.full_path)?.pinned);
 
 	return {
 		projects,
 		workspaceStates,
+		ranks,
 		filtered,
+		pinnedProjects,
 		query,
 		setQuery,
 		selected,
 		setSelected: selectAndSave,
 		refresh,
-		loading
+		loading,
+		sortMode,
+		toggleSort,
+		togglePin
 	};
 };
