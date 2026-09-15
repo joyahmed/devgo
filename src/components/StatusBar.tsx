@@ -12,7 +12,8 @@ const TargetGroup = ({
 	isWsl,
 	hasSelection,
 	shortcut,
-	onPick
+	onPick,
+	pulse
 }: TargetGroupProps) => (
 	<div className='flex items-center gap-1.5 min-w-0'>
 		<span className='text-13 text-text-muted shrink-0'>
@@ -31,7 +32,7 @@ const TargetGroup = ({
 				<Button
 					key={t.id}
 					variant='target'
-					className='shrink-0'
+					className={`shrink-0 ${isDefault && pulse ? 'animate-pulse-once' : ''}`}
 					aria-current={isDefault ? 'true' : undefined}
 					disabled={!hasSelection || blocked}
 					// the default launches with no id, so the Rust fallback chain
@@ -61,7 +62,8 @@ const StatusBar = ({
 	onTerminal,
 	onBoth,
 	onManageTargets,
-	onOpenPalette
+	onOpenPalette,
+	pulse = null
 }: StatusBarProps) => {
 	const groups = [
 		{
@@ -69,14 +71,16 @@ const StatusBar = ({
 			items: editors,
 			defaultId: defaults.editor,
 			shortcut: prettyKeys(shortcutFor('openEditor')),
-			onPick: onEditor
+			onPick: onEditor,
+			pulse: pulse === 'editor'
 		},
 		{
 			label: 'Terminal',
 			items: terminals,
 			defaultId: defaults.terminal,
 			shortcut: prettyKeys(shortcutFor('openTerminal')),
-			onPick: onTerminal
+			onPick: onTerminal,
+			pulse: pulse === 'terminal'
 		}
 	];
 	const both = prettyKeys(shortcutFor('openBoth'));
@@ -92,7 +96,7 @@ const StatusBar = ({
 				))}
 				<Button
 					variant='target'
-					className='shrink-0'
+					className={`shrink-0 ${pulse === 'both' ? 'animate-pulse-once' : ''}`}
 					disabled={!hasSelection}
 					onClick={onBoth}
 					title={`Open Both — ${both}`}

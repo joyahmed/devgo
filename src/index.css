@@ -38,6 +38,33 @@
 	--radius-panel: 12px;
 	--shadow-surface: 0 16px 40px -12px rgb(0 0 0 / 0.6), 0 0 0 1px rgb(0 0 0 / 0.25);
 
+	/* the one choreographed motion in the app: the row you just launched.
+	   the accent washes across it from the rail and fades, 220ms, once. on
+	   launch only, never on select, hover or mount: motion here answers an
+	   action, and nothing moves on its own */
+	--animate-launch: launch 220ms ease-out;
+	@keyframes launch {
+		from {
+			background-color: color-mix(in oklab, var(--color-accent) 45%, transparent);
+			box-shadow: inset 6px 0 0 var(--color-accent);
+		}
+		to {
+			background-color: transparent;
+			box-shadow: inset 0 0 0 transparent;
+		}
+	}
+	/* the footer button that answered the key: one pulse of the accent */
+	--animate-pulse-once: pulse-once 220ms ease-out;
+	@keyframes pulse-once {
+		from {
+			background-color: var(--color-accent);
+			color: var(--color-text-primary);
+		}
+		to {
+			background-color: transparent;
+		}
+	}
+
 	/* Toast entrance. Tailwind v4 mints `animate-fade-in` from this variable. */
 	--animate-fade-in: fade-in 0.18s ease-out;
 	@keyframes fade-in {

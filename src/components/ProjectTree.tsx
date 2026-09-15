@@ -227,6 +227,7 @@ const ProjectRow = ({
 	stale,
 	quiet,
 	showHints,
+	launching,
 	rank,
 	git,
 	tech,
@@ -239,7 +240,7 @@ const ProjectRow = ({
 	<div
 		className={`${col} group px-3 py-1.5 cursor-pointer select-none transition-colors ${
 			stale ? 'opacity-60' : ''
-		} ${
+		} ${launching ? 'animate-launch' : ''} ${
 			selected
 				? quiet
 					? 'bg-bg-selected/40 text-text-primary'
@@ -297,6 +298,7 @@ const ProjectTree = ({
 	onGithubAddMenu,
 	onGroupContextMenu,
 	showHints,
+	launchingPath,
 	ref
 }: ProjectTreeProps) => {
 	const [collapsed, setCollapsed] = useState<Set<string>>(loadCollapsed);
@@ -643,6 +645,7 @@ const ProjectTree = ({
 		selected: selected?.full_path === project.full_path,
 		quiet: cursorLit,
 		showHints,
+		launching: launchingPath === project.full_path,
 		rank: ranks?.get(project.full_path),
 		git: gitInfo?.get(project.full_path),
 		tech: techInfo?.get(project.full_path),

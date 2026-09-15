@@ -195,9 +195,34 @@ const AppInner = () => {
 
 	const handleSelect = (p: Project) => setSelected(p);
 
+	// the launch moment: the row that was just launched plays its motion
+	// and the footer button that answered the key pulses once. 240ms, then
+	// both clear. a timestamp rather than a counter in a ref: flash is
+	// reachable from the palette's command list, which is built in render
+	const [launching, setLaunching] = useState<Launching | null>(null);
+	const flash = (kind: LaunchKind, path = selected?.full_path) => {
+		if (!path) return;
+		const seq = performance.now();
+		setLaunching({ path, kind, seq });
+		window.setTimeout(
+			() => setLaunching(l => (l?.seq === seq ? null : l)),
+			240
+		);
+	};
+
+	// every launch path goes through one of these, so every launch flashes
 	const handleLaunch = (p: Project) => {
 		setSelected(p);
+		flash('both', p.full_path);
 		openBoth(p).catch(e => toast(showError(e)));
+	};
+	const launchEditor = (p: Project) => {
+		flash('editor', p.full_path);
+		openEditor(p).catch(e => toast(showError(e)));
+	};
+	const launchTerminal = (p: Project) => {
+		flash('terminal', p.full_path);
+		openTerminal(p).catch(e => toast(showError(e)));
 	};
 
 	const handleSearchEnter = () => {
@@ -520,11 +545,18 @@ const AppInner = () => {
 		];
 	};
 
-	const handleOpenEditor = (targetId?: string) =>
+	const handleOpenEditor = (targetId?: string) => {
+		flash('editor');
 		openEditor(undefined, targetId).catch(e => toast(showError(e)));
-	const handleOpenTerminal = (targetId?: string) =>
+	};
+	const handleOpenTerminal = (targetId?: string) => {
+		flash('terminal');
 		openTerminal(undefined, targetId).catch(e => toast(showError(e)));
-	const handleOpenBoth = () => openBoth().catch(e => toast(showError(e)));
+	};
+	const handleOpenBoth = () => {
+		flash('both');
+		openBoth().catch(e => toast(showError(e)));
+	};
 	// a target with no WSL form cannot open a WSL project; the row disables
 	// it instead of letting the launch fail after the click
 	const selectionIsWsl = selected?.file_system === 'WSL';
@@ -687,12 +719,8 @@ const AppInner = () => {
 				keywords: ['order', 'frecency', 'activity', 'name'],
 				run: toggleSort
 			},
-			proj('openEditor', 'Open in editor', ['code', 'edit'], pr =>
-				openEditor(pr).catch(e => toast(showError(e)))
-			),
-			proj('openTerminal', 'Open terminal', ['term', 'shell', 'wt'], pr =>
-				openTerminal(pr).catch(e => toast(showError(e)))
-			),
+			proj('openEditor', 'Open in editor', ['code', 'edit'], launchEditor),
+			proj('openTerminal', 'Open terminal', ['term', 'shell', 'wt'], launchTerminal),
 			proj('openBoth', 'Open both', ['launch'], handleLaunch),
 			proj(
 				'revealExplorer',
@@ -824,12 +852,12 @@ const AppInner = () => {
 			{
 				label: 'Open in editor',
 				hint: hint('openEditor'),
-				onClick: () => openEditor(p).catch(e => toast(showError(e)))
+				onClick: () => launchEditor(p)
 			},
 			{
 				label: 'Open terminal',
 				hint: hint('openTerminal'),
-				onClick: () => openTerminal(p).catch(e => toast(showError(e)))
+				onClick: () => launchTerminal(p)
 			},
 			{ label: 'Open both', hint: hint('openBoth'), onClick: () => handleLaunch(p) },
 			'separator',
@@ -1444,7 +1472,8 @@ const AppInner = () => {
 									setGithubAddMenu({ x, y }),
 								onGroupContextMenu: (name: string, x: number, y: number) =>
 									setGroupHeaderMenu({ name, x, y }),
-								showHints
+								showHints,
+								launchingPath: launching?.path ?? null
 							}}
 						/>
 					</>
@@ -1470,7 +1499,8 @@ const AppInner = () => {
 					onTerminal: handleOpenTerminal,
 					onBoth: handleOpenBoth,
 					onManageTargets: () => openSettings('targets'),
-					onOpenPalette: () => setPaletteOpen(true)
+					onOpenPalette: () => setPaletteOpen(true),
+					pulse: launching?.kind ?? null
 				}}
 			/>
 		</div>

@@ -355,6 +355,16 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 /// the footer: the launch groups, and the palette's door
+/// which default just fired; its button pulses once, the launch moment
+type LaunchKind = 'editor' | 'terminal' | 'both';
+
+interface Launching {
+	path: string;
+	kind: LaunchKind;
+	/// the moment it fired, so a second launch of the same row replays
+	seq: number;
+}
+
 interface StatusBarProps {
 	hasSelection: boolean;
 	selectionIsWsl: boolean;
@@ -366,6 +376,7 @@ interface StatusBarProps {
 	onBoth: () => void;
 	onManageTargets: () => void;
 	onOpenPalette: () => void;
+	pulse?: LaunchKind | null;
 }
 
 interface TitleBarProps {
@@ -765,6 +776,8 @@ interface ProjectTreeProps {
 	onGroupContextMenu?: (name: string, x: number, y: number) => void;
 	/// the recent / frequent words on rows, off unless Appearance says so
 	showHints?: boolean;
+	/// the project that was just launched; its row plays the launch motion
+	launchingPath?: string | null;
 	ref?: React.Ref<ProjectTreeHandle>;
 }
 
@@ -802,6 +815,8 @@ interface ProjectRowProps {
 	/// strong blue is always the row Enter acts on
 	quiet?: boolean;
 	showHints?: boolean;
+	/// just launched: the row plays the launch motion
+	launching?: boolean;
 	rank?: ProjectRank;
 	git?: GitInfo;
 	tech?: ProjectTech;
@@ -821,6 +836,8 @@ interface TargetGroupProps {
 	hasSelection: boolean;
 	shortcut: string;
 	onPick: (id?: string) => void;
+	/// the default just fired: it pulses once
+	pulse?: boolean;
 }
 
 /* Toast */
