@@ -183,34 +183,72 @@ fn sanitize_file_stem(name: &str) -> String {
     }
 }
 
+/// Bring the project's session up to the requested layout, and nothing more.
+///
+/// The old script wrapped every window creation in the has-session guard,
+/// so the layout was decided the first time you launched a project and
+/// frozen: add a window, relaunch, still see three, with nothing to explain
+/// it. Every window gets its own guard now, the first one included: on a
+/// session that already exists new-session never runs, and a name you put at
+/// the top of the list would otherwise be the one that never appears.
+///
+/// Nothing here kills, renames or prunes. A window someone made by hand is
+/// theirs, and a launcher that tidies your session is one you stop trusting
+/// with a long-running process.
 fn build_tmux_script(
     session: &str,
     linux_path: &str,
     tmux: &TmuxConfig,
 ) -> String {
-    let mut windows = tmux.window_names.iter();
-    let create = match windows.next() {
+    let windows = &tmux.window_names;
+    let session_q = sh_quote(session);
+    // every -t carries `=`: tmux matches a target by prefix otherwise, and
+    // has-session -t app is satisfied by a running app-api. new-session -s
+    // is the exception, it names something that does not exist yet
+    let exact_q = sh_quote(&format!("={session}"));
+    let target_q = sh_quote(&format!("={session}:"));
+    let path_q = sh_quote(linux_path);
+
+    // an empty list is one plain window: new-session always makes one, and
+    // the default is not quietly put back
+    let create = match windows.first() {
         Some(first) => format!(
-            "    tmux new-session -d -s \"{session}\" -n \"{first}\" -c \"{linux_path}\"\n"
+            "    tmux new-session -d -s {session_q} -n {} -c {path_q}\n",
+            sh_quote(first)
         ),
-        None => format!(
-            "    tmux new-session -d -s \"{session}\" -c \"{linux_path}\"\n"
-        ),
+        None => format!("    tmux new-session -d -s {session_q} -c {path_q}\n"),
     };
-    let rest: String = windows
+
+    // -F: a name is a literal, not a regex. -x: git must not match a
+    // hand-made git-log. --: a name like -log is otherwise read as options,
+    // grep exits 2, `if !` reads that as "not found", and the window is
+    // created again on every launch
+    let reconcile: String = windows
+        .iter()
         .map(|name| {
+            let name_q = sh_quote(name);
             format!(
-                "    tmux new-window -t \"{session}:\" -n \"{name}\" -c \"{linux_path}\"\n"
+                "if ! tmux list-windows -t {exact_q} -F '#W' 2>/dev/null | grep -Fxq -- {name_q}; then\n    tmux new-window -t {target_q} -n {name_q} -c {path_q}\nfi\n"
             )
         })
         .collect();
+
     format!(
         r#"#!/usr/bin/env bash
-if ! tmux has-session -t "{session}" 2>/dev/null; then
-{create}{rest}fi
-tmux attach -t "{session}"
+if ! tmux has-session -t {exact_q} 2>/dev/null; then
+{create}fi
+{reconcile}tmux attach -t {exact_q}
 "#
     )
+}
+
+/// One single-quoted bash word. Names are typed by a person, or arrive from
+/// an imported file: in double quotes, `a"; tmux kill-server; #` is a working
+/// way to destroy every session, and one stray `"` is a syntax error that
+/// stops every WSL launch. Single quotes are wholly literal; the one
+/// character they cannot hold is `'`, which closes, escapes and reopens.
+fn sh_quote(value: &str) -> String {
+    format!("'{}'", value.replace('\'', r"'\''"))
 }
 
 /// Open a terminal that runs a command in the project directory.
@@ -406,6 +444,178 @@ mod tests {
         assert!(!script_path.exists(), "{}", script_path.display());
     }
 
+    #[test]
+    fn a_custom_window_list_produces_exactly_those_windows_in_order() {
+        let names = ["editor", "logs", "db", "shell"];
+        let script =
+            build_tmux_script("app-deadbeef", "/srv/app", &tmux_with(&names));
+        assert_eq!(script.matches("tmux new-session").count(), 1);
+        // names.len(), not names.len() - 1: the first name is reconciled too
+        assert_eq!(script.matches("tmux new-window").count(), names.len());
+        let mut cursor = 0;
+        for name in names {
+            let needle = format!("-n '{name}' -c '/srv/app'");
+            let at = script[cursor..]
+                .find(&needle)
+                .unwrap_or_else(|| panic!("{name} missing or out of order"));
+            cursor += at + needle.len();
+        }
+        for stale in ["code", "agents", "git"] {
+            assert!(!script.contains(stale), "the default leaked: {script}");
+        }
+    }
+
+    #[test]
+    fn an_empty_window_list_opens_one_unnamed_window() {
+        let script =
+            build_tmux_script("app-deadbeef", "/srv/app", &tmux_with(&[]));
+        assert!(script
+            .contains("tmux new-session -d -s 'app-deadbeef' -c '/srv/app'"));
+        assert!(!script.contains("-n "), "must not name a window: {script}");
+        assert!(
+            !script.contains("new-window"),
+            "nothing to reconcile: {script}"
+        );
+        assert!(script.contains("tmux attach -t '=app-deadbeef'"));
+    }
+
+    /// has-session -t app is satisfied by a running app-api; `=` forces an
+    /// exact match everywhere but on the name being created.
+    #[test]
+    fn every_tmux_target_is_matched_exactly_except_the_name_being_created() {
+        let script = build_tmux_script(
+            "app",
+            "/srv/app",
+            &tmux_with(&["code", "agents"]),
+        );
+        assert!(script.contains("tmux has-session -t '=app'"), "{script}");
+        assert!(script.contains("tmux list-windows -t '=app'"), "{script}");
+        assert!(script.contains("tmux new-window -t '=app:'"), "{script}");
+        assert!(script.contains("tmux attach -t '=app'"), "{script}");
+        assert!(!script.contains("-s '=app"), "{script}");
+    }
+
+    /// "Make the session match the list" is the most natural edit anyone
+    /// will propose here, and it is the one that loses a running build.
+    #[test]
+    fn reconciliation_never_kills_or_renames_a_window() {
+        let script = build_tmux_script(
+            "app-deadbeef",
+            "/srv/app",
+            &tmux_with(&["code", "agents"]),
+        );
+        for destructive in [
+            "kill-window",
+            "kill-session",
+            "kill-server",
+            "rename-window",
+            "rename-session",
+            "move-window",
+            "unlink-window",
+        ] {
+            assert!(!script.contains(destructive), "{destructive}: {script}");
+        }
+    }
+
+    /// Every other test here is a contains over one flat string and would
+    /// pass with the new-window blocks back inside the guard. What makes
+    /// reconciliation work is where the blocks sit.
+    #[test]
+    fn the_reconcile_blocks_sit_outside_the_has_session_guard() {
+        let script = build_tmux_script(
+            "app-deadbeef",
+            "/srv/app",
+            &tmux_with(&["code", "git"]),
+        );
+        let fi = script.find("\nfi\n").expect("the guard closes");
+        let first_reconcile =
+            script.find("tmux list-windows").expect("reconciles");
+        assert!(first_reconcile > fi, "back inside the guard: {script}");
+        assert_eq!(
+            script[..fi].matches("tmux new-window").count(),
+            0,
+            "{script}"
+        );
+    }
+
+    #[test]
+    fn a_window_name_that_looks_like_an_option_is_still_a_pattern() {
+        let script = build_tmux_script(
+            "app-deadbeef",
+            "/srv/app",
+            &tmux_with(&["code", "-log"]),
+        );
+        assert!(script.contains("grep -Fxq -- 'code'"), "{script}");
+        assert!(script.contains("grep -Fxq -- '-log'"), "{script}");
+        assert_eq!(
+            script.matches("grep -Fxq -- ").count(),
+            script.matches("grep ").count(),
+            "a grep without -- crept back in: {script}"
+        );
+    }
+
+    #[test]
+    fn a_hostile_window_name_stays_one_inert_word() {
+        let hostile = r#"a"; tmux kill-server; #"#;
+        let names = tmux_with(&[hostile, "$(touch /tmp/pwned)", "it's"]);
+        let script = build_tmux_script("app-deadbeef", "/srv/app", &names);
+        // the script does say kill-server, harmlessly, inside the quoted name;
+        // it must never say it anywhere else
+        let quoted = format!("'{hostile}'");
+        assert_eq!(
+            script.matches("kill-server").count(),
+            script.matches(&quoted).count(),
+            "a name escaped its quotes: {script}"
+        );
+        assert_eq!(script.matches(&quoted).count(), 3, "{script}");
+        assert!(script.contains("'$(touch /tmp/pwned)'"), "{script}");
+        assert!(script.contains(r"'it'\''s'"), "{script}");
+        // every double quote left is one the name contained
+        assert_eq!(script.matches('"').count(), 3, "{script}");
+    }
+
+    /// back$up is a legal directory; unquoted, bash expands $up to nothing.
+    #[test]
+    fn a_project_path_with_shell_characters_is_not_expanded() {
+        let script = build_tmux_script(
+            "app-deadbeef",
+            "/home/joy/back$up",
+            &tmux_with(&["code"]),
+        );
+        assert!(script.contains("-c '/home/joy/back$up'"), "{script}");
+    }
+
+    #[test]
+    fn the_temp_script_filename_carries_the_session_name() {
+        let here = wsl_project("api", "work");
+        let there = wsl_project("api", "other");
+        let terminal = LaunchTarget {
+            id: "tmux-term".into(),
+            name: "tmux Terminal".into(),
+            kind: TargetKind::Terminal,
+            executable: "cmd".into(),
+            args_template: "/c exit".into(),
+            wsl_executable: None,
+            wsl_args_template: Some("/c exit {script}".into()),
+            run_args_template: None,
+            wsl_run_args_template: None,
+        };
+        for project in [&here, &there] {
+            let expected = std::env::temp_dir()
+                .join(format!("devgo-{}.sh", tmux_session_name(project)));
+            let _ = std::fs::remove_file(&expected);
+            launch_target(
+                &terminal,
+                project,
+                &no_distro(),
+                &tmux_with(&["code"]),
+            )
+            .unwrap();
+            assert!(expected.exists(), "{}", expected.display());
+            let _ = std::fs::remove_file(&expected);
+        }
+    }
+
     /// The shipped default must still be byte-for-byte what the three
     /// hardcoded lines produced, or every existing session gets a new layout.
     #[test]
@@ -416,7 +626,7 @@ mod tests {
         let script = build_tmux_script("api", "/home/joy/api", &shipped);
         let mut cursor = 0;
         for name in &shipped.window_names {
-            let needle = format!("-n \"{name}\" -c \"/home/joy/api\"");
+            let needle = format!("-n '{name}' -c '/home/joy/api'");
             let at = script[cursor..]
                 .find(&needle)
                 .unwrap_or_else(|| panic!("{name} missing or out of order"));
