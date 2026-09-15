@@ -6,8 +6,9 @@
 //! (a spawned thread streams progress as events), and a failure leaves the
 //! disk exactly as it was. git clone removes a half-made directory when it
 //! fails, and the refusals here never let it start on one that exists.
+use std::io::{BufRead, BufReader};
 use std::os::windows::process::CommandExt;
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 use serde::Serialize;
 
@@ -146,6 +147,119 @@ pub fn refuse_if_needed(
     Ok(())
 }
 
+/// One line of git clone --progress stderr, reduced to what a row can
+/// show: `Receiving objects:  42% (1234/2938), 1.20 MiB | 2.40 MiB/s`
+/// becomes (Receiving objects, 42). A line with no percentage (`Cloning
+/// into '…'…`) comes back with None.
+pub fn parse_progress(line: &str) -> (String, Option<u8>) {
+    let line = line.trim();
+    let Some((phase, rest)) = line.split_once(':') else {
+        return (line.to_string(), None);
+    };
+    let pct = rest
+        .split('%')
+        .next()
+        .and_then(|s| s.trim().parse::<u8>().ok())
+        .filter(|p| *p <= 100);
+    (phase.trim().to_string(), pct)
+}
+
+/// Run the clone, calling on_line for every progress line git prints.
+/// Blocking; the command wraps it in a thread. --progress makes git print
+/// its percentages even without a terminal.
+pub fn run(plan: &Plan, mut on_line: impl FnMut(&str)) -> Result<(), AppError> {
+    let mut cmd = match &plan.distro {
+        Some(d) => {
+            let mut c = Command::new("wsl");
+            c.env("WSL_UTF8", "1");
+            c.args([
+                "-d",
+                d,
+                "-e",
+                "git",
+                "clone",
+                "--progress",
+                &plan.url,
+                &plan.git_dest,
+            ]);
+            c
+        }
+        None => {
+            let mut c = Command::new("git");
+            c.args(["clone", "--progress", &plan.url, &plan.git_dest]);
+            c
+        }
+    };
+    let mut child = cmd
+        .creation_flags(CREATE_NO_WINDOW)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| AppError::LaunchFailed(format!("git clone: {e}")))?;
+
+    // git rewrites progress lines in place with \r, so a "line" ends at
+    // either terminator
+    let mut last_error = String::new();
+    if let Some(stderr) = child.stderr.take() {
+        let mut reader = BufReader::new(stderr);
+        let mut buf = Vec::new();
+        loop {
+            buf.clear();
+            let n = read_until_either(&mut reader, &mut buf)?;
+            if n == 0 {
+                break;
+            }
+            let line = String::from_utf8_lossy(&buf).trim().to_string();
+            if line.is_empty() {
+                continue;
+            }
+            if line.starts_with("fatal:") || line.starts_with("error:") {
+                last_error = line.clone();
+            }
+            on_line(&line);
+        }
+    }
+    let status = child.wait()?;
+    if status.success() {
+        Ok(())
+    } else if last_error.is_empty() {
+        Err(AppError::LaunchFailed(format!(
+            "git clone exited with {status}"
+        )))
+    } else {
+        Err(AppError::LaunchFailed(last_error))
+    }
+}
+
+// read_until for two delimiters: BufRead::read_until takes one byte
+fn read_until_either<R: BufRead>(
+    r: &mut R,
+    buf: &mut Vec<u8>,
+) -> std::io::Result<usize> {
+    let mut total = 0;
+    loop {
+        let available = r.fill_buf()?;
+        if available.is_empty() {
+            return Ok(total);
+        }
+        let stop = available.iter().position(|b| *b == b'\r' || *b == b'\n');
+        match stop {
+            Some(i) => {
+                buf.extend_from_slice(&available[..i]);
+                r.consume(i + 1);
+                return Ok(total + i + 1);
+            }
+            None => {
+                let len = available.len();
+                buf.extend_from_slice(available);
+                r.consume(len);
+                total += len;
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -213,6 +327,44 @@ mod tests {
         let err = refuse_if_needed(&p, &[]).unwrap_err().to_string();
         assert!(err.contains("already exists"), "{err}");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn progress_lines_reduce_to_phase_and_percent() {
+        assert_eq!(
+            parse_progress(
+                "Receiving objects:  42% (1234/2938), 1.20 MiB | 2.40 MiB/s"
+            ),
+            ("Receiving objects".into(), Some(42))
+        );
+        assert_eq!(
+            parse_progress("Resolving deltas: 100% (10/10), done."),
+            ("Resolving deltas".into(), Some(100))
+        );
+        assert_eq!(
+            parse_progress("Cloning into 'devgo'..."),
+            ("Cloning into 'devgo'...".into(), None)
+        );
+        assert_eq!(
+            parse_progress("remote: Enumerating objects: 55, done."),
+            ("remote".into(), None)
+        );
+    }
+
+    #[test]
+    fn read_until_either_splits_on_cr_and_lf() {
+        let data = b"a\rbb\nccc";
+        let mut r = BufReader::new(&data[..]);
+        let mut buf = Vec::new();
+        let mut lines = Vec::new();
+        loop {
+            buf.clear();
+            if read_until_either(&mut r, &mut buf).unwrap() == 0 {
+                break;
+            }
+            lines.push(String::from_utf8(buf.clone()).unwrap());
+        }
+        assert_eq!(lines, vec!["a", "bb", "ccc"]);
     }
 
     #[test]
