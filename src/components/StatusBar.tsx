@@ -16,7 +16,7 @@ const TargetGroup = ({
 	pulse
 }: TargetGroupProps) => (
 	<div className='flex items-center gap-1.5 min-w-0'>
-		<span className='text-13 text-text-muted shrink-0'>
+		<span className='text-11 text-text-muted shrink-0'>
 			{label}
 		</span>
 		{items.map(t => {
@@ -40,7 +40,7 @@ const TargetGroup = ({
 					onClick={() => onPick(isDefault ? undefined : t.id)}
 					title={title}
 				>
-					<span className='truncate leading-none'>{t.name}</span>
+					<span className='truncate text-11 leading-none'>{t.name}</span>
 					{isDefault && <Kbd>{shortcut}</Kbd>}
 				</Button>
 			);
@@ -86,7 +86,7 @@ const StatusBar = ({
 	const both = prettyKeys(shortcutFor('openBoth'));
 
 	return (
-		<footer className='flex items-center justify-between gap-6 h-12 px-4 bg-bg-secondary border-t border-border shrink-0 text-13 select-none overflow-hidden'>
+		<footer className='flex items-center justify-between gap-6 h-12 px-4 bg-bg-secondary border-t border-border shrink-0 text-11 select-none overflow-hidden'>
 			<div className='flex items-center gap-4 min-w-0 overflow-hidden'>
 				{groups.map(g => (
 					<TargetGroup
@@ -101,7 +101,7 @@ const StatusBar = ({
 					onClick={onBoth}
 					title={`Open Both — ${both}`}
 				>
-					<span className='leading-none'>Open Both</span>
+					<span className='text-11 leading-none'>Open Both</span>
 					<Kbd>{both}</Kbd>
 				</Button>
 				<Button
@@ -117,7 +117,7 @@ const StatusBar = ({
 			    surface is itself undiscoverable */}
 			<Button
 				variant='ghost'
-				className='gap-1.5 text-13 shrink-0 hover:bg-transparent hover:text-accent'
+				className='gap-1.5 text-11 shrink-0 hover:bg-transparent hover:text-accent'
 				title='Open the command palette'
 				onClick={onOpenPalette}
 			>

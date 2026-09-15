@@ -722,20 +722,22 @@ const ProjectTree = ({
 								)}
 								<div className='flex items-center gap-2 text-text-secondary min-w-0'>
 									<span
-										className={`text-13 shrink-0 ${isOpen ? 'text-accent' : 'text-text-muted'}`}
+										className={`text-11 shrink-0 ${isOpen ? 'text-accent' : 'text-text-muted'}`}
 									>
 										{isOpen ? '▼' : '▶'}
 									</span>
-									<span className='truncate font-semibold text-text-primary'>
+									{/* one step under the rows: a workspace header is a label for
+									    the rows, not a row */}
+									<span className='truncate text-13 font-semibold text-text-primary'>
 										{lastSegment(ws)}
 									</span>
 									<StatusPill state={wsState} />
 								</div>
-								<div className='text-text-muted truncate' title={ws}>
+								<div className='text-11 text-text-muted truncate' title={ws}>
 									{ws}
 								</div>
-								<FsCell {...{ fs, className: 'font-medium' }} />
-								<div className='text-right text-13 text-text-muted font-mono'>
+								<FsCell {...{ fs, className: 'text-11 font-medium' }} />
+								<div className='text-right text-11 text-text-muted font-mono'>
 									{count}
 								</div>
 							</div>
