@@ -5,6 +5,7 @@ const ConfirmDialog = ({
 	open,
 	title,
 	message,
+	confirmLabel = 'Confirm',
 	onConfirm,
 	onCancel
 }: ConfirmDialogProps) => {
@@ -23,7 +24,7 @@ const ConfirmDialog = ({
 
 	const actions: { label: string; variant: ButtonVariant; onClick: () => void }[] = [
 		{ label: 'Cancel', variant: 'secondary', onClick: onCancel },
-		{ label: 'Remove', variant: 'danger', onClick: onConfirm }
+		{ label: confirmLabel, variant: 'danger', onClick: onConfirm }
 	];
 
 	return (

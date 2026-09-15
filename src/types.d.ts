@@ -107,7 +107,8 @@ type ButtonVariant =
 	| 'danger'
 	| 'ghost'
 	| 'pill'
-	| 'tab';
+	| 'tab'
+	| 'badge';
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
 	variant?: ButtonVariant;
@@ -154,8 +155,19 @@ interface ConfirmDialogProps {
 	open: boolean;
 	title: string;
 	message: string;
+	/// What the confirming button says — the verb, so the dialog cannot say
+	/// "Remove" over a question about stopping something.
+	confirmLabel?: string;
 	onConfirm: () => void;
 	onCancel: () => void;
+}
+
+interface WslControlProps {
+	distros: string[];
+	/// Called after every stop attempt, success or not — the caller re-reads.
+	onChanged: () => void;
+	onConfirm: (message: string, action: () => void) => void;
+	onResult: (message: string, kind: ToastType) => void;
 }
 
 interface SearchBoxProps {

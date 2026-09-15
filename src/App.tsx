@@ -8,6 +8,7 @@ import ProjectTree from './components/ProjectTree';
 import RuntimeIndicator from './components/RuntimeIndicator';
 import SearchBox from './components/SearchBox';
 import TitleBar from './components/TitleBar';
+import WslControl from './components/WslControl';
 import ToastProvider, { useToast } from './components/Toast';
 import { useLaunchActions } from './hooks/useLaunchActions';
 import { useProjects } from './hooks/useProjects';
@@ -63,6 +64,22 @@ const AppInner = () => {
 	useEffect(() => {
 		invoke<string>('get_summon_hotkey').then(setSummonHotkey).catch(() => {});
 	}, []);
+
+	// Live WSL state, refreshed on the passes the app already makes — every
+	// scan, and every stop attempt — never on a timer. `wsl -l -q --running`
+	// boots nothing, so it is free to ask.
+	const [distros, setDistros] = useState<string[]>([]);
+	const refreshDistros = () => {
+		invoke<string[]>('get_running_distros').then(setDistros).catch(() => {});
+	};
+	useEffect(refreshDistros, [workspaceStates]);
+
+	// One dialog, two destructive actions with two different sentences: the
+	// popover asks App to confirm, and App renders the question.
+	const [confirmAction, setConfirmAction] = useState<{
+		message: string;
+		run: () => void;
+	} | null>(null);
 
 	const treeRef = useRef<ProjectTreeHandle>(null);
 	const handleArrow = (dir: 1 | -1) => treeRef.current?.navigate(dir);
@@ -210,7 +227,18 @@ const AppInner = () => {
 	return (
 		<div className='flex flex-col h-screen w-screen rounded-xl overflow-hidden'>
 			<TitleBar>
-				<RuntimeIndicator runtime={runtime?.runtime ?? 'windows'} />
+				<div className='flex items-center gap-2'>
+					<WslControl
+						{...{
+							distros,
+							onChanged: refreshDistros,
+							onConfirm: (message: string, run: () => void) =>
+								setConfirmAction({ message, run }),
+							onResult: toast
+						}}
+					/>
+					<RuntimeIndicator runtime={runtime?.runtime ?? 'windows'} />
+				</div>
 			</TitleBar>
 
 			<Suspense>
@@ -228,10 +256,25 @@ const AppInner = () => {
 
 			<ConfirmDialog
 				{...{
+					open: confirmAction !== null,
+					title: 'Stop WSL',
+					message: confirmAction?.message ?? '',
+					confirmLabel: 'Stop',
+					onConfirm: () => {
+						confirmAction?.run();
+						setConfirmAction(null);
+					},
+					onCancel: () => setConfirmAction(null)
+				}}
+			/>
+
+			<ConfirmDialog
+				{...{
 					open: removeIndex !== null,
 					title: 'Remove Workspace',
 					message:
 						'Are you sure you want to remove this workspace folder? Your files will not be deleted.',
+					confirmLabel: 'Remove',
 					onConfirm: () => {
 						if (removeIndex !== null) handleRemove(removeIndex);
 						setRemoveIndex(null);

@@ -12,7 +12,11 @@ const VARIANT: Record<ButtonVariant, string> = {
 		'p-1 text-sm rounded bg-transparent border-none text-text-muted hover:text-text-primary hover:bg-bg-hover',
 	pill: 'px-6 py-2.5 text-[13px] border border-border rounded-[20px] bg-bg-panel text-text-secondary hover:not-disabled:bg-bg-hover hover:not-disabled:text-text-primary hover:not-disabled:border-accent',
 	// A sidebar item; the selected one says so with aria-current="page".
-	tab: 'justify-start px-3 py-1.5 text-sm font-medium rounded bg-transparent border-none text-text-secondary hover:bg-bg-hover/50 hover:text-text-primary aria-[current=page]:bg-bg-selected aria-[current=page]:text-text-primary'
+	tab: 'justify-start px-3 py-1.5 text-sm font-medium rounded bg-transparent border-none text-text-secondary hover:bg-bg-hover/50 hover:text-text-primary aria-[current=page]:bg-bg-selected aria-[current=page]:text-text-primary',
+	// A title-bar status pill you can click. Disabled means "nothing to act on",
+	// and the muted colour says so; the base opacity dims it further.
+	badge:
+		'px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider rounded-full bg-bg-panel border border-border text-accent hover:not-disabled:border-accent disabled:text-text-muted'
 };
 
 const Button = ({
