@@ -168,6 +168,67 @@ fn relative_name(root: &std::path::Path, path: &std::path::Path) -> String {
         })
 }
 
+fn scan_windows_nested(
+    root: &str,
+    depth: usize,
+    ignore: &[String],
+) -> ScanOutcome {
+    let root_path = std::path::Path::new(root);
+    let entries = match std::fs::read_dir(root_path) {
+        Ok(e) => e,
+        Err(e) => {
+            return ScanOutcome::Unavailable(match e.kind() {
+                std::io::ErrorKind::PermissionDenied => {
+                    UnavailableReason::AccessDenied
+                }
+                _ => UnavailableReason::NotMounted,
+            })
+        }
+    };
+    let fs_type = detect_file_system(root).to_string();
+    let mut out = Vec::new();
+    walk_windows(entries, root_path, 1, depth, ignore, &fs_type, &mut out);
+    out.sort_by_key(|p| p.name.to_lowercase());
+    ScanOutcome::Scanned(out)
+}
+
+// a sub-read that fails is a missing branch, not an unavailable workspace;
+// only the root read decides that
+fn walk_windows(
+    entries: std::fs::ReadDir,
+    root: &std::path::Path,
+    level: usize,
+    max: usize,
+    ignore: &[String],
+    fs_type: &str,
+    out: &mut Vec<Project>,
+) {
+    for entry in entries.flatten() {
+        if !entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+            continue;
+        }
+        let name = entry.file_name().to_string_lossy().to_string();
+        if is_pruned(&name, ignore) {
+            continue;
+        }
+        let path = entry.path();
+        // every immediate child is a project; deeper only if marked
+        if level == 1 || has_marker(&path) {
+            out.push(Project::new(
+                relative_name(root, &path),
+                path.to_string_lossy().into_owned(),
+                root.to_string_lossy().into_owned(),
+                fs_type.to_string(),
+            ));
+        }
+        if level < max {
+            if let Ok(sub) = std::fs::read_dir(&path) {
+                walk_windows(sub, root, level + 1, max, ignore, fs_type, out);
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
