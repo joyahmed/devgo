@@ -1,10 +1,12 @@
 import { lazy, Suspense, useRef, useState } from 'react';
 import ConfirmDialog from './components/ConfirmDialog';
 import ProjectTree from './components/ProjectTree';
+import RuntimeIndicator from './components/RuntimeIndicator';
 import SearchBox from './components/SearchBox';
 import TitleBar from './components/TitleBar';
 import ToastProvider, { useToast } from './components/Toast';
 import { useProjects } from './hooks/useProjects';
+import { useRuntime } from './hooks/useRuntime';
 import { useWorkspaces } from './hooks/useWorkspaces';
 
 const WorkspaceManager = lazy(() => import('./components/WorkspaceManager'));
@@ -31,6 +33,7 @@ const AppInner = () => {
 	const { filtered, query, setQuery, selected, setSelected, loading } =
 		useProjects();
 	const { toast } = useToast();
+	const runtime = useRuntime();
 	const [removeIndex, setRemoveIndex] = useState<number | null>(null);
 
 	const treeRef = useRef<ProjectTreeHandle>(null);
@@ -48,7 +51,9 @@ const AppInner = () => {
 
 	return (
 		<div className='flex flex-col h-screen w-screen rounded-xl overflow-hidden'>
-			<TitleBar />
+			<TitleBar>
+				<RuntimeIndicator runtime={runtime?.runtime ?? 'windows'} />
+			</TitleBar>
 
 			<ConfirmDialog
 				{...{

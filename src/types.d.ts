@@ -12,6 +12,13 @@ interface Project {
 	file_system: string;
 }
 
+interface RuntimeInfo {
+	runtime: 'windows' | 'wsl';
+	wsl_available: boolean;
+	distros: string[];
+	default_distro: string | null;
+}
+
 /* Component props */
 
 type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'ghost';
@@ -50,6 +57,10 @@ interface SearchBoxProps {
 	onEnter?: () => void;
 	onArrow?: (dir: 1 | -1) => void;
 	enterHint?: string;
+}
+
+interface RuntimeIndicatorProps {
+	runtime: RuntimeInfo['runtime'];
 }
 
 interface ProjectTreeHandle {
