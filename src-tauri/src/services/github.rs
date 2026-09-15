@@ -7,7 +7,7 @@
 //! token: gh owns auth, so "not installed" and "not logged in" are typed
 //! errors with the fix in them rather than an empty list that looks like
 //! "you have no repos".
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::os::windows::process::CommandExt;
 use std::path::PathBuf;
@@ -51,6 +51,11 @@ pub struct Repo {
     /// None for an empty repository: gh prints defaultBranchRef null for
     /// one with no commits, and one such repo must not fail the list
     pub default_branch: Option<String>,
+    /// put here by hand (add repo by name), not by gh repo list. a refresh
+    /// keeps these: they are not the user's repos, so the list would never
+    /// bring them back on its own
+    #[serde(default)]
+    pub added: bool,
 }
 
 /// The three states the auth answer can be in. login is the point: the
@@ -103,8 +108,36 @@ impl GithubStore {
         self.cache.clone()
     }
 
-    pub fn store(&mut self, cache: GithubCache) -> Result<(), AppError> {
+    /// Replace the fetched list, keeping every hand-added row the fetch
+    /// did not return: the merge that makes add-by-name survive a refresh.
+    pub fn store(&mut self, mut cache: GithubCache) -> Result<(), AppError> {
+        let fetched: HashSet<String> =
+            cache.repos.iter().map(|r| r.full_name.clone()).collect();
+        let kept: Vec<Repo> = self
+            .cache
+            .repos
+            .iter()
+            .filter(|r| r.added && !fetched.contains(&r.full_name))
+            .cloned()
+            .collect();
+        cache.repos.extend(kept);
+        cache.repos.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
         self.cache = cache;
+        self.save()
+    }
+
+    /// Add one row by hand, replacing a previous copy of the same repo.
+    pub fn add(&mut self, mut repo: Repo) -> Result<(), AppError> {
+        repo.added = true;
+        self.cache.repos.retain(|r| r.full_name != repo.full_name);
+        self.cache.repos.push(repo);
+        self.cache
+            .repos
+            .sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+        self.save()
+    }
+
+    fn save(&self) -> Result<(), AppError> {
         let data = serde_json::to_string_pretty(&self.cache)?;
         fs::write(&self.file_path, data)?;
         Ok(())
@@ -272,6 +305,7 @@ pub fn parse_repos(text: &str) -> Result<Vec<Repo>, AppError> {
             private: r.is_private,
             archived: r.is_archived,
             default_branch: r.default_branch_ref.map(|b| b.name),
+            added: false,
         })
         .collect())
 }
@@ -443,6 +477,49 @@ mod tests {
         assert!(
             dir.join("github-cache.json.bak").exists(),
             "and the original is kept"
+        );
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_refresh_keeps_hand_added_rows_and_drops_nothing_else() {
+        let dir = std::env::temp_dir().join("devgo-github-added");
+        let _ = fs::remove_dir_all(&dir);
+        let mut store = GithubStore::new(dir.clone()).unwrap();
+        let mut stranger = parse_repos(SAMPLE).unwrap().remove(1);
+        stranger.full_name = "someone/else".into();
+        store.add(stranger.clone()).unwrap();
+        assert!(store.get().repos[0].added);
+
+        // a refresh that does not include the stranger keeps it; one that
+        // does not include an ordinary old row drops that row
+        store
+            .store(GithubCache {
+                fetched_at: 9,
+                login: None,
+                orgs: vec![],
+                repos: parse_repos(SAMPLE).unwrap(),
+            })
+            .unwrap();
+        let names: Vec<String> = store
+            .get()
+            .repos
+            .iter()
+            .map(|r| r.full_name.clone())
+            .collect();
+        assert!(names.contains(&"someone/else".to_string()), "{names:?}");
+        assert_eq!(names.len(), 4);
+
+        // adding the same repo twice is one row
+        store.add(stranger).unwrap();
+        assert_eq!(
+            store
+                .get()
+                .repos
+                .iter()
+                .filter(|r| r.full_name == "someone/else")
+                .count(),
+            1
         );
         let _ = fs::remove_dir_all(&dir);
     }
