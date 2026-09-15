@@ -91,6 +91,15 @@ interface ScanConfig {
 	depth: number;
 }
 
+/// The tmux windows a WSL launch opens, in order; the count is the length.
+/// snake_case: the Rust struct has no rename_all, so the wire field really is
+/// window_names.
+interface TmuxConfig {
+	/// off means one plain login shell in the project directory
+	enabled: boolean;
+	window_names: string[];
+}
+
 // the --color-* names in index.css; a theme must set every one
 type ThemeKey =
 	| 'bg-primary'
@@ -248,6 +257,10 @@ interface OnboardingProps {
 
 interface ScanningPanelProps {
 	onSaved: () => void;
+	onError: (message: string) => void;
+}
+
+interface TmuxPanelProps {
 	onError: (message: string) => void;
 }
 

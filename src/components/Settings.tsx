@@ -221,6 +221,112 @@ const ScanningPanel = ({ onSaved, onError }: ScanningPanelProps) => {
 	);
 };
 
+// no onSaved: a window list is not scan input, and the only "changed"
+// channel Settings hands a panel is onScanChanged, which re-walks every
+// workspace. Success is a line under the button, like ConfigPanel
+const TmuxPanel = ({ onError }: TmuxPanelProps) => {
+	const [text, setText] = useState<string | null>(null);
+	const [enabled, setEnabled] = useState(true);
+	const [saving, setSaving] = useState(false);
+	const [msg, setMsg] = useState<string | null>(null);
+
+	useEffect(() => {
+		invoke<TmuxConfig>('get_tmux_config')
+			.then(c => {
+				setEnabled(c.enabled);
+				setText(c.window_names.join('\n'));
+			})
+			// text stays null until this resolves, which is what disables the
+			// controls; the failure path has to set it too
+			.catch(e => {
+				onError(String(e));
+				setText('');
+			});
+	}, []);
+
+	const save = async () => {
+		setSaving(true);
+		setMsg(null);
+		// newlines only: ScanningPanel also splits on commas because a folder
+		// name never has one, and a tmux window name legitimately can
+		const window_names = [
+			...new Set(
+				(text ?? '')
+					.split('\n')
+					.map(s => s.trim())
+					.filter(Boolean)
+			)
+		];
+		try {
+			await invoke('set_tmux_config', { config: { enabled, window_names } });
+			setMsg('Saved. Takes effect on the next launch.');
+		} catch (e) {
+			onError(String(e));
+		} finally {
+			setSaving(false);
+		}
+	};
+
+	const modes = [
+		{ value: true, label: 'tmux session' },
+		{ value: false, label: 'Plain shell' }
+	];
+
+	return (
+		<div className='flex flex-col gap-5'>
+			{/* the switch first, and the list dims under it: a live text box
+			    under a disabled feature is a promise the app is not keeping */}
+			<div>
+				<h4 className={heading}>Use tmux</h4>
+				<p className='text-xs text-text-muted mb-2'>
+					On, a WSL terminal opens a tmux session with the windows below. Off,
+					it opens one plain login shell in the project directory and starts
+					no tmux server at all — the right answer if you only ever use one
+					tab.
+				</p>
+				<div className='flex items-center gap-2'>
+					{modes.map(m => (
+						<Button
+							key={m.label}
+							variant='target'
+							aria-current={enabled === m.value ? 'true' : undefined}
+							onClick={() => setEnabled(m.value)}
+							disabled={text === null}
+						>
+							{m.label}
+						</Button>
+					))}
+				</div>
+			</div>
+			<div className={enabled ? '' : 'opacity-50'}>
+				<h4 className={heading}>Windows</h4>
+				<p className='text-xs text-text-muted mb-2'>
+					One name per line, in order; the first is the window you land in.
+					Existing windows are left alone — one you opened by hand, or
+					renamed, survives every relaunch, and nothing here is ever killed
+					or pruned. Leave the box empty for a single plain window.
+				</p>
+				<textarea
+					className='w-full h-32 px-3 py-2 bg-bg-panel border border-border-strong rounded-md font-mono text-xs text-text-primary outline-none focus:border-accent resize-none'
+					placeholder={'code\nagents\ngit'}
+					value={text ?? ''}
+					onChange={e => setText(e.target.value)}
+					disabled={text === null || !enabled}
+				/>
+			</div>
+			<Button
+				variant='primary'
+				className='self-start'
+				onClick={save}
+				disabled={saving || text === null}
+			>
+				{saving ? 'Saving…' : 'Save'}
+			</Button>
+			{msg && <p className='text-xs text-accent'>{msg}</p>}
+		</div>
+	);
+};
+
 const SWATCHES: ThemeKey[] = [
 	'bg-primary',
 	'bg-panel',
@@ -406,6 +512,11 @@ const Settings = ({
 			render: () => (
 				<ScanningPanel {...{ onSaved: onScanChanged, onError }} />
 			)
+		},
+		{
+			id: 'tmux',
+			label: 'tmux',
+			render: () => <TmuxPanel {...{ onError }} />
 		},
 		{
 			id: 'shortcuts',
