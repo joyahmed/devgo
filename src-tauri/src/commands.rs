@@ -1,6 +1,8 @@
 use std::sync::Mutex;
 use tauri::State;
 
+use crate::error::AppError;
+use crate::models::Project;
 use crate::services::WorkspaceStore;
 
 pub struct AppState {
@@ -31,4 +33,19 @@ pub fn remove_workspace(
     let mut store = state.workspace_store.lock().map_err(|e| e.to_string())?;
     store.remove(index).map_err(|e| e.to_string())?;
     Ok(store.list())
+}
+
+#[tauri::command]
+pub fn get_projects(state: State<AppState>) -> Result<Vec<Project>, AppError> {
+    let store = state
+        .workspace_store
+        .lock()
+        .map_err(|e| AppError::Lock(e.to_string()))?;
+    let mut projects = Vec::new();
+    for ws in store.list() {
+        let mut found = crate::services::scan_workspace(&ws)?;
+        projects.append(&mut found);
+    }
+    projects.sort_by_key(|p| p.name.to_lowercase());
+    Ok(projects)
 }

@@ -33,6 +33,7 @@ pub fn run() {
             commands::get_workspaces,
             commands::add_workspace,
             commands::remove_workspace,
+            commands::get_projects
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
