@@ -90,3 +90,81 @@ impl WorkspaceStore {
 fn contains(parent: &str, child: &str) -> bool {
     child.starts_with(&format!("{parent}/"))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn store(name: &str) -> WorkspaceStore {
+        let dir = std::env::temp_dir().join(format!("devgo-ws-test-{name}"));
+        let _ = fs::remove_dir_all(&dir);
+        WorkspaceStore::new(dir).unwrap()
+    }
+
+    #[test]
+    fn removing_out_of_range_is_an_error_not_a_silent_success() {
+        let mut s = store("range");
+        s.add(r"G:\dev").unwrap();
+
+        assert!(
+            s.remove(5).is_err(),
+            "a stale index must not report success"
+        );
+        assert_eq!(s.list().len(), 1, "nothing may be removed on a bad index");
+
+        s.remove(0).unwrap();
+        assert!(s.list().is_empty());
+    }
+
+    #[test]
+    fn re_adding_the_same_workspace_is_a_no_op_not_an_error() {
+        let mut s = store("dupe");
+        s.add(r"G:\dev").unwrap();
+        s.add(r"G:/dev").unwrap();
+        s.add(r"G:\dev\").unwrap();
+        assert_eq!(
+            s.list().len(),
+            1,
+            "separator and trailing slash must not fool it"
+        );
+    }
+
+    /// The bug behind "I removed the workspace and its projects are still
+    /// there": two overlapping roots scan the same folders.
+    #[test]
+    fn a_workspace_inside_another_is_refused_either_way_round() {
+        let mut s = store("nested-child");
+        s.add(r"\\wsl.localhost\Ubuntu\home\joy\projects\03_ai")
+            .unwrap();
+        assert!(
+            s.add(r"\\wsl.localhost\Ubuntu\home\joy\projects\03_ai\palimpsest")
+                .is_err(),
+            "a child of an existing workspace must be refused"
+        );
+
+        let mut s = store("nested-parent");
+        s.add(r"G:\dev\apps").unwrap();
+        assert!(s.add(r"G:\dev").is_err(), "a parent must be refused too");
+        assert_eq!(s.list(), vec![r"G:\dev\apps".to_string()]);
+    }
+
+    /// Without the separator in `contains`, this pair would be rejected.
+    #[test]
+    fn a_sibling_with_a_shared_prefix_is_not_nested() {
+        let mut s = store("prefix");
+        s.add(r"G:\dev").unwrap();
+        s.add(r"G:\devtools").unwrap();
+        assert_eq!(s.list().len(), 2, "G:\\devtools is not inside G:\\dev");
+    }
+
+    #[test]
+    fn workspaces_survive_a_reload() {
+        let dir = std::env::temp_dir().join("devgo-ws-test-reload");
+        let _ = fs::remove_dir_all(&dir);
+        let mut s = WorkspaceStore::new(dir.clone()).unwrap();
+        s.add(r"G:\dev").unwrap();
+
+        let reloaded = WorkspaceStore::new(dir).unwrap();
+        assert_eq!(reloaded.list(), vec![r"G:\dev".to_string()]);
+    }
+}
