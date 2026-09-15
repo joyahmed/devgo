@@ -212,4 +212,26 @@ mod tests {
         assert!(notepad.resolve("x", Some(("Ubuntu", "/home"))).is_none());
         assert!(notepad.resolve("x", None).is_some());
     }
+
+    #[test]
+    fn run_templates_substitute_the_command() {
+        let wt = defaults().into_iter().nth(1).unwrap();
+        let (exe, args) =
+            wt.resolve_run(r"G:\dev\app", None, "bun run dev").unwrap();
+        assert_eq!(exe, "wt");
+        assert_eq!(args, r#"-d "G:\dev\app" cmd /k bun run dev"#);
+
+        let (_, args) = wt
+            .resolve_run("x", Some(("Ubuntu", "/home/joy/app")), "bun run dev")
+            .unwrap();
+        assert!(args.contains(r#"--cd "/home/joy/app""#));
+        assert!(args.ends_with(r#""bun run dev; exec bash""#));
+    }
+
+    /// An editor has no run form; asking is a refusal, not a plain open.
+    #[test]
+    fn a_target_without_a_run_template_refuses_commands() {
+        assert!(vscode().resolve_run("x", None, "bun run dev").is_none());
+        assert!(vscode().resolve("x", None).is_some());
+    }
 }
