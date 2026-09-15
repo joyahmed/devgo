@@ -233,6 +233,44 @@ pub fn list_orgs() -> Result<Vec<String>, AppError> {
 const REPO_FIELDS: &str =
     "name,owner,url,updatedAt,isPrivate,isArchived,defaultBranchRef";
 
+/// owner/name out of whatever a person pastes: the bare form, a GitHub
+/// url (with or without .git, a trailing slash, a /tree/… tail), or an
+/// ssh remote. Anything else is None; a guess here would send gh a
+/// stranger.
+pub fn parse_spec(input: &str) -> Option<String> {
+    let s = input.trim();
+    let rest = s
+        .strip_prefix("https://github.com/")
+        .or_else(|| s.strip_prefix("http://github.com/"))
+        .or_else(|| s.strip_prefix("github.com/"))
+        .or_else(|| s.strip_prefix("git@github.com:"))
+        .or_else(|| s.strip_prefix("ssh://git@github.com/"))
+        .unwrap_or(s);
+    let mut parts = rest.split('/').filter(|p| !p.is_empty());
+    let owner = parts.next()?;
+    let name = parts.next()?.trim_end_matches(".git");
+    let ok = |p: &str| {
+        !p.is_empty()
+            && p.chars().all(|c| {
+                c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.'
+            })
+    };
+    if !ok(owner) || !ok(name) {
+        return None;
+    }
+    Some(format!("{owner}/{name}"))
+}
+
+/// One repository by name, any owner. gh repo view prints the same shape
+/// gh repo list prints one element of, so the parser is shared.
+pub fn view_repo(full_name: &str) -> Result<Repo, AppError> {
+    let text = gh(&["repo", "view", full_name, "--json", REPO_FIELDS])?;
+    let mut repos = parse_repos(&format!("[{text}]"))?;
+    repos.pop().ok_or_else(|| {
+        AppError::GhUnavailable(format!("gh returned nothing for {full_name}"))
+    })
+}
+
 /// The user's own repositories plus each listed org's, newest first.
 ///
 /// One gh repo list per owner. About six seconds for a few hundred repos
@@ -479,6 +517,31 @@ mod tests {
             "and the original is kept"
         );
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn spec_accepts_the_forms_people_paste() {
+        for input in [
+            "joyahmed/devgo-app",
+            "  joyahmed/devgo-app  ",
+            "https://github.com/joyahmed/devgo-app",
+            "https://github.com/joyahmed/devgo-app.git",
+            "https://github.com/joyahmed/devgo-app/",
+            "https://github.com/joyahmed/devgo-app/tree/main/src",
+            "github.com/joyahmed/devgo-app",
+            "git@github.com:joyahmed/devgo-app.git",
+            "ssh://git@github.com/joyahmed/devgo-app.git",
+        ] {
+            assert_eq!(
+                parse_spec(input).as_deref(),
+                Some("joyahmed/devgo-app"),
+                "{input}"
+            );
+        }
+        assert_eq!(parse_spec("devgo-app"), None, "no owner");
+        assert_eq!(parse_spec("https://gitlab.com/a/b"), None, "not GitHub");
+        assert_eq!(parse_spec("a/b c"), None, "a space is not a name");
+        assert_eq!(parse_spec(""), None);
     }
 
     #[test]
