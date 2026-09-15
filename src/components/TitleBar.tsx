@@ -9,11 +9,11 @@ const TitleBar = ({ children }: TitleBarProps) => (
 			className='flex flex-1 items-center gap-2 cursor-grab'
 			onMouseDown={() => appWindow.startDragging()}
 		>
-			<span className='text-lg text-accent pointer-events-none'>
+			<span className='text-18 text-accent pointer-events-none'>
 				&#10022;
 			</span>
 			{/* no tagline: a title bar is not a place for a subtitle */}
-			<span className='text-base font-bold text-text-primary pointer-events-none'>
+			<span className='text-18 font-bold text-text-primary pointer-events-none'>
 				DevGo
 			</span>
 		</div>

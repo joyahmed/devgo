@@ -15,7 +15,7 @@ const TargetGroup = ({
 	onPick
 }: TargetGroupProps) => (
 	<div className='flex items-center gap-1.5 min-w-0'>
-		<span className='text-[10px] uppercase tracking-wider text-text-muted shrink-0'>
+		<span className='text-11 uppercase tracking-wider text-text-muted shrink-0'>
 			{label}
 		</span>
 		{items.map(t => {
@@ -82,7 +82,7 @@ const StatusBar = ({
 	const both = prettyKeys(shortcutFor('openBoth'));
 
 	return (
-		<footer className='flex items-center justify-between gap-6 h-12 px-4 bg-bg-secondary border-t border-border shrink-0 text-[13px] select-none overflow-hidden'>
+		<footer className='flex items-center justify-between gap-6 h-12 px-4 bg-bg-secondary border-t border-border shrink-0 text-13 select-none overflow-hidden'>
 			<div className='flex items-center gap-4 min-w-0 overflow-hidden'>
 				{groups.map(g => (
 					<TargetGroup
@@ -102,7 +102,7 @@ const StatusBar = ({
 				</Button>
 				<Button
 					variant='ghost'
-					className='text-[11px] px-2 shrink-0'
+					className='text-11 px-2 shrink-0'
 					onClick={onManageTargets}
 					title='Add, remove or scan for editors and terminals'
 				>
@@ -113,7 +113,7 @@ const StatusBar = ({
 			    surface is itself undiscoverable */}
 			<Button
 				variant='ghost'
-				className='gap-1.5 text-[13px] shrink-0 hover:bg-transparent hover:text-accent'
+				className='gap-1.5 text-13 shrink-0 hover:bg-transparent hover:text-accent'
 				title='Open the command palette'
 				onClick={onOpenPalette}
 			>

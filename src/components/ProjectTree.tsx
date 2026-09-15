@@ -27,7 +27,7 @@ const loadCollapsed = (): Set<string> => {
 };
 
 const pill =
-	'inline-block px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider rounded-full bg-bg-panel border border-border-strong shrink-0';
+	'inline-block px-2 py-0.5 text-11 font-semibold uppercase tracking-wider rounded-full bg-bg-panel border border-border-strong shrink-0';
 
 const FS_TONE: Record<string, string> = {
 	WSL: 'text-accent',
@@ -97,7 +97,7 @@ const TechBadges = ({ tech }: TechBadgesProps) => {
 			{tech.tags.map(t => (
 				<span
 					key={t}
-					className={`text-[9px] uppercase tracking-wider border rounded px-1 ${
+					className={`text-11 uppercase tracking-wider border rounded-control px-1 ${
 						TAG_TONE[t] ?? 'text-text-muted border-border'
 					}`}
 				>
@@ -105,7 +105,7 @@ const TechBadges = ({ tech }: TechBadgesProps) => {
 				</span>
 			))}
 			{tech.package_manager && (
-				<span className='text-[9px] uppercase tracking-wider text-text-muted'>
+				<span className='text-11 uppercase tracking-wider text-text-muted'>
 					{tech.package_manager}
 				</span>
 			)}
@@ -136,7 +136,7 @@ const GitBadge = ({ info, onOpenBranches }: GitBadgeProps) => {
 				</span>
 			)}
 			<span
-				className={`truncate font-mono text-[11px] text-text-muted ${
+				className={`truncate font-mono text-11 text-text-muted ${
 					info.remote ? 'hover:text-accent cursor-pointer' : ''
 				}`}
 				title={
@@ -176,14 +176,14 @@ const RowMeta = ({
 			}}
 		/>
 		{rank?.hint && (
-			<span className='text-[9px] uppercase tracking-wider text-text-muted shrink-0'>
+			<span className='text-11 uppercase tracking-wider text-text-muted shrink-0'>
 				{rank.hint}
 			</span>
 		)}
 		{onTogglePin && (
 			<Button
 				variant='ghost'
-				className={`text-xs leading-none p-0.5 hover:scale-110 hover:bg-transparent ${
+				className={`text-13 leading-none p-0.5 hover:scale-110 hover:bg-transparent ${
 					rank?.pinned ? 'text-accent' : 'text-text-muted/40'
 				}`}
 				title={rank?.pinned ? 'Unpin' : 'Pin to top'}
@@ -534,8 +534,8 @@ const ProjectTree = ({
 
 	if (loading) {
 		return (
-			<div className='flex-1 flex items-center justify-center text-sm text-text-muted'>
-				<span className='animate-spin text-lg mr-2'>&#9696;</span>
+			<div className='flex-1 flex items-center justify-center text-15 text-text-muted'>
+				<span className='animate-spin text-18 mr-2'>&#9696;</span>
 				Scanning workspaces...
 			</div>
 		);
@@ -565,7 +565,7 @@ const ProjectTree = ({
 			workspaceStates?.filter(s => s.status === 'unavailable') ?? [];
 		if (blocked.length > 0) {
 			return (
-				<div className='flex-1 flex flex-col items-center justify-center gap-2 text-sm text-text-muted px-6 text-center'>
+				<div className='flex-1 flex flex-col items-center justify-center gap-2 text-15 text-text-muted px-6 text-center'>
 					<span className='text-danger font-semibold'>
 						{blocked.length === 1
 							? '1 workspace is unavailable'
@@ -574,13 +574,13 @@ const ProjectTree = ({
 					{blocked.map(s => (
 						<span
 							key={s.workspace}
-							className='font-mono text-xs truncate max-w-full'
+							className='font-mono text-13 truncate max-w-full'
 						>
 							{s.workspace} —{' '}
 							{s.reason ? REASON_LABEL[s.reason] : 'unavailable'}
 						</span>
 					))}
-					<span className='text-xs'>
+					<span className='text-13'>
 						Nothing was cached for these yet. Refresh once they are back.
 					</span>
 				</div>
@@ -588,7 +588,7 @@ const ProjectTree = ({
 		}
 		if (!githubLane) {
 			return (
-				<div className='flex-1 flex items-center justify-center text-sm text-text-muted'>
+				<div className='flex-1 flex items-center justify-center text-15 text-text-muted'>
 					No projects found. Add a workspace to begin.
 				</div>
 			);
@@ -599,7 +599,7 @@ const ProjectTree = ({
 		return (
 			<div className='flex-1 flex flex-col min-h-0'>
 				<div className='flex-1 overflow-y-auto'>
-					<div className='px-3 py-3 text-sm text-text-muted'>
+					<div className='px-3 py-3 text-15 text-text-muted'>
 						{query.trim()
 							? 'No project matches.'
 							: 'No projects found. Add a workspace to begin.'}
@@ -634,7 +634,7 @@ const ProjectTree = ({
 	return (
 		<div className='flex-1 flex flex-col min-h-0'>
 			<div
-				className={`${col} px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-text-primary bg-bg-hover/30 rounded-t-md shrink-0 border-b border-border`}
+				className={`${col} px-3 py-1.5 text-13 font-bold uppercase tracking-wider text-text-primary bg-bg-hover/30 rounded-t-control shrink-0 border-b border-border`}
 			>
 				{COLUMNS.map(({ label, className }) => (
 					<div key={label} className={className}>
@@ -646,7 +646,7 @@ const ProjectTree = ({
 			<div className='flex-1 overflow-y-auto'>
 				{pinned.length > 0 && (
 					<div className='mb-1'>
-						<div className='px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-text-muted'>
+						<div className='px-3 py-1 text-11 font-bold uppercase tracking-wider text-text-muted'>
 							Pinned
 						</div>
 						{pinned.map(project => (
@@ -692,12 +692,12 @@ const ProjectTree = ({
 							>
 								{drop?.ws === ws && (
 									<div
-										className={`absolute left-4 right-4 h-0.5 bg-accent rounded pointer-events-none ${drop.after ? 'bottom-0' : 'top-0'}`}
+										className={`absolute left-4 right-4 h-0.5 bg-accent rounded-control pointer-events-none ${drop.after ? 'bottom-0' : 'top-0'}`}
 									/>
 								)}
 								<div className='flex items-center gap-2 text-text-secondary min-w-0'>
 									<span
-										className={`text-xs shrink-0 ${isOpen ? 'text-accent' : 'text-text-muted'}`}
+										className={`text-13 shrink-0 ${isOpen ? 'text-accent' : 'text-text-muted'}`}
 									>
 										{isOpen ? '▼' : '▶'}
 									</span>

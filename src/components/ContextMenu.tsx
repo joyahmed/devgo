@@ -35,7 +35,7 @@ const ContextMenu = ({ x, y, items, onClose }: ContextMenuProps) => {
 	return (
 		<div
 			ref={ref}
-			className='fixed z-50 w-64 bg-bg-secondary border border-border rounded-lg shadow-2xl py-1 text-sm'
+			className='fixed z-50 w-64 bg-bg-secondary border border-border rounded-control shadow-surface py-1 text-15'
 			style={style}
 			onContextMenu={e => e.preventDefault()}
 		>
@@ -46,7 +46,7 @@ const ContextMenu = ({ x, y, items, onClose }: ContextMenuProps) => {
 					<Button
 						key={item.label}
 						variant='ghost'
-						className={`w-full rounded-none px-3 py-1.5 text-sm ${
+						className={`w-full rounded-none px-3 py-1.5 text-15 ${
 							item.danger ? 'hover:bg-danger/10' : ''
 						}`}
 						disabled={item.disabled}
@@ -62,7 +62,7 @@ const ContextMenu = ({ x, y, items, onClose }: ContextMenuProps) => {
 						>
 							<span className='truncate'>{item.label}</span>
 							{item.hint && (
-								<span className='font-mono text-[10px] text-text-muted shrink-0'>
+								<span className='font-mono text-11 text-text-muted shrink-0'>
 									{item.hint}
 								</span>
 							)}

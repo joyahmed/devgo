@@ -23,11 +23,11 @@ const Onboarding = ({ onAdd, onAddMany, onError }: OnboardingProps) => {
 	return (
 		<div className='flex-1 flex items-center justify-center min-h-0 overflow-y-auto'>
 			<div className='w-[min(720px,92%)] py-8 text-center'>
-				<div className='text-4xl text-accent mb-3'>&#10022;</div>
-				<h2 className='text-xl font-bold text-text-primary mb-1'>
+				<div className='text-24 text-accent mb-3'>&#10022;</div>
+				<h2 className='text-24 font-bold text-text-primary mb-1'>
 					Welcome to DevGo
 				</h2>
-				<p className='text-sm text-text-secondary mb-6'>
+				<p className='text-15 text-text-secondary mb-6'>
 					Add a folder that holds your projects — one level of subfolders
 					becomes your launchable list.
 				</p>
@@ -47,7 +47,7 @@ const Onboarding = ({ onAdd, onAddMany, onError }: OnboardingProps) => {
 					</div>
 				)}
 
-				<p className='text-xs text-text-muted mt-6'>
+				<p className='text-13 text-text-muted mt-6'>
 					…or drag a folder onto the window.
 				</p>
 			</div>

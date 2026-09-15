@@ -14,10 +14,10 @@ const WorkspaceManager = ({
 
 	return (
 		<div>
-			<h3 className='text-base font-bold mb-4'>Workspaces</h3>
+			<h3 className='text-18 font-bold mb-4'>Workspaces</h3>
 
 			{workspaces.length === 0 ? (
-				<p className='text-[13px] text-text-muted mb-4'>
+				<p className='text-13 text-text-muted mb-4'>
 					No workspaces added yet.
 				</p>
 			) : (
@@ -25,7 +25,7 @@ const WorkspaceManager = ({
 					{workspaces.map((ws, i) => (
 						<li
 							key={ws}
-							className='flex items-center justify-between px-3 py-2 bg-bg-panel rounded-md font-mono text-xs break-all'
+							className='flex items-center justify-between px-3 py-2 bg-bg-panel rounded-control font-mono text-13 break-all'
 						>
 							<span className='flex-1 min-w-0'>
 								<span className='block text-text-primary truncate'>

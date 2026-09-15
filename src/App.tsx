@@ -932,7 +932,7 @@ const AppInner = () => {
 		// only clips the app
 		<div
 			className={`flex flex-col h-screen w-screen overflow-hidden ${
-				maximized ? '' : 'rounded-xl'
+				maximized ? '' : 'rounded-panel'
 			}`}
 		>
 			<TitleBar>
@@ -1342,11 +1342,11 @@ const AppInner = () => {
 								}}
 								title={`Add workspace (${prettyKeys(shortcutFor('addWorkspace'))})`}
 							>
-								<span className='text-base leading-none'>+</span>
-								<span className='text-xs font-semibold leading-none'>
+								<span className='text-18 leading-none'>+</span>
+								<span className='text-13 font-semibold leading-none'>
 									Workspace
 								</span>
-								<span className='text-[9px] leading-none opacity-70'>▾</span>
+								<span className='text-11 leading-none opacity-70'>▾</span>
 							</Button>
 							<Button
 								variant='ghost'
@@ -1430,8 +1430,8 @@ const AppInner = () => {
 			</div>
 
 			{dragOver && (
-				<div className='fixed inset-0 z-50 flex items-center justify-center bg-accent/10 border-2 border-dashed border-accent m-2 rounded-xl pointer-events-none'>
-					<span className='text-lg font-semibold text-accent bg-bg-secondary/90 px-5 py-2.5 rounded-lg border border-accent'>
+				<div className='fixed inset-0 z-50 flex items-center justify-center bg-accent/10 border-2 border-dashed border-accent m-2 rounded-panel pointer-events-none'>
+					<span className='text-18 font-semibold text-accent bg-bg-secondary/90 px-5 py-2.5 rounded-control border border-accent'>
 						Drop a folder to add a workspace
 					</span>
 				</div>

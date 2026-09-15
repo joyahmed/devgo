@@ -45,10 +45,10 @@ const PLACEHOLDERS = [
 ];
 
 const heading =
-	'text-xs font-bold uppercase tracking-wider text-text-secondary mb-2';
+	'text-13 font-bold uppercase tracking-wider text-text-secondary mb-2';
 const field =
-	'w-full px-2 py-1.5 bg-bg-panel border border-border-strong rounded text-xs font-mono text-text-primary outline-none focus:border-accent';
-const badge = 'text-[9px] uppercase tracking-wider rounded px-1 border';
+	'w-full px-2 py-1.5 bg-bg-panel border border-border-strong rounded-control text-13 font-mono text-text-primary outline-none focus:border-accent';
+const badge = 'text-11 uppercase tracking-wider rounded-control px-1 border';
 
 const TargetList = ({
 	kind,
@@ -97,11 +97,11 @@ const TargetList = ({
 			return (
 				<div
 					key={t.id}
-					className='flex items-center justify-between gap-3 px-3 py-2 bg-bg-panel rounded-md'
+					className='flex items-center justify-between gap-3 px-3 py-2 bg-bg-panel rounded-control'
 				>
 					<div className='min-w-0'>
 						<div className='flex items-center gap-2'>
-							<span className='text-sm text-text-primary truncate'>{t.name}</span>
+							<span className='text-15 text-text-primary truncate'>{t.name}</span>
 							{badges
 								.filter(b => b.show)
 								.map(({ label, className, title }) => (
@@ -110,7 +110,7 @@ const TargetList = ({
 									</span>
 								))}
 						</div>
-						<div className='font-mono text-[11px] text-text-muted truncate'>
+						<div className='font-mono text-11 text-text-muted truncate'>
 							{t.executable} {t.args_template}
 						</div>
 					</div>
@@ -121,7 +121,7 @@ const TargetList = ({
 								<Button
 									key={label}
 									variant='ghost'
-									className={`text-xs px-2 ${className}`}
+									className={`text-13 px-2 ${className}`}
 									onClick={onClick}
 								>
 									{label}
@@ -238,12 +238,12 @@ const TargetManager = ({
 			{/* detection proposes; nothing is written until a specific Add */}
 			<div>
 				<div className='flex items-center justify-between mb-2'>
-					<h4 className='text-xs font-bold uppercase tracking-wider text-text-secondary'>
+					<h4 className='text-13 font-bold uppercase tracking-wider text-text-secondary'>
 						Detected on this machine
 					</h4>
 					<Button
 						variant='ghost'
-						className='text-xs px-2 hover:text-accent'
+						className='text-13 px-2 hover:text-accent'
 						disabled={scanning}
 						onClick={scan}
 					>
@@ -251,21 +251,21 @@ const TargetManager = ({
 					</Button>
 				</div>
 				{scanHint ? (
-					<p className='text-xs text-text-muted'>{scanHint}</p>
+					<p className='text-13 text-text-muted'>{scanHint}</p>
 				) : (
 					<ul className='list-none flex flex-col gap-1.5'>
 						{(found ?? []).map(d => (
 							<li
 								key={d.target.id}
-								className='flex items-center justify-between gap-3 px-3 py-2 bg-bg-panel rounded-md'
+								className='flex items-center justify-between gap-3 px-3 py-2 bg-bg-panel rounded-control'
 							>
 								<span className='flex flex-col min-w-0 flex-1' title={d.detail}>
-									<span className='text-sm text-text-primary truncate'>
+									<span className='text-15 text-text-primary truncate'>
 										{d.target.name}
 									</span>
 									{/* where it came from: an entry with no provenance is
 									    the guessing the old seed policy refused */}
-									<span className='font-mono text-[11px] text-text-muted truncate'>
+									<span className='font-mono text-11 text-text-muted truncate'>
 										{d.source === 'path' ? d.detail : `in ${d.source}`}
 									</span>
 								</span>
@@ -274,7 +274,7 @@ const TargetManager = ({
 								</span>
 								<Button
 									variant='ghost'
-									className='text-xs px-2 hover:text-accent'
+									className='text-13 px-2 hover:text-accent'
 									onClick={() => addDetected(d.target.id)}
 								>
 									Add
@@ -286,7 +286,7 @@ const TargetManager = ({
 			</div>
 
 			{open ? (
-				<div className='flex flex-col gap-2 border border-border rounded-lg p-3'>
+				<div className='flex flex-col gap-2 border border-border rounded-control p-3'>
 					<div className='flex gap-2'>
 						{KINDS.map(k => (
 							<Button
@@ -310,7 +310,7 @@ const TargetManager = ({
 						/>
 					))}
 
-					<p className='text-[11px] text-text-muted leading-relaxed'>
+					<p className='text-11 text-text-muted leading-relaxed'>
 						Placeholders:{' '}
 						{PLACEHOLDERS.map(({ code, note }) => (
 							<span key={code}>

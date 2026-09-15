@@ -22,7 +22,7 @@ const pushRecent = (id: string) => {
 };
 
 const divider =
-	'px-4 pt-2 pb-1 text-[10px] font-bold uppercase tracking-wider text-text-muted';
+	'px-4 pt-2 pb-1 text-11 font-bold uppercase tracking-wider text-text-muted';
 
 const CommandPalette = ({ commands, onClose }: CommandPaletteProps) => {
 	const [query, setQuery] = useState('');
@@ -86,12 +86,12 @@ const CommandPalette = ({ commands, onClose }: CommandPaletteProps) => {
 			onClick={onClose}
 		>
 			<div
-				className='w-[min(780px,92vw)] max-h-[70vh] flex flex-col bg-bg-secondary border border-border rounded-xl shadow-2xl overflow-hidden'
+				className='w-[min(780px,92vw)] max-h-[70vh] flex flex-col bg-bg-secondary border border-border rounded-panel shadow-surface overflow-hidden'
 				onClick={e => e.stopPropagation()}
 			>
 				<input
 					autoFocus
-					className='w-full px-4 py-3 bg-transparent outline-none text-sm text-text-primary placeholder:text-text-muted border-b border-border'
+					className='w-full px-4 py-3 bg-transparent outline-none text-15 text-text-primary placeholder:text-text-muted border-b border-border'
 					placeholder='Type a command…'
 					value={query}
 					onChange={e => {
@@ -104,7 +104,7 @@ const CommandPalette = ({ commands, onClose }: CommandPaletteProps) => {
 
 				<div className='flex-1 overflow-y-auto py-1'>
 					{list.length === 0 && (
-						<div className='px-4 py-6 text-center text-sm text-text-muted'>
+						<div className='px-4 py-6 text-center text-15 text-text-muted'>
 							No matching commands
 						</div>
 					)}
@@ -123,11 +123,11 @@ const CommandPalette = ({ commands, onClose }: CommandPaletteProps) => {
 							>
 								<span className='flex w-full items-center justify-between gap-4'>
 									<span className='min-w-0'>
-										<span className='block truncate text-sm text-text-primary'>
+										<span className='block truncate text-15 text-text-primary'>
 											{cmd.title}
 										</span>
 										{cmd.subtitle && (
-											<span className='block truncate text-xs text-text-muted'>
+											<span className='block truncate text-13 text-text-muted'>
 												{cmd.subtitle}
 											</span>
 										)}

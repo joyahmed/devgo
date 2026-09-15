@@ -3,7 +3,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 const appWindow = getCurrentWindow();
 
 const buttonClass =
-	'flex items-center justify-center w-8 h-7 bg-transparent border-none text-text-secondary cursor-pointer text-sm rounded hover:bg-bg-hover hover:text-text-primary transition-colors';
+	'flex items-center justify-center w-8 h-7 bg-transparent border-none text-text-secondary cursor-pointer text-15 rounded-control hover:bg-bg-hover hover:text-text-primary transition-colors';
 
 const TitleBarButton = ({
 	className = '',

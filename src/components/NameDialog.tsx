@@ -31,11 +31,11 @@ const NameDialog = ({
 
 	return (
 		<div className='text-left'>
-			<p className='text-xs text-text-muted mb-3'>{hint}</p>
+			<p className='text-13 text-text-muted mb-3'>{hint}</p>
 			<input
 				type='text'
 				autoFocus
-				className='w-full px-3 py-2 bg-bg-panel border border-border-strong rounded-md text-sm text-text-primary outline-none focus:border-accent placeholder:text-text-muted'
+				className='w-full px-3 py-2 bg-bg-panel border border-border-strong rounded-control text-15 text-text-primary outline-none focus:border-accent placeholder:text-text-muted'
 				value={name}
 				onChange={e => setName(e.target.value)}
 				onKeyDown={e => {
@@ -43,7 +43,7 @@ const NameDialog = ({
 				}}
 				disabled={busy}
 			/>
-			{error && <p className='text-xs text-danger mt-2'>{error}</p>}
+			{error && <p className='text-13 text-danger mt-2'>{error}</p>}
 			<div className='flex justify-end mt-4'>
 				<Button variant='primary' onClick={submit} disabled={busy || !name.trim()}>
 					{submitLabel}

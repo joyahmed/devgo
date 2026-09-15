@@ -74,12 +74,12 @@ const ScanPicker = ({
 	};
 
 	if (scanning || roots === null) {
-		return <p className='text-sm text-text-muted py-4 text-center'>Scanning…</p>;
+		return <p className='text-15 text-text-muted py-4 text-center'>Scanning…</p>;
 	}
 
 	if (roots.length === 0) {
 		return (
-			<p className='text-sm text-text-muted py-4 text-center'>
+			<p className='text-15 text-text-muted py-4 text-center'>
 				No common project folders found. Choose one manually, or start a WSL
 				distro and scan again.
 			</p>
@@ -93,14 +93,14 @@ const ScanPicker = ({
 	return (
 		<div className='text-left'>
 			<div className='flex items-center justify-between mb-2'>
-				<span className='text-[10px] font-bold uppercase tracking-wider text-text-muted'>
+				<span className='text-11 font-bold uppercase tracking-wider text-text-muted'>
 					Found {roots.length}
 					{addable.length < roots.length &&
 						` · ${roots.length - addable.length} already added`}
 				</span>
 				<Button
 					variant='ghost'
-					className='text-[11px] text-accent hover:bg-transparent'
+					className='text-11 text-accent hover:bg-transparent'
 					disabled={addable.length === 0}
 					onClick={() =>
 						setPicked(allOn ? new Set() : new Set(addable.map(r => r.path)))
@@ -116,7 +116,7 @@ const ScanPicker = ({
 					return (
 						<li key={r.path}>
 							<label
-								className={`flex items-center gap-3 px-3 py-2 bg-bg-panel border rounded-md ${pickTone(added, on)}`}
+								className={`flex items-center gap-3 px-3 py-2 bg-bg-panel border rounded-control ${pickTone(added, on)}`}
 							>
 								<input
 									type='checkbox'
@@ -126,15 +126,15 @@ const ScanPicker = ({
 									onChange={() => toggle(r.path)}
 								/>
 								<span className='min-w-0 flex-1'>
-									<span className='block text-[13px] text-text-primary truncate'>
+									<span className='block text-13 text-text-primary truncate'>
 										{r.label}
 									</span>
-									<span className='block font-mono text-[10px] text-text-muted truncate'>
+									<span className='block font-mono text-11 text-text-muted truncate'>
 										{r.path}
 									</span>
 								</span>
 								<span
-									className={`text-[9px] uppercase tracking-wider px-1 rounded border shrink-0 ${KIND_TONE[r.kind]}`}
+									className={`text-11 uppercase tracking-wider px-1 rounded-control border shrink-0 ${KIND_TONE[r.kind]}`}
 								>
 									{added ? 'added' : r.kind === 'wsl' ? 'WSL' : 'WIN'}
 								</span>

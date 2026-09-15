@@ -27,14 +27,14 @@ const AddRepo = ({ onAdded, onDone }: AddRepoProps) => {
 
 	return (
 		<div className='text-left'>
-			<p className='text-xs text-text-muted mb-3'>
+			<p className='text-13 text-text-muted mb-3'>
 				<span className='font-mono'>owner/name</span> or a GitHub URL. The row
 				joins the group without cloning, and stays through refreshes.
 			</p>
 			<input
 				type='text'
 				autoFocus
-				className='w-full px-3 py-2 bg-bg-panel border border-border-strong rounded-md font-mono text-sm text-text-primary outline-none focus:border-accent placeholder:text-text-muted'
+				className='w-full px-3 py-2 bg-bg-panel border border-border-strong rounded-control font-mono text-15 text-text-primary outline-none focus:border-accent placeholder:text-text-muted'
 				placeholder='tauri-apps/tauri'
 				value={spec}
 				onChange={e => setSpec(e.target.value)}
@@ -43,7 +43,7 @@ const AddRepo = ({ onAdded, onDone }: AddRepoProps) => {
 				}}
 				disabled={busy}
 			/>
-			{error && <p className='text-xs text-danger mt-2'>{error}</p>}
+			{error && <p className='text-13 text-danger mt-2'>{error}</p>}
 			<div className='flex justify-end mt-4'>
 				<Button variant='primary' onClick={add} disabled={busy || !spec.trim()}>
 					{busy ? 'Looking it up…' : 'Add to the list'}

@@ -37,7 +37,7 @@ const SearchBox = ({
 
 	return (
 		<div
-			className={`relative bg-bg-panel rounded-lg border border-border-strong focus-within:border-accent transition-colors ${className}`}
+			className={`relative bg-bg-panel rounded-control border border-border-strong focus-within:border-accent transition-colors ${className}`}
 		>
 			<input
 				ref={ref}
@@ -46,7 +46,7 @@ const SearchBox = ({
 				// appears, and the project box is where that typing goes
 				autoFocus={lane === 'projects'}
 				data-lane-search={lane}
-				className='w-full py-2 pl-3.5 pr-20 bg-transparent outline-none text-sm text-text-primary placeholder:text-text-muted'
+				className='w-full py-2 pl-3.5 pr-20 bg-transparent outline-none text-15 text-text-primary placeholder:text-text-muted'
 				placeholder={placeholder}
 				value={value}
 				onChange={e => onChange(e.target.value)}
@@ -64,7 +64,7 @@ const SearchBox = ({
 					</Button>
 				)}
 				{enterHint && (
-					<span className='text-[10px] text-text-muted px-1.5 py-0.5 border border-border-strong rounded'>
+					<span className='text-11 text-text-muted px-1.5 py-0.5 border border-border-strong rounded-control'>
 						{enterHint}
 					</span>
 				)}

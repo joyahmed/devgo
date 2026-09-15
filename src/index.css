@@ -16,7 +16,27 @@
 	--color-border-strong: #48638e;
 	--font-sans: 'Segoe UI', system-ui, sans-serif;
 	--font-mono: 'Cascadia Code', 'Consolas', monospace;
+	/* one scale, five steps. seventeen sizes were in use (text-[9px] to
+	   text-4xl); a component that can pick any pixel size will. 11 for a
+	   hint or a tag, 13 for metadata and controls, 15 for a row, 18 for a
+	   heading, 24 for the one title. line heights ride along, so text-15
+	   alone sets both */
+	--text-11: 11px;
+	--text-11--line-height: 16px;
+	--text-13: 13px;
+	--text-13--line-height: 20px;
+	--text-15: 15px;
+	--text-15--line-height: 22px;
+	--text-18: 18px;
+	--text-18--line-height: 26px;
+	--text-24: 24px;
+	--text-24--line-height: 32px;
+	/* two radii: a control (button, input, chip, menu row) and a panel (a
+	   modal, a menu, a toast). one shadow, for panels only: rows and chips
+	   never float */
+	--radius-control: 6px;
 	--radius-panel: 12px;
+	--shadow-surface: 0 16px 40px -12px rgb(0 0 0 / 0.6), 0 0 0 1px rgb(0 0 0 / 0.25);
 
 	/* Toast entrance. Tailwind v4 mints `animate-fade-in` from this variable. */
 	--animate-fade-in: fade-in 0.18s ease-out;

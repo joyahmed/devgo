@@ -14,7 +14,7 @@ import WorkspaceManager from './WorkspaceManager';
 const LAST_PANEL = 'devgo.settingsPanel';
 
 const heading =
-	'text-xs font-bold uppercase tracking-wider text-text-secondary mb-2';
+	'text-13 font-bold uppercase tracking-wider text-text-secondary mb-2';
 
 const MODIFIER_KEYS = new Set(['Control', 'Alt', 'Shift', 'Meta']);
 const NAV_KEYS: Record<string, string> = {
@@ -82,20 +82,20 @@ const ShortcutTable = ({
 		<div className='flex flex-col gap-5'>
 			<div>
 				<h4 className={heading}>Summon</h4>
-				<div className='flex items-center justify-between gap-3 py-1 text-sm'>
+				<div className='flex items-center justify-between gap-3 py-1 text-15'>
 					<span className='text-text-secondary'>
 						Show / hide DevGo from anywhere
 					</span>
 					<span className='flex items-center gap-2 shrink-0'>
 						<Kbd>{capturing ? 'Press keys…' : prettyKeys(summonHotkey)}</Kbd>
 						<Button variant='ghost' onClick={() => setCapturing(c => !c)}>
-							<span className={`text-xs ${capturing ? 'text-accent' : ''}`}>
+							<span className={`text-13 ${capturing ? 'text-accent' : ''}`}>
 								{capturing ? 'Cancel' : 'Rebind'}
 							</span>
 						</Button>
 					</span>
 				</div>
-				<p className='text-xs text-text-muted mt-1'>
+				<p className='text-13 text-text-muted mt-1'>
 					Click Rebind, then press the combination — it needs a modifier
 					(Ctrl / Alt / Shift / Super). If another app owns the keys, the old
 					binding stays.
@@ -108,12 +108,12 @@ const ShortcutTable = ({
 					{SHORTCUTS.filter(s => s.group === g).map(s => (
 						<div
 							key={s.id}
-							className='flex items-center justify-between py-1 text-sm'
+							className='flex items-center justify-between py-1 text-15'
 						>
 							<span className='text-text-secondary'>
 								{s.label}
 								{s.needsSelection && (
-									<span className='text-text-muted text-xs'>
+									<span className='text-text-muted text-13'>
 										{' '}
 										· needs a selection
 									</span>
@@ -173,7 +173,7 @@ const ScanningPanel = ({ onSaved, onError }: ScanningPanelProps) => {
 		<div className='flex flex-col gap-5'>
 			<div>
 				<h4 className={heading}>Scan depth</h4>
-				<p className='text-xs text-text-muted mb-2'>
+				<p className='text-13 text-text-muted mb-2'>
 					How many folder levels deep to look for projects. 1 keeps the
 					original scan (every immediate child). Higher also surfaces nested
 					projects — a monorepo's{' '}
@@ -197,13 +197,13 @@ const ScanningPanel = ({ onSaved, onError }: ScanningPanelProps) => {
 			</div>
 			<div>
 				<h4 className={heading}>Ignore folders</h4>
-				<p className='text-xs text-text-muted mb-2'>
+				<p className='text-13 text-text-muted mb-2'>
 					Folder names to skip while scanning, one per line — on top of the
 					hidden dotfolders that are always skipped. Matched by name,
 					case-insensitive.
 				</p>
 				<textarea
-					className='w-full h-32 px-3 py-2 bg-bg-panel border border-border-strong rounded-md font-mono text-xs text-text-primary outline-none focus:border-accent resize-none'
+					className='w-full h-32 px-3 py-2 bg-bg-panel border border-border-strong rounded-control font-mono text-13 text-text-primary outline-none focus:border-accent resize-none'
 					placeholder={'node_modules\narchive\nvendor'}
 					value={text ?? ''}
 					onChange={e => setText(e.target.value)}
@@ -280,14 +280,14 @@ const TmuxPanel = ({ onError }: TmuxPanelProps) => {
 			    under a disabled feature is a promise the app is not keeping */}
 			<div>
 				<h4 className={heading}>Use tmux / psmux</h4>
-				<p className='text-xs text-text-muted mb-2'>
+				<p className='text-13 text-text-muted mb-2'>
 					On, a terminal launch opens a session with the windows below — tmux
 					inside the distro for a WSL project, psmux for a Windows project.
 					Off, it opens one plain shell in the project directory and starts
 					no multiplexer at all — the right answer if you only ever use one
 					tab.
 				</p>
-				<p className='text-xs text-text-muted mb-2'>
+				<p className='text-13 text-text-muted mb-2'>
 					psmux is a tmux for Windows and is installed separately:{' '}
 					<code className='text-text-secondary'>
 						winget install marlocarlo.psmux
@@ -311,14 +311,14 @@ const TmuxPanel = ({ onError }: TmuxPanelProps) => {
 			</div>
 			<div className={enabled ? '' : 'opacity-50'}>
 				<h4 className={heading}>Windows</h4>
-				<p className='text-xs text-text-muted mb-2'>
+				<p className='text-13 text-text-muted mb-2'>
 					One name per line, in order; the first is the window you land in.
 					Existing windows are left alone — one you opened by hand, or
 					renamed, survives every relaunch, and nothing here is ever killed
 					or pruned. Leave the box empty for a single plain window.
 				</p>
 				<textarea
-					className='w-full h-32 px-3 py-2 bg-bg-panel border border-border-strong rounded-md font-mono text-xs text-text-primary outline-none focus:border-accent resize-none'
+					className='w-full h-32 px-3 py-2 bg-bg-panel border border-border-strong rounded-control font-mono text-13 text-text-primary outline-none focus:border-accent resize-none'
 					placeholder={'code\nagents\ngit'}
 					value={text ?? ''}
 					onChange={e => setText(e.target.value)}
@@ -333,7 +333,7 @@ const TmuxPanel = ({ onError }: TmuxPanelProps) => {
 			>
 				{saving ? 'Saving…' : 'Save'}
 			</Button>
-			{msg && <p className='text-xs text-accent'>{msg}</p>}
+			{msg && <p className='text-13 text-accent'>{msg}</p>}
 		</div>
 	);
 };
@@ -404,11 +404,11 @@ const GithubPanel = ({ github, onError }: GithubPanelProps) => {
 			<div>
 				<h4 className={heading}>GitHub CLI</h4>
 				<p
-					className={`text-sm font-mono ${status?.login ? 'text-text-primary' : 'text-danger'}`}
+					className={`text-15 font-mono ${status?.login ? 'text-text-primary' : 'text-danger'}`}
 				>
 					{statusLine}
 				</p>
-				<p className='text-xs text-text-muted mt-2'>
+				<p className='text-13 text-text-muted mt-2'>
 					DevGo lists your repositories through{' '}
 					<code className='text-text-secondary'>gh</code> and stores no token
 					of its own: <code className='text-text-secondary'>gh auth login</code>{' '}
@@ -421,12 +421,12 @@ const GithubPanel = ({ github, onError }: GithubPanelProps) => {
 
 			<div>
 				<h4 className={heading}>Organisations</h4>
-				<p className='text-xs text-text-muted mb-2'>
+				<p className='text-13 text-text-muted mb-2'>
 					Your own repositories are always listed. Tick the organisations to
 					list beside them; all of them are ticked until you change it.
 				</p>
 				{known.length === 0 ? (
-					<p className='text-xs text-text-muted italic'>
+					<p className='text-13 text-text-muted italic'>
 						{cache && cache.fetched_at > 0
 							? 'You are not a member of any organisation.'
 							: 'Refresh once to discover your organisations.'}
@@ -436,7 +436,7 @@ const GithubPanel = ({ github, onError }: GithubPanelProps) => {
 						{known.map(org => (
 							<label
 								key={org}
-								className='flex items-center gap-2 text-sm text-text-secondary cursor-pointer'
+								className='flex items-center gap-2 text-15 text-text-secondary cursor-pointer'
 							>
 								<input
 									type='checkbox'
@@ -459,12 +459,12 @@ const GithubPanel = ({ github, onError }: GithubPanelProps) => {
 						{saving ? 'Saving…' : 'Save'}
 					</Button>
 				)}
-				{msg && <p className='text-xs text-accent mt-2'>{msg}</p>}
+				{msg && <p className='text-13 text-accent mt-2'>{msg}</p>}
 			</div>
 
 			<div>
 				<h4 className={heading}>Search all of GitHub as you type</h4>
-				<p className='text-xs text-text-muted mb-2'>
+				<p className='text-13 text-text-muted mb-2'>
 					Off, the GitHub box matches your cached list instantly and never
 					touches the network. On, it also asks GitHub, any owner, once you
 					have typed three characters and paused for a moment; the hits appear
@@ -491,7 +491,7 @@ const GithubPanel = ({ github, onError }: GithubPanelProps) => {
 
 			<div>
 				<h4 className={heading}>Cache</h4>
-				<p className='text-xs text-text-muted mb-2'>{cacheLine}</p>
+				<p className='text-13 text-text-muted mb-2'>{cacheLine}</p>
 				<Button
 					onClick={github.refresh}
 					disabled={!status?.login || github.refreshing}
@@ -504,7 +504,7 @@ const GithubPanel = ({ github, onError }: GithubPanelProps) => {
 					{github.refreshing ? 'Refreshing…' : 'Refresh now'}
 				</Button>
 				{github.lastError && (
-					<p className='text-xs text-danger mt-2'>{github.lastError}</p>
+					<p className='text-13 text-danger mt-2'>{github.lastError}</p>
 				)}
 			</div>
 		</div>
@@ -539,16 +539,16 @@ const AppearancePanel = () => {
 						onClick={() => pick(t.id)}
 					>
 						<span className='flex items-center justify-between mb-2'>
-							<span className='text-[13px]'>{t.name}</span>
+							<span className='text-13'>{t.name}</span>
 							{t.id === current && (
-								<span className='text-accent text-xs'>✓</span>
+								<span className='text-accent text-13'>✓</span>
 							)}
 						</span>
 						<span className='flex gap-1'>
 							{SWATCHES.map(k => (
 								<span
 									key={k}
-									className='w-6 h-6 rounded border border-white/10'
+									className='w-6 h-6 rounded-control border border-white/10'
 									style={{ background: t.colors[k] }}
 								/>
 							))}
@@ -625,7 +625,7 @@ const ConfigPanel = ({ onChanged, onError }: ConfigPanelProps) => {
 			{sections.map(s => (
 				<div key={s.title}>
 					<h4 className={heading}>{s.title}</h4>
-					<p className='text-xs text-text-muted mb-3'>{s.text}</p>
+					<p className='text-13 text-text-muted mb-3'>{s.text}</p>
 					<div className='flex gap-2'>
 						{s.actions.map(a => (
 							<Button key={a.label} onClick={a.onClick}>
@@ -635,7 +635,7 @@ const ConfigPanel = ({ onChanged, onError }: ConfigPanelProps) => {
 					</div>
 				</div>
 			))}
-			{msg && <p className='text-xs text-accent'>{msg}</p>}
+			{msg && <p className='text-13 text-accent'>{msg}</p>}
 		</div>
 	);
 };
@@ -764,11 +764,11 @@ const Settings = ({
 			onClick={onClose}
 		>
 			<div
-				className='bg-bg-secondary border border-border rounded-xl w-[min(1040px,92vw)] h-[min(760px,86vh)] flex overflow-hidden shadow-2xl'
+				className='bg-bg-secondary border border-border rounded-panel w-[min(1040px,92vw)] h-[min(760px,86vh)] flex overflow-hidden shadow-surface'
 				onClick={e => e.stopPropagation()}
 			>
 				<nav className='w-44 shrink-0 border-r border-border bg-bg-primary/40 p-2 flex flex-col gap-1'>
-					<h3 className='text-xs font-bold uppercase tracking-wider text-text-muted px-2 py-2'>
+					<h3 className='text-13 font-bold uppercase tracking-wider text-text-muted px-2 py-2'>
 						Settings
 					</h3>
 					{panels.map(p => (

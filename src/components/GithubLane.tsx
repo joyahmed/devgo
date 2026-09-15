@@ -117,14 +117,14 @@ const RepoRow = ({
 			    silent absence in a group you curated */}
 			{gone && (
 				<span
-					className='text-[9px] uppercase tracking-wider text-danger shrink-0'
+					className='text-11 uppercase tracking-wider text-danger shrink-0'
 					title='Not in your GitHub list any more. Remove it from the group, or refresh'
 				>
 					gone
 				</span>
 			)}
 			{repo.archived && (
-				<span className='text-[9px] uppercase tracking-wider text-text-muted shrink-0'>
+				<span className='text-11 uppercase tracking-wider text-text-muted shrink-0'>
 					archived
 				</span>
 			)}
@@ -140,14 +140,14 @@ const RepoRow = ({
 						onShowLocal(localPath);
 					}}
 				>
-					<span className='text-[9px] uppercase tracking-wider text-accent hover:underline'>
+					<span className='text-11 uppercase tracking-wider text-accent hover:underline'>
 						local
 					</span>
 				</Button>
 			)}
 			{repo.added && !localPath && (
 				<span
-					className='text-[9px] uppercase tracking-wider text-text-muted shrink-0'
+					className='text-11 uppercase tracking-wider text-text-muted shrink-0'
 					title='Added by name. Not one of your repositories'
 				>
 					added
@@ -155,20 +155,20 @@ const RepoRow = ({
 			)}
 			{repo.default_branch && (
 				<span
-					className='truncate font-mono text-[11px] text-text-muted'
+					className='truncate font-mono text-11 text-text-muted'
 					title='Default branch'
 				>
 					{repo.default_branch}
 				</span>
 			)}
 			{repo.stars !== null && repo.stars > 0 && (
-				<span className='text-[11px] text-text-muted shrink-0' title='Stars'>
+				<span className='text-11 text-text-muted shrink-0' title='Stars'>
 					★ {compactCount(repo.stars)}
 				</span>
 			)}
 			{gone ? null : job && job.status !== 'done' ? (
 				<span
-					className={`text-[11px] shrink-0 text-right truncate max-w-[14rem] ${
+					className={`text-11 shrink-0 text-right truncate max-w-[14rem] ${
 						job.status === 'failed' ? 'text-danger' : 'text-accent'
 					}`}
 					title={job.error ?? jobLine(job)}
@@ -177,7 +177,7 @@ const RepoRow = ({
 				</span>
 			) : (
 				<span
-					className='text-[11px] text-text-muted shrink-0 w-16 text-right'
+					className='text-11 text-text-muted shrink-0 w-16 text-right'
 					title={repo.updated_at}
 				>
 					{relativeTime(repo.updated_at)}
@@ -282,7 +282,7 @@ const GithubLane = ({
 			>
 				<div className='flex items-center gap-2 text-text-secondary min-w-0'>
 					<span
-						className={`text-xs shrink-0 ${isOpen ? 'text-accent' : 'text-text-muted'}`}
+						className={`text-13 shrink-0 ${isOpen ? 'text-accent' : 'text-text-muted'}`}
 					>
 						{isOpen ? '▼' : '▶'}
 					</span>
@@ -291,7 +291,7 @@ const GithubLane = ({
 					</span>
 					{login && (
 						<span
-							className='font-mono text-xs text-text-muted truncate'
+							className='font-mono text-13 text-text-muted truncate'
 							title='Logged in as'
 						>
 							{login}
@@ -317,7 +317,7 @@ const GithubLane = ({
 							}}
 						>
 							<span
-								className={`text-[9px] uppercase tracking-wider hover:underline ${
+								className={`text-11 uppercase tracking-wider hover:underline ${
 									showRecents ? 'text-accent' : 'text-text-muted'
 								}`}
 							>
@@ -365,17 +365,17 @@ const GithubLane = ({
 			>
 				<div className='overflow-hidden'>
 					{github.lastError && (
-						<div className='ml-6 px-3 py-2 text-xs text-danger'>
+						<div className='ml-6 px-3 py-2 text-13 text-danger'>
 							{github.lastError}
 						</div>
 					)}
 					{isOpen && total === 0 && !github.refreshing && !github.lastError && (
-						<div className='ml-6 px-3 py-2 text-sm text-text-muted'>
+						<div className='ml-6 px-3 py-2 text-15 text-text-muted'>
 							{emptyLine(status)}
 						</div>
 					)}
 					{total > 0 && visible.length === 0 && !searching && (
-						<div className='ml-6 px-3 py-2 text-sm text-text-muted'>
+						<div className='ml-6 px-3 py-2 text-15 text-text-muted'>
 							No repository matches{' '}
 							<span className='font-mono'>{query.trim()}</span>.
 						</div>
@@ -387,7 +387,7 @@ const GithubLane = ({
 						flat.map(part => (
 							<div key={part.key}>
 								{part.show && (
-									<div className='ml-6 px-3 py-1.5 text-[10px] uppercase tracking-wider text-text-muted'>
+									<div className='ml-6 px-3 py-1.5 text-11 uppercase tracking-wider text-text-muted'>
 										{part.label}
 									</div>
 								)}
@@ -416,7 +416,7 @@ const GithubLane = ({
 										<div className='flex items-center gap-2 min-w-0'>
 											{name !== null && (
 												<span
-													className={`text-xs shrink-0 ${isFolded ? 'text-text-muted' : 'text-accent'}`}
+													className={`text-13 shrink-0 ${isFolded ? 'text-text-muted' : 'text-accent'}`}
 												>
 													{isFolded ? '▶' : '▼'}
 												</span>
@@ -439,7 +439,7 @@ const GithubLane = ({
 										rowFor(repo, heading, section.gone.has(repo.full_name))
 									)}
 								{name !== null && !isFolded && section.rows.length === 0 && (
-									<div className='ml-12 px-3 py-2 text-xs text-text-muted'>
+									<div className='ml-12 px-3 py-2 text-13 text-text-muted'>
 										Empty. Right-click a repo and choose Add to group.
 									</div>
 								)}
@@ -449,7 +449,7 @@ const GithubLane = ({
 					{/* say what the default view is, so twenty rows out of a few
 					    hundred never reads as "where are the rest" */}
 					{isOpen && showRecents && tail && tail.total > RECENT_LIMIT && (
-						<div className='ml-6 px-3 py-1.5 text-[10px] text-text-muted'>
+						<div className='ml-6 px-3 py-1.5 text-11 text-text-muted'>
 							{RECENT_LIMIT} most recently updated of {tail.total}
 							{sections && sections.length > 1 ? ' not in a group' : ''}. Type
 							to search all of them.

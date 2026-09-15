@@ -30,10 +30,10 @@ const Modal = ({
 			onClick={onClose}
 		>
 			<div
-				className={`bg-bg-secondary border border-border rounded-xl p-6 ${width} shadow-2xl`}
+				className={`bg-bg-secondary border border-border rounded-panel p-6 ${width} shadow-surface`}
 				onClick={e => e.stopPropagation()}
 			>
-				<h3 className='text-base font-bold mb-2'>{title}</h3>
+				<h3 className='text-18 font-bold mb-2'>{title}</h3>
 				{children}
 			</div>
 		</div>

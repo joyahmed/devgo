@@ -9,7 +9,7 @@ import { pickTone } from './rowStyles';
 const WS_KEY = 'devgo.cloneWorkspace';
 
 const field =
-	'w-full px-3 py-2 bg-bg-panel border border-border-strong rounded-md text-sm text-text-primary outline-none focus:border-accent placeholder:text-text-muted';
+	'w-full px-3 py-2 bg-bg-panel border border-border-strong rounded-control text-15 text-text-primary outline-none focus:border-accent placeholder:text-text-muted';
 
 // "scan with github" (joy): the ScanPicker shape pointed the other way.
 // tick the repositories you want on this disk, choose the workspace they
@@ -102,13 +102,13 @@ const ClonePicker = ({
 				onChange={e => setQuery(e.target.value)}
 			/>
 			<div className='flex items-center justify-between mb-2'>
-				<span className='text-[10px] font-bold uppercase tracking-wider text-text-muted'>
+				<span className='text-11 font-bold uppercase tracking-wider text-text-muted'>
 					{visible.length} of {repos.length}
 					{count > 0 && ` · ${count} ticked`}
 				</span>
 				<Button
 					variant='ghost'
-					className='text-[11px] text-accent hover:bg-transparent'
+					className='text-11 text-accent hover:bg-transparent'
 					disabled={cloneable.length === 0}
 					onClick={() =>
 						setPicked(prev => {
@@ -131,7 +131,7 @@ const ClonePicker = ({
 					return (
 						<li key={r.full_name}>
 							<label
-								className={`flex items-center gap-3 px-3 py-1.5 bg-bg-panel border rounded-md ${pickTone(Boolean(here), on)}`}
+								className={`flex items-center gap-3 px-3 py-1.5 bg-bg-panel border rounded-control ${pickTone(Boolean(here), on)}`}
 								title={here ? `Already here: ${here}` : r.url}
 							>
 								<input
@@ -141,11 +141,11 @@ const ClonePicker = ({
 									disabled={Boolean(here)}
 									onChange={() => toggle(r.full_name)}
 								/>
-								<span className='min-w-0 flex-1 font-mono text-[13px] text-text-primary truncate'>
+								<span className='min-w-0 flex-1 font-mono text-13 text-text-primary truncate'>
 									<span className='text-text-muted'>{r.owner}/</span>
 									{r.name}
 								</span>
-								<span className='text-[11px] text-text-muted shrink-0'>
+								<span className='text-11 text-text-muted shrink-0'>
 									{local[r.full_name] ? 'local' : relativeTime(r.updated_at)}
 								</span>
 							</label>
@@ -153,20 +153,20 @@ const ClonePicker = ({
 					);
 				})}
 				{visible.length === 0 && (
-					<li className='px-3 py-4 text-[13px] text-text-muted text-center'>
+					<li className='px-3 py-4 text-13 text-text-muted text-center'>
 						No repository matches.
 					</li>
 				)}
 			</ul>
-			{error && <p className='text-xs text-danger mt-2'>{error}</p>}
+			{error && <p className='text-13 text-danger mt-2'>{error}</p>}
 			{grouping ? (
 				<div className='flex items-center justify-between gap-3 mt-4'>
-					<label className='flex items-center gap-2 min-w-0 flex-1 text-[13px] text-text-secondary'>
+					<label className='flex items-center gap-2 min-w-0 flex-1 text-13 text-text-secondary'>
 						<span className='shrink-0'>group</span>
 						<input
 							type='text'
 							list='devgo-group-names'
-							className={`${field} min-w-0 flex-1 px-2 py-1.5 text-[13px]`}
+							className={`${field} min-w-0 flex-1 px-2 py-1.5 text-13`}
 							placeholder='a name, new or existing'
 							value={groupName}
 							onChange={e => setGroupName(e.target.value)}
@@ -188,10 +188,10 @@ const ClonePicker = ({
 				</div>
 			) : (
 			<div className='flex items-center justify-between gap-3 mt-4'>
-				<label className='flex items-center gap-2 min-w-0 text-[13px] text-text-secondary'>
+				<label className='flex items-center gap-2 min-w-0 text-13 text-text-secondary'>
 					<span className='shrink-0'>into</span>
 					<select
-						className='min-w-0 flex-1 px-2 py-1.5 bg-bg-panel border border-border-strong rounded-md text-[13px] text-text-primary outline-none focus:border-accent'
+						className='min-w-0 flex-1 px-2 py-1.5 bg-bg-panel border border-border-strong rounded-control text-13 text-text-primary outline-none focus:border-accent'
 						value={workspace}
 						onChange={e => setWorkspace(e.target.value)}
 						title={workspace}

@@ -74,18 +74,18 @@ const WslControl = ({
 			</Button>
 
 			{open && (
-				<div className='absolute right-0 mt-1 z-50 min-w-56 bg-bg-secondary border border-border rounded-lg shadow-2xl py-1 text-sm'>
+				<div className='absolute right-0 mt-1 z-50 min-w-56 bg-bg-secondary border border-border rounded-control shadow-surface py-1 text-15'>
 					{distros.map(d => (
 						<div
 							key={d}
 							className='flex items-center justify-between gap-3 px-3 py-1.5 hover:bg-bg-hover/50'
 						>
-							<span className='font-mono text-xs truncate text-text-secondary'>
+							<span className='font-mono text-13 truncate text-text-secondary'>
 								{d}
 							</span>
 							<Button
 								variant='ghost'
-								className='text-xs px-2'
+								className='text-13 px-2'
 								disabled={busy !== null}
 								onClick={() =>
 									onConfirm(STOP_ONE(d), () =>
@@ -102,7 +102,7 @@ const WslControl = ({
 
 					<Button
 						variant='ghost'
-						className='w-full justify-start text-xs px-3 hover:bg-danger/10'
+						className='w-full justify-start text-13 px-3 hover:bg-danger/10'
 						disabled={busy !== null}
 						onClick={() =>
 							onConfirm(STOP_ALL, () => run('all', 'shutdown_wsl', {}))
