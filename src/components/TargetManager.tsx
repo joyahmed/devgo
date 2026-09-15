@@ -166,10 +166,14 @@ const TargetManager = ({
 			.finally(() => setScanning(false));
 	};
 
+	// the row leaves only once the add succeeded; a failure keeps it, with
+	// the reason in a toast
 	const addDetected = (id: string) =>
-		guard(onAddDetected(id)).then(() =>
-			setFound(prev => (prev ?? []).filter(d => d.target.id !== id))
-		);
+		onAddDetected(id)
+			.then(() =>
+				setFound(prev => (prev ?? []).filter(d => d.target.id !== id))
+			)
+			.catch(e => onError(String(e)));
 
 	const scanLabel = scanning ? 'Scanning…' : found ? 'Scan again' : 'Scan';
 	const scanHint =
