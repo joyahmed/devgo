@@ -7,6 +7,7 @@ use tauri::{Manager, State};
 use crate::error::AppError;
 use crate::models::target::{LaunchTarget, TargetKind};
 use crate::models::Project;
+use crate::services::clone;
 use crate::services::detect::{self, ProjectTech};
 use crate::services::editors::{self, DetectedTarget};
 use crate::services::frecency;
@@ -1024,6 +1025,94 @@ pub fn set_github_orgs(
         .map_err(lock_err)?
         .set_github_orgs(orgs)
         .map_err(AppError::Lock)
+}
+
+/// What clone_repo answers before the clone has started.
+#[derive(Serialize)]
+pub struct CloneStarted {
+    pub full_name: String,
+    /// the path the project will have, in the workspace's own form
+    pub dest: String,
+    pub protocol: clone::Protocol,
+}
+
+/// Clone a GitHub row into a workspace, on a spawned thread.
+///
+/// Returns as soon as the refusals have been checked and the thread
+/// started. Progress arrives as devgo://clone-progress { full_name,
+/// phase, percent } and the end as devgo://clone-done { full_name, ok,
+/// dest, error }. The frontend runs a picker's clones one after another
+/// off those events: parallel clones are a way to get rate-limited and a
+/// way to fill a disk.
+#[tauri::command]
+pub fn clone_repo(
+    full_name: String,
+    workspace: String,
+    name: Option<String>,
+    app: tauri::AppHandle,
+    state: State<AppState>,
+) -> Result<CloneStarted, AppError> {
+    // not because a stranger could call it: because a stale picker could,
+    // after a workspace was removed underneath it
+    if !state
+        .workspace_store
+        .lock()
+        .map_err(lock_err)?
+        .list()
+        .contains(&workspace)
+    {
+        return Err(AppError::CloneRefused(format!(
+            "{workspace} is not one of your workspaces"
+        )));
+    }
+    let repo_name = full_name
+        .rsplit('/')
+        .next()
+        .unwrap_or(&full_name)
+        .to_string();
+    let folder = clone::folder_name(&repo_name, name.as_deref())?;
+    let protocol = clone::Protocol::detect();
+    let plan = clone::plan(&workspace, &full_name, &folder, protocol);
+    // the liveness list only matters for a WSL workspace; a Windows one
+    // skips the wsl.exe spawn entirely, same as the scanner
+    let running = if plan.distro.is_some() {
+        wsl::running_distros_memo()
+    } else {
+        Vec::new()
+    };
+    clone::refuse_if_needed(&plan, &running)?;
+
+    let started = CloneStarted {
+        full_name: full_name.clone(),
+        dest: plan.dest.clone(),
+        protocol,
+    };
+    std::thread::spawn(move || {
+        let result = clone::run(&plan, |line| {
+            let (phase, percent) = clone::parse_progress(line);
+            let _ = tauri::Emitter::emit(
+                &app,
+                "devgo://clone-progress",
+                serde_json::json!({
+                    "full_name": full_name,
+                    "phase": phase,
+                    "percent": percent
+                }),
+            );
+        });
+        let error = result.as_ref().err().map(|e| e.to_string());
+        let _ = tauri::Emitter::emit(
+            &app,
+            "devgo://clone-done",
+            serde_json::json!({
+                "full_name": full_name,
+                "ok": result.is_ok(),
+                "dest": plan.dest,
+                "error": error
+            }),
+        );
+    });
+    Ok(started)
 }
 
 /// The two clone urls for a row, built in Rust from owner/name.
