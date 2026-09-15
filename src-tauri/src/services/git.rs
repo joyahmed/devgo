@@ -23,6 +23,10 @@ pub struct GitInfo {
     pub remote: Option<String>,
     /// Unix seconds of the last commit, for "recently worked on" sorting.
     pub last_commit: u64,
+    /// Branches on the remote as of the last git fetch. None means nobody
+    /// has asked: filled on demand by get_remote_branches, never by the
+    /// badge pass, which is one git.exe per project already.
+    pub remote_branches: Option<Vec<String>>,
 }
 
 /// Parse `git status --porcelain=v2 --branch`.
@@ -173,6 +177,7 @@ fn parse_wsl_output(
             dirty,
             remote: remote_to_url(remote),
             last_commit: commit.trim().parse().unwrap_or(0),
+            remote_branches: None,
         });
     }
     out
@@ -200,6 +205,54 @@ fn read_wsl_batch(distro: &str, projects: &[&Project]) -> Vec<GitInfo> {
             &windows_paths,
         ),
         _ => Vec::new(),
+    }
+}
+
+// the FULL refname, not %(refname:short): short names looked right and
+// were not, git shortens refs/remotes/origin/HEAD to plain origin, and the
+// first popover listed a branch called origin. with the full name the
+// pointer is unmistakable and dropped. origin/ is stripped because it is
+// the remote the app already means by remote; any other keeps its prefix
+fn parse_remote_refs(text: &str) -> Vec<String> {
+    text.lines()
+        .map(str::trim)
+        .filter_map(|l| l.strip_prefix("refs/remotes/"))
+        .filter(|l| !l.is_empty() && !l.ends_with("/HEAD"))
+        .map(|l| l.strip_prefix("origin/").unwrap_or(l).to_string())
+        .collect()
+}
+
+/// The remote's branches for one project, from what the last git fetch
+/// left in refs/remotes. No network: exactly as current as the user's last
+/// fetch, and it can never hang on a slow link. On demand only, and a WSL
+/// project whose distro is stopped reports nothing rather than booting it,
+/// the same gate as everything else in this file.
+pub fn remote_branches(project: &Project, running: &[String]) -> Vec<String> {
+    const ARGS: [&str; 3] =
+        ["for-each-ref", "--format=%(refname)", "refs/remotes/"];
+    match distro_of(&project.full_path) {
+        Some(distro) if wsl::is_running(&distro, running) => {
+            let linux = super::platform::paths::windows_to_wsl_path(
+                &project.full_path,
+                &distro,
+            );
+            let output = Command::new("wsl")
+                .creation_flags(CREATE_NO_WINDOW)
+                .env("WSL_UTF8", "1")
+                .args(["-d", &distro, "-e", "git", "-C", &linux])
+                .args(ARGS)
+                .output();
+            match output {
+                Ok(out) if out.status.success() => {
+                    parse_remote_refs(&String::from_utf8_lossy(&out.stdout))
+                }
+                _ => Vec::new(),
+            }
+        }
+        Some(_) => Vec::new(),
+        None => git_windows(&project.full_path, &ARGS)
+            .map(|t| parse_remote_refs(&t))
+            .unwrap_or_default(),
     }
 }
 
@@ -296,6 +349,20 @@ mod tests {
         assert_eq!(remote_to_url(""), None);
         assert_eq!(remote_to_url("/srv/git/repo.git"), None);
         assert_eq!(remote_to_url("file:///srv/git/repo"), None);
+    }
+
+    #[test]
+    fn remote_refs_drop_head_and_the_origin_prefix_only() {
+        let text = "refs/remotes/origin/HEAD\nrefs/remotes/origin/main\nrefs/remotes/origin/feat/x\nrefs/remotes/upstream/main\n\n";
+        assert_eq!(
+            parse_remote_refs(text),
+            vec!["main", "feat/x", "upstream/main"],
+            "HEAD is a pointer; origin is implied; another remote keeps its name"
+        );
+        // the bug: %(refname:short) renders origin/HEAD as bare origin, which
+        // then listed as a branch. a stray short line is ignored, not mistaken
+        assert!(parse_remote_refs("origin\norigin/main").is_empty());
+        assert!(parse_remote_refs("").is_empty());
     }
 
     #[test]
