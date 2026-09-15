@@ -358,6 +358,14 @@ const ProjectTree = ({
 		setDrop(null);
 	};
 
+	// the keyboard twin of dragging the header: the selected project's
+	// workspace moves one place in the rendered order
+	const nudge = (ws: string, dir: 1 | -1) => {
+		const i = entries.findIndex(([w]) => w === ws);
+		const target = entries[i + dir];
+		if (i >= 0 && target) moveWorkspace(ws, target[0], dir === 1);
+	};
+
 	// Pinned rows come first for keyboard navigation, and are then skipped in
 	// the tree below so arrowing down never lands on the same project twice.
 	const pinned = pinnedProjects ?? [];
@@ -420,7 +428,9 @@ const ProjectTree = ({
 		// a combo.
 		const combos: [ShortcutId, () => void][] = [
 			['togglePin', () => selected && onTogglePin?.(selected)],
-			['toggleWorkspace', () => ws && setCollapsedFor(ws, !isCollapsed(ws))]
+			['toggleWorkspace', () => ws && setCollapsedFor(ws, !isCollapsed(ws))],
+			['moveWorkspaceUp', () => ws && nudge(ws, -1)],
+			['moveWorkspaceDown', () => ws && nudge(ws, 1)]
 		];
 		const handler = (e: globalThis.KeyboardEvent) => {
 			const modified = e.ctrlKey || e.metaKey || e.altKey;
@@ -443,7 +453,16 @@ const ProjectTree = ({
 		};
 		window.addEventListener('keydown', handler);
 		return () => window.removeEventListener('keydown', handler);
-	}, [selected, visible, collapsed, navigate, onLaunch, onTogglePin]);
+	}, [
+		selected,
+		visible,
+		collapsed,
+		navigate,
+		onLaunch,
+		onTogglePin,
+		workspaceOrder,
+		onReorder
+	]);
 
 	const stateFor = (ws: string) =>
 		workspaceStates?.find(s => s.workspace === ws);

@@ -171,6 +171,8 @@ type ShortcutId =
 	| 'quit'
 	| 'addWorkspace'
 	| 'removeWorkspace'
+	| 'moveWorkspaceUp'
+	| 'moveWorkspaceDown'
 	| 'openEditor'
 	| 'openTerminal'
 	| 'openBoth'

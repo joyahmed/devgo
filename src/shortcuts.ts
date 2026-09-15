@@ -100,6 +100,20 @@ export const SHORTCUTS: Shortcut[] = [
 		label: 'Remove workspace',
 		group: 'Workspace',
 		needsSelection: true
+	},
+	{
+		id: 'moveWorkspaceUp',
+		keys: 'Alt+ArrowUp',
+		label: 'Move workspace up',
+		group: 'Workspace',
+		needsSelection: true
+	},
+	{
+		id: 'moveWorkspaceDown',
+		keys: 'Alt+ArrowDown',
+		label: 'Move workspace down',
+		group: 'Workspace',
+		needsSelection: true
 	}
 ];
 
