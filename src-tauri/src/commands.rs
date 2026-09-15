@@ -515,6 +515,40 @@ pub fn set_scan_config(
         .map_err(AppError::Lock)
 }
 
+// how you work, never this machine: no cache, no history, no pins, no runtime
+#[derive(Serialize, serde::Deserialize)]
+pub struct PortableConfig {
+    pub workspaces: Vec<String>,
+    pub targets: Vec<LaunchTarget>,
+    pub default_editor: Option<String>,
+    pub default_terminal: Option<String>,
+    pub summon_hotkey: String,
+    pub scan_config: crate::services::preferences::ScanConfig,
+}
+
+// the backend writes the file; the frontend only picks where
+#[tauri::command]
+pub fn export_config_to_file(
+    path: String,
+    state: State<AppState>,
+) -> Result<(), AppError> {
+    let workspaces = state.workspace_store.lock().map_err(lock_err)?.list();
+    let targets = state.target_store.lock().map_err(lock_err)?.list();
+    let config = {
+        let prefs = state.pref_store.lock().map_err(lock_err)?;
+        PortableConfig {
+            workspaces,
+            targets,
+            default_editor: prefs.default_target(TargetKind::Editor),
+            default_terminal: prefs.default_target(TargetKind::Terminal),
+            summon_hotkey: prefs.summon_hotkey(),
+            scan_config: prefs.scan_config(),
+        }
+    };
+    std::fs::write(&path, serde_json::to_string_pretty(&config)?)?;
+    Ok(())
+}
+
 /// Open the folder in Explorer. Works for WSL projects too: the UNC path is
 /// what Explorer wants. Boots the distro, but the user asked for that.
 #[tauri::command]

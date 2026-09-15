@@ -162,6 +162,7 @@ pub fn run() {
             commands::add_workspace_folders,
             commands::get_scan_config,
             commands::set_scan_config,
+            commands::export_config_to_file,
             commands::get_runtime_info,
             commands::open_editor,
             commands::open_terminal,
