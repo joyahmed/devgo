@@ -517,6 +517,13 @@ interface GithubState {
 	isOpen: boolean;
 	toggleOpen: () => void;
 	visible: GithubRepo[];
+	/// null while searching: then visible is the flat list of matches
+	sections: LaneSection[] | null;
+	groups: GithubGroup[];
+	/// one edit in, the whole list back
+	editGroups: (edit: GroupEdit) => Promise<GithubGroup[]>;
+	folded: Set<string>;
+	toggleGroup: (name: string) => void;
 	refresh: () => void;
 	reload: () => void;
 	setOrgs: (orgs: string[] | null) => Promise<void>;

@@ -1,13 +1,24 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { useEffect, useRef, useState } from 'react';
-import { visibleRepos } from '../github';
+import { laneSections, visibleRepos } from '../github';
 
 // whether the lane is open, remembered across sessions. absent means
 // "open once there is something to show": a first run with no cache
 // starts closed, so the very first fetch is a click on the header, an
 // explicit ask, and never a surprise on launch
 const OPEN_KEY = 'devgo.githubLane';
+// which groups are folded, remembered like the tree's collapse set
+const FOLDED_KEY = 'devgo.githubGroupsFolded';
+
+const loadFolded = (): Set<string> => {
+	try {
+		const raw = JSON.parse(localStorage.getItem(FOLDED_KEY) ?? '[]');
+		return new Set(Array.isArray(raw) ? (raw as string[]) : []);
+	} catch {
+		return new Set();
+	}
+};
 
 const loadOpen = (): boolean | null => {
 	try {
@@ -103,7 +114,42 @@ export const useGithub = (
 		refresh();
 	}, [isOpen, payload, status, refreshing]);
 
-	const visible = visibleRepos(payload?.cache.repos ?? [], query);
+	// groups: loaded once, and every edit goes through one command that
+	// returns the whole list, so this never predicts what the store did
+	const [groups, setGroups] = useState<GithubGroup[]>([]);
+	useEffect(() => {
+		invoke<GithubGroup[]>('get_github_groups').then(setGroups).catch(() => {});
+	}, []);
+	const editGroups = async (edit: GroupEdit) => {
+		const next = await invoke<GithubGroup[]>('edit_github_groups', { edit });
+		setGroups(next);
+		return next;
+	};
+
+	const [folded, setFolded] = useState<Set<string>>(loadFolded);
+	const toggleGroup = (name: string) => {
+		const next = new Set(folded);
+		if (next.has(name)) next.delete(name);
+		else next.add(name);
+		try {
+			localStorage.setItem(FOLDED_KEY, JSON.stringify([...next]));
+		} catch {
+			// per-viewer convenience only
+		}
+		setFolded(next);
+	};
+
+	// with a query the list is one flat list of matches, groups aside;
+	// without one it is the groups in order and then the ungrouped tail.
+	// visible is the flattened row order in both cases, what the keyboard
+	// walks, with folded groups contributing nothing, exactly as a
+	// collapsed workspace
+	const sections = query.trim()
+		? null
+		: laneSections(payload?.cache.repos ?? [], groups);
+	const visible = sections
+		? sections.flatMap(s => (s.group && folded.has(s.group) ? [] : s.rows))
+		: visibleRepos(payload?.cache.repos ?? [], query);
 
 	const setOrgs = async (orgs: string[] | null) => {
 		await invoke('set_github_orgs', { orgs });
@@ -119,6 +165,11 @@ export const useGithub = (
 		isOpen,
 		toggleOpen,
 		visible,
+		sections,
+		groups,
+		editGroups,
+		folded,
+		toggleGroup,
 		refresh,
 		reload,
 		setOrgs
