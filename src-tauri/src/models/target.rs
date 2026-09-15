@@ -114,6 +114,11 @@ impl LaunchTarget {
 pub const WT_ARGS: &str =
     "-d \"{path}\" pwsh -NoExit -ExecutionPolicy Bypass -File \"{script}\"";
 
+/// What wt opened a Windows project with before psmux: the directory and
+/// nothing else. Kept so the store can tell the default nobody touched
+/// from a template the user wrote, and migrate only the first.
+pub const WT_ARGS_PRE_PSMUX: &str = "-d \"{path}\"";
+
 /// The registry every install starts with.
 ///
 /// VS Code and Windows Terminal only, because those are the two DevGo already

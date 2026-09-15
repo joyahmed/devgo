@@ -2,7 +2,9 @@ use std::fs;
 use std::path::PathBuf;
 
 use crate::error::AppError;
-use crate::models::target::{defaults, LaunchTarget, TargetKind};
+use crate::models::target::{
+    defaults, LaunchTarget, TargetKind, WT_ARGS, WT_ARGS_PRE_PSMUX,
+};
 
 /// Editors and terminals, persisted together.
 ///
@@ -37,7 +39,32 @@ impl TargetStore {
             targets
         };
 
-        Ok(Self { targets, file_path })
+        let mut store = Self { targets, file_path };
+        store.adopt_psmux_template()?;
+        Ok(store)
+    }
+
+    /// defaults() is read once, on first run, so a changed wt template
+    /// reaches nobody who already has the app, and that is every machine
+    /// this was built for. Only a wt still carrying the old default is
+    /// touched: a template the user edited is theirs, the same rule the
+    /// session script follows for a hand-made window. The file is copied
+    /// aside first, not renamed, so a failure between the two writes leaves
+    /// the file it found rather than no file.
+    fn adopt_psmux_template(&mut self) -> Result<(), AppError> {
+        let Some(pos) = self
+            .targets
+            .iter()
+            .position(|t| t.id == "wt" && t.args_template == WT_ARGS_PRE_PSMUX)
+        else {
+            return Ok(());
+        };
+        if self.file_path.exists() {
+            let backup = format!("{}.pre-psmux", self.file_path.display());
+            fs::copy(&self.file_path, backup)?;
+        }
+        self.targets[pos].args_template = WT_ARGS.to_string();
+        self.save()
     }
 
     pub fn list(&self) -> Vec<LaunchTarget> {
@@ -185,6 +212,93 @@ mod tests {
             s.remove("vscode").is_ok(),
             "second editor makes the first removable"
         );
+    }
+
+    /// A targets.json as every install before psmux wrote it. The other
+    /// fields are what a real file carries, so the test proves they survive.
+    fn pre_psmux_json(wt_args: &str) -> String {
+        format!(
+            r#"[
+  {{"id":"vscode","name":"VS Code","kind":"editor","executable":"code",
+   "args_template":"\"{{path}}\"","wsl_executable":null,
+   "wsl_args_template":"--folder-uri vscode-remote://wsl+{{distro}}{{linux_path}}",
+   "run_args_template":null,"wsl_run_args_template":null}},
+  {{"id":"wt","name":"Windows Terminal","kind":"terminal","executable":"wt",
+   "args_template":"{}","wsl_executable":null,
+   "wsl_args_template":"wsl -d {{distro}} bash \"{{script}}\"",
+   "run_args_template":"-d \"{{path}}\" cmd /k {{command}}",
+   "wsl_run_args_template":"wsl -d {{distro}} --cd \"{{linux_path}}\" -e bash -lc \"{{command}}; exec bash\""}}
+]"#,
+            wt_args.replace('"', "\\\"")
+        )
+    }
+
+    #[test]
+    fn an_install_from_before_psmux_gets_the_session_script_and_a_backup() {
+        let dir = std::env::temp_dir().join("devgo-targets-pre-psmux");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let original = pre_psmux_json(WT_ARGS_PRE_PSMUX);
+        fs::write(dir.join("targets.json"), &original).unwrap();
+
+        let s = TargetStore::new(dir.clone()).unwrap();
+        let wt = s.get("wt").unwrap();
+        assert_eq!(wt.args_template, WT_ARGS);
+        // everything that was not the one field stays what it was
+        assert_eq!(
+            wt.run_args_template.as_deref(),
+            Some("-d \"{path}\" cmd /k {command}")
+        );
+        assert_eq!(
+            wt.wsl_args_template.as_deref(),
+            Some("wsl -d {distro} bash \"{script}\"")
+        );
+        assert_eq!(s.get("vscode").unwrap().name, "VS Code");
+
+        // persisted, not patched in memory
+        let reloaded = TargetStore::new(dir.clone()).unwrap();
+        assert_eq!(reloaded.get("wt").unwrap().args_template, WT_ARGS);
+
+        // and the file it found is still there, byte for byte
+        let backup =
+            fs::read_to_string(dir.join("targets.json.pre-psmux")).unwrap();
+        assert_eq!(backup, original);
+        assert!(
+            !dir.join("targets.json.bak").exists(),
+            "a migration is not a parse failure"
+        );
+    }
+
+    /// Matching on the id alone would overwrite a template the user wrote
+    /// to "fix" something they never asked about.
+    #[test]
+    fn a_customised_windows_terminal_template_is_left_alone() {
+        let dir = std::env::temp_dir().join("devgo-targets-custom-wt");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let custom = "-d \"{path}\" -p \"Dev\"";
+        let original = pre_psmux_json(custom);
+        fs::write(dir.join("targets.json"), &original).unwrap();
+
+        let s = TargetStore::new(dir.clone()).unwrap();
+        assert_eq!(s.get("wt").unwrap().args_template, custom);
+        assert!(!dir.join("targets.json.pre-psmux").exists());
+        assert_eq!(
+            fs::read_to_string(dir.join("targets.json")).unwrap(),
+            original,
+            "an untouched store is not rewritten"
+        );
+    }
+
+    /// A .pre-psmux of a file seeded a millisecond ago would be noise that
+    /// makes the real backups harder to trust.
+    #[test]
+    fn a_fresh_install_needs_no_migration_and_gets_no_backup() {
+        let dir = std::env::temp_dir().join("devgo-targets-fresh-psmux");
+        let _ = fs::remove_dir_all(&dir);
+        let s = TargetStore::new(dir.clone()).unwrap();
+        assert_eq!(s.get("wt").unwrap().args_template, WT_ARGS);
+        assert!(!dir.join("targets.json.pre-psmux").exists());
     }
 
     #[test]
