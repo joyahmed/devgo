@@ -1,3 +1,4 @@
+pub mod config_io;
 pub mod detect;
 pub mod discover;
 pub mod frecency;
