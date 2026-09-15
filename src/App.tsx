@@ -4,6 +4,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import ActionButtons from './components/ActionButtons';
 import ConfirmDialog from './components/ConfirmDialog';
+import ContextMenu from './components/ContextMenu';
 import ProjectTree from './components/ProjectTree';
 import RuntimeIndicator from './components/RuntimeIndicator';
 import SearchBox from './components/SearchBox';
@@ -14,7 +15,7 @@ import { useLaunchActions } from './hooks/useLaunchActions';
 import { useProjects } from './hooks/useProjects';
 import { useRuntime } from './hooks/useRuntime';
 import { useWorkspaces } from './hooks/useWorkspaces';
-import { isTypingTarget, matches, shortcutFor } from './shortcuts';
+import { isTypingTarget, matches, prettyKeys, shortcutFor } from './shortcuts';
 
 // Settings pulls in WorkspaceManager and the shortcut table, none of which the
 // launcher needs to start. The split used to sit on WorkspaceManager; now that
@@ -202,6 +203,56 @@ const AppInner = () => {
 		}
 	};
 
+	// hints come from the shortcut table so the menu can't lie about the keys
+	const [menu, setMenu] = useState<{
+		project: Project;
+		x: number;
+		y: number;
+	} | null>(null);
+	const buildMenu = (p: Project): MenuEntry[] => {
+		const hint = (id: ShortcutId) => prettyKeys(shortcutFor(id));
+		const remote = git.get(p.full_path)?.remote;
+		const pinned = ranks.get(p.full_path)?.pinned ?? false;
+		return [
+			{
+				label: 'Open in editor',
+				hint: hint('openEditor'),
+				onClick: () => openEditor(p).catch(e => toast(showError(e)))
+			},
+			{
+				label: 'Open terminal',
+				hint: hint('openTerminal'),
+				onClick: () => openTerminal(p).catch(e => toast(showError(e)))
+			},
+			{ label: 'Open both', hint: hint('openBoth'), onClick: () => handleLaunch(p) },
+			'separator',
+			{
+				label: 'Reveal in Explorer',
+				hint: hint('revealExplorer'),
+				onClick: () => revealInExplorer(p)
+			},
+			{
+				label: 'Copy Windows path',
+				hint: hint('copyWinPath'),
+				onClick: () => copyWindowsPath(p)
+			},
+			{
+				label: 'Copy WSL path',
+				hint: hint('copyWslPath'),
+				onClick: () => copyWslPath(p)
+			},
+			...(remote
+				? [{ label: 'Open remote', onClick: () => handleOpenRemote(p) }]
+				: []),
+			'separator',
+			{
+				label: pinned ? 'Unpin' : 'Pin to top',
+				hint: hint('togglePin'),
+				onClick: () => handleTogglePin(p)
+			}
+		];
+	};
+
 	// Delete acts on the selected project's workspace. With no selection there
 	// is nothing unambiguous to remove, so it opens Settings rather than guess.
 	const handleRemoveShortcut = () => {
@@ -286,6 +337,17 @@ const AppInner = () => {
 				/>
 			</Suspense>
 
+			{menu && (
+				<ContextMenu
+					{...{
+						x: menu.x,
+						y: menu.y,
+						items: buildMenu(menu.project),
+						onClose: () => setMenu(null)
+					}}
+				/>
+			)}
+
 			<ConfirmDialog
 				{...{
 					open: confirmAction !== null,
@@ -345,7 +407,9 @@ const AppInner = () => {
 						techInfo: tech,
 						pinnedProjects,
 						onTogglePin: handleTogglePin,
-						onOpenRemote: handleOpenRemote
+						onOpenRemote: handleOpenRemote,
+						onContextMenu: (p: Project, x: number, y: number) =>
+							setMenu({ project: p, x, y })
 					}}
 				/>
 				<ActionButtons

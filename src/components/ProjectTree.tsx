@@ -175,7 +175,8 @@ const ProjectRow = ({
 	onSelect,
 	onDoubleClick,
 	onTogglePin,
-	onOpenRemote
+	onOpenRemote,
+	onContextMenu
 }: ProjectRowProps) => (
 	<div
 		className={`${col} px-3 py-1.5 cursor-pointer select-none transition-colors ${
@@ -189,6 +190,12 @@ const ProjectRow = ({
 		}`}
 		onClick={() => onSelect(project)}
 		onDoubleClick={() => onDoubleClick(project)}
+		// select first so the menu and the keyboard agree on the row
+		onContextMenu={e => {
+			e.preventDefault();
+			onSelect(project);
+			onContextMenu?.(project, e.clientX, e.clientY);
+		}}
 	>
 		<div className='truncate text-text-muted' title={project.workspace}>
 			{lastSegment(project.workspace)}
@@ -224,6 +231,7 @@ const ProjectTree = ({
 	pinnedProjects,
 	onTogglePin,
 	onOpenRemote,
+	onContextMenu,
 	ref
 }: ProjectTreeProps) => {
 	const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
@@ -409,7 +417,8 @@ const ProjectTree = ({
 		onSelect,
 		onDoubleClick,
 		onTogglePin,
-		onOpenRemote
+		onOpenRemote,
+		onContextMenu
 	});
 
 	return (

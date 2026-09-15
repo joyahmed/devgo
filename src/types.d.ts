@@ -275,6 +275,7 @@ interface ProjectTreeProps {
 	pinnedProjects?: Project[];
 	onTogglePin?: (p: Project) => void;
 	onOpenRemote?: (p: Project) => void;
+	onContextMenu?: (p: Project, x: number, y: number) => void;
 	ref?: React.Ref<ProjectTreeHandle>;
 }
 
@@ -314,6 +315,7 @@ interface ProjectRowProps {
 	onDoubleClick: (p: Project) => void;
 	onTogglePin?: (p: Project) => void;
 	onOpenRemote?: (p: Project) => void;
+	onContextMenu?: (p: Project, x: number, y: number) => void;
 }
 
 interface ActionButtonsProps {
