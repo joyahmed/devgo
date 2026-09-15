@@ -267,6 +267,9 @@ pub fn run() {
             let target_store = services::TargetStore::new(app_data_dir.clone())
                 .expect("failed to initialize target store");
 
+            let github_store = services::GithubStore::new(app_data_dir.clone())
+                .expect("failed to initialize github store");
+
             let store = WorkspaceStore::new(app_data_dir)
                 .expect("failed to initialize workspace store");
 
@@ -283,6 +286,8 @@ pub fn run() {
                 tech_cache: std::sync::Mutex::new(
                     std::collections::HashMap::new(),
                 ),
+                github_store: std::sync::Mutex::new(github_store),
+                github_refreshing: std::sync::atomic::AtomicBool::new(false),
             });
 
             // geometry goes on before the webview calls show(), so the first
@@ -407,6 +412,10 @@ pub fn run() {
             commands::shutdown_wsl,
             commands::open_remote,
             commands::get_remote_branches,
+            commands::get_github_repos,
+            commands::get_github_status,
+            commands::set_github_orgs,
+            commands::github_clone_urls,
             commands::reveal_in_explorer,
             commands::get_wsl_path,
             commands::discover_roots,

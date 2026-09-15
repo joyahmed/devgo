@@ -11,9 +11,11 @@ use crate::services::detect::{self, ProjectTech};
 use crate::services::editors::{self, DetectedTarget};
 use crate::services::frecency;
 use crate::services::git;
+use crate::services::github::{self, GhStatus, GithubCache};
 use crate::services::launcher;
 use crate::services::platform::{wsl, RuntimeInfo};
 use crate::services::scanner::{ScanOutcome, UnavailableReason};
+use crate::services::GithubStore;
 use crate::services::PreferencesStore;
 use crate::services::ProjectCacheStore;
 use crate::services::TargetStore;
@@ -76,6 +78,10 @@ pub struct AppState {
     /// Stack detection, in memory only, for the same reason as git: `node` on
     /// a project whose package.json went last week looks current too.
     pub tech_cache: Mutex<HashMap<String, ProjectTech>>,
+    pub github_store: Mutex<GithubStore>,
+    /// One GitHub refresh at a time. A second refresh_github_repos while
+    /// one is in flight returns at once; the running one serves both.
+    pub github_refreshing: std::sync::atomic::AtomicBool,
 }
 
 #[tauri::command]
@@ -873,6 +879,81 @@ pub fn open_remote(
         .spawn()
         .map_err(|e| AppError::LaunchFailed(format!("{url}: {e}")))?;
     Ok(())
+}
+
+// ── GitHub ──────────────────────────────────────────────────────────────
+
+/// What the lane and the Settings panel read. stale is decided here so
+/// the frontend never knows the six-hour rule; refreshing is whether a
+/// fetch is in flight right now, so a button can say so.
+#[derive(Serialize)]
+pub struct GithubPayload {
+    pub cache: GithubCache,
+    pub stale: bool,
+    pub refreshing: bool,
+    /// the user's org choice; None means every org the last refresh found
+    pub orgs: Option<Vec<String>>,
+    /// full_name to local project path, for every row cloned here. As
+    /// current as the last badge pass; the frontend re-reads after each
+    pub local: HashMap<String, String>,
+}
+
+/// The cache, immediately. No network here, ever: this is what renders
+/// on mount and it must cost what reading a file costs.
+#[tauri::command]
+pub fn get_github_repos(
+    state: State<AppState>,
+) -> Result<GithubPayload, AppError> {
+    let cache = state.github_store.lock().map_err(lock_err)?.get();
+    let orgs = state.pref_store.lock().map_err(lock_err)?.github_orgs();
+    let local = {
+        let git = state.git_cache.lock().map_err(lock_err)?;
+        github::local_matches(
+            &cache.repos,
+            git.values().filter_map(|i| {
+                i.remote.as_deref().map(|r| (i.full_path.as_str(), r))
+            }),
+        )
+    };
+    Ok(GithubPayload {
+        local,
+        stale: github::is_stale(
+            cache.fetched_at,
+            crate::services::preferences::now_secs(),
+        ),
+        refreshing: state
+            .github_refreshing
+            .load(std::sync::atomic::Ordering::Relaxed),
+        cache,
+        orgs,
+    })
+}
+
+/// Installed / logged in as / neither, without touching the network.
+#[tauri::command]
+pub fn get_github_status() -> GhStatus {
+    github::status()
+}
+
+/// Save the org choice. Takes effect on the next refresh; nothing here
+/// fetches.
+#[tauri::command]
+pub fn set_github_orgs(
+    orgs: Option<Vec<String>>,
+    state: State<AppState>,
+) -> Result<(), AppError> {
+    state
+        .pref_store
+        .lock()
+        .map_err(lock_err)?
+        .set_github_orgs(orgs)
+        .map_err(AppError::Lock)
+}
+
+/// The two clone urls for a row, built in Rust from owner/name.
+#[tauri::command]
+pub fn github_clone_urls(full_name: String) -> (String, String) {
+    github::clone_urls(&full_name)
 }
 
 /// Which distros are up right now. Costs one management call and boots nothing,
