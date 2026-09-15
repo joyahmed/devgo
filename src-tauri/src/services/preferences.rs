@@ -357,6 +357,30 @@ impl PreferencesStore {
         self.save()
     }
 
+    pub fn tmux_config(&self) -> TmuxConfig {
+        self.prefs.tmux_config.clone()
+    }
+
+    /// Trim, drop blanks, de-duplicate here rather than in the panel: the
+    /// panel is not the only way in (the command, import, a hand edit). A
+    /// blank name reaches `tmux new-window -n ''`, tmux renames it `bash`, the
+    /// name is never found, and a window is appended on every launch.
+    pub fn set_tmux_config(
+        &mut self,
+        mut config: TmuxConfig,
+    ) -> Result<(), String> {
+        let mut seen: Vec<String> = Vec::new();
+        for name in &config.window_names {
+            let trimmed = name.trim();
+            if !trimmed.is_empty() && !seen.iter().any(|s| s == trimmed) {
+                seen.push(trimmed.to_string());
+            }
+        }
+        config.window_names = seen;
+        self.prefs.tmux_config = config;
+        self.save()
+    }
+
     pub fn window_state(&self) -> Option<WindowState> {
         self.prefs.window_state.clone()
     }
@@ -597,6 +621,53 @@ mod tests {
             !rect(900, 720, -880, 100).is_restorable(only_primary),
             "only 20px on screen"
         );
+    }
+
+    /// Every prefs.json in the wild predates tmux_config; the other fields
+    /// surviving is what makes a lost serde default loud here, not on
+    /// someone's machine.
+    #[test]
+    fn a_config_from_before_tmux_windows_still_loads() {
+        let dir = std::env::temp_dir().join("devgo-prefs-test-pre-tmux");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(
+            dir.join("prefs.json"),
+            r#"{"pinned":["G:\\ws\\api"],"summon_hotkey":"Ctrl+Alt+D",
+                "scan_config":{"ignore":["node_modules"],"depth":2}}"#,
+        )
+        .unwrap();
+
+        let s = PreferencesStore::new(dir.clone()).unwrap();
+        assert_eq!(s.tmux_config(), TmuxConfig::default());
+        assert_eq!(s.pinned(), vec![r"G:\ws\api".to_string()]);
+        assert_eq!(s.summon_hotkey(), "Ctrl+Alt+D");
+        assert!(!dir.join("prefs.json.bak").exists(), "nothing quarantined");
+    }
+
+    #[test]
+    fn a_window_list_is_cleaned_on_the_way_in() {
+        let mut s = store("tmux-normalise");
+        let names = ["  code  ", "", "   ", "agents", "code", "\tgit\n"];
+        s.set_tmux_config(TmuxConfig {
+            enabled: true,
+            window_names: names.iter().map(|n| n.to_string()).collect(),
+        })
+        .unwrap();
+        assert_eq!(
+            s.tmux_config().window_names,
+            vec!["code".to_string(), "agents".to_string(), "git".to_string()],
+            "trimmed, blanks dropped, duplicates gone, order kept"
+        );
+
+        // an empty list survives as empty: "no named windows" is an answer,
+        // and restoring the default would make it unsettable
+        s.set_tmux_config(TmuxConfig {
+            enabled: true,
+            window_names: vec![" ".into()],
+        })
+        .unwrap();
+        assert!(s.tmux_config().window_names.is_empty());
     }
 
     /// A prefs.json from before this field must load, not go to .bak.
