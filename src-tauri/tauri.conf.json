@@ -16,6 +16,7 @@
 				"width": 900,
 				"height": 720,
 				"resizable": true,
+				"maximized": true,
 				"decorations": false,
 				"center": true,
 				"visible": false
