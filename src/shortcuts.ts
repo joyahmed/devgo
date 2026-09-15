@@ -54,6 +54,27 @@ export const SHORTCUTS: Shortcut[] = [
 		needsSelection: true
 	},
 	{
+		id: 'revealExplorer',
+		keys: 'Ctrl+Shift+E',
+		label: 'Reveal in Explorer',
+		group: 'Project',
+		needsSelection: true
+	},
+	{
+		id: 'copyWinPath',
+		keys: 'Ctrl+Shift+C',
+		label: 'Copy Windows path',
+		group: 'Project',
+		needsSelection: true
+	},
+	{
+		id: 'copyWslPath',
+		keys: 'Ctrl+Shift+W',
+		label: 'Copy WSL path',
+		group: 'Project',
+		needsSelection: true
+	},
+	{
 		id: 'togglePin',
 		keys: 'Ctrl+S',
 		label: 'Pin / unpin',

@@ -175,6 +175,33 @@ const AppInner = () => {
 		openTerminal().catch(e => toast(showError(e)));
 	const handleOpenBoth = () => openBoth().catch(e => toast(showError(e)));
 
+	const revealInExplorer = (p: Project) => {
+		invoke('reveal_in_explorer', { project: p }).catch(e =>
+			toast(showError(e))
+		);
+	};
+
+	// secure context + user gesture, so no clipboard plugin needed
+	const copyText = async (text: string, label: string) => {
+		try {
+			await navigator.clipboard.writeText(text);
+			toast(`Copied ${label}`, 'success');
+		} catch {
+			toast('Could not copy to clipboard', 'error');
+		}
+	};
+
+	const copyWindowsPath = (p: Project) => copyText(p.full_path, 'Windows path');
+
+	const copyWslPath = async (p: Project) => {
+		try {
+			const wsl = await invoke<string>('get_wsl_path', { project: p });
+			await copyText(wsl, 'WSL path');
+		} catch (e) {
+			toast(showError(e));
+		}
+	};
+
 	// Delete acts on the selected project's workspace. With no selection there
 	// is nothing unambiguous to remove, so it opens Settings rather than guess.
 	const handleRemoveShortcut = () => {
@@ -220,6 +247,9 @@ const AppInner = () => {
 			if (fire('openEditor', handleOpenEditor)) return;
 			if (fire('openTerminal', handleOpenTerminal)) return;
 			if (fire('openBoth', handleOpenBoth)) return;
+			if (fire('revealExplorer', () => revealInExplorer(selected))) return;
+			if (fire('copyWinPath', () => copyWindowsPath(selected))) return;
+			if (fire('copyWslPath', () => copyWslPath(selected))) return;
 		};
 		window.addEventListener('keydown', handler);
 		return () => window.removeEventListener('keydown', handler);
