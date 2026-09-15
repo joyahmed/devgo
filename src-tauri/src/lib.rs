@@ -175,6 +175,8 @@ pub fn run() {
             commands::get_wsl_path,
             commands::discover_roots,
             commands::add_workspace_folders,
+            commands::get_scan_config,
+            commands::set_scan_config,
             commands::get_runtime_info,
             commands::open_editor,
             commands::open_terminal,

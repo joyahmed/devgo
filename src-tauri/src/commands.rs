@@ -468,6 +468,26 @@ pub fn add_workspace_folders(
     Ok(store.list())
 }
 
+#[tauri::command]
+pub fn get_scan_config(
+    state: State<AppState>,
+) -> Result<crate::services::preferences::ScanConfig, AppError> {
+    Ok(state.pref_store.lock().map_err(lock_err)?.scan_config())
+}
+
+#[tauri::command]
+pub fn set_scan_config(
+    config: crate::services::preferences::ScanConfig,
+    state: State<AppState>,
+) -> Result<(), AppError> {
+    state
+        .pref_store
+        .lock()
+        .map_err(lock_err)?
+        .set_scan_config(config)
+        .map_err(AppError::Lock)
+}
+
 /// Open the folder in Explorer. Works for WSL projects too: the UNC path is
 /// what Explorer wants. Boots the distro, but the user asked for that.
 #[tauri::command]
