@@ -7,12 +7,50 @@ mod tray;
 
 use commands::AppState;
 use services::platform::detection;
+use services::preferences::WindowState;
 use services::single_instance;
 use services::workspace::WorkspaceStore;
 use tauri::tray::{
     MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent,
 };
 use tauri::Manager;
+
+// only the restored rect is stored: maximized, the window is the screen,
+// and saving that hands the restore button a screen-sized window
+fn remember_geometry(window: &tauri::Window) {
+    // a hidden window's geometry is nobody's choice: startup fires resize
+    // and move before show(), and close hides rather than exits
+    if !window.is_visible().unwrap_or(false) {
+        return;
+    }
+    let Some(state) = window.app_handle().try_state::<AppState>() else {
+        return;
+    };
+    let Ok(mut prefs) = state.pref_store.lock() else {
+        return;
+    };
+
+    let next = if window.is_maximized().unwrap_or(false) {
+        WindowState {
+            maximized: true,
+            ..prefs.window_state().unwrap_or_default()
+        }
+    } else {
+        let (Ok(size), Ok(pos)) =
+            (window.inner_size(), window.outer_position())
+        else {
+            return;
+        };
+        WindowState {
+            maximized: false,
+            width: size.width,
+            height: size.height,
+            x: pos.x,
+            y: pos.y,
+        }
+    };
+    let _ = prefs.set_window_state(next);
+}
 
 pub fn run() {
     tauri::Builder::default()
@@ -133,13 +171,17 @@ pub fn run() {
 
             Ok(())
         })
-        .on_window_event(|window, event| {
+        .on_window_event(|window, event| match event {
             // ✕ hides. A launcher that takes two seconds to cold-start is a
             // launcher you stop using; Quit lives in the tray menu and Ctrl+Q.
-            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+            tauri::WindowEvent::CloseRequested { api, .. } => {
                 api.prevent_close();
                 let _ = window.hide();
             }
+            tauri::WindowEvent::Resized(_) | tauri::WindowEvent::Moved(_) => {
+                remember_geometry(window);
+            }
+            _ => {}
         })
         .invoke_handler(tauri::generate_handler![
             commands::get_workspaces,
