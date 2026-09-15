@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { scoreCommand } from '../palette';
 import Button from './Button';
+import Kbd from './Kbd';
 
 const RECENT_KEY = 'devgo.recentCommands';
 const RECENT_MAX = 10;
@@ -132,9 +133,7 @@ const CommandPalette = ({ commands, onClose }: CommandPaletteProps) => {
 										)}
 									</span>
 									{cmd.hint && (
-										<kbd className='font-mono text-[10px] shrink-0 px-1.5 py-0.5 border border-border-strong rounded bg-bg-panel text-text-muted'>
-											{cmd.hint}
-										</kbd>
+										<Kbd>{cmd.hint}</Kbd>
 									)}
 								</span>
 							</Button>

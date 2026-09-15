@@ -1,5 +1,6 @@
 import { prettyKeys, shortcutFor } from '../shortcuts';
 import Button from './Button';
+import Kbd from './Kbd';
 
 // Hints come from the shortcut table, not from strings typed here — a button
 // that advertises a binding nobody registered is worse than one with no hint.
@@ -48,11 +49,7 @@ const ActionButtons = ({
 						title={hint ? `${label} — ${hint}` : label}
 					>
 						{label}
-						{hint && (
-							<kbd className='font-mono text-[10px] text-text-muted border border-border-strong rounded px-1 py-px'>
-								{hint}
-							</kbd>
-						)}
+						{hint && <Kbd>{hint}</Kbd>}
 					</Button>
 				);
 			})}

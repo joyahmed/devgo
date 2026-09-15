@@ -1,5 +1,6 @@
 import { prettyKeys, shortcutFor } from '../shortcuts';
 import Button from './Button';
+import Kbd from './Kbd';
 
 // the palette's only visible door; without it the discovery surface is itself undiscoverable
 const StatusBar = ({ onOpenPalette }: StatusBarProps) => (
@@ -10,10 +11,8 @@ const StatusBar = ({ onOpenPalette }: StatusBarProps) => (
 			title='Open the command palette'
 			onClick={onOpenPalette}
 		>
-			<kbd className='font-mono text-[11px] leading-none px-2 py-1 border border-border-strong rounded bg-bg-panel text-text-primary'>
-				{prettyKeys(shortcutFor('commandPalette'))}
-			</kbd>
-			<span className='text-text-secondary'>Commands</span>
+			<Kbd>{prettyKeys(shortcutFor('commandPalette'))}</Kbd>
+			<span className='text-text-secondary leading-none'>Commands</span>
 		</Button>
 	</footer>
 );

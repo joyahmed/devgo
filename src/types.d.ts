@@ -229,6 +229,10 @@ interface TitleBarProps {
 	children?: React.ReactNode;
 }
 
+interface KbdProps {
+	children: React.ReactNode;
+}
+
 interface TitleBarButtonProps {
 	className?: string;
 	onClick: () => void;

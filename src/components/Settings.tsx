@@ -5,6 +5,7 @@ import { prettyKeys, SHORTCUTS } from '../shortcuts';
 import { savedThemeId, setTheme, THEMES } from '../themes';
 import { useTargets } from '../hooks/useTargets';
 import Button from './Button';
+import Kbd from './Kbd';
 import TargetManager from './TargetManager';
 import WorkspaceManager from './WorkspaceManager';
 
@@ -12,8 +13,6 @@ import WorkspaceManager from './WorkspaceManager';
 // nothing in Rust reads it, so it never goes near prefs.json.
 const LAST_PANEL = 'devgo.settingsPanel';
 
-const kbd =
-	'font-mono text-[11px] px-2 py-0.5 border border-border-strong rounded bg-bg-panel text-text-primary';
 const heading =
 	'text-xs font-bold uppercase tracking-wider text-text-secondary mb-2';
 
@@ -88,9 +87,7 @@ const ShortcutTable = ({
 						Show / hide DevGo from anywhere
 					</span>
 					<span className='flex items-center gap-2 shrink-0'>
-						<kbd className={kbd}>
-							{capturing ? 'Press keys…' : prettyKeys(summonHotkey)}
-						</kbd>
+						<Kbd>{capturing ? 'Press keys…' : prettyKeys(summonHotkey)}</Kbd>
 						<Button variant='ghost' onClick={() => setCapturing(c => !c)}>
 							<span className={`text-xs ${capturing ? 'text-accent' : ''}`}>
 								{capturing ? 'Cancel' : 'Rebind'}
@@ -122,7 +119,7 @@ const ShortcutTable = ({
 									</span>
 								)}
 							</span>
-							<kbd className={kbd}>{prettyKeys(s.keys)}</kbd>
+							<Kbd>{prettyKeys(s.keys)}</Kbd>
 						</div>
 					))}
 				</div>
