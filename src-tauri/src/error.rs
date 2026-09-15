@@ -35,6 +35,11 @@ pub enum AppError {
     #[error("Refusing to open {0}: not an https url")]
     BadUrl(String),
 
+    /// A clone that must not start: the destination exists, the distro is
+    /// stopped, the name is a path. Phrased for the row that asked.
+    #[error("{0}")]
+    CloneRefused(String),
+
     /// Carries an already-phrased message: the distinction between "timed out"
     /// and "returned but still running" is the useful part, and only the caller
     /// knows which it was.
