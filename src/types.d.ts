@@ -789,6 +789,9 @@ interface ProjectRowProps {
 	pinnedStrip?: boolean;
 	/// Served from cache — the row dims to say so.
 	stale?: boolean;
+	/// a github row has the cursor: the selection stays, dimmed, so the
+	/// strong blue is always the row Enter acts on
+	quiet?: boolean;
 	rank?: ProjectRank;
 	git?: GitInfo;
 	tech?: ProjectTech;

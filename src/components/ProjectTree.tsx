@@ -206,6 +206,7 @@ const ProjectRow = ({
 	selected,
 	pinnedStrip,
 	stale,
+	quiet,
 	rank,
 	git,
 	tech,
@@ -220,7 +221,9 @@ const ProjectRow = ({
 			pinnedStrip ? 'border-l-2' : 'ml-6 border-l border-border'
 		} ${stale ? 'opacity-60' : ''} ${
 			selected
-				? 'bg-bg-selected text-text-primary border-l-accent'
+				? quiet
+					? 'bg-bg-selected/40 text-text-primary border-l-accent/50'
+					: 'bg-bg-selected text-text-primary border-l-accent'
 				: `text-text-secondary hover:bg-bg-hover/50 ${
 						pinnedStrip ? 'border-l-accent/40' : 'border-l-transparent'
 					}`
@@ -607,9 +610,12 @@ const ProjectTree = ({
 		);
 	}
 
+	// two cursors can be lit at once, the project you selected and the
+	// github row you then arrowed to, and enter acts on the second
 	const rowProps = (project: Project) => ({
 		project,
 		selected: selected?.full_path === project.full_path,
+		quiet: repoCursor !== null,
 		rank: ranks?.get(project.full_path),
 		git: gitInfo?.get(project.full_path),
 		tech: techInfo?.get(project.full_path),
