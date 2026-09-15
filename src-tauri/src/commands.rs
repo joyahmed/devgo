@@ -379,6 +379,28 @@ pub fn detect_targets(
         .collect())
 }
 
+/// Register one detected target by id. Not by posting the target back: the
+/// TS LaunchTarget has no run templates, so a detected terminal would come
+/// back with them stripped and fail its first run_script. Re-deriving costs
+/// one where.exe spawn and cannot lose a field.
+#[tauri::command]
+pub fn add_detected_target(
+    id: String,
+    state: State<AppState>,
+) -> Result<LaunchTarget, AppError> {
+    let running = wsl::running_distros();
+    let found = editors::detect(&running)
+        .into_iter()
+        .find(|d| d.target.id == id)
+        .ok_or_else(|| AppError::TargetNotFound(id))?;
+
+    state
+        .target_store
+        .lock()
+        .map_err(lock_err)?
+        .add(found.target)
+}
+
 #[tauri::command]
 pub fn get_targets(
     state: State<AppState>,
