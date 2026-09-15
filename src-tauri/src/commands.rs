@@ -45,6 +45,7 @@ pub struct AppState {
     pub workspace_store: Mutex<WorkspaceStore>,
     pub cache_store: Mutex<ProjectCacheStore>,
     pub runtime_info: Mutex<RuntimeInfo>,
+    pub lock_path: std::path::PathBuf,
 }
 
 #[tauri::command]
@@ -205,7 +206,14 @@ pub fn open_both(
     launcher::launch_both(&project, &info)
 }
 
+/// Quit for real.
+///
+/// Closing the window only hides it — that is the point of a tray launcher — but
+/// the tray menu must not be the only way out, or the process quietly outlives
+/// every "close". This gives the window itself an exit, and releases the
+/// instance lock so the next launch starts clean.
 #[tauri::command]
-pub fn quit_app(app: tauri::AppHandle) {
+pub fn quit_app(app: tauri::AppHandle, state: State<AppState>) {
+    crate::services::single_instance::release_lock(&state.lock_path);
     app.exit(0);
 }
