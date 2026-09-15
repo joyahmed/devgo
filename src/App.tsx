@@ -9,9 +9,11 @@ import Button from './components/Button';
 import CommandPalette from './components/CommandPalette';
 import ConfirmDialog from './components/ConfirmDialog';
 import ContextMenu from './components/ContextMenu';
+import Modal from './components/Modal';
 import Onboarding from './components/Onboarding';
 import ProjectTree from './components/ProjectTree';
 import RuntimeIndicator from './components/RuntimeIndicator';
+import ScanPicker from './components/ScanPicker';
 import SearchBox from './components/SearchBox';
 import StatusBar from './components/StatusBar';
 import TitleBar from './components/TitleBar';
@@ -72,6 +74,13 @@ const AppInner = () => {
 	const targets = useTargets();
 	const { toast } = useToast();
 	const [removeIndex, setRemoveIndex] = useState<number | null>(null);
+	// the + menu, anchored under its button, and the scan picker it opens.
+	// two ways in, choose one folder or scan and tick several, and the
+	// button is the door to both rather than a button per way
+	const [addMenu, setAddMenu] = useState<{ x: number; y: number } | null>(
+		null
+	);
+	const [scanOpen, setScanOpen] = useState(false);
 
 	// Read once, on mount. The literal is only what the Shortcuts panel shows
 	// for the frame before the command answers; prefs.json is the value.
@@ -626,8 +635,11 @@ const AppInner = () => {
 					<Button
 						variant='ghost'
 						className='w-7 h-7'
-						onClick={pickWorkspaceFolder}
-						title={`Add workspace (${prettyKeys(shortcutFor('addWorkspace'))})`}
+						onClick={e => {
+							const r = e.currentTarget.getBoundingClientRect();
+							setAddMenu({ x: r.left, y: r.bottom + 4 });
+						}}
+						title='Add workspace'
 					>
 						+
 					</Button>
@@ -727,6 +739,45 @@ const AppInner = () => {
 					}}
 				/>
 			)}
+
+			{addMenu && (
+				<ContextMenu
+					{...{
+						x: addMenu.x,
+						y: addMenu.y,
+						items: [
+							{
+								label: 'Choose a folder…',
+								hint: prettyKeys(shortcutFor('addWorkspace')),
+								onClick: pickWorkspaceFolder
+							},
+							{ label: 'Scan for folders…', onClick: () => setScanOpen(true) }
+						],
+						onClose: () => setAddMenu(null)
+					}}
+				/>
+			)}
+
+			{/* discovery used to live only on the empty screen, so from the
+			    first workspace on the scan was unreachable. the same picker
+			    as Onboarding; the modal is the only difference */}
+			<Modal
+				{...{
+					open: scanOpen,
+					title: 'Scan for folders',
+					onClose: () => setScanOpen(false),
+					width: 'w-[min(640px,92vw)]'
+				}}
+			>
+				<ScanPicker
+					{...{
+						existing: workspaces,
+						onAddMany: handleAddMany,
+						onError: (m: string) => toast(m, 'error'),
+						onDone: () => setScanOpen(false)
+					}}
+				/>
+			</Modal>
 
 			<ConfirmDialog
 				{...{
