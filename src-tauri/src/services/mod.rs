@@ -4,6 +4,7 @@ pub mod discover;
 pub mod editors;
 pub mod frecency;
 pub mod git;
+pub mod github;
 pub mod launcher;
 pub mod platform;
 pub mod preferences;
