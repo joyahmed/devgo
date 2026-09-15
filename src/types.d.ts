@@ -71,6 +71,18 @@ interface ProjectTech {
 	has_deps: boolean;
 }
 
+/// a suggested workspace root for an empty first run
+interface DiscoveredRoot {
+	path: string;
+	label: string;
+	kind: 'windows' | 'wsl';
+}
+
+/// bare folder names the scan skips, on top of dotfolders
+interface ScanConfig {
+	ignore: string[];
+}
+
 interface LastProject {
 	full_path: string;
 	workspace: string;
@@ -172,6 +184,17 @@ interface TitleBarButtonProps {
 	className?: string;
 	onClick: () => void;
 	children: React.ReactNode;
+}
+
+interface OnboardingProps {
+	onAdd: (path: string) => void;
+	onAddMany: (paths: string[]) => void;
+	onError: (message: string) => void;
+}
+
+interface ScanningPanelProps {
+	onSaved: () => void;
+	onError: (message: string) => void;
 }
 
 interface WorkspaceManagerProps {
