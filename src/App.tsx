@@ -6,6 +6,7 @@ import ActionButtons from './components/ActionButtons';
 import CommandPalette from './components/CommandPalette';
 import ConfirmDialog from './components/ConfirmDialog';
 import ContextMenu from './components/ContextMenu';
+import Onboarding from './components/Onboarding';
 import ProjectTree from './components/ProjectTree';
 import RuntimeIndicator from './components/RuntimeIndicator';
 import SearchBox from './components/SearchBox';
@@ -139,6 +140,16 @@ const AppInner = () => {
 			toast(showError(e));
 		}
 		refreshWorkspaces();
+	};
+
+	const handleAddMany = async (paths: string[]) => {
+		try {
+			await invoke('add_workspace_folders', { paths });
+		} catch (e) {
+			toast(showError(e));
+		}
+		refreshWorkspaces();
+		refresh();
 	};
 
 	const handleRemove = async (index: number) => {
@@ -529,51 +540,63 @@ const AppInner = () => {
 			/>
 
 			<div className='flex-1 flex flex-col p-5 gap-4 overflow-hidden'>
-				<SearchBox
-					{...{
-						ref: searchRef,
-						value: query,
-						onChange: setQuery,
-						onEnter: handleSearchEnter,
-						onArrow: handleArrow,
-						sortMode,
-						onToggleSort: toggleSort,
-						enterHint:
-							selected || filtered.length > 0 ? '⏎ Enter' : undefined
-					}}
-				/>
-				<ProjectTree
-					{...{
-						ref: treeRef,
-						projects: filtered,
-						selected,
-						onSelect: handleSelect,
-						onDoubleClick: handleLaunch,
-						onLaunch: handleLaunch,
-						query,
-						loading,
-						workspaceStates,
-						ranks,
-						gitInfo: git,
-						techInfo: tech,
-						pinnedProjects,
-						onTogglePin: handleTogglePin,
-						onOpenRemote: handleOpenRemote,
-						onContextMenu: (p: Project, x: number, y: number) =>
-							setMenu({ project: p, x, y })
-					}}
-				/>
-				<ActionButtons
-					{...{
-						hasSelection: selected !== null,
-						onAddWorkspace: () => openSettings('workspaces'),
-						onRemoveWorkspace: handleRemoveShortcut,
-						onEditor: handleOpenEditor,
-						onTerminal: handleOpenTerminal,
-						onBoth: handleOpenBoth,
-						onRefresh: handleRefresh
-					}}
-				/>
+				{workspaces.length === 0 && !loading ? (
+					<Onboarding
+						{...{
+							onAdd: handleAddWorkspace,
+							onAddMany: handleAddMany,
+							onError: (m: string) => toast(m, 'error')
+						}}
+					/>
+				) : (
+					<>
+						<SearchBox
+							{...{
+								ref: searchRef,
+								value: query,
+								onChange: setQuery,
+								onEnter: handleSearchEnter,
+								onArrow: handleArrow,
+								sortMode,
+								onToggleSort: toggleSort,
+								enterHint:
+									selected || filtered.length > 0 ? '⏎ Enter' : undefined
+							}}
+						/>
+						<ProjectTree
+							{...{
+								ref: treeRef,
+								projects: filtered,
+								selected,
+								onSelect: handleSelect,
+								onDoubleClick: handleLaunch,
+								onLaunch: handleLaunch,
+								query,
+								loading,
+								workspaceStates,
+								ranks,
+								gitInfo: git,
+								techInfo: tech,
+								pinnedProjects,
+								onTogglePin: handleTogglePin,
+								onOpenRemote: handleOpenRemote,
+								onContextMenu: (p: Project, x: number, y: number) =>
+									setMenu({ project: p, x, y })
+							}}
+						/>
+						<ActionButtons
+							{...{
+								hasSelection: selected !== null,
+								onAddWorkspace: () => openSettings('workspaces'),
+								onRemoveWorkspace: handleRemoveShortcut,
+								onEditor: handleOpenEditor,
+								onTerminal: handleOpenTerminal,
+								onBoth: handleOpenBoth,
+								onRefresh: handleRefresh
+							}}
+						/>
+					</>
+				)}
 			</div>
 
 			<StatusBar {...{ onOpenPalette: () => setPaletteOpen(true) }} />
