@@ -1027,6 +1027,34 @@ pub fn set_github_orgs(
         .map_err(AppError::Lock)
 }
 
+/// Add one repository to the group by name: any owner, no clone.
+///
+/// gh repo view is one network call, about 0.6 s. An async command runs
+/// off the main thread, and spawn_blocking keeps the call off the async
+/// runtime's workers too; the store is locked only after gh has answered.
+#[tauri::command]
+pub async fn add_github_repo(
+    spec: String,
+    state: State<'_, AppState>,
+) -> Result<github::Repo, AppError> {
+    let full_name = github::parse_spec(&spec).ok_or_else(|| {
+        AppError::GhUnavailable(format!(
+            "{spec:?} is not owner/name or a GitHub url"
+        ))
+    })?;
+    let repo = tauri::async_runtime::spawn_blocking(move || {
+        github::view_repo(&full_name)
+    })
+    .await
+    .map_err(|e| AppError::Lock(e.to_string()))??;
+    state
+        .github_store
+        .lock()
+        .map_err(lock_err)?
+        .add(repo.clone())?;
+    Ok(repo)
+}
+
 /// What clone_repo answers before the clone has started.
 #[derive(Serialize)]
 pub struct CloneStarted {
