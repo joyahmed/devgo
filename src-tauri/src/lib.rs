@@ -2,6 +2,7 @@ mod commands;
 mod error;
 mod models;
 mod services;
+mod summon;
 
 use commands::AppState;
 use services::platform::detection;
@@ -17,6 +18,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .setup(move |app| {
             let app_data_dir = app
                 .path()
@@ -79,6 +81,20 @@ pub fn run() {
                 lock_path: lock_path.clone(),
             });
 
+            // A hotkey another app already owns must not stop DevGo from
+            // starting — log it and carry on; the tray and window still work.
+            let hotkey = app
+                .state::<AppState>()
+                .pref_store
+                .lock()
+                .map(|p| p.summon_hotkey())
+                .unwrap_or_else(|_| {
+                    services::preferences::DEFAULT_SUMMON_HOTKEY.to_string()
+                });
+            if let Err(e) = summon::register(&app.handle().clone(), &hotkey) {
+                eprintln!("[DevGo] summon hotkey '{hotkey}' unavailable: {e}");
+            }
+
             let show_item =
                 MenuItemBuilder::with_id("show", "Show").build(app)?;
             let quit_item =
@@ -137,6 +153,7 @@ pub fn run() {
             commands::get_projects,
             commands::refresh_projects,
             commands::quit_app,
+            commands::toggle_pin,
             commands::get_runtime_info,
             commands::open_vscode,
             commands::open_terminal,
