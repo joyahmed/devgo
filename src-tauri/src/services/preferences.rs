@@ -53,16 +53,25 @@ fn default_ignore() -> Vec<String> {
         .collect()
 }
 
+fn default_depth() -> usize {
+    1
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScanConfig {
     #[serde(default = "default_ignore")]
     pub ignore: Vec<String>,
+    /// 1 is the one-level scan: every immediate child is a project. Above
+    /// 1, nested folders that carry a marker are projects too.
+    #[serde(default = "default_depth")]
+    pub depth: usize,
 }
 
 impl Default for ScanConfig {
     fn default() -> Self {
         Self {
             ignore: default_ignore(),
+            depth: default_depth(),
         }
     }
 }
