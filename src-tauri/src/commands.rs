@@ -186,9 +186,13 @@ fn collect_projects(
 
     let mut prefs = state.pref_store.lock().map_err(lock_err)?;
 
-    // Only prune history against workspaces we actually read this pass. Pruning
-    // against the merged list would let a stopped distro or a detached drive
-    // erase the launch history of every project it holds.
+    // prune only under workspaces read live this pass; a stopped distro or a
+    // detached drive keeps its history
+    let live_roots: Vec<String> = states
+        .iter()
+        .filter(|s| matches!(s.status, WorkspaceStatus::Live))
+        .map(|s| s.workspace.clone())
+        .collect();
     let live: Vec<String> = states
         .iter()
         .filter(|s| matches!(s.status, WorkspaceStatus::Live))
@@ -199,9 +203,9 @@ fn collect_projects(
                 .map(|p| p.full_path.clone())
         })
         .collect();
-    if !live.is_empty() {
-        prefs.retain_known(&live).map_err(AppError::Lock)?;
-    }
+    prefs
+        .retain_known(&live, &live_roots)
+        .map_err(AppError::Lock)?;
 
     let stats = prefs.project_stats();
     let pinned = prefs.pinned();

@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -159,21 +159,31 @@ impl PreferencesStore {
         Ok(pinned)
     }
 
-    /// Drop stats and pins for projects that no longer exist, so a renamed or
-    /// deleted folder doesn't keep a phantom entry forever. Only ever called
-    /// with a *live* scan result — never with a cached or unavailable one, or a
-    /// detached drive would erase its own history.
+    /// Drop stats and pins for projects gone from a workspace read live this
+    /// pass. Anything under a workspace served from cache or unavailable is
+    /// kept: a stopped distro must not erase its own history.
     pub fn retain_known(
         &mut self,
         live_paths: &[String],
+        live_roots: &[String],
     ) -> Result<(), String> {
+        // slash-normalise so a root prefix-matches its projects on both sides
+        let norm =
+            |s: &str| s.replace('\\', "/").trim_end_matches('/').to_string();
+        let roots: Vec<String> = live_roots.iter().map(|r| norm(r)).collect();
+        let known: HashSet<String> =
+            live_paths.iter().map(|p| norm(p)).collect();
+        let keep = |path: &str| {
+            let p = norm(path);
+            known.contains(&p)
+                || !roots
+                    .iter()
+                    .any(|r| p == *r || p.starts_with(&format!("{r}/")))
+        };
+
         let before = (self.prefs.project_stats.len(), self.prefs.pinned.len());
-        self.prefs
-            .project_stats
-            .retain(|path, _| live_paths.iter().any(|p| p == path));
-        self.prefs
-            .pinned
-            .retain(|path| live_paths.iter().any(|p| p == path));
+        self.prefs.project_stats.retain(|path, _| keep(path));
+        self.prefs.pinned.retain(|path| keep(path));
         if before != (self.prefs.project_stats.len(), self.prefs.pinned.len()) {
             self.save()?;
         }
@@ -282,18 +292,35 @@ mod tests {
     #[test]
     fn retain_known_prunes_vanished_projects() {
         let mut s = store("retain");
-        s.record_launch(r"G:\gone").unwrap();
-        s.record_launch(r"G:\here").unwrap();
-        s.toggle_pin(r"G:\gone").unwrap();
+        s.record_launch(r"G:\ws\gone").unwrap();
+        s.record_launch(r"G:\ws\here").unwrap();
+        s.toggle_pin(r"G:\ws\gone").unwrap();
 
-        s.retain_known(&[r"G:\here".to_string()]).unwrap();
+        s.retain_known(&[r"G:\ws\here".to_string()], &[r"G:\ws".to_string()])
+            .unwrap();
 
-        assert!(!s.project_stats().contains_key(r"G:\gone"));
-        assert!(s.project_stats().contains_key(r"G:\here"));
+        assert!(!s.project_stats().contains_key(r"G:\ws\gone"));
+        assert!(s.project_stats().contains_key(r"G:\ws\here"));
         assert!(
             s.pinned().is_empty(),
             "pin for a vanished project is dropped"
         );
+    }
+
+    #[test]
+    fn retain_known_keeps_workspaces_not_read_live() {
+        let mut s = store("retain-cached");
+        let wsl = r"\\wsl.localhost\Ubuntu\home\joy\projects\api";
+        s.record_launch(wsl).unwrap();
+        s.toggle_pin(wsl).unwrap();
+        s.record_launch(r"G:\ws\here").unwrap();
+
+        // the distro is stopped: only G:\ws was read this pass
+        s.retain_known(&[r"G:\ws\here".to_string()], &[r"G:\ws".to_string()])
+            .unwrap();
+
+        assert!(s.project_stats().contains_key(wsl), "history survives");
+        assert_eq!(s.pinned(), vec![wsl.to_string()], "pin survives");
     }
 
     /// The hotkey is read through a getter that falls back to the default, so
