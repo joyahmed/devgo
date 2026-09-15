@@ -160,6 +160,10 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
 	ref?: React.Ref<HTMLButtonElement>;
 }
 
+interface StatusBarProps {
+	onOpenPalette: () => void;
+}
+
 interface TitleBarProps {
 	children?: React.ReactNode;
 }

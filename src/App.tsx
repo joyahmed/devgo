@@ -9,6 +9,7 @@ import ContextMenu from './components/ContextMenu';
 import ProjectTree from './components/ProjectTree';
 import RuntimeIndicator from './components/RuntimeIndicator';
 import SearchBox from './components/SearchBox';
+import StatusBar from './components/StatusBar';
 import TitleBar from './components/TitleBar';
 import WslControl from './components/WslControl';
 import ToastProvider, { useToast } from './components/Toast';
@@ -562,6 +563,8 @@ const AppInner = () => {
 					}}
 				/>
 			</div>
+
+			<StatusBar {...{ onOpenPalette: () => setPaletteOpen(true) }} />
 		</div>
 	);
 };
