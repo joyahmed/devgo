@@ -12,13 +12,6 @@ interface Project {
 	file_system: string;
 }
 
-interface RuntimeInfo {
-	runtime: 'windows' | 'wsl';
-	wsl_available: boolean;
-	distros: string[];
-	default_distro: string | null;
-}
-
 type WorkspaceStatus = 'live' | 'cached' | 'unavailable';
 
 /// Why a workspace could not be read. "distro_stopped" is not a failure — it
@@ -692,10 +685,6 @@ interface SearchBoxProps {
 	lane?: SearchLane;
 	className?: string;
 	ref?: React.Ref<HTMLInputElement>;
-}
-
-interface RuntimeIndicatorProps {
-	runtime: RuntimeInfo['runtime'];
 }
 
 interface ProjectTreeHandle {

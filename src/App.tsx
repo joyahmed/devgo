@@ -14,7 +14,6 @@ import Modal from './components/Modal';
 import NameDialog from './components/NameDialog';
 import Onboarding from './components/Onboarding';
 import ProjectTree from './components/ProjectTree';
-import RuntimeIndicator from './components/RuntimeIndicator';
 import ScanPicker from './components/ScanPicker';
 import SearchBox from './components/SearchBox';
 import StatusBar from './components/StatusBar';
@@ -26,7 +25,6 @@ import { useGithub } from './hooks/useGithub';
 import { useLaunchActions } from './hooks/useLaunchActions';
 import { useMaximized } from './hooks/useMaximized';
 import { useProjects } from './hooks/useProjects';
-import { useRuntime } from './hooks/useRuntime';
 import { useTargets } from './hooks/useTargets';
 import { useWorkspaces } from './hooks/useWorkspaces';
 import { lastSegment } from './paths';
@@ -74,7 +72,6 @@ const SORT_MODES: { mode: SortMode; label: string }[] = [
 ];
 
 const AppInner = () => {
-	const runtime = useRuntime();
 	const maximized = useMaximized();
 	const {
 		workspaces,
@@ -935,7 +932,9 @@ const AppInner = () => {
 							onResult: toast
 						}}
 					/>
-					<RuntimeIndicator runtime={runtime?.runtime ?? 'windows'} />
+					{/* the wsl chip stays up here, not in the row: it has to work
+					    when the table shows no wsl workspace, which is exactly when a
+					    distro wedges */}
 					<Button
 						variant='ghost'
 						onClick={() => openSettings()}

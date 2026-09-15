@@ -12,11 +12,9 @@ const TitleBar = ({ children }: TitleBarProps) => (
 			<span className='text-lg text-accent pointer-events-none'>
 				&#10022;
 			</span>
+			{/* no tagline: a title bar is not a place for a subtitle */}
 			<span className='text-base font-bold text-text-primary pointer-events-none'>
 				DevGo
-			</span>
-			<span className='text-xs text-text-secondary ml-1 pointer-events-none'>
-				Developer Workspace Launcher
 			</span>
 		</div>
 		<div className='flex items-center gap-1 shrink-0'>
