@@ -659,7 +659,9 @@ const AppInner = () => {
 				}}
 			/>
 
-			<div className='flex-1 flex flex-col p-5 gap-4 overflow-hidden'>
+			{/* one cap for the search box, the action row and the rows, instead of
+			    a width rule each */}
+			<div className='flex-1 flex flex-col w-full max-w-[1400px] mx-auto p-5 gap-4 overflow-hidden'>
 				{workspaces.length === 0 && !loading ? (
 					<Onboarding
 						{...{

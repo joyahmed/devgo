@@ -6,7 +6,7 @@ import Button from './Button';
 // The last column carries a workspace's count or a row's meta — badges, branch,
 // hint, star — so it is sized for the meta and the count right-aligns in it.
 const col =
-	'grid grid-cols-[1fr_1fr_80px_minmax(150px,0.9fr)] items-center gap-x-3 text-sm';
+	'grid grid-cols-[1fr_1fr_minmax(80px,0.4fr)_minmax(150px,0.9fr)] items-center gap-x-3 text-sm';
 
 const COLUMNS = [
 	{ label: 'Workspace', className: '' },
