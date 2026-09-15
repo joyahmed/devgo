@@ -611,11 +611,16 @@ const ProjectTree = ({
 	}
 
 	// two cursors can be lit at once, the project you selected and the
-	// github row you then arrowed to, and enter acts on the second
+	// github row you then arrowed to, and enter acts on the second. a
+	// cursor whose row has left the list (the box was cleared) lights
+	// nothing, so it dims nothing
+	const cursorLit = rows.some(
+		r => r.kind === 'repo' && r.repo.full_name === repoCursor
+	);
 	const rowProps = (project: Project) => ({
 		project,
 		selected: selected?.full_path === project.full_path,
-		quiet: repoCursor !== null,
+		quiet: cursorLit,
 		rank: ranks?.get(project.full_path),
 		git: gitInfo?.get(project.full_path),
 		tech: techInfo?.get(project.full_path),
