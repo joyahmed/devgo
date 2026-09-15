@@ -7,6 +7,7 @@ use crate::models::Project;
 use crate::services::launcher;
 use crate::services::platform::{wsl, RuntimeInfo};
 use crate::services::scanner::{ScanOutcome, UnavailableReason};
+use crate::services::PreferencesStore;
 use crate::services::ProjectCacheStore;
 use crate::services::WorkspaceStore;
 
@@ -43,6 +44,7 @@ pub struct ProjectsPayload {
 
 pub struct AppState {
     pub workspace_store: Mutex<WorkspaceStore>,
+    pub pref_store: Mutex<PreferencesStore>,
     pub cache_store: Mutex<ProjectCacheStore>,
     pub runtime_info: Mutex<RuntimeInfo>,
     pub lock_path: std::path::PathBuf,
@@ -167,7 +169,13 @@ pub fn refresh_projects(
 ) -> Result<ProjectsPayload, AppError> {
     if force {
         let fresh = crate::services::platform::detection::detect_runtime();
-        *state.runtime_info.lock().map_err(lock_err)? = fresh;
+        *state.runtime_info.lock().map_err(lock_err)? = fresh.clone();
+        state
+            .pref_store
+            .lock()
+            .map_err(lock_err)?
+            .set_cached_runtime(fresh)
+            .map_err(AppError::Lock)?;
     }
     collect_projects(&state, force)
 }
@@ -216,4 +224,30 @@ pub fn open_both(
 pub fn quit_app(app: tauri::AppHandle, state: State<AppState>) {
     crate::services::single_instance::release_lock(&state.lock_path);
     app.exit(0);
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct LastProject {
+    pub full_path: String,
+    pub workspace: String,
+}
+
+#[tauri::command]
+pub fn get_last_project(
+    state: State<AppState>,
+) -> Result<Option<LastProject>, String> {
+    let prefs = state.pref_store.lock().map_err(|e| e.to_string())?;
+    Ok(prefs.get_last_project().map(|(path, ws)| LastProject {
+        full_path: path.to_string(),
+        workspace: ws.to_string(),
+    }))
+}
+
+#[tauri::command]
+pub fn set_last_project(
+    state: State<AppState>,
+    project: LastProject,
+) -> Result<(), String> {
+    let mut prefs = state.pref_store.lock().map_err(|e| e.to_string())?;
+    prefs.set_last_project(project.full_path, project.workspace)
 }
