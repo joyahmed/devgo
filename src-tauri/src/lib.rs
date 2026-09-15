@@ -15,6 +15,41 @@ use tauri::tray::{
 };
 use tauri::Manager;
 
+/// The taskbar button's identity and icon, which tauri leaves half done.
+/// The nsis installer stamps the shortcuts with the bundle identifier as
+/// their AppUserModelID, but nothing sets it on the process, so a pinned
+/// DevGo and a running DevGo are two buttons. Raw imports rather than the
+/// windows crate: it is in the tree through tauri, not a dependency of
+/// ours, and a handful of functions do not earn one.
+#[cfg(windows)]
+mod win_taskbar {
+    #[link(name = "shell32")]
+    unsafe extern "system" {
+        fn SetCurrentProcessExplicitAppUserModelID(app_id: *const u16) -> i32;
+    }
+
+    fn wide(s: &str) -> Vec<u16> {
+        s.encode_utf16().chain(std::iter::once(0)).collect()
+    }
+
+    /// Before the first window exists: the taskbar reads the id at window
+    /// creation, so this is the first thing run() does.
+    pub fn set_app_user_model_id(id: &str) {
+        let id = wide(id);
+        // a failure costs grouping, not the app; nothing to do at runtime
+        let hr =
+            unsafe { SetCurrentProcessExplicitAppUserModelID(id.as_ptr()) };
+        if hr < 0 {
+            eprintln!("[DevGo] SetCurrentProcessExplicitAppUserModelID failed: 0x{hr:08x}");
+        }
+    }
+}
+
+#[cfg(not(windows))]
+mod win_taskbar {
+    pub fn set_app_user_model_id(_id: &str) {}
+}
+
 // only the restored rect is stored: maximized, the window is the screen,
 // and saving that hands the restore button a screen-sized window
 fn remember_geometry(window: &tauri::Window) {
@@ -80,6 +115,11 @@ fn monitor_rects(monitors: &[tauri::Monitor]) -> Vec<MonitorRect> {
 }
 
 pub fn run() {
+    let context: tauri::Context<tauri::Wry> = tauri::generate_context!();
+
+    // before the builder: the main window is created inside run
+    win_taskbar::set_app_user_model_id(&context.config().identifier);
+
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
@@ -288,6 +328,6 @@ pub fn run() {
             commands::get_last_project,
             commands::set_last_project,
         ])
-        .run(tauri::generate_context!())
+        .run(context)
         .expect("error while running tauri application");
 }
