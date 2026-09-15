@@ -327,6 +327,29 @@ interface TmuxPanelProps {
 	onError: (message: string) => void;
 }
 
+interface GithubLaneProps {
+	github: GithubState;
+	query: string;
+	/// the keyboard/click cursor, by full_name. beside the project
+	/// selection, not instead of it
+	cursor: string | null;
+	onSelect: (repo: GithubRepo) => void;
+	onOpen: (repo: GithubRepo) => void;
+	onContextMenu: (repo: GithubRepo, x: number, y: number) => void;
+	/// a row cloned here can jump to its disk row
+	onShowLocal: (path: string) => void;
+}
+
+interface RepoRowProps {
+	repo: GithubRepo;
+	isCursor: boolean;
+	localPath?: string;
+	onSelect: (repo: GithubRepo) => void;
+	onOpen: (repo: GithubRepo) => void;
+	onContextMenu: (repo: GithubRepo, x: number, y: number) => void;
+	onShowLocal: (path: string) => void;
+}
+
 interface ConfigPanelProps {
 	/// an import or a cache reset changed what the launcher should show
 	onChanged: () => void;
