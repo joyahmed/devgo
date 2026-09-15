@@ -1,9 +1,9 @@
 use tauri::menu::{Menu, MenuBuilder, MenuItemBuilder};
 use tauri::{AppHandle, Manager, Wry};
 
-use crate::commands::AppState;
+use crate::commands::{launch_project_default, AppState};
 use crate::models::Project;
-use crate::services::{frecency, preferences};
+use crate::services::{frecency, preferences, single_instance};
 
 pub const TRAY_ID: &str = "main";
 const MAX_RECENTS: usize = 7;
@@ -82,4 +82,47 @@ pub fn refresh(app: &AppHandle) {
             }
         }
     });
+}
+
+fn show_window(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+}
+
+// a click is an ask: booting a stopped distro here is fine
+fn launch(app: &AppHandle, project: &Project) {
+    let state = app.state::<AppState>();
+    let _ = launch_project_default(&state, project);
+    refresh(app);
+}
+
+pub fn handle_event(app: &AppHandle, id: &str) {
+    match id {
+        "show" => show_window(app),
+        "quit" => {
+            let state = app.state::<AppState>();
+            single_instance::release_lock(&state.lock_path);
+            app.exit(0);
+        }
+        "openlast" => {
+            if let Some(project) = last_project(&app.state::<AppState>()) {
+                launch(app, &project);
+            }
+        }
+        id if id.starts_with(LAUNCH_PREFIX) => {
+            let path = &id[LAUNCH_PREFIX.len()..];
+            let project = app
+                .state::<AppState>()
+                .cache_store
+                .lock()
+                .ok()
+                .and_then(|c| c.find(path));
+            if let Some(project) = project {
+                launch(app, &project);
+            }
+        }
+        _ => {}
+    }
 }

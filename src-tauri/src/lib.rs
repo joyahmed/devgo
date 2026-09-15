@@ -82,7 +82,7 @@ pub fn run() {
                 cache_store: std::sync::Mutex::new(cache_store),
                 target_store: std::sync::Mutex::new(target_store),
                 runtime_info: std::sync::Mutex::new(runtime_info),
-                lock_path: lock_path.clone(),
+                lock_path,
                 git_cache: std::sync::Mutex::new(
                     std::collections::HashMap::new(),
                 ),
@@ -112,18 +112,8 @@ pub fn run() {
                 .icon(app.default_window_icon().unwrap().clone())
                 .menu(&menu)
                 .show_menu_on_left_click(false)
-                .on_menu_event(move |app, event| match event.id.as_ref() {
-                    "show" => {
-                        if let Some(window) = app.get_webview_window("main") {
-                            let _ = window.show();
-                            let _ = window.set_focus();
-                        }
-                    }
-                    "quit" => {
-                        single_instance::release_lock(&lock_path);
-                        app.exit(0);
-                    }
-                    _ => {}
+                .on_menu_event(|app, event| {
+                    tray::handle_event(app, event.id.as_ref())
                 })
                 .on_tray_icon_event(|tray, event| {
                     if let TrayIconEvent::Click {
