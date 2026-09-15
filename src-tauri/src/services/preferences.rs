@@ -168,6 +168,13 @@ pub struct Preferences {
     /// maximized. `serde(default)` keeps an older prefs.json out of `.bak`.
     #[serde(default)]
     pub window_state: Option<WindowState>,
+    /// Which GitHub organisations the lane lists beside the user's own
+    /// repos. None, the default and every prefs.json from before this
+    /// field, means every org gh finds; Some(list) is a choice made in
+    /// Settings, kept even when empty. `serde(default)` for the same
+    /// reason as every field above it.
+    #[serde(default)]
+    pub github_orgs: Option<Vec<String>>,
 }
 
 // bare names, not globs: a cheap comparison on the listing the scan already has
@@ -384,6 +391,18 @@ impl PreferencesStore {
         }
         config.window_names = seen;
         self.prefs.tmux_config = config;
+        self.save()
+    }
+
+    pub fn github_orgs(&self) -> Option<Vec<String>> {
+        self.prefs.github_orgs.clone()
+    }
+
+    pub fn set_github_orgs(
+        &mut self,
+        orgs: Option<Vec<String>>,
+    ) -> Result<(), String> {
+        self.prefs.github_orgs = orgs;
         self.save()
     }
 
