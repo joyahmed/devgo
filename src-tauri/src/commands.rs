@@ -844,19 +844,26 @@ pub fn get_remote_branches(
     Ok(branches)
 }
 
-/// Open a project's remote in the browser.
+/// Open a project's remote in the browser: the repo root, or one branch
+/// of it. The url is built here from the cached remote and branch_url, so
+/// the frontend never assembles a url out of strings the user can see.
 #[tauri::command]
 pub fn open_remote(
     full_path: String,
+    branch: Option<String>,
     state: State<AppState>,
 ) -> Result<(), AppError> {
-    let url = state
+    let root = state
         .git_cache
         .lock()
         .map_err(lock_err)?
         .get(&full_path)
         .and_then(|i| i.remote.clone())
         .ok_or_else(|| AppError::NoRemote(full_path))?;
+    let url = match branch.as_deref().map(str::trim).filter(|b| !b.is_empty()) {
+        Some(b) => git::branch_url(&root, b),
+        None => root,
+    };
 
     // `start` is a cmd builtin, so it needs a shell. The empty "" is the window
     // title argument, which start would otherwise steal the URL for.
