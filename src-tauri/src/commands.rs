@@ -8,6 +8,7 @@ use crate::error::AppError;
 use crate::models::target::{LaunchTarget, TargetKind};
 use crate::models::Project;
 use crate::services::detect::{self, ProjectTech};
+use crate::services::editors::{self, DetectedTarget};
 use crate::services::frecency;
 use crate::services::git;
 use crate::services::launcher;
@@ -350,6 +351,32 @@ pub fn open_both(
     state: State<AppState>,
 ) -> Result<(), AppError> {
     launch_project_default(&state, &project)
+}
+
+/// Editors and terminals installed but not yet registered. This is the
+/// command that makes detection mean anything on a machine that has run
+/// DevGo before: `defaults()` is written only when targets.json does not
+/// exist, so candidates added there would ship as a no-op. It proposes; it
+/// never writes.
+#[tauri::command]
+pub fn detect_targets(
+    state: State<AppState>,
+) -> Result<Vec<DetectedTarget>, AppError> {
+    // only distros already running are asked; detection never boots a vm
+    let running = wsl::running_distros();
+    let existing: Vec<String> = state
+        .target_store
+        .lock()
+        .map_err(lock_err)?
+        .list()
+        .into_iter()
+        .map(|t| t.id)
+        .collect();
+
+    Ok(editors::detect(&running)
+        .into_iter()
+        .filter(|d| !existing.contains(&d.target.id))
+        .collect())
 }
 
 #[tauri::command]
