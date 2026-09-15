@@ -480,15 +480,24 @@ const ProjectTree = ({
 								</div>
 							</div>
 
-							{isOpen &&
-								wsProjects
-									.filter(p => !pinnedPaths.has(p.full_path))
-									.map(project => (
-										<ProjectRow
-											key={project.full_path}
-											{...{ ...rowProps(project), stale: isStale }}
-										/>
-									))}
+							{/* 0fr to 1fr animates height with nothing measured; the rows stay
+							    mounted and clipped, and `visible` already skips them for the
+							    keyboard */}
+							<div
+								className='grid transition-[grid-template-rows] duration-150 ease-out'
+								style={{ gridTemplateRows: isOpen ? '1fr' : '0fr' }}
+							>
+								<div className='overflow-hidden'>
+									{wsProjects
+										.filter(p => !pinnedPaths.has(p.full_path))
+										.map(project => (
+											<ProjectRow
+												key={project.full_path}
+												{...{ ...rowProps(project), stale: isStale }}
+											/>
+										))}
+								</div>
+							</div>
 						</div>
 					);
 				})}
