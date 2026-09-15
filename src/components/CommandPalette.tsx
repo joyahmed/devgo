@@ -62,8 +62,7 @@ const CommandPalette = ({ commands, onClose }: CommandPaletteProps) => {
 	const keys: Record<string, () => void> = {
 		ArrowDown: () => setActive(i => Math.min(i + 1, list.length - 1)),
 		ArrowUp: () => setActive(i => Math.max(i - 1, 0)),
-		Enter: () => run(list[active]),
-		Escape: onClose
+		Enter: () => run(list[active])
 	};
 
 	const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -80,15 +79,10 @@ const CommandPalette = ({ commands, onClose }: CommandPaletteProps) => {
 		return null;
 	};
 
+	// content only: app mounts this inside a top drawer, which owns the
+	// surface, the slide, the backdrop and the escape key
 	return (
-		<div
-			className='fixed inset-0 bg-black/60 flex items-start justify-center z-50 pt-[12vh]'
-			onClick={onClose}
-		>
-			<div
-				className='w-[min(780px,92vw)] max-h-[70vh] flex flex-col bg-bg-secondary border border-border rounded-panel shadow-surface overflow-hidden'
-				onClick={e => e.stopPropagation()}
-			>
+		<>
 				<input
 					autoFocus
 					className='w-full px-4 py-3 bg-transparent outline-none text-15 text-text-primary placeholder:text-text-muted border-b border-border'
@@ -102,7 +96,7 @@ const CommandPalette = ({ commands, onClose }: CommandPaletteProps) => {
 					onKeyDown={handleKeyDown}
 				/>
 
-				<div className='flex-1 overflow-y-auto py-1'>
+				<div className='flex-1 max-h-[60vh] overflow-y-auto py-1'>
 					{list.length === 0 && (
 						<div className='px-4 py-6 text-center text-15 text-text-muted'>
 							No matching commands
@@ -140,8 +134,7 @@ const CommandPalette = ({ commands, onClose }: CommandPaletteProps) => {
 						</div>
 					))}
 				</div>
-			</div>
-		</div>
+		</>
 	);
 };
 

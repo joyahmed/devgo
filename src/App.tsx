@@ -1046,14 +1046,26 @@ const AppInner = () => {
 				/>
 			</Suspense>
 
-			{paletteOpen && (
-				<CommandPalette
-					{...{
-						commands: buildCommands(),
-						onClose: () => setPaletteOpen(false)
-					}}
-				/>
-			)}
+			{/* the palette was its own overlay dropping from the top; it is the
+			    top drawer's first user, so the surface, the slide and escape are
+			    the code the confirm sheets run */}
+			<Drawer
+				{...{
+					side: 'top' as const,
+					open: paletteOpen,
+					onClose: () => setPaletteOpen(false),
+					width: 'w-[min(780px,92vw)]'
+				}}
+			>
+				{paletteOpen && (
+					<CommandPalette
+						{...{
+							commands: buildCommands(),
+							onClose: () => setPaletteOpen(false)
+						}}
+					/>
+				)}
+			</Drawer>
 
 			{menu && (
 				<ContextMenu
