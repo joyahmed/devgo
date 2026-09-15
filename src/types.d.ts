@@ -102,6 +102,55 @@ interface TmuxConfig {
 	window_names: string[];
 }
 
+/// one GitHub repository as gh repo list reported it and the cache holds
+/// it. url has the shape remote_to_url gives a project's remote, which is
+/// what makes the local match a string compare on the Rust side
+interface GithubRepo {
+	full_name: string;
+	name: string;
+	owner: string;
+	url: string;
+	/// RFC 3339 straight from gh; rendered relative by relativeTime
+	updated_at: string;
+	private: boolean;
+	archived: boolean;
+	/// null for an empty repository
+	default_branch: string | null;
+}
+
+/// installed / logged in as / neither, read without the network
+interface GhStatus {
+	installed: boolean;
+	version: string | null;
+	login: string | null;
+}
+
+interface GithubCache {
+	/// unix seconds of the last successful fetch; 0 means never
+	fetched_at: number;
+	login: string | null;
+	/// every org the last refresh found: the Settings checkboxes
+	orgs: string[];
+	repos: GithubRepo[];
+}
+
+interface GithubPayload {
+	cache: GithubCache;
+	/// older than the six-hour rule, decided in Rust
+	stale: boolean;
+	refreshing: boolean;
+	/// the user's org choice; null means every org in cache.orgs
+	orgs: string[] | null;
+	/// full_name to local project path, for rows cloned on this disk
+	local: Record<string, string>;
+}
+
+/// what the refresh thread emits when it is done
+interface GithubUpdated {
+	ok: boolean;
+	error: string | null;
+}
+
 // the --color-* names in index.css; a theme must set every one
 type ThemeKey =
 	| 'bg-primary'
