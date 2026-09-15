@@ -343,6 +343,12 @@ const TmuxPanel = ({ onError }: TmuxPanelProps) => {
 // sentences the lane header says, each with its fix, and a refresh here
 // is the same thread the header's ↻ starts. devgo holds no token; gh
 // does, which is why log out is gh auth logout and not a button
+// on or off; the same pair the tmux panel uses
+const LIVE_MODES = [
+	{ label: 'On', value: true },
+	{ label: 'Off', value: false }
+];
+
 const GithubPanel = ({ github, onError }: GithubPanelProps) => {
 	const { status, payload } = github;
 	const cache = payload?.cache;
@@ -454,6 +460,33 @@ const GithubPanel = ({ github, onError }: GithubPanelProps) => {
 					</Button>
 				)}
 				{msg && <p className='text-xs text-accent mt-2'>{msg}</p>}
+			</div>
+
+			<div>
+				<h4 className={heading}>Search all of GitHub as you type</h4>
+				<p className='text-xs text-text-muted mb-2'>
+					Off, the GitHub box matches your cached list instantly and never
+					touches the network. On, it also asks GitHub, any owner, once you
+					have typed three characters and paused for a moment; the hits appear
+					under a <em>More from GitHub</em> line. This is the one place a
+					keystroke becomes a network call, which is why it is off until you
+					turn it on.
+				</p>
+				<div className='flex items-center gap-2'>
+					{LIVE_MODES.map(m => (
+						<Button
+							key={m.label}
+							variant='target'
+							aria-current={github.liveOn === m.value ? 'true' : undefined}
+							disabled={!payload}
+							onClick={() =>
+								github.setLiveSearch(m.value).catch(e => onError(String(e)))
+							}
+						>
+							{m.label}
+						</Button>
+					))}
+				</div>
 			</div>
 
 			<div>
