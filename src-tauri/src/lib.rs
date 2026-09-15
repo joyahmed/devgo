@@ -3,12 +3,12 @@ mod error;
 mod models;
 mod services;
 mod summon;
+mod tray;
 
 use commands::AppState;
 use services::platform::detection;
 use services::single_instance;
 use services::workspace::WorkspaceStore;
-use tauri::menu::{MenuBuilder, MenuItemBuilder};
 use tauri::tray::{
     MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent,
 };
@@ -105,15 +105,10 @@ pub fn run() {
                 eprintln!("[DevGo] summon hotkey '{hotkey}' unavailable: {e}");
             }
 
-            let show_item =
-                MenuItemBuilder::with_id("show", "Show").build(app)?;
-            let quit_item =
-                MenuItemBuilder::with_id("quit", "Quit").build(app)?;
-            let menu = MenuBuilder::new(app)
-                .items(&[&show_item, &quit_item])
-                .build()?;
+            // recents come from the cache; rebuilt on every project fetch
+            let menu = tray::build_menu(app.handle())?;
 
-            let _tray = TrayIconBuilder::new()
+            let _tray = TrayIconBuilder::with_id(tray::TRAY_ID)
                 .icon(app.default_window_icon().unwrap().clone())
                 .menu(&menu)
                 .show_menu_on_left_click(false)
