@@ -40,3 +40,23 @@ pub fn normalize(path: &str) -> String {
         trimmed.to_string()
     }
 }
+
+pub fn wsl_to_windows_path(wsl_path: &str, distro: &str) -> String {
+    if let Some(rest) = wsl_path.strip_prefix("/mnt/") {
+        if !rest.is_empty() {
+            let drive = rest.chars().next().unwrap().to_uppercase().to_string();
+            let remainder = &rest[1..];
+            return format!("{}:{}", drive, remainder.replace('/', "\\"));
+        }
+    }
+
+    if wsl_path.starts_with('/') {
+        return format!(
+            "\\\\wsl.localhost\\{}{}",
+            distro,
+            wsl_path.replace('/', "\\")
+        );
+    }
+
+    wsl_path.replace('/', "\\")
+}

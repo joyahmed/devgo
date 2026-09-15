@@ -173,6 +173,7 @@ pub fn run() {
             commands::open_remote,
             commands::reveal_in_explorer,
             commands::get_wsl_path,
+            commands::discover_roots,
             commands::get_runtime_info,
             commands::open_editor,
             commands::open_terminal,

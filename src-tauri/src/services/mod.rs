@@ -1,4 +1,5 @@
 pub mod detect;
+pub mod discover;
 pub mod frecency;
 pub mod git;
 pub mod launcher;

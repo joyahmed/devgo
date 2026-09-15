@@ -444,6 +444,13 @@ pub fn get_project_tech(
     Ok(fresh)
 }
 
+/// Suggest roots for an empty first run. Never boots a distro; fired from the
+/// onboarding Scan button, never on launch.
+#[tauri::command]
+pub fn discover_roots() -> Vec<crate::services::discover::DiscoveredRoot> {
+    crate::services::discover::discover()
+}
+
 /// Open the folder in Explorer. Works for WSL projects too: the UNC path is
 /// what Explorer wants. Boots the distro, but the user asked for that.
 #[tauri::command]
