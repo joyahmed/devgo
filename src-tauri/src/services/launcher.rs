@@ -264,6 +264,83 @@ fn sh_quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', r"'\''"))
 }
 
+/// The PowerShell twin of build_tmux_script, line for line where the
+/// shells allow it. psmux speaks tmux's commands and returns tmux's exit
+/// codes, so every rule above holds here for the same reasons: reconcile
+/// per window, `=` on every target but the one being created, nothing
+/// killed or renamed. The reasons are repeated beside each line rather
+/// than pointed at, because whoever edits one script will not have the
+/// other open.
+fn build_psmux_script(
+    session: &str,
+    windows_path: &str,
+    tmux: &TmuxConfig,
+) -> String {
+    // -LiteralPath, not -Path: -Path reads [ and ] as wildcards, and
+    // api[v2] is a legal directory that then "cannot be found". first in
+    // both branches, so a detach leaves the -NoExit shell in the project
+    let path_q = ps_quote(windows_path);
+    let cd = format!("Set-Location -LiteralPath {path_q}\n");
+
+    // off is no psmux, not psmux with one window: an empty list still
+    // starts a server and leaves a session behind. the template's -NoExit
+    // is what keeps this shell open
+    if !tmux.enabled {
+        return cd;
+    }
+
+    let windows = &tmux.window_names;
+    let session_q = ps_quote(session);
+    let exact_q = ps_quote(&format!("={session}"));
+    let target_q = ps_quote(&format!("={session}:"));
+
+    let create = match windows.first() {
+        Some(first) => format!(
+            "    psmux new-session -d -s {session_q} -n {} -c {path_q}\n",
+            ps_quote(first)
+        ),
+        None => {
+            format!("    psmux new-session -d -s {session_q} -c {path_q}\n")
+        }
+    };
+
+    // -cnotcontains: the plain -notcontains is case-insensitive, so a
+    // hand-made Code satisfies the check for code and the window you
+    // configured never appears. whole-element too, so git cannot match a
+    // git-log. @( ) so one window is still an array and none is an empty
+    // one, not $null, which -cnotcontains would read as a list of one
+    let reconcile: String = windows
+        .iter()
+        .map(|name| {
+            let name_q = ps_quote(name);
+            format!(
+                "if (@(psmux list-windows -t {exact_q} -F '#W' 2>$null) -cnotcontains {name_q}) {{\n    psmux new-window -t {target_q} -n {name_q} -c {path_q}\n}}\n"
+            )
+        })
+        .collect();
+
+    // has-session answers with its exit code, and 1 is the answer we are
+    // asking for; a profile that turns the native preference on under
+    // ErrorActionPreference Stop would abort the script on it
+    format!(
+        r#"{cd}$PSNativeCommandUseErrorActionPreference = $false
+psmux has-session -t {exact_q} 2>$null
+if ($LASTEXITCODE -ne 0) {{
+{create}}}
+{reconcile}psmux attach -t {exact_q}
+"#
+    )
+}
+
+/// One single-quoted PowerShell string, for the same reason as sh_quote:
+/// in double quotes $var and $( ) expand and a `"` ends the string. Single
+/// quotes hold everything but `'`, which PowerShell escapes by doubling.
+/// A backslash needs nothing done to it, the escape character is the
+/// backtick, so G:\dev is G:\dev.
+fn ps_quote(value: &str) -> String {
+    format!("'{}'", value.replace('\'', "''"))
+}
+
 /// Open a terminal that runs a command in the project directory.
 pub fn launch_with_command(
     target: &LaunchTarget,
@@ -693,6 +770,227 @@ mod tests {
                 .unwrap_or_else(|| panic!("{name} missing or out of order"));
             cursor += at + needle.len();
         }
+    }
+
+    // psmux: each test below is the Windows twin of a tmux test above. A
+    // rule that holds for one script and silently not the other is the
+    // asymmetry this work exists to remove
+
+    #[test]
+    fn the_default_list_opens_code_agents_and_git_under_psmux_too() {
+        let shipped = TmuxConfig::default();
+        let script =
+            build_psmux_script("api-1f2e3d4c", r"G:\dev\api", &shipped);
+        assert!(
+            script.contains(
+                r"psmux new-session -d -s 'api-1f2e3d4c' -n 'code' -c 'G:\dev\api'"
+            ),
+            "the first window belongs to new-session: {script}"
+        );
+        let mut cursor = 0;
+        for name in &shipped.window_names {
+            let needle = format!(r"-n '{name}' -c 'G:\dev\api'");
+            let at = script[cursor..]
+                .find(&needle)
+                .unwrap_or_else(|| panic!("{name} missing or out of order"));
+            cursor += at + needle.len();
+        }
+    }
+
+    #[test]
+    fn a_custom_window_list_produces_exactly_those_psmux_windows_in_order() {
+        let names = ["editor", "logs", "db", "shell"];
+        let script = build_psmux_script(
+            "app-deadbeef",
+            r"G:\srv\app",
+            &tmux_with(&names),
+        );
+        assert_eq!(script.matches("psmux new-session").count(), 1);
+        // the first name is reconciled too
+        assert_eq!(script.matches("psmux new-window").count(), names.len());
+        let mut cursor = 0;
+        for name in names {
+            let needle = format!(r"-n '{name}' -c 'G:\srv\app'");
+            let at = script[cursor..]
+                .find(&needle)
+                .unwrap_or_else(|| panic!("{name} missing or out of order"));
+            cursor += at + needle.len();
+        }
+        for stale in ["code", "agents", "git"] {
+            assert!(!script.contains(stale), "the default leaked: {script}");
+        }
+    }
+
+    #[test]
+    fn an_empty_window_list_opens_one_unnamed_psmux_window() {
+        let script =
+            build_psmux_script("app-deadbeef", r"G:\srv\app", &tmux_with(&[]));
+        assert!(script.contains(
+            r"psmux new-session -d -s 'app-deadbeef' -c 'G:\srv\app'"
+        ));
+        assert!(!script.contains("-n "), "must not name a window: {script}");
+        assert!(
+            !script.contains("new-window"),
+            "nothing to reconcile: {script}"
+        );
+        assert!(script.contains("psmux attach -t '=app-deadbeef'"));
+    }
+
+    /// Probed: psmux resolves a target by prefix exactly as tmux does, and
+    /// has-session -t devgo-pro was satisfied by a running devgo-probe.
+    #[test]
+    fn every_psmux_target_is_matched_exactly_except_the_name_being_created() {
+        let script = build_psmux_script(
+            "app",
+            r"G:\srv\app",
+            &tmux_with(&["code", "agents"]),
+        );
+        assert!(script.contains("psmux has-session -t '=app'"), "{script}");
+        assert!(script.contains("psmux list-windows -t '=app'"), "{script}");
+        assert!(script.contains("psmux new-window -t '=app:'"), "{script}");
+        assert!(script.contains("psmux attach -t '=app'"), "{script}");
+        assert!(!script.contains("-s '=app"), "{script}");
+        assert_eq!(
+            script.matches(" -t ").count(),
+            script.matches(" -t '=").count(),
+            "a target without = crept in: {script}"
+        );
+    }
+
+    #[test]
+    fn psmux_reconciliation_never_kills_or_renames_a_window() {
+        let script = build_psmux_script(
+            "app-deadbeef",
+            r"G:\srv\app",
+            &tmux_with(&["code", "agents"]),
+        );
+        for destructive in [
+            "kill-window",
+            "kill-session",
+            "kill-server",
+            "rename-window",
+            "rename-session",
+            "move-window",
+            "unlink-window",
+        ] {
+            assert!(!script.contains(destructive), "{destructive}: {script}");
+        }
+    }
+
+    /// The contains checks above cannot see where a block sits; this can.
+    #[test]
+    fn the_psmux_reconcile_blocks_sit_outside_the_has_session_guard() {
+        let script = build_psmux_script(
+            "app-deadbeef",
+            r"G:\srv\app",
+            &tmux_with(&["code", "git"]),
+        );
+        let guard = script
+            .find("if ($LASTEXITCODE -ne 0) {")
+            .expect("the guard opens");
+        let guard_close =
+            guard + script[guard..].find("\n}\n").expect("the guard closes");
+        let first_reconcile =
+            script.find("psmux list-windows").expect("reconciles");
+        assert!(
+            first_reconcile > guard_close,
+            "back inside the guard: {script}"
+        );
+        assert_eq!(
+            script[..guard_close].matches("psmux new-window").count(),
+            0,
+            "{script}"
+        );
+    }
+
+    /// -notcontains is case-insensitive, so a hand-made Code satisfies the
+    /// check for code; -cnotcontains is the grep -Fx of this script, and
+    /// one easily deleted letter.
+    #[test]
+    fn a_psmux_window_name_is_compared_exactly_and_case_sensitively() {
+        let script = build_psmux_script(
+            "app-deadbeef",
+            r"G:\srv\app",
+            &tmux_with(&["code", "-log"]),
+        );
+        assert!(script.contains("-cnotcontains 'code'"), "{script}");
+        assert!(script.contains("-cnotcontains '-log'"), "{script}");
+        assert_eq!(
+            script.matches("-cnotcontains ").count(),
+            script.matches("notcontains").count(),
+            "a case-insensitive -notcontains crept back in: {script}"
+        );
+        // one window is a string and none is $null; @( ) makes both a list
+        assert_eq!(
+            script.matches("if (@(psmux list-windows").count(),
+            2,
+            "{script}"
+        );
+    }
+
+    #[test]
+    fn a_hostile_window_name_stays_one_inert_powershell_string() {
+        let hostile = r#"a"; psmux kill-server; #"#;
+        let names =
+            tmux_with(&[hostile, "$(Remove-Item -Recurse G:\\)", "it's"]);
+        let script = build_psmux_script("app-deadbeef", r"G:\srv\app", &names);
+        let quoted = format!("'{hostile}'");
+        assert_eq!(
+            script.matches("kill-server").count(),
+            script.matches(&quoted).count(),
+            "a name escaped its quotes: {script}"
+        );
+        assert_eq!(script.matches(&quoted).count(), 3, "{script}");
+        assert!(
+            script.contains("'$(Remove-Item -Recurse G:\\)'"),
+            "{script}"
+        );
+        // powershell's own escape for a quote inside single quotes: double it
+        assert!(script.contains("'it''s'"), "{script}");
+        // the bash escape would end the string and leave a stray backslash
+        assert!(!script.contains(r"'\''"), "{script}");
+        // every double quote left is one the name contained
+        assert_eq!(script.matches('"').count(), 3, "{script}");
+    }
+
+    /// Set-Location -Path 'G:\dev\api[v2]' reads the brackets as a wildcard
+    /// and fails on a directory that is right there.
+    #[test]
+    fn a_project_path_with_wildcard_characters_is_taken_literally() {
+        let on = build_psmux_script(
+            "app-deadbeef",
+            r"G:\dev\api[v2]",
+            &tmux_with(&["code"]),
+        );
+        let off = build_psmux_script(
+            "app-deadbeef",
+            r"G:\dev\api[v2]",
+            &TmuxConfig {
+                enabled: false,
+                window_names: vec![],
+            },
+        );
+        for script in [&on, &off] {
+            assert!(
+                script.contains(r"Set-Location -LiteralPath 'G:\dev\api[v2]'"),
+                "{script}"
+            );
+            assert!(!script.contains("Set-Location -Path"), "{script}");
+        }
+        assert!(on.contains(r"-c 'G:\dev\api[v2]'"), "{on}");
+    }
+
+    /// With -NoExit on the template a bare Set-Location is a shell that
+    /// stays open in the project.
+    #[test]
+    fn psmux_switched_off_opens_a_plain_shell_and_no_session() {
+        let off = TmuxConfig {
+            enabled: false,
+            window_names: vec!["code".into()],
+        };
+        let script = build_psmux_script("api-1f2e3d4c", r"G:\dev\api", &off);
+        assert!(!script.contains("psmux"), "{script}");
+        assert_eq!(script, "Set-Location -LiteralPath 'G:\\dev\\api'\n");
     }
 
     #[test]
