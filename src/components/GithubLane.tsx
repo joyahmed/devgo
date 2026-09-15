@@ -20,23 +20,6 @@ const Lock = () => (
 	</svg>
 );
 
-const Refresh = ({ spinning }: { spinning: boolean }) => (
-	<svg
-		width='13'
-		height='13'
-		viewBox='0 0 24 24'
-		fill='none'
-		stroke='currentColor'
-		strokeWidth='2'
-		strokeLinecap='round'
-		strokeLinejoin='round'
-		className={spinning ? 'animate-spin' : ''}
-	>
-		<path d='M21 12a9 9 0 1 1-2.64-6.36' />
-		<polyline points='21 3 21 9 15 9' />
-	</svg>
-);
-
 // the header's one sentence, driven by the three states of the auth
 // answer. the lane never shows an empty list that looks like "no repos":
 // each state names its fix, and Settings says the same sentence
@@ -199,7 +182,6 @@ const GithubLane = ({
 	onContextMenu,
 	onShowLocal,
 	jobs,
-	onAddMenu,
 	onGroupContextMenu
 }: GithubLaneProps) => {
 	const {
@@ -215,13 +197,11 @@ const GithubLane = ({
 		searching,
 		folded,
 		toggleGroup,
-		showRecents,
-		toggleRecents
+		showRecents
 	} = github;
 	const login = payload?.cache.login ?? status?.login ?? null;
 	const total = payload?.cache.repos.length ?? 0;
 	const local = payload?.local ?? {};
-	const canRefresh = Boolean(status?.login);
 	// the ungrouped tail: the footer line speaks for it
 	const tail = sections?.[sections.length - 1];
 	// the sections on screen: the tail only while recents is on
@@ -271,10 +251,7 @@ const GithubLane = ({
 	return (
 		<div>
 			{/* the header is the collapse handle and, on a first run, the door
-			    to the first fetch: a click, which is what explicit ask means.
-			    refresh lives here and not in the title bar: that button is the
-			    disk scan, and one button for both would make every F5 cost
-			    six seconds of gh */}
+			    to the first fetch: a click, which is what explicit ask means */}
 			<div
 				className={`${col} px-3 py-2 cursor-pointer hover:bg-bg-hover/50 select-none`}
 				onClick={toggleOpen}
@@ -299,61 +276,9 @@ const GithubLane = ({
 					)}
 				</div>
 				<div className='text-text-muted truncate'>{headerLine(github)}</div>
-				<div className='flex items-center gap-1'>
-					{/* the recents switch: a word that reads as a state, on in the
-					    accent and off in muted, like the local mark */}
-					{total > 0 && sections && (
-						<Button
-							variant='ghost'
-							className='-my-1 hover:bg-transparent'
-							title={
-								showRecents
-									? 'Hide the recently updated repos not in a group'
-									: 'Show the recently updated repos not in a group'
-							}
-							onClick={e => {
-								e.stopPropagation();
-								toggleRecents();
-							}}
-						>
-							<span
-								className={`text-11 hover:underline ${
-									showRecents ? 'text-accent' : 'text-text-muted'
-								}`}
-							>
-								recents
-							</span>
-						</Button>
-					)}
-					{onAddMenu && total > 0 && (
-						<Button
-							variant='ghost'
-							className='w-6 h-6 -my-1'
-							title='Clone repos into a workspace, or add one by name'
-							onClick={e => {
-								e.stopPropagation();
-								const r = e.currentTarget.getBoundingClientRect();
-								onAddMenu(r.left, r.bottom + 4);
-							}}
-						>
-							+
-						</Button>
-					)}
-					{canRefresh && (
-						<Button
-							variant='ghost'
-							className='w-6 h-6 -my-1'
-							title='Refresh from GitHub (runs gh)'
-							disabled={github.refreshing}
-							onClick={e => {
-								e.stopPropagation();
-								github.refresh();
-							}}
-						>
-							<Refresh spinning={github.refreshing} />
-						</Button>
-					)}
-				</div>
+				{/* the controls left this row for the search line: a heading is
+				    a line of text */}
+				<div />
 				<div className='text-right text-13 text-text-muted font-mono'>
 					{total > 0 ? total : ''}
 				</div>

@@ -10,6 +10,7 @@ import ClonePicker from './components/ClonePicker';
 import CommandPalette from './components/CommandPalette';
 import ConfirmDialog from './components/ConfirmDialog';
 import ContextMenu from './components/ContextMenu';
+import GithubControls from './components/GithubControls';
 import Modal from './components/Modal';
 import NameDialog from './components/NameDialog';
 import Onboarding from './components/Onboarding';
@@ -1351,7 +1352,8 @@ const AppInner = () => {
 						    beside it, then the two controls that change what the list
 						    holds, which lived in the title bar; this is the list's row.
 						    the github box sits level with it at a fixed share, so the
-						    project box is the wider one at every width */}
+						    project box is the wider one at every width, with the github
+						    rows' own three controls beside it */}
 						<div className='w-full shrink-0 flex items-center gap-4'>
 						<div className='flex-1 min-w-0 flex items-center gap-3'>
 							<SearchBox
@@ -1432,6 +1434,14 @@ const AppInner = () => {
 								}}
 							/>
 						)}
+						{github.available && (
+							<GithubControls
+								{...{
+									github,
+									onAddMenu: (x: number, y: number) => setGithubAddMenu({ x, y })
+								}}
+							/>
+						)}
 						</div>
 						<ProjectTree
 							{...{
@@ -1468,8 +1478,6 @@ const AppInner = () => {
 									setRepoMenu({ repo: r, x, y }),
 								onShowLocal: showLocal,
 								cloneJobs: clone.jobs,
-								onGithubAddMenu: (x: number, y: number) =>
-									setGithubAddMenu({ x, y }),
 								onGroupContextMenu: (name: string, x: number, y: number) =>
 									setGroupHeaderMenu({ name, x, y }),
 								showHints,
