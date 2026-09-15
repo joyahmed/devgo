@@ -193,6 +193,8 @@ mod tests {
             ),
             wsl_executable: None,
             wsl_args_template: None,
+            run_args_template: None,
+            wsl_run_args_template: None,
         };
 
         let project = Project::new(

@@ -136,6 +136,8 @@ mod tests {
             args_template: "{path}".into(),
             wsl_executable: None,
             wsl_args_template: None,
+            run_args_template: None,
+            wsl_run_args_template: None,
         }
     }
 

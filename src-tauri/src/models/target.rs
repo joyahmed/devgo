@@ -23,6 +23,15 @@ pub struct LaunchTarget {
     /// Arguments for a WSL project. `{distro}` and `{linux_path}` are also
     /// available here. `None` means the target cannot open WSL projects.
     pub wsl_args_template: Option<String>,
+    /// Arguments for running a command in a Windows project. `{command}` is
+    /// substituted alongside `{path}`. `None` means this target cannot run
+    /// commands: the flags differ per terminal and guessing opens the wrong
+    /// thing.
+    #[serde(default)]
+    pub run_args_template: Option<String>,
+    /// The same for a WSL project.
+    #[serde(default)]
+    pub wsl_run_args_template: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -35,32 +44,58 @@ pub enum TargetKind {
 impl LaunchTarget {
     /// Resolve this target's command line for a project.
     ///
-    /// Returns `None` when the target has no WSL form and the project is a WSL
-    /// project — the caller reports that rather than launching something that
-    /// would silently open the wrong directory.
+    /// Returns `None` when the target has no template for the situation: no
+    /// WSL form for a WSL project, or no run form when a command was asked
+    /// for. The caller reports that rather than opening the wrong directory,
+    /// or the right one with the command quietly dropped.
     pub fn resolve(
         &self,
         windows_path: &str,
         wsl: Option<(&str, &str)>,
     ) -> Option<(String, String)> {
-        match wsl {
-            Some((distro, linux_path)) => {
-                let template = self.wsl_args_template.as_ref()?;
-                let exe = self
-                    .wsl_executable
-                    .clone()
-                    .unwrap_or_else(|| self.executable.clone());
-                let args = template
-                    .replace("{distro}", distro)
-                    .replace("{linux_path}", linux_path)
-                    .replace("{path}", windows_path);
-                Some((exe, args))
-            }
-            None => Some((
-                self.executable.clone(),
-                self.args_template.replace("{path}", windows_path),
-            )),
+        self.resolve_inner(windows_path, wsl, None)
+    }
+
+    pub fn resolve_run(
+        &self,
+        windows_path: &str,
+        wsl: Option<(&str, &str)>,
+        command: &str,
+    ) -> Option<(String, String)> {
+        self.resolve_inner(windows_path, wsl, Some(command))
+    }
+
+    fn resolve_inner(
+        &self,
+        windows_path: &str,
+        wsl: Option<(&str, &str)>,
+        command: Option<&str>,
+    ) -> Option<(String, String)> {
+        let template = match (wsl.is_some(), command) {
+            (true, None) => self.wsl_args_template.as_ref()?,
+            (true, Some(_)) => self.wsl_run_args_template.as_ref()?,
+            (false, None) => &self.args_template,
+            (false, Some(_)) => self.run_args_template.as_ref()?,
+        };
+
+        let exe = match wsl {
+            Some(_) => self
+                .wsl_executable
+                .clone()
+                .unwrap_or_else(|| self.executable.clone()),
+            None => self.executable.clone(),
+        };
+
+        let mut args = template.replace("{path}", windows_path);
+        if let Some((distro, linux_path)) = wsl {
+            args = args
+                .replace("{distro}", distro)
+                .replace("{linux_path}", linux_path);
         }
+        if let Some(cmd) = command {
+            args = args.replace("{command}", cmd);
+        }
+        Some((exe, args))
     }
 }
 
@@ -83,6 +118,9 @@ pub fn defaults() -> Vec<LaunchTarget> {
             wsl_args_template: Some(
                 "--folder-uri vscode-remote://wsl+{distro}{linux_path}".into(),
             ),
+            // an editor is not a place to run a dev command
+            run_args_template: None,
+            wsl_run_args_template: None,
         },
         LaunchTarget {
             id: "wt".into(),
@@ -92,6 +130,12 @@ pub fn defaults() -> Vec<LaunchTarget> {
             args_template: "-d \"{path}\"".into(),
             wsl_executable: None,
             wsl_args_template: Some("wsl -d {distro} bash \"{script}\"".into()),
+            // cmd /k keeps the window open, so a failing script leaves its
+            // error on screen
+            run_args_template: Some("-d \"{path}\" cmd /k {command}".into()),
+            wsl_run_args_template: Some(
+                "wsl -d {distro} --cd \"{linux_path}\" -e bash -lc \"{command}; exec bash\"".into(),
+            ),
         },
     ]
 }
@@ -140,6 +184,8 @@ mod tests {
             wsl_args_template: Some(
                 "-d {distro} --cd \"{linux_path}\" -e hx .".into(),
             ),
+            run_args_template: None,
+            wsl_run_args_template: None,
         };
         let (exe, args) = helix
             .resolve("ignored", Some(("Debian", "/srv/app")))
@@ -160,6 +206,8 @@ mod tests {
             args_template: "\"{path}\"".into(),
             wsl_executable: None,
             wsl_args_template: None,
+            run_args_template: None,
+            wsl_run_args_template: None,
         };
         assert!(notepad.resolve("x", Some(("Ubuntu", "/home"))).is_none());
         assert!(notepad.resolve("x", None).is_some());

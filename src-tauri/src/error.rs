@@ -42,6 +42,9 @@ pub enum AppError {
         "{0} has no WSL configuration, so it cannot open the WSL project {1}"
     )]
     TargetCannotOpenWsl(String, String),
+
+    #[error("{0} has no run template, so it cannot run a command")]
+    TargetCannotRun(String),
 }
 
 // std::io::Error and serde_json::Error don't implement Serialize, so we can't
