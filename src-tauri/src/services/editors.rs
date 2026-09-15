@@ -78,13 +78,16 @@ const WINDOWS: &[WinCandidate] = &[
         run_args: None,
         wsl_run_args: None,
     },
+    // zed's windows cli takes the distro as a flag and resolves the linux
+    // path itself; it was None until that cli shipped, and devgo refused
+    // WSL projects zed opened fine by hand
     WinCandidate {
         id: "zed",
         name: "Zed",
         kind: TargetKind::Editor,
         exe: "zed",
         args: "\"{path}\"",
-        wsl_args: None,
+        wsl_args: Some("--wsl {distro} \"{linux_path}\""),
         run_args: None,
         wsl_run_args: None,
     },
@@ -402,6 +405,13 @@ mod tests {
         let t = to_target(subl);
         assert!(t.resolve("x", Some(("Ubuntu", "/home/joy"))).is_none());
         assert!(t.resolve(r"G:\dev", None).is_some(), "still opens Windows");
+
+        // a third form: the program crosses with its own flag
+        let zed = WINDOWS.iter().find(|c| c.id == "zed").unwrap();
+        let (_, args) = to_target(zed)
+            .resolve("x", Some(("Ubuntu", "/home/joy/p")))
+            .unwrap();
+        assert_eq!(args, "--wsl Ubuntu \"/home/joy/p\"");
     }
 
     #[test]
