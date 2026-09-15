@@ -318,11 +318,11 @@ fn build_psmux_script(
 
     let create = match windows.first() {
         Some(first) => format!(
-            "    psmux new-session -d -s {session_q} -n {} -c {path_q}\n",
+            "    psmux.exe new-session -d -s {session_q} -n {} -c {path_q}\n",
             ps_quote(first)
         ),
         None => {
-            format!("    psmux new-session -d -s {session_q} -c {path_q}\n")
+            format!("    psmux.exe new-session -d -s {session_q} -c {path_q}\n")
         }
     };
 
@@ -336,7 +336,7 @@ fn build_psmux_script(
         .map(|name| {
             let name_q = ps_quote(name);
             format!(
-                "if (@(psmux list-windows -t {exact_q} -F '#W' 2>$null) -cnotcontains {name_q}) {{\n    psmux new-window -t {target_q} -n {name_q} -c {path_q}\n}}\n"
+                "if (@(psmux.exe list-windows -t {exact_q} -F '#W' 2>$null) -cnotcontains {name_q}) {{\n    psmux.exe new-window -t {target_q} -n {name_q} -c {path_q}\n}}\n"
             )
         })
         .collect();
@@ -346,19 +346,23 @@ fn build_psmux_script(
     // windows. return ends the script and nothing else; exit would end pwsh
     // regardless of -NoExit and close the tab on the one machine where the
     // message matters.
+    // psmux.exe, and -CommandType Application: this runs in the user's own
+    // shell, profile included, and a profile that aliases psmux to a
+    // project picker made Get-Command say yes and every call below open a
+    // folder dialog. ask for the program, call the program
     // has-session answers with its exit code, and 1 is the answer we are
     // asking for; a profile that turns the native preference on under
     // ErrorActionPreference Stop would abort the script on it
     format!(
-        r#"{cd}if (-not (Get-Command psmux -ErrorAction SilentlyContinue)) {{
+        r#"{cd}if (-not (Get-Command psmux.exe -CommandType Application -ErrorAction SilentlyContinue)) {{
     Write-Host 'DevGo: psmux is not installed, so this is a plain shell. For named windows: winget install marlocarlo.psmux'
     return
 }}
 $PSNativeCommandUseErrorActionPreference = $false
-psmux has-session -t {exact_q} 2>$null
+psmux.exe has-session -t {exact_q} 2>$null
 if ($LASTEXITCODE -ne 0) {{
 {create}}}
-{reconcile}psmux attach -t {exact_q}
+{reconcile}psmux.exe attach -t {exact_q}
 "#
     )
 }
@@ -823,7 +827,7 @@ mod tests {
             build_psmux_script("api-1f2e3d4c", r"G:\dev\api", &shipped);
         assert!(
             script.contains(
-                r"psmux new-session -d -s 'api-1f2e3d4c' -n 'code' -c 'G:\dev\api'"
+                r"psmux.exe new-session -d -s 'api-1f2e3d4c' -n 'code' -c 'G:\dev\api'"
             ),
             "the first window belongs to new-session: {script}"
         );
@@ -845,9 +849,9 @@ mod tests {
             r"G:\srv\app",
             &tmux_with(&names),
         );
-        assert_eq!(script.matches("psmux new-session").count(), 1);
+        assert_eq!(script.matches("psmux.exe new-session").count(), 1);
         // the first name is reconciled too
-        assert_eq!(script.matches("psmux new-window").count(), names.len());
+        assert_eq!(script.matches("psmux.exe new-window").count(), names.len());
         let mut cursor = 0;
         for name in names {
             let needle = format!(r"-n '{name}' -c 'G:\srv\app'");
@@ -866,14 +870,14 @@ mod tests {
         let script =
             build_psmux_script("app-deadbeef", r"G:\srv\app", &tmux_with(&[]));
         assert!(script.contains(
-            r"psmux new-session -d -s 'app-deadbeef' -c 'G:\srv\app'"
+            r"psmux.exe new-session -d -s 'app-deadbeef' -c 'G:\srv\app'"
         ));
         assert!(!script.contains("-n "), "must not name a window: {script}");
         assert!(
             !script.contains("new-window"),
             "nothing to reconcile: {script}"
         );
-        assert!(script.contains("psmux attach -t '=app-deadbeef'"));
+        assert!(script.contains("psmux.exe attach -t '=app-deadbeef'"));
     }
 
     /// Probed: psmux resolves a target by prefix exactly as tmux does, and
@@ -885,10 +889,19 @@ mod tests {
             r"G:\srv\app",
             &tmux_with(&["code", "agents"]),
         );
-        assert!(script.contains("psmux has-session -t '=app'"), "{script}");
-        assert!(script.contains("psmux list-windows -t '=app'"), "{script}");
-        assert!(script.contains("psmux new-window -t '=app:'"), "{script}");
-        assert!(script.contains("psmux attach -t '=app'"), "{script}");
+        assert!(
+            script.contains("psmux.exe has-session -t '=app'"),
+            "{script}"
+        );
+        assert!(
+            script.contains("psmux.exe list-windows -t '=app'"),
+            "{script}"
+        );
+        assert!(
+            script.contains("psmux.exe new-window -t '=app:'"),
+            "{script}"
+        );
+        assert!(script.contains("psmux.exe attach -t '=app'"), "{script}");
         assert!(!script.contains("-s '=app"), "{script}");
         assert_eq!(
             script.matches(" -t ").count(),
@@ -931,13 +944,15 @@ mod tests {
         let guard_close =
             guard + script[guard..].find("\n}\n").expect("the guard closes");
         let first_reconcile =
-            script.find("psmux list-windows").expect("reconciles");
+            script.find("psmux.exe list-windows").expect("reconciles");
         assert!(
             first_reconcile > guard_close,
             "back inside the guard: {script}"
         );
         assert_eq!(
-            script[..guard_close].matches("psmux new-window").count(),
+            script[..guard_close]
+                .matches("psmux.exe new-window")
+                .count(),
             0,
             "{script}"
         );
@@ -962,7 +977,7 @@ mod tests {
         );
         // one window is a string and none is $null; @( ) makes both a list
         assert_eq!(
-            script.matches("if (@(psmux list-windows").count(),
+            script.matches("if (@(psmux.exe list-windows").count(),
             2,
             "{script}"
         );
@@ -1041,10 +1056,11 @@ mod tests {
             &tmux_with(&["code"]),
         );
         let check = script
-            .find("if (-not (Get-Command psmux -ErrorAction SilentlyContinue))")
+            .find("if (-not (Get-Command psmux.exe -CommandType Application")
             .expect("asks whether psmux is installed");
         let cd = script.find("Set-Location").expect("enters the project");
-        let first_call = script.find("psmux has-session").expect("then talks");
+        let first_call =
+            script.find("psmux.exe has-session").expect("then talks");
         assert!(cd < check, "the directory comes before any bail: {script}");
         assert!(check < first_call, "the check comes first: {script}");
         assert!(
@@ -1097,7 +1113,10 @@ mod tests {
         // the write is synchronous inside launch_target; only the echo is not
         let on_disk = std::fs::read_to_string(&expected)
             .unwrap_or_else(|_| panic!("no script at {}", expected.display()));
-        assert!(on_disk.contains("psmux new-session -d -s "), "{on_disk}");
+        assert!(
+            on_disk.contains("psmux.exe new-session -d -s "),
+            "{on_disk}"
+        );
         assert!(on_disk.contains("-n 'code'"), "{on_disk}");
         assert!(
             on_disk
@@ -1143,6 +1162,33 @@ mod tests {
         launch_target(&plain, &project, &no_distro(), &tmux_with(&["code"]))
             .unwrap();
         assert!(!script_path.exists(), "{}", script_path.display());
+    }
+
+    /// Found in verify: a profile that aliased psmux to a project picker
+    /// made Get-Command say yes, and every call opened a folder dialog in
+    /// the tab. The script runs in the user's shell, profile included.
+    #[test]
+    fn the_script_calls_the_binary_not_whatever_psmux_means_in_the_profile() {
+        let script = build_psmux_script(
+            "app-deadbeef",
+            r"G:\srv\app",
+            &tmux_with(&["code"]),
+        );
+        assert!(
+            script.contains("Get-Command psmux.exe -CommandType Application"),
+            "an alias or a function answers a bare Get-Command: {script}"
+        );
+        // every mention outside the bail message is a call, and a call
+        // names the program
+        let calls: Vec<&str> = script
+            .lines()
+            .filter(|l| !l.contains("Write-Host"))
+            .flat_map(|l| l.match_indices("psmux").map(move |(i, _)| &l[i..]))
+            .collect();
+        assert!(!calls.is_empty());
+        for call in calls {
+            assert!(call.starts_with("psmux.exe "), "an alias answers: {call}");
+        }
     }
 
     #[test]
