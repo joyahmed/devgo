@@ -378,6 +378,13 @@ pub fn run() {
             tauri::WindowEvent::Resized(_) | tauri::WindowEvent::Moved(_) => {
                 remember_geometry(window);
             }
+            // every path that shows the window ends in an activation: the
+            // frontend's show(), the tray, the summon hotkey, the
+            // single-instance restore. one hook sees all four, and the
+            // resend is what un-blanks a button explorer painted generic
+            tauri::WindowEvent::Focused(true) => {
+                win_taskbar::apply_window_icon(window);
+            }
             _ => {}
         })
         .invoke_handler(tauri::generate_handler![
