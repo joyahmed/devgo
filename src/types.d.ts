@@ -104,7 +104,8 @@ type ThemeKey =
 	| 'accent'
 	| 'accent-hover'
 	| 'danger'
-	| 'border';
+	| 'border'
+	| 'border-strong';
 
 interface Theme {
 	id: string;

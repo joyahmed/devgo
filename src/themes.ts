@@ -1,4 +1,11 @@
 // every colour is a --color-* variable, so a theme is an override on :root
+//
+// the contract a palette has to meet (scripts/check-contrast.mjs runs it):
+// - text-muted >= 4.5:1 on bg-primary and bg-panel: it carries real
+//   information (badges, hints, timestamps), so the body-text bar applies
+// - border-strong >= 3:1 on every surface: the edge of a control you operate
+// - border is held to nothing on purpose: it is the quiet divider between
+//   rows and panels, and a control-grade ratio would draw every hairline
 const KEYS: ThemeKey[] = [
 	'bg-primary',
 	'bg-secondary',
@@ -11,7 +18,8 @@ const KEYS: ThemeKey[] = [
 	'accent',
 	'accent-hover',
 	'danger',
-	'border'
+	'border',
+	'border-strong'
 ];
 
 export const THEMES: Theme[] = [
@@ -30,7 +38,8 @@ export const THEMES: Theme[] = [
 			accent: '#3b82f6',
 			'accent-hover': '#2563eb',
 			danger: '#ef4444',
-			border: '#1e293b'
+			border: '#1e293b',
+			'border-strong': '#48638e'
 		}
 	},
 	{
@@ -48,7 +57,8 @@ export const THEMES: Theme[] = [
 			accent: '#22c55e',
 			'accent-hover': '#16a34a',
 			danger: '#ef4444',
-			border: '#14331a'
+			border: '#14331a',
+			'border-strong': '#2b6d37'
 		}
 	},
 	{
@@ -66,7 +76,8 @@ export const THEMES: Theme[] = [
 			accent: '#88c0d0',
 			'accent-hover': '#81a1c1',
 			danger: '#bf616a',
-			border: '#434c5e'
+			border: '#434c5e',
+			'border-strong': '#818da5'
 		}
 	},
 	{
@@ -84,7 +95,8 @@ export const THEMES: Theme[] = [
 			accent: '#bd93f9',
 			'accent-hover': '#a679f0',
 			danger: '#ff5555',
-			border: '#44475a'
+			border: '#44475a',
+			'border-strong': '#7b7f9b'
 		}
 	},
 	{
@@ -102,7 +114,8 @@ export const THEMES: Theme[] = [
 			accent: '#3b82f6',
 			'accent-hover': '#2563eb',
 			danger: '#ef4444',
-			border: '#1f1f1f'
+			border: '#1f1f1f',
+			'border-strong': '#5d5d5d'
 		}
 	}
 ];
