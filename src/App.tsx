@@ -506,6 +506,18 @@ const AppInner = () => {
 			});
 	};
 
+	// refresh from github: the live list from the api replaces what
+	// refs/remotes remembered. the local list stays the default, instant
+	// and usually right; this is the one place the two sources meet.
+	// picking a menu entry closes the menu (ContextMenu's contract), so
+	// the popover is re-opened at the same spot with the fresh list;
+	// otherwise the click fetched into a menu nobody could see
+	const refreshBranchesFromGithub = ({ project, x, y }: BranchMenu) => {
+		invoke<string[]>('refresh_remote_branches_github', { project })
+			.then(list => setBranchMenu({ project, x, y, branches: list }))
+			.catch(e => toast(showError(e)));
+	};
+
 	const buildBranchMenu = (m: BranchMenu): MenuEntry[] => {
 		const info = git.get(m.project.full_path);
 		const host = info?.remote ? hostOf(info.remote) : 'remote';
@@ -531,7 +543,18 @@ const AppInner = () => {
 			...(current
 				? [{ label: current, hint: 'current', onClick: open(current) }]
 				: []),
-			...rest
+			...rest,
+			...(host === 'GitHub'
+				? [
+						'separator' as const,
+						{
+							label: 'Refresh from GitHub',
+							hint: 'gh api',
+							disabled: m.branches === null,
+							onClick: () => refreshBranchesFromGithub(m)
+						}
+					]
+				: [])
 		];
 	};
 
