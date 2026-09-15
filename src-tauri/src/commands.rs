@@ -132,7 +132,8 @@ fn collect_projects(
     {
         Vec::new()
     } else {
-        wsl::running_distros()
+        // memoised: the git and stack passes that follow reuse the answer
+        wsl::running_distros_memo()
     };
 
     let mut projects = Vec::new();
@@ -531,7 +532,9 @@ fn running_for(projects: &[Project]) -> Vec<String> {
         .iter()
         .any(|p| crate::services::scanner::distro_of(&p.full_path).is_some())
     {
-        wsl::running_distros()
+        // through the memo: a refresh is three commands gated on the same
+        // question, and a stop through DevGo clears it
+        wsl::running_distros_memo()
     } else {
         Vec::new()
     }
