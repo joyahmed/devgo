@@ -7,7 +7,7 @@ mod tray;
 
 use commands::AppState;
 use services::platform::detection;
-use services::preferences::WindowState;
+use services::preferences::{MonitorRect, WindowState};
 use services::single_instance;
 use services::workspace::WorkspaceStore;
 use tauri::tray::{
@@ -21,6 +21,12 @@ fn remember_geometry(window: &tauri::Window) {
     // a hidden window's geometry is nobody's choice: startup fires resize
     // and move before show(), and close hides rather than exits
     if !window.is_visible().unwrap_or(false) {
+        return;
+    }
+    // a minimized window is still visible, and reports (-32000, -32000) at
+    // 144x19: a placeholder, not a position. saving it stranded the next
+    // launch off every monitor
+    if window.is_minimized().unwrap_or(false) {
         return;
     }
     let Some(state) = window.app_handle().try_state::<AppState>() else {
@@ -41,15 +47,36 @@ fn remember_geometry(window: &tauri::Window) {
         else {
             return;
         };
-        WindowState {
+        let candidate = WindowState {
             maximized: false,
             width: size.width,
             height: size.height,
             x: pos.x,
             y: pos.y,
+        };
+        // maximizing is not atomic: a Resized arrives while is_maximized()
+        // still says false, and the screen-filling rect would become the
+        // restore rect
+        let monitors = window
+            .available_monitors()
+            .map(|m| monitor_rects(&m))
+            .unwrap_or_default();
+        if candidate.covers_a_monitor(&monitors) {
+            return;
         }
+        candidate
     };
     let _ = prefs.set_window_state(next);
+}
+
+fn monitor_rects(monitors: &[tauri::Monitor]) -> Vec<MonitorRect> {
+    monitors
+        .iter()
+        .map(|m| {
+            let (p, s) = (m.position(), m.size());
+            (p.x, p.y, s.width, s.height)
+        })
+        .collect()
 }
 
 pub fn run() {
