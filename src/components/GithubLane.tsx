@@ -188,7 +188,6 @@ const RepoRow = ({
 // them through the palette's matcher
 const GithubLane = ({
 	github,
-	query,
 	cursor,
 	onSelect,
 	onOpen,
@@ -199,6 +198,7 @@ const GithubLane = ({
 	onGroupContextMenu
 }: GithubLaneProps) => {
 	const {
+		query,
 		payload,
 		status,
 		isOpen,

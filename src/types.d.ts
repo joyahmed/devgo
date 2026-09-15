@@ -435,7 +435,6 @@ interface GithubPanelProps {
 
 interface GithubLaneProps {
 	github: GithubState;
-	query: string;
 	/// the keyboard/click cursor, by full_name. beside the project
 	/// selection, not instead of it
 	cursor: string | null;
@@ -532,6 +531,9 @@ type TargetDraft = Record<
 /// owns the one copy, and the row and the panel read the same list.
 /// what useGithub hands out; named because ambient types cannot import
 interface GithubState {
+	/// the github box's text; the hook owns it, not App
+	query: string;
+	setQuery: (q: string) => void;
 	payload: GithubPayload | null;
 	status: GhStatus | null;
 	refreshing: boolean;

@@ -100,8 +100,9 @@ const AppInner = () => {
 	const { addWorkspace, removeWorkspace, openEditor, openTerminal, openBoth } =
 		useLaunchActions(selected, refresh);
 	// the github group. reads its cache on mount and re-reads after every
-	// badge pass (git is the dependency) so the local marks track the disk
-	const github = useGithub(query, git);
+	// badge pass (git is the dependency) so the local marks track the disk.
+	// its box is its own; the project query never reaches it
+	const github = useGithub(git);
 	// one registry: a second useTargets in Settings would leave the row stale
 	// after an add until the next mount
 	const targets = useTargets();

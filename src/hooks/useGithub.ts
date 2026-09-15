@@ -33,10 +33,9 @@ const loadOpen = (): boolean | null => {
 // thread to finish, and owns the one rule about when a refresh may start
 // on its own: the lane's first open in a session, when the cache is
 // stale. everything else that fetches is a button or a palette command
-export const useGithub = (
-	query: string,
-	git: Map<string, GitInfo>
-): GithubState => {
+export const useGithub = (git: Map<string, GitInfo>): GithubState => {
+	// the github rows' own box: the project box never sees this
+	const [query, setQuery] = useState('');
 	const [payload, setPayload] = useState<GithubPayload | null>(null);
 	const [status, setStatus] = useState<GhStatus | null>(null);
 	const [refreshing, setRefreshing] = useState(false);
@@ -157,6 +156,8 @@ export const useGithub = (
 	};
 
 	return {
+		query,
+		setQuery,
 		payload,
 		status,
 		refreshing,

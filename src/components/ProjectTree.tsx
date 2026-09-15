@@ -538,7 +538,6 @@ const ProjectTree = ({
 		<GithubLane
 			{...{
 				github,
-				query,
 				cursor: repoCursor,
 				onSelect: selectRepo,
 				onOpen: (r: GithubRepo) => onRepoOpen?.(r),
