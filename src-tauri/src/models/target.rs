@@ -102,6 +102,18 @@ impl LaunchTarget {
     }
 }
 
+/// Windows Terminal's arguments for a Windows project. {script} is the
+/// seam the WSL form already uses: the launcher writes a PowerShell script
+/// that brings the project's psmux session up. -NoExit because the script
+/// ends in attach, and when that returns the tab has to stay open in the
+/// project rather than vanish. -ExecutionPolicy Bypass because a script in
+/// %TEMP% is exactly what a RemoteSigned machine refuses to run. pwsh, not
+/// powershell: 5.1 reads a file without a BOM as ANSI, so a window name
+/// outside ASCII arrives garbled and is created again on every launch.
+/// A const because editors::detect has to offer the same bytes.
+pub const WT_ARGS: &str =
+    "-d \"{path}\" pwsh -NoExit -ExecutionPolicy Bypass -File \"{script}\"";
+
 /// The registry every install starts with.
 ///
 /// VS Code and Windows Terminal only, because those are the two DevGo already
@@ -130,7 +142,7 @@ pub fn defaults() -> Vec<LaunchTarget> {
             name: "Windows Terminal".into(),
             kind: TargetKind::Terminal,
             executable: "wt".into(),
-            args_template: "-d \"{path}\"".into(),
+            args_template: WT_ARGS.into(),
             wsl_executable: None,
             wsl_args_template: Some("wsl -d {distro} bash \"{script}\"".into()),
             // cmd /k keeps the window open, so a failing script leaves its
@@ -195,6 +207,31 @@ mod tests {
             .unwrap();
         assert_eq!(exe, "wsl");
         assert_eq!(args, "-d Debian --cd \"/srv/app\" -e hx .");
+    }
+
+    /// A Windows project used to get a plain tab while the same launch on a
+    /// WSL project got named windows; the seam only closes that gap if the
+    /// Windows template asks for it too. resolve must leave the placeholder
+    /// alone, because only the launcher can write the file.
+    #[test]
+    fn the_seeded_terminal_asks_for_a_session_script_on_both_filesystems() {
+        let wt = defaults().into_iter().find(|t| t.id == "wt").unwrap();
+        let (exe, args) = wt.resolve(r"G:\dev\app", None).unwrap();
+        assert_eq!(exe, "wt");
+        assert_eq!(
+            args,
+            r#"-d "G:\dev\app" pwsh -NoExit -ExecutionPolicy Bypass -File "{script}""#
+        );
+        let (_, wsl_args) = wt
+            .resolve(
+                r"\\wsl.localhost\Ubuntu\home\joy\app",
+                Some(("Ubuntu", "/home/joy/app")),
+            )
+            .unwrap();
+        assert!(wsl_args.contains("{script}"), "{wsl_args}");
+        // the run form is a command in a tab and stays what it was
+        let (_, run) = wt.resolve_run(r"G:\dev\app", None, "bun dev").unwrap();
+        assert_eq!(run, r#"-d "G:\dev\app" cmd /k bun dev"#);
     }
 
     /// Refusing is the point: launching a Windows-only editor at a WSL project

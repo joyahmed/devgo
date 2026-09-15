@@ -11,7 +11,7 @@ use std::process::Command;
 use serde::Serialize;
 
 use super::platform::wsl;
-use crate::models::target::{LaunchTarget, TargetKind};
+use crate::models::target::{LaunchTarget, TargetKind, WT_ARGS};
 
 const CREATE_NO_WINDOW: u32 = 0x08000000;
 
@@ -161,13 +161,15 @@ const WINDOWS: &[WinCandidate] = &[
         run_args: None,
         wsl_run_args: None,
     },
-    // terminals open WSL projects through the tmux script, like the seed
+    // terminals open WSL projects through the tmux script, like the seed;
+    // WT_ARGS shared with it, so a wt removed and added back from this list
+    // gets the psmux script and not the bare tab the default used to open
     WinCandidate {
         id: "wt",
         name: "Windows Terminal",
         kind: TargetKind::Terminal,
         exe: "wt",
-        args: "-d \"{path}\"",
+        args: WT_ARGS,
         wsl_args: Some("wsl -d {distro} bash \"{script}\""),
         run_args: Some("-d \"{path}\" cmd /k {command}"),
         wsl_run_args: Some(
