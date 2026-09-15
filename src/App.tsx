@@ -39,7 +39,7 @@ const showError = (e: unknown): string => {
 
 const AppInner = () => {
 	const runtime = useRuntime();
-	const { workspaces } = useWorkspaces();
+	const { workspaces, refresh: refreshWorkspaces } = useWorkspaces();
 	const {
 		filtered,
 		query,
@@ -130,12 +130,24 @@ const AppInner = () => {
 		if (target) handleLaunch(target);
 	};
 
+	// useLaunchActions refreshes projects only; the workspace list is a second
+	// view of the same state and goes stale without this
+	const handleAddWorkspace = async (path: string) => {
+		try {
+			await addWorkspace(path);
+		} catch (e) {
+			toast(showError(e));
+		}
+		refreshWorkspaces();
+	};
+
 	const handleRemove = async (index: number) => {
 		try {
 			await removeWorkspace(index);
 		} catch (e) {
 			toast(showError(e));
 		}
+		refreshWorkspaces();
 	};
 
 	// A forced refresh is the one path allowed to start a stopped WSL distro.
@@ -458,7 +470,7 @@ const AppInner = () => {
 						open: showSettings,
 						onClose: closeSettings,
 						workspaces,
-						onAddWorkspace: addWorkspace,
+						onAddWorkspace: handleAddWorkspace,
 						onRemoveWorkspace: (i: number) => setRemoveIndex(i),
 						summonHotkey,
 						onError: (m: string) => toast(m, 'error'),
