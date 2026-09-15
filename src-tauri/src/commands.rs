@@ -522,11 +522,19 @@ pub fn add_workspace_folders(
     state: State<AppState>,
 ) -> Result<Vec<String>, String> {
     let mut store = state.workspace_store.lock().map_err(|e| e.to_string())?;
+    // add can refuse now; one refusal must not throw away the rest of the
+    // drop. add what can be added, then say what could not
+    let mut refused = Vec::new();
     for p in &paths {
         let is_wsl = p.replace('\\', "/").starts_with("//wsl");
         if is_wsl || std::path::Path::new(p).is_dir() {
-            store.add(p).map_err(|e| e.to_string())?;
+            if let Err(e) = store.add(p) {
+                refused.push(e.to_string());
+            }
         }
+    }
+    if !refused.is_empty() {
+        return Err(refused.join("; "));
     }
     Ok(store.list())
 }
@@ -598,7 +606,8 @@ pub fn import_config_from_file(
     {
         let mut ws = state.workspace_store.lock().map_err(lock_err)?;
         for w in &config.workspaces {
-            // add dedupes by path
+            // a duplicate or an overlap is a skip here, not a failure: an
+            // import must never stop halfway
             let _ = ws.add(w);
         }
     }
