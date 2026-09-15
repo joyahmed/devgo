@@ -147,6 +147,33 @@ interface GithubPayload {
 	local: Record<string, string>;
 }
 
+/// a named group inside the GitHub list: a label over full_names, in the
+/// user's order. a repo may be in several; a name the cache no longer
+/// carries renders as gone rather than vanishing
+interface GithubGroup {
+	name: string;
+	repos: string[];
+}
+
+/// one edit to the groups: the Rust GroupEdit enum, tagged by op
+type GroupEdit =
+	| { op: 'assign'; group: string; repo: string }
+	| { op: 'unassign'; group: string; repo: string }
+	| { op: 'rename'; from: string; to: string }
+	| { op: 'delete'; name: string }
+	| { op: 'reorder'; order: string[] };
+
+/// one section of the list with no query: a group (or the ungrouped
+/// tail), its rows in order, and which of them the cache no longer carries
+interface LaneSection {
+	/// a group's name, or null for the ungrouped tail
+	group: string | null;
+	rows: GithubRepo[];
+	gone: Set<string>;
+	/// for the tail: how many ungrouped repos exist beyond the ones shown
+	total: number;
+}
+
 /// what the refresh thread emits when it is done
 interface GithubUpdated {
 	ok: boolean;

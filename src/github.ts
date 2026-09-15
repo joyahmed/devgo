@@ -32,6 +32,53 @@ const UNITS: [number, string][] = [
 	[12, 'mo']
 ];
 
+// a gone row is a GithubRepo built from its name, so every menu and key
+// that works on a row works on it; the section's gone set says which it is
+const goneRow = (full_name: string): GithubRepo => {
+	const [owner = '', name = full_name] = full_name.split('/');
+	return {
+		full_name,
+		name,
+		owner,
+		url: `https://github.com/${full_name}`,
+		updated_at: '',
+		private: false,
+		archived: false,
+		default_branch: null,
+		added: false
+	};
+};
+
+// the sections with no query: every group in order with all its rows,
+// then the ungrouped tail, the newest RECENT_LIMIT of what is in no group.
+// with a query, sectioning is off and visibleRepos is the answer
+export const laneSections = (
+	repos: GithubRepo[],
+	groups: GithubGroup[]
+): LaneSection[] => {
+	const byName = new Map(repos.map(r => [r.full_name, r]));
+	const grouped = new Set<string>();
+	const sections: LaneSection[] = groups.map(g => {
+		const gone = new Set<string>();
+		const rows = g.repos.map(full => {
+			grouped.add(full);
+			const r = byName.get(full);
+			if (r) return r;
+			gone.add(full);
+			return goneRow(full);
+		});
+		return { group: g.name, rows, gone, total: rows.length };
+	});
+	const rest = repos.filter(r => !grouped.has(r.full_name));
+	sections.push({
+		group: null,
+		rows: rest.slice(0, RECENT_LIMIT),
+		gone: new Set(),
+		total: rest.length
+	});
+	return sections;
+};
+
 // 2026-09-11T18:48:35Z -> 3 h ago. coarse on purpose: a row is a glance,
 // and "2 y ago" is exactly as useful as the date
 export const relativeTime = (
