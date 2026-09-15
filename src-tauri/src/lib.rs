@@ -174,6 +174,7 @@ pub fn run() {
             commands::reveal_in_explorer,
             commands::get_wsl_path,
             commands::discover_roots,
+            commands::add_workspace_folders,
             commands::get_runtime_info,
             commands::open_editor,
             commands::open_terminal,

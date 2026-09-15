@@ -451,6 +451,23 @@ pub fn discover_roots() -> Vec<crate::services::discover::DiscoveredRoot> {
     crate::services::discover::discover()
 }
 
+/// The drag-and-drop path. A local file is skipped; a wsl path is added
+/// without an is_dir probe, because the probe would boot a stopped distro.
+#[tauri::command]
+pub fn add_workspace_folders(
+    paths: Vec<String>,
+    state: State<AppState>,
+) -> Result<Vec<String>, String> {
+    let mut store = state.workspace_store.lock().map_err(|e| e.to_string())?;
+    for p in &paths {
+        let is_wsl = p.replace('\\', "/").starts_with("//wsl");
+        if is_wsl || std::path::Path::new(p).is_dir() {
+            store.add(p).map_err(|e| e.to_string())?;
+        }
+    }
+    Ok(store.list())
+}
+
 /// Open the folder in Explorer. Works for WSL projects too: the UNC path is
 /// what Explorer wants. Boots the distro, but the user asked for that.
 #[tauri::command]
