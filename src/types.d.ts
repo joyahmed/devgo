@@ -134,6 +134,17 @@ interface LaunchTarget {
 	wsl_args_template: string | null;
 }
 
+/// A target DevGo found installed but has not registered. It is added back
+/// by id, never by posting this object to add_target: LaunchTarget above has
+/// no run templates, so a round trip would strip them from a terminal.
+interface DetectedTarget {
+	target: LaunchTarget;
+	/// "path" for a Windows program, or the distro name
+	source: string;
+	/// a resolved exe path, or "Ubuntu-26.04 · nvim"
+	detail: string;
+}
+
 /* Shortcuts — see src/shortcuts.ts */
 
 type ShortcutId =

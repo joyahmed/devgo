@@ -39,6 +39,14 @@ export const useTargets = () => {
 		await reload();
 	};
 
+	// proposes only: nothing is written until addDetected is called for an id
+	const detect = () => invoke<DetectedTarget[]>('detect_targets');
+
+	const addDetected = async (id: string) => {
+		await invoke<LaunchTarget>('add_detected_target', { id });
+		await reload();
+	};
+
 	const setDefaultTarget = async (kind: TargetKind, id: string) => {
 		await invoke('set_default_target', { kind, id });
 		await reload();
@@ -49,6 +57,8 @@ export const useTargets = () => {
 		terminals,
 		defaults,
 		addTarget,
+		detect,
+		addDetected,
 		removeTarget,
 		setDefaultTarget
 	};
