@@ -3,6 +3,29 @@ use serde::Serialize;
 use super::platform::wsl;
 use crate::models::Project;
 
+// a nested folder is a project only if it says so. .git is a directory and
+// is handled on its own in both walkers
+const FILE_MARKERS: &[&str] = &[
+    "package.json",
+    "Cargo.toml",
+    "go.mod",
+    "pyproject.toml",
+    "requirements.txt",
+];
+
+// never entered: node_modules alone holds a thousand package.json files
+const PRUNE_DIRS: &[&str] = &[
+    "node_modules",
+    ".git",
+    "target",
+    "dist",
+    "build",
+    "vendor",
+    ".next",
+    ".venv",
+    ".svn",
+];
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum UnavailableReason {
@@ -119,6 +142,30 @@ pub fn scan_workspace(
 
     projects.sort_by_key(|p| p.name.to_lowercase());
     ScanOutcome::Scanned(projects)
+}
+
+fn is_pruned(name: &str, ignore: &[String]) -> bool {
+    name.starts_with('.')
+        || PRUNE_DIRS.iter().any(|p| p.eq_ignore_ascii_case(name))
+        || ignore.iter().any(|ig| ig.eq_ignore_ascii_case(name))
+}
+
+fn has_marker(dir: &std::path::Path) -> bool {
+    FILE_MARKERS.iter().any(|m| dir.join(m).exists())
+        || dir.join(".git").exists()
+}
+
+// the path from the workspace root, forward slashes: `mono/apps/web`
+fn relative_name(root: &std::path::Path, path: &std::path::Path) -> String {
+    path.strip_prefix(root)
+        .ok()
+        .map(|r| r.to_string_lossy().replace('\\', "/"))
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| {
+            path.file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default()
+        })
 }
 
 #[cfg(test)]
