@@ -25,6 +25,10 @@ const SearchBox = ({
 	};
 
 	const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+		// Bare keys only. Ctrl+Enter, Shift+Enter and Alt+Enter are project
+		// actions declared in the shortcut table and owned by App's handler; if
+		// this forwarded them as a plain Enter, one chord would launch twice.
+		if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
 		const action = keys[e.key];
 		if (!action) return;
 		e.preventDefault();

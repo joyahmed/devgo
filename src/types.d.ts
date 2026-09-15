@@ -67,9 +67,47 @@ interface LastProject {
 	workspace: string;
 }
 
+/* Shortcuts — see src/shortcuts.ts */
+
+type ShortcutId =
+	| 'focusSearch'
+	| 'clearSearch'
+	| 'refresh'
+	| 'settings'
+	| 'quit'
+	| 'addWorkspace'
+	| 'removeWorkspace'
+	| 'openEditor'
+	| 'openTerminal'
+	| 'openBoth'
+	| 'togglePin'
+	| 'expand'
+	| 'collapse'
+	| 'toggleWorkspace'
+	| 'top'
+	| 'bottom';
+
+type ShortcutGroup = 'Global' | 'Navigation' | 'Project' | 'Workspace';
+
+interface Shortcut {
+	id: ShortcutId;
+	/// Canonical form: modifiers in Ctrl→Alt→Shift order, then the key.
+	keys: string;
+	label: string;
+	group: ShortcutGroup;
+	/// Requires a selected project to do anything.
+	needsSelection?: boolean;
+}
+
 /* Component props */
 
-type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'ghost' | 'pill';
+type ButtonVariant =
+	| 'primary'
+	| 'secondary'
+	| 'danger'
+	| 'ghost'
+	| 'pill'
+	| 'tab';
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
 	variant?: ButtonVariant;
@@ -89,6 +127,27 @@ interface WorkspaceManagerProps {
 	workspaces: string[];
 	onAdd: (path: string) => void;
 	onRemove: (index: number) => void;
+}
+
+/// A settings section. Later chapters add panels by adding to the registry in
+/// Settings.tsx — the shell itself never changes.
+interface SettingsPanel {
+	id: string;
+	label: string;
+	render: () => React.ReactNode;
+}
+
+interface SettingsProps {
+	open: boolean;
+	onClose: () => void;
+	workspaces: string[];
+	onAddWorkspace: (path: string) => void;
+	onRemoveWorkspace: (index: number) => void;
+	summonHotkey: string;
+}
+
+interface ShortcutTableProps {
+	summonHotkey: string;
 }
 
 interface ConfirmDialogProps {

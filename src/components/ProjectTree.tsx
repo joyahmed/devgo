@@ -1,4 +1,5 @@
 import { useEffect, useImperativeHandle, useState } from 'react';
+import { isTypingTarget, matches, shortcutFor } from '../shortcuts';
 import Button from './Button';
 
 const col = 'grid grid-cols-[1fr_1fr_80px_52px] items-center text-sm';
@@ -195,6 +196,24 @@ const ProjectTree = ({
 
 	useImperativeHandle(ref, () => ({ navigate }));
 
+	// Takes the state wanted rather than toggling: → always expands and ←
+	// always collapses, and only Ctrl+Space computes the flip, at its call site.
+	const setCollapsedFor = (ws: string, want: boolean) => {
+		setCollapsed(prev => {
+			const next = new Set(prev);
+			if (want) next.add(ws);
+			else next.delete(ws);
+			return next;
+		});
+	};
+
+	// Reads `visible` — the flattened, filtered list on screen — so Home and
+	// End land on what you can see, not on the unfiltered project set.
+	const jump = (to: 'top' | 'bottom') => {
+		const target = to === 'top' ? visible[0] : visible[visible.length - 1];
+		if (target) onSelect(target);
+	};
+
 	// Searching expands everything; otherwise only the selected workspace stays
 	// open. Both were effects that called setCollapsed synchronously, which
 	// cascades an extra render on every keystroke. This is React's documented
@@ -221,27 +240,40 @@ const ProjectTree = ({
 			if (selected) onLaunch(selected);
 			else if (visible.length > 0) onLaunch(visible[0]);
 		};
+		const ws = selected?.workspace;
+		// Bare navigation keys. While the search box has focus these belong to
+		// it — it forwards ↑ ↓ ⏎ itself, and ← → Home End move its caret.
 		const keys: Record<string, () => void> = {
 			ArrowDown: () => navigate(1),
 			ArrowUp: () => navigate(-1),
+			ArrowRight: () => ws && setCollapsedFor(ws, false),
+			ArrowLeft: () => ws && setCollapsedFor(ws, true),
+			Home: () => jump('top'),
+			End: () => jump('bottom'),
 			Enter: launch
 		};
+		// Modifier combos are app-level and must still work while the search
+		// box is focused — which is exactly where summon leaves you. A bare
+		// letter is unreachable there, which is why every project action is
+		// a combo.
+		const combos: [ShortcutId, () => void][] = [
+			['togglePin', () => selected && onTogglePin?.(selected)],
+			['toggleWorkspace', () => ws && setCollapsedFor(ws, !collapsed.has(ws))]
+		];
 		const handler = (e: globalThis.KeyboardEvent) => {
-			// Bare keys belong to whatever input has focus, but modifier combos are
-			// app-level and must still work while the search box is focused —
-			// which is exactly where summon leaves you.
-			const mod = e.ctrlKey || e.metaKey;
-			const modified = mod || e.altKey;
-			if (e.target instanceof HTMLInputElement && !modified) return;
+			const modified = e.ctrlKey || e.metaKey || e.altKey;
+			// Enter combos are project actions, owned by App's handler. Two
+			// window listeners see every key; one of them renouncing the overlap
+			// is what keeps the boundary from being a coin flip on effect order.
+			if (e.key === 'Enter' && (modified || e.shiftKey)) return;
 			if (modified) {
-				// Ctrl+S rather than bare "s": the search box is the primary input,
-				// and a bare letter is unreachable while it has focus.
-				if (mod && e.key === 's' && selected) {
-					e.preventDefault();
-					onTogglePin?.(selected);
-				}
+				const combo = combos.find(([id]) => matches(e, shortcutFor(id)));
+				if (!combo) return;
+				e.preventDefault();
+				combo[1]();
 				return;
 			}
+			if (isTypingTarget(e)) return;
 			const action = keys[e.key];
 			if (!action) return;
 			e.preventDefault();
@@ -249,7 +281,7 @@ const ProjectTree = ({
 		};
 		window.addEventListener('keydown', handler);
 		return () => window.removeEventListener('keydown', handler);
-	}, [selected, visible, navigate, onLaunch, onTogglePin]);
+	}, [selected, visible, collapsed, navigate, onLaunch, onTogglePin]);
 
 	const stateFor = (ws: string) =>
 		workspaceStates?.find(s => s.workspace === ws);
