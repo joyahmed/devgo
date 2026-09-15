@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useEffect, useRef, useState } from 'react';
+import { fuzzyScore } from '../palette';
 
 /// A workspace on a virtual disk can be missing for a few seconds after boot
 /// while the disk attaches. Retry a bounded number of times so the list heals
@@ -163,14 +164,11 @@ export const useProjects = () => {
 		});
 	};
 
-	const q = query.trim().toLowerCase();
-	const matched = q
-		? projects.filter(p => p.name.toLowerCase().includes(q))
-		: projects;
+	const q = query.trim();
 
 	// Both ranked modes fall back to name, so the long tail (equal scores, or
 	// projects with no git history) keeps a stable alphabetical order instead
-	// of whatever the scan happened to return. `[...matched]` because sort
+	// of whatever the scan happened to return. `[...projects]` because sort
 	// mutates.
 	const byName = (a: Project, b: Project) =>
 		a.name.toLowerCase().localeCompare(b.name.toLowerCase());
@@ -184,10 +182,17 @@ export const useProjects = () => {
 		const sb = ranks.get(b.full_path)?.score ?? 0;
 		return sb !== sa ? sb - sa : byName(a, b);
 	};
-	const filtered =
-		sortMode === 'name'
-			? matched
-			: [...matched].sort(sortMode === 'activity' ? byActivity : byFrecency);
+	// the palette's matcher, a third time: `dvgo` finds `devgo-app`. while you
+	// type, the top hit belongs under Enter, so best match first
+	const filtered = q
+		? projects
+				.map(p => ({ p, s: fuzzyScore(q, p.name) }))
+				.filter((x): x is { p: Project; s: number } => x.s !== null)
+				.sort((a, b) => (b.s !== a.s ? b.s - a.s : byName(a.p, b.p)))
+				.map(x => x.p)
+		: sortMode === 'name'
+			? projects
+			: [...projects].sort(sortMode === 'activity' ? byActivity : byFrecency);
 
 	// Derived from `filtered`, not `projects`, so pins respect the search.
 	const pinnedProjects = filtered.filter(p => ranks.get(p.full_path)?.pinned);
