@@ -186,6 +186,12 @@ export const useProjects = () => {
 		});
 	};
 
+	// the sort control picks a mode outright; the palette still cycles
+	const setSort = (mode: SortMode) => {
+		localStorage.setItem(SORT_KEY, mode);
+		setSortMode(mode);
+	};
+
 	// Patch one rank from the command's answer rather than rescanning every
 	// workspace to change a star.
 	const togglePin = async (project: Project) => {
@@ -249,6 +255,7 @@ export const useProjects = () => {
 		loading,
 		sortMode,
 		toggleSort,
+		setSort,
 		togglePin
 	};
 };
