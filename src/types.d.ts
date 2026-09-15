@@ -116,6 +116,8 @@ interface GithubRepo {
 	archived: boolean;
 	/// null for an empty repository
 	default_branch: string | null;
+	/// added by hand (any owner) rather than listed by gh; survives a refresh
+	added: boolean;
 }
 
 /// installed / logged in as / neither, read without the network

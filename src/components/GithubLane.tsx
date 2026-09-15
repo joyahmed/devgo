@@ -123,6 +123,14 @@ const RepoRow = ({
 					</span>
 				</Button>
 			)}
+			{repo.added && !localPath && (
+				<span
+					className='text-[9px] uppercase tracking-wider text-text-muted shrink-0'
+					title='Added by name. Not one of your repositories'
+				>
+					added
+				</span>
+			)}
 			{repo.default_branch && (
 				<span
 					className='truncate font-mono text-[11px] text-text-muted'
