@@ -46,6 +46,22 @@ const showError = (e: unknown): string => {
 	return 'Something went wrong';
 };
 
+// the host's own spelling for the four we know, the bare hostname for the
+// rest: "Open repo on GitHub", not "on github" and not "on github.com"
+const HOST_NAMES: Record<string, string> = {
+	'github.com': 'GitHub',
+	'gitlab.com': 'GitLab',
+	'bitbucket.org': 'Bitbucket',
+	'codeberg.org': 'Codeberg'
+};
+const hostOf = (url: string) => {
+	const h = (url.replace(/^https?:\/\//, '').split('/')[0] ?? '').replace(
+		/^www\./,
+		''
+	);
+	return HOST_NAMES[h] ?? h;
+};
+
 const AppInner = () => {
 	const runtime = useRuntime();
 	const maximized = useMaximized();
@@ -249,10 +265,60 @@ const AppInner = () => {
 		togglePin(p).catch(e => toast(showError(e)));
 	};
 
-	const handleOpenRemote = (p: Project) => {
-		invoke('open_remote', { fullPath: p.full_path }).catch(e =>
-			toast(showError(e))
-		);
+	const handleOpenRemote = (p: Project, branch?: string) => {
+		invoke('open_remote', {
+			fullPath: p.full_path,
+			branch: branch ?? null
+		}).catch(e => toast(showError(e)));
+	};
+
+	// the branch popover: the repo on its host, then every branch the last
+	// git fetch left in refs/remotes, read when the chip is clicked and
+	// never in the badge pass; remembered on the project's GitInfo
+	const [branchMenu, setBranchMenu] = useState<BranchMenu | null>(null);
+
+	const openBranches = (p: Project, x: number, y: number) => {
+		setBranchMenu({ project: p, x, y, branches: null });
+		// only the popover that asked gets the answer
+		const fill = (list: string[]) =>
+			setBranchMenu(m =>
+				m && m.project.full_path === p.full_path ? { ...m, branches: list } : m
+			);
+		invoke<string[]>('get_remote_branches', { project: p })
+			.then(fill)
+			.catch(e => {
+				toast(showError(e));
+				fill([]);
+			});
+	};
+
+	const buildBranchMenu = (m: BranchMenu): MenuEntry[] => {
+		const info = git.get(m.project.full_path);
+		const host = info?.remote ? hostOf(info.remote) : 'remote';
+		const current = info?.branch ?? null;
+		const others = (m.branches ?? []).filter(b => b !== current);
+		const open = (branch?: string) => () => handleOpenRemote(m.project, branch);
+		const rest: MenuEntry[] =
+			m.branches === null
+				? [{ label: 'Loading branches…', disabled: true, onClick: () => {} }]
+				: others.length === 0
+					? [
+							{
+								label: 'No other branches on the remote',
+								disabled: true,
+								onClick: () => {}
+							}
+						]
+					: others.map(b => ({ label: b, onClick: open(b) }));
+		// the same open_remote the context menu has called since chapter 10
+		return [
+			{ label: `Open repo on ${host}`, onClick: open() },
+			'separator',
+			...(current
+				? [{ label: current, hint: 'current', onClick: open(current) }]
+				: []),
+			...rest
+		];
 	};
 
 	const handleOpenEditor = (targetId?: string) =>
@@ -757,6 +823,17 @@ const AppInner = () => {
 				/>
 			)}
 
+			{branchMenu && (
+				<ContextMenu
+					{...{
+						x: branchMenu.x,
+						y: branchMenu.y,
+						items: buildBranchMenu(branchMenu),
+						onClose: () => setBranchMenu(null)
+					}}
+				/>
+			)}
+
 			{addMenu && (
 				<ContextMenu
 					{...{
@@ -869,7 +946,7 @@ const AppInner = () => {
 								techInfo: tech,
 								pinnedProjects,
 								onTogglePin: handleTogglePin,
-								onOpenRemote: handleOpenRemote,
+								onOpenBranches: openBranches,
 								onContextMenu: (p: Project, x: number, y: number) =>
 									setMenu({ project: p, x, y }),
 								onWorkspaceContextMenu: (ws: string, x: number, y: number) =>

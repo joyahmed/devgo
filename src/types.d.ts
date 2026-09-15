@@ -60,6 +60,8 @@ interface GitInfo {
 	dirty: boolean;
 	remote: string | null;
 	last_commit: number;
+	/// filled on demand by get_remote_branches; null until someone asks
+	remote_branches: string[] | null;
 }
 
 /// What a project appears to be, from the names in its top directory alone.
@@ -392,6 +394,14 @@ interface ConfirmDialogProps {
 	onCancel: () => void;
 }
 
+/// the branch popover; branches null is the loading state
+interface BranchMenu {
+	project: Project;
+	x: number;
+	y: number;
+	branches: string[] | null;
+}
+
 interface MenuAction {
 	label: string;
 	hint?: string;
@@ -455,7 +465,7 @@ interface ProjectTreeProps {
 	techInfo?: Map<string, ProjectTech>;
 	pinnedProjects?: Project[];
 	onTogglePin?: (p: Project) => void;
-	onOpenRemote?: (p: Project) => void;
+	onOpenBranches?: (p: Project, x: number, y: number) => void;
 	onContextMenu?: (p: Project, x: number, y: number) => void;
 	/// right-click on a workspace row; workspaces had no menu at all
 	onWorkspaceContextMenu?: (workspace: string, x: number, y: number) => void;
@@ -469,7 +479,8 @@ interface ProjectTreeProps {
 
 interface GitBadgeProps {
 	info?: GitInfo;
-	onOpenRemote?: () => void;
+	/// the chip was clicked: open the branch popover at (x, y)
+	onOpenBranches?: (x: number, y: number) => void;
 }
 
 interface TechBadgesProps {
@@ -486,7 +497,7 @@ interface RowMetaProps {
 	git?: GitInfo;
 	tech?: ProjectTech;
 	onTogglePin?: (p: Project) => void;
-	onOpenRemote?: (p: Project) => void;
+	onOpenBranches?: (p: Project, x: number, y: number) => void;
 }
 
 interface ProjectRowProps {
@@ -502,7 +513,7 @@ interface ProjectRowProps {
 	onSelect: (p: Project) => void;
 	onDoubleClick: (p: Project) => void;
 	onTogglePin?: (p: Project) => void;
-	onOpenRemote?: (p: Project) => void;
+	onOpenBranches?: (p: Project, x: number, y: number) => void;
 	onContextMenu?: (p: Project, x: number, y: number) => void;
 }
 

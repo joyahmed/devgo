@@ -126,8 +126,10 @@ const TechBadges = ({ tech }: TechBadgesProps) => {
 
 /// Branch name plus a dot when the tree is dirty. Absent entirely for anything
 /// that is not a git repository, or whose distro is stopped — no placeholder,
-/// no "unknown", nothing to read as a state that it isn't.
-const GitBadge = ({ info, onOpenRemote }: GitBadgeProps) => {
+/// no "unknown", nothing to read as a state that it isn't. With a remote the
+/// chip is a door: it reports where it is and asks for the branch popover
+/// there, so the list appears where the eye already is.
+const GitBadge = ({ info, onOpenBranches }: GitBadgeProps) => {
 	if (!info?.branch) return null;
 	return (
 		<span className='flex items-center gap-1 min-w-0'>
@@ -140,12 +142,15 @@ const GitBadge = ({ info, onOpenRemote }: GitBadgeProps) => {
 				className={`truncate font-mono text-[11px] text-text-muted ${
 					info.remote ? 'hover:text-accent cursor-pointer' : ''
 				}`}
-				title={info.remote ? `${info.branch} — open ${info.remote}` : info.branch}
+				title={
+					info.remote ? `${info.branch} — branches on ${info.remote}` : info.branch
+				}
 				onClick={
 					info.remote
 						? e => {
 								e.stopPropagation();
-								onOpenRemote?.();
+								const r = e.currentTarget.getBoundingClientRect();
+								onOpenBranches?.(r.left, r.bottom + 4);
 							}
 						: undefined
 				}
@@ -163,11 +168,16 @@ const RowMeta = ({
 	git,
 	tech,
 	onTogglePin,
-	onOpenRemote
+	onOpenBranches
 }: RowMetaProps) => (
 	<div className='flex items-center justify-end gap-1.5 min-w-0'>
 		<TechBadges {...{ tech }} />
-		<GitBadge {...{ info: git, onOpenRemote: () => onOpenRemote?.(project) }} />
+		<GitBadge
+			{...{
+				info: git,
+				onOpenBranches: (x: number, y: number) => onOpenBranches?.(project, x, y)
+			}}
+		/>
 		{rank?.hint && (
 			<span className='text-[9px] uppercase tracking-wider text-text-muted shrink-0'>
 				{rank.hint}
@@ -205,7 +215,7 @@ const ProjectRow = ({
 	onSelect,
 	onDoubleClick,
 	onTogglePin,
-	onOpenRemote,
+	onOpenBranches,
 	onContextMenu
 }: ProjectRowProps) => (
 	<div
@@ -236,7 +246,7 @@ const ProjectRow = ({
 			{project.name}
 		</div>
 		<FsCell fs={project.file_system} />
-		<RowMeta {...{ project, rank, git, tech, onTogglePin, onOpenRemote }} />
+		<RowMeta {...{ project, rank, git, tech, onTogglePin, onOpenBranches }} />
 	</div>
 );
 
@@ -254,7 +264,7 @@ const ProjectTree = ({
 	techInfo,
 	pinnedProjects,
 	onTogglePin,
-	onOpenRemote,
+	onOpenBranches,
 	onContextMenu,
 	onWorkspaceContextMenu,
 	workspaceOrder,
@@ -522,7 +532,7 @@ const ProjectTree = ({
 		onSelect,
 		onDoubleClick,
 		onTogglePin,
-		onOpenRemote,
+		onOpenBranches,
 		onContextMenu
 	});
 
