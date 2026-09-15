@@ -1,7 +1,6 @@
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { type ReactNode } from 'react';
-import TitleBarButton from './TitleBarButton';
-import { TITLE_BAR_BUTTONS } from './titleBarButtons';
+import TitleBarButton, { TITLE_BAR_BUTTONS } from './TitleBarButton';
 
 const appWindow = getCurrentWindow();
 
