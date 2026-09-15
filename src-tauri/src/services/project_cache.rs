@@ -141,4 +141,19 @@ mod tests {
         assert_eq!(s.find(r"G:\b\web").map(|p| p.name), Some("web".into()));
         assert!(s.find(r"G:\b\gone").is_none());
     }
+
+    #[test]
+    fn clear_forgets_everything_on_disk() {
+        let dir = std::env::temp_dir().join("devgo-cache-test-clear");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+
+        let mut s = ProjectCacheStore::new(dir.clone()).unwrap();
+        s.store(r"G:\a", vec![project("api", r"G:\a")]).unwrap();
+        s.clear().unwrap();
+
+        assert!(s.all_projects().is_empty());
+        let reloaded = ProjectCacheStore::new(dir).unwrap();
+        assert!(reloaded.get(r"G:\a").is_none(), "clear must persist");
+    }
 }
