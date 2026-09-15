@@ -457,6 +457,9 @@ interface ProjectTreeProps {
 	onContextMenu?: (p: Project, x: number, y: number) => void;
 	/// right-click on a workspace row; workspaces had no menu at all
 	onWorkspaceContextMenu?: (workspace: string, x: number, y: number) => void;
+	/// the store's order; without it the tree fell back to first-seen order
+	/// of the name-sorted project list
+	workspaceOrder?: string[];
 	ref?: React.Ref<ProjectTreeHandle>;
 }
 

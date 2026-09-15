@@ -856,7 +856,8 @@ const AppInner = () => {
 								onContextMenu: (p: Project, x: number, y: number) =>
 									setMenu({ project: p, x, y }),
 								onWorkspaceContextMenu: (ws: string, x: number, y: number) =>
-									setScriptMenu({ x, y, items: buildWorkspaceMenu(ws) })
+									setScriptMenu({ x, y, items: buildWorkspaceMenu(ws) }),
+								workspaceOrder: workspaces
 							}}
 						/>
 						<ActionButtons

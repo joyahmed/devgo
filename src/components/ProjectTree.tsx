@@ -255,6 +255,7 @@ const ProjectTree = ({
 	onOpenRemote,
 	onContextMenu,
 	onWorkspaceContextMenu,
+	workspaceOrder,
 	ref
 }: ProjectTreeProps) => {
 	const [collapsed, setCollapsed] = useState<Set<string>>(loadCollapsed);
@@ -268,13 +269,22 @@ const ProjectTree = ({
 		grouped.set(p.workspace, existing);
 	}
 
+	// the store's order, not grouped's: grouped is keyed in first-seen order
+	// of the name-sorted project list, so a workspace's place depended on
+	// what its first project happened to be called. one the store does not
+	// list (a search result from a workspace mid-removal) keeps its place
+	// at the end rather than vanishing
+	const rank = new Map((workspaceOrder ?? []).map((w, i) => [w, i]));
+	const at = (ws: string) => rank.get(ws) ?? Number.MAX_SAFE_INTEGER;
+	const entries = [...grouped].sort(([a], [b]) => at(a) - at(b));
+
 	// Pinned rows come first for keyboard navigation, and are then skipped in
 	// the tree below so arrowing down never lands on the same project twice.
 	const pinned = pinnedProjects ?? [];
 	const pinnedPaths = new Set(pinned.map(p => p.full_path));
 
 	const visible: Project[] = [...pinned];
-	for (const [ws, wsProjects] of grouped) {
+	for (const [ws, wsProjects] of entries) {
 		if (!isCollapsed(ws)) {
 			visible.push(...wsProjects.filter(p => !pinnedPaths.has(p.full_path)));
 		}
@@ -404,8 +414,6 @@ const ProjectTree = ({
 		);
 	}
 
-	const workspaces = [...grouped.entries()];
-
 	const rowProps = (project: Project) => ({
 		project,
 		selected: selected?.full_path === project.full_path,
@@ -447,7 +455,7 @@ const ProjectTree = ({
 					</div>
 				)}
 
-				{workspaces.map(([ws, wsProjects]) => {
+				{entries.map(([ws, wsProjects]) => {
 					const isOpen = !isCollapsed(ws);
 					const count = wsProjects.length;
 					const fs = wsProjects[0]?.file_system ?? 'Windows';
