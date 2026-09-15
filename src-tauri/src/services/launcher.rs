@@ -4,7 +4,7 @@ use std::process::Command;
 use super::platform::RuntimeInfo;
 use super::preferences::TmuxConfig;
 use crate::error::AppError;
-use crate::models::target::{LaunchTarget, TargetKind};
+use crate::models::target::LaunchTarget;
 use crate::models::Project;
 
 const CREATE_NO_WINDOW: u32 = 0x08000000;
@@ -74,21 +74,15 @@ pub fn launch_target(
     info: &RuntimeInfo,
     tmux: &TmuxConfig,
 ) -> Result<(), AppError> {
-    let (resolved, script) = if is_wsl(project) {
+    let (resolved, wsl) = if is_wsl(project) {
         let distro = distro_from_project(project, info)?;
         let linux_path = super::platform::paths::windows_to_wsl_path(
             &project.full_path,
             &distro,
         );
-        let script = if target.kind == TargetKind::Terminal {
-            Some(write_tmux_script(project, &distro, &linux_path, tmux)?)
-        } else {
-            None
-        };
-        (
-            target.resolve(&project.full_path, Some((&distro, &linux_path))),
-            script,
-        )
+        let resolved =
+            target.resolve(&project.full_path, Some((&distro, &linux_path)));
+        (resolved, Some((distro, linux_path)))
     } else {
         (target.resolve(&project.full_path, None), None)
     };
@@ -105,9 +99,14 @@ pub fn launch_target(
         }
     })?;
 
-    let args = match script {
-        Some(path) => args.replace("{script}", &path),
-        None => args,
+    // the template decides, not the kind: a terminal whose args ignore
+    // {script} used to get a devgo-*.sh in %TEMP% that nothing ever read
+    let args = match (&wsl, args.contains("{script}")) {
+        (Some((distro, linux_path)), true) => {
+            let script = write_tmux_script(project, distro, linux_path, tmux)?;
+            args.replace("{script}", &script)
+        }
+        _ => args,
     };
 
     spawn_raw(&exe, &args)
@@ -318,6 +317,93 @@ mod tests {
             "WSL".into(),
         );
         assert_eq!(tmux_session_name(&work), tmux_session_name(&shouted));
+    }
+
+    /// {script} is the one placeholder resolve knows nothing about; the
+    /// launcher fills it afterwards, because only the launcher writes the file.
+    #[test]
+    fn the_script_placeholder_is_filled_by_the_launcher_not_by_resolve() {
+        let every = LaunchTarget {
+            id: "every".into(),
+            name: "Every Placeholder".into(),
+            kind: TargetKind::Terminal,
+            executable: "wt".into(),
+            args_template: "-d \"{path}\"".into(),
+            wsl_executable: None,
+            wsl_args_template: Some(
+                "{distro} {linux_path} {path} {script}".into(),
+            ),
+            run_args_template: None,
+            wsl_run_args_template: None,
+        };
+        let windows_path = r"\\wsl.localhost\Ubuntu\home\joy\api";
+        let (_, args) = every
+            .resolve(windows_path, Some(("Ubuntu", "/home/joy/api")))
+            .unwrap();
+        assert_eq!(
+            args,
+            format!("Ubuntu /home/joy/api {windows_path} {{script}}")
+        );
+
+        // the other half: the launcher fills it with a file it really wrote.
+        // cmd, not wsl, so the suite does not depend on a distro
+        let marker =
+            std::env::temp_dir().join("devgo-script-placeholder-proof.txt");
+        let _ = std::fs::remove_file(&marker);
+        let echoes = LaunchTarget {
+            id: "echo-script".into(),
+            name: "Echo Script".into(),
+            kind: TargetKind::Terminal,
+            executable: "cmd".into(),
+            args_template: "/c exit".into(),
+            wsl_executable: None,
+            wsl_args_template: Some(format!(
+                "/c echo {{script}} > \"{}\"",
+                marker.display()
+            )),
+            run_args_template: None,
+            wsl_run_args_template: None,
+        };
+        let project = wsl_project("placeholder", "work");
+        launch_target(&echoes, &project, &no_distro(), &tmux_with(&["code"]))
+            .unwrap();
+        let written_len = || std::fs::metadata(&marker).map_or(0, |m| m.len());
+        for _ in 0..40 {
+            if written_len() > 0 {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        let written =
+            std::fs::read_to_string(&marker).expect("target never ran");
+        assert!(!written.contains("{script}"), "{written:?}");
+        assert!(written.contains(".sh"), "{written:?}");
+        let _ = std::fs::remove_file(&marker);
+    }
+
+    /// A terminal that opens the directory directly asks for no script and
+    /// must not be left one in %TEMP%.
+    #[test]
+    fn a_terminal_template_without_the_placeholder_writes_no_script() {
+        let project = wsl_project("orphan-check", "work");
+        let script_path = std::env::temp_dir()
+            .join(format!("devgo-{}.sh", tmux_session_name(&project)));
+        let _ = std::fs::remove_file(&script_path);
+        let plain = LaunchTarget {
+            id: "plain".into(),
+            name: "Plain".into(),
+            kind: TargetKind::Terminal,
+            executable: "cmd".into(),
+            args_template: "/c exit".into(),
+            wsl_executable: None,
+            wsl_args_template: Some("/c exit".into()),
+            run_args_template: None,
+            wsl_run_args_template: None,
+        };
+        launch_target(&plain, &project, &no_distro(), &tmux_with(&["code"]))
+            .unwrap();
+        // the write is synchronous inside launch_target: it exists or never was
+        assert!(!script_path.exists(), "{}", script_path.display());
     }
 
     /// The shipped default must still be byte-for-byte what the three
