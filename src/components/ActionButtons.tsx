@@ -7,7 +7,7 @@ const BUTTONS: { key: string; label: string; shortcut?: ShortcutId }[] = [
 	{ key: 'remove', label: 'Remove', shortcut: 'removeWorkspace' },
 	{ key: 'add', label: 'Add', shortcut: 'addWorkspace' },
 	{ key: 'refresh', label: 'Refresh', shortcut: 'refresh' },
-	{ key: 'code', label: 'VS Code', shortcut: 'openEditor' },
+	{ key: 'code', label: 'Editor', shortcut: 'openEditor' },
 	{ key: 'terminal', label: 'Terminal', shortcut: 'openTerminal' },
 	{ key: 'both', label: 'Open Both', shortcut: 'openBoth' }
 ];
@@ -20,7 +20,7 @@ const ActionButtons = ({
 	hasSelection,
 	onAddWorkspace,
 	onRemoveWorkspace,
-	onVSCode,
+	onEditor,
 	onTerminal,
 	onBoth,
 	onRefresh
@@ -29,7 +29,7 @@ const ActionButtons = ({
 		remove: onRemoveWorkspace,
 		add: onAddWorkspace,
 		refresh: onRefresh,
-		code: onVSCode,
+		code: onEditor,
 		terminal: onTerminal,
 		both: onBoth
 	};

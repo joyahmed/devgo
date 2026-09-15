@@ -14,9 +14,11 @@ export const useLaunchActions = (
 		refreshProjects();
 	};
 
-	const openVSCode = () => {
+	const openEditor = () => {
 		if (!selected) return Promise.resolve();
-		return invoke('open_vscode', { project: selected });
+		// targetId omitted means "use the default", resolved on the Rust side so
+		// the fallback chain lives in one place.
+		return invoke('open_editor', { project: selected, targetId: null });
 	};
 
 	const openTerminal = () => {
@@ -33,7 +35,7 @@ export const useLaunchActions = (
 	return {
 		addWorkspace,
 		removeWorkspace,
-		openVSCode,
+		openEditor,
 		openTerminal,
 		openBoth
 	};

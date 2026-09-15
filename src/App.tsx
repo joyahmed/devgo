@@ -53,7 +53,7 @@ const AppInner = () => {
 		toggleSort,
 		togglePin
 	} = useProjects();
-	const { addWorkspace, removeWorkspace, openVSCode, openTerminal, openBoth } =
+	const { addWorkspace, removeWorkspace, openEditor, openTerminal, openBoth } =
 		useLaunchActions(selected, refresh);
 	const { toast } = useToast();
 	const [removeIndex, setRemoveIndex] = useState<number | null>(null);
@@ -169,7 +169,7 @@ const AppInner = () => {
 		);
 	};
 
-	const handleOpenVSCode = () => openVSCode().catch(e => toast(showError(e)));
+	const handleOpenEditor = () => openEditor().catch(e => toast(showError(e)));
 	const handleOpenTerminal = () =>
 		openTerminal().catch(e => toast(showError(e)));
 	const handleOpenBoth = () => openBoth().catch(e => toast(showError(e)));
@@ -216,7 +216,7 @@ const AppInner = () => {
 			}
 
 			if (!selected) return;
-			if (fire('openEditor', handleOpenVSCode)) return;
+			if (fire('openEditor', handleOpenEditor)) return;
 			if (fire('openTerminal', handleOpenTerminal)) return;
 			if (fire('openBoth', handleOpenBoth)) return;
 		};
@@ -249,7 +249,8 @@ const AppInner = () => {
 						workspaces,
 						onAddWorkspace: addWorkspace,
 						onRemoveWorkspace: (i: number) => setRemoveIndex(i),
-						summonHotkey
+						summonHotkey,
+						onError: (m: string) => toast(m, 'error')
 					}}
 				/>
 			</Suspense>
@@ -320,7 +321,7 @@ const AppInner = () => {
 						hasSelection: selected !== null,
 						onAddWorkspace: openSettings,
 						onRemoveWorkspace: handleRemoveShortcut,
-						onVSCode: handleOpenVSCode,
+						onEditor: handleOpenEditor,
 						onTerminal: handleOpenTerminal,
 						onBoth: handleOpenBoth,
 						onRefresh: handleRefresh

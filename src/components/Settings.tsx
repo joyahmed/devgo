@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { prettyKeys, SHORTCUTS } from '../shortcuts';
+import { useTargets } from '../hooks/useTargets';
 import Button from './Button';
+import TargetManager from './TargetManager';
 import WorkspaceManager from './WorkspaceManager';
 
 // Which panel you last looked at is frontend-only UI state, like sortMode:
@@ -63,8 +65,11 @@ const Settings = ({
 	workspaces,
 	onAddWorkspace,
 	onRemoveWorkspace,
-	summonHotkey
+	summonHotkey,
+	onError
 }: SettingsProps) => {
+	const targets = useTargets();
+
 	// The registry. A later chapter adds a panel by adding an object here; the
 	// nav, the persistence, Escape and the layout never learn what a panel holds.
 	const panels: SettingsPanel[] = [
@@ -77,6 +82,23 @@ const Settings = ({
 						workspaces,
 						onAdd: onAddWorkspace,
 						onRemove: onRemoveWorkspace
+					}}
+				/>
+			)
+		},
+		{
+			id: 'targets',
+			label: 'Editors & Terminals',
+			render: () => (
+				<TargetManager
+					{...{
+						editors: targets.editors,
+						terminals: targets.terminals,
+						defaults: targets.defaults,
+						onAdd: targets.addTarget,
+						onRemove: targets.removeTarget,
+						onSetDefault: targets.setDefaultTarget,
+						onError
 					}}
 				/>
 			)

@@ -67,6 +67,22 @@ interface LastProject {
 	workspace: string;
 }
 
+type TargetKind = 'editor' | 'terminal';
+
+/// An editor or terminal DevGo can launch into. Both share one shape because
+/// both are "a program plus how to hand it a directory". `string | null`, not
+/// `?`: Rust's Option serialises to an explicit null, and one is built here to
+/// send back.
+interface LaunchTarget {
+	id: string;
+	name: string;
+	kind: TargetKind;
+	executable: string;
+	args_template: string;
+	wsl_executable: string | null;
+	wsl_args_template: string | null;
+}
+
 /* Shortcuts — see src/shortcuts.ts */
 
 type ShortcutId =
@@ -145,10 +161,36 @@ interface SettingsProps {
 	onAddWorkspace: (path: string) => void;
 	onRemoveWorkspace: (index: number) => void;
 	summonHotkey: string;
+	onError: (message: string) => void;
 }
 
 interface ShortcutTableProps {
 	summonHotkey: string;
+}
+
+/// The add form's fields — all strings, because an input cannot hold null.
+type TargetDraft = Record<
+	'name' | 'executable' | 'args_template' | 'wsl_executable' | 'wsl_args_template',
+	string
+>;
+
+interface TargetListProps {
+	kind: TargetKind;
+	items: LaunchTarget[];
+	defaultId?: string;
+	onRemove: (id: string) => void;
+	onSetDefault: (kind: TargetKind, id: string) => void;
+}
+
+interface TargetManagerProps {
+	editors: LaunchTarget[];
+	terminals: LaunchTarget[];
+	/// Kind → id of the target that would actually launch, resolved in Rust.
+	defaults: Record<string, string>;
+	onAdd: (t: Omit<LaunchTarget, 'id'>) => Promise<void>;
+	onRemove: (id: string) => Promise<void>;
+	onSetDefault: (kind: TargetKind, id: string) => Promise<void>;
+	onError: (message: string) => void;
 }
 
 interface ConfirmDialogProps {
@@ -242,7 +284,7 @@ interface ActionButtonsProps {
 	hasSelection: boolean;
 	onAddWorkspace: () => void;
 	onRemoveWorkspace: () => void;
-	onVSCode: () => void;
+	onEditor: () => void;
 	onTerminal: () => void;
 	onBoth: () => void;
 	onRefresh: () => void;
