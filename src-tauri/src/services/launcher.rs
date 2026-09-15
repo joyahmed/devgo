@@ -200,6 +200,19 @@ fn build_tmux_script(
     linux_path: &str,
     tmux: &TmuxConfig,
 ) -> String {
+    // off is no tmux, not tmux with one window: an empty list still starts
+    // a server and leaves a session behind. exec so exiting closes the tab,
+    // -l so the profile is read; doubled braces because this is a format
+    if !tmux.enabled {
+        return format!(
+            r#"#!/usr/bin/env bash
+cd {} || exit 1
+exec "${{SHELL:-bash}}" -l
+"#,
+            sh_quote(linux_path)
+        );
+    }
+
     let windows = &tmux.window_names;
     let session_q = sh_quote(session);
     // every -t carries `=`: tmux matches a target by prefix otherwise, and
@@ -614,6 +627,54 @@ mod tests {
             assert!(expected.exists(), "{}", expected.display());
             let _ = std::fs::remove_file(&expected);
         }
+    }
+
+    #[test]
+    fn tmux_switched_off_opens_a_plain_shell_and_no_session() {
+        let off = TmuxConfig {
+            enabled: false,
+            window_names: vec!["code".into()],
+        };
+        let script = build_tmux_script("api", "/home/joy/api", &off);
+        assert!(!script.contains("tmux"), "{script}");
+        assert!(script.contains("cd '/home/joy/api'"), "{script}");
+        assert!(script.contains(r#"exec "${SHELL:-bash}" -l"#), "{script}");
+    }
+
+    /// The list is ignored while off and still there when it comes back.
+    #[test]
+    fn the_window_list_survives_being_switched_off() {
+        let names = ["editor", "logs", "db"];
+        let off = TmuxConfig {
+            enabled: false,
+            ..tmux_with(&names)
+        };
+        let off_script = build_tmux_script("app", "/srv/app", &off);
+        for name in names {
+            assert!(!off_script.contains(name), "{off_script}");
+        }
+        let on = TmuxConfig {
+            enabled: true,
+            ..off
+        };
+        let on_script = build_tmux_script("app", "/srv/app", &on);
+        for name in names {
+            assert!(on_script.contains(&format!("-n '{name}'")), "{on_script}");
+        }
+    }
+
+    /// bool::default() is false; a plain serde(default) on `enabled` would
+    /// have switched tmux off for every existing install.
+    #[test]
+    fn tmux_is_on_for_a_config_that_predates_the_switch() {
+        let parsed: TmuxConfig =
+            serde_json::from_str(r#"{"window_names":["code","agents"]}"#)
+                .unwrap();
+        assert!(parsed.enabled);
+        assert_eq!(
+            parsed.window_names,
+            vec!["code".to_string(), "agents".to_string()]
+        );
     }
 
     /// The shipped default must still be byte-for-byte what the three
