@@ -182,7 +182,8 @@ const GithubLane = ({
 	onOpen,
 	onContextMenu,
 	onShowLocal,
-	jobs
+	jobs,
+	onAddMenu
 }: GithubLaneProps) => {
 	const { payload, status, isOpen, toggleOpen, visible } = github;
 	const login = payload?.cache.login ?? status?.login ?? null;
@@ -221,7 +222,21 @@ const GithubLane = ({
 					)}
 				</div>
 				<div className='text-text-muted truncate'>{headerLine(github)}</div>
-				<div>
+				<div className='flex items-center gap-1'>
+					{onAddMenu && total > 0 && (
+						<Button
+							variant='ghost'
+							className='w-6 h-6 -my-1'
+							title='Clone repos into a workspace, or add one by name'
+							onClick={e => {
+								e.stopPropagation();
+								const r = e.currentTarget.getBoundingClientRect();
+								onAddMenu(r.left, r.bottom + 4);
+							}}
+						>
+							+
+						</Button>
+					)}
 					{canRefresh && (
 						<Button
 							variant='ghost'

@@ -271,6 +271,7 @@ const ProjectTree = ({
 	onRepoContextMenu,
 	onShowLocal,
 	cloneJobs,
+	onGithubAddMenu,
 	ref
 }: ProjectTreeProps) => {
 	const [collapsed, setCollapsed] = useState<Set<string>>(loadCollapsed);
@@ -543,7 +544,8 @@ const ProjectTree = ({
 				onContextMenu: (r: GithubRepo, x: number, y: number) =>
 					onRepoContextMenu?.(r, x, y),
 				onShowLocal: (path: string) => onShowLocal?.(path),
-				jobs: cloneJobs
+				jobs: cloneJobs,
+				onAddMenu: onGithubAddMenu
 			}}
 		/>
 	) : null;

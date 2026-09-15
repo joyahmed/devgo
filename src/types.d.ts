@@ -384,6 +384,8 @@ interface GithubLaneProps {
 	onShowLocal: (path: string) => void;
 	/// clones in flight or just finished, by full_name
 	jobs?: Map<string, CloneJob>;
+	/// the header's +: clone repos / add repo by name, opened at (x, y)
+	onAddMenu?: (x: number, y: number) => void;
 }
 
 interface RepoRowProps {
@@ -635,6 +637,7 @@ interface ProjectTreeProps {
 	/// the local mark: select the disk project this repo is cloned at
 	onShowLocal?: (path: string) => void;
 	cloneJobs?: Map<string, CloneJob>;
+	onGithubAddMenu?: (x: number, y: number) => void;
 	ref?: React.Ref<ProjectTreeHandle>;
 }
 
