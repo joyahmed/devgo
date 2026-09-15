@@ -880,8 +880,10 @@ mod tests {
         assert!(script.contains("psmux.exe attach -t '=app-deadbeef'"));
     }
 
-    /// Probed: psmux resolves a target by prefix exactly as tmux does, and
-    /// has-session -t devgo-pro was satisfied by a running devgo-probe.
+    /// Probed on psmux 3.3.8: a bare name matches exactly and a prefix not
+    /// at all, so the `=` is inert there today. It stays: tmux's own rule
+    /// is prefix match, psmux tracks tmux, and a release that adopts the
+    /// rule would attach you to somebody else's project without a word.
     #[test]
     fn every_psmux_target_is_matched_exactly_except_the_name_being_created() {
         let script = build_psmux_script(
