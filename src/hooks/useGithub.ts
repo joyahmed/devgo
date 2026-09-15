@@ -214,7 +214,7 @@ export const useGithub = (git: Map<string, GitInfo>): GithubState => {
 	// wrong heading
 	const have = new Set((cacheMatches ?? []).map(r => r.full_name));
 	const liveExtras =
-		cacheMatches && live.query === q
+		liveOn && cacheMatches && live.query === q
 			? live.repos.filter(r => !have.has(r.full_name))
 			: [];
 
