@@ -1,20 +1,20 @@
 import type { KeyboardEvent } from 'react';
 import Button from './Button';
 
-const SORT_LABEL: Record<SortMode, string> = {
-	frecency: 'frecency',
-	activity: 'activity',
-	name: 'A–Z'
-};
-
+// the input and nothing else. it carried a SEARCH PROJECTS label and a
+// 10px sort: button; the placeholder names the scope now and the sort is
+// a real control beside the box. from this chapter there are two of
+// these, one over the projects and one over the github rows, so it is
+// the same component twice rather than two components
 const SearchBox = ({
 	value,
 	onChange,
 	onEnter,
 	onArrow,
 	enterHint,
-	sortMode,
-	onToggleSort,
+	placeholder = 'Search local projects…',
+	lane = 'projects',
+	className = '',
 	ref
 }: SearchBoxProps) => {
 	const keys: Record<string, (() => void) | undefined> = {
@@ -36,50 +36,38 @@ const SearchBox = ({
 	};
 
 	return (
-		<div className='shrink-0'>
-			<div className='flex items-baseline justify-between mb-2'>
-				<label className='block text-xs font-semibold uppercase tracking-wider text-text-secondary'>
-					Search Projects
-				</label>
-				{onToggleSort && (
+		<div
+			className={`relative bg-bg-panel rounded-lg border border-border-strong focus-within:border-accent transition-colors ${className}`}
+		>
+			<input
+				ref={ref}
+				type='text'
+				// the launcher's whole job is to be typed into the instant it
+				// appears, and the project box is where that typing goes
+				autoFocus={lane === 'projects'}
+				data-lane-search={lane}
+				className='w-full py-2 pl-3.5 pr-20 bg-transparent outline-none text-sm text-text-primary placeholder:text-text-muted'
+				placeholder={placeholder}
+				value={value}
+				onChange={e => onChange(e.target.value)}
+				onKeyDown={handleKeyDown}
+			/>
+			<div className='absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1.5'>
+				{value && (
 					<Button
 						variant='ghost'
-						className='text-[10px] uppercase tracking-wider p-0 hover:text-accent hover:bg-transparent'
-						title='Toggle sort order'
-						onClick={onToggleSort}
+						className='text-text-secondary'
+						title='Clear'
+						onClick={() => onChange('')}
 					>
-						sort: {SORT_LABEL[sortMode ?? 'frecency']}
+						&#10005;
 					</Button>
 				)}
-			</div>
-			<div className='relative bg-bg-panel rounded-lg border border-border-strong focus-within:border-accent transition-colors'>
-				<input
-					ref={ref}
-					type='text'
-					// The launcher's whole job is to be typed into the instant it appears.
-					autoFocus
-					className='w-full py-2.5 pl-3.5 pr-20 bg-transparent outline-none text-sm text-text-primary placeholder:text-text-muted'
-					placeholder='Type to filter...'
-					value={value}
-					onChange={e => onChange(e.target.value)}
-					onKeyDown={handleKeyDown}
-				/>
-				<div className='absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1.5'>
-					{value && (
-						<Button
-							variant='ghost'
-							className='text-text-secondary'
-							onClick={() => onChange('')}
-						>
-							&#10005;
-						</Button>
-					)}
-					{enterHint && (
-						<span className='text-[10px] text-text-muted px-1.5 py-0.5 border border-border-strong rounded'>
-							{enterHint}
-						</span>
-					)}
-				</div>
+				{enterHint && (
+					<span className='text-[10px] text-text-muted px-1.5 py-0.5 border border-border-strong rounded'>
+						{enterHint}
+					</span>
+				)}
 			</div>
 		</div>
 	);

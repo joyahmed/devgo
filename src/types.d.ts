@@ -678,14 +678,19 @@ interface WslControlProps {
 	onResult: (message: string, kind: ToastType) => void;
 }
 
+/// which rows a search box searches
+type SearchLane = 'projects' | 'github';
+
 interface SearchBoxProps {
 	value: string;
 	onChange: (v: string) => void;
 	onEnter?: () => void;
 	onArrow?: (dir: 1 | -1) => void;
 	enterHint?: string;
-	sortMode?: SortMode;
-	onToggleSort?: () => void;
+	placeholder?: string;
+	/// the project box takes focus on mount; the github box does not
+	lane?: SearchLane;
+	className?: string;
 	ref?: React.Ref<HTMLInputElement>;
 }
 

@@ -66,6 +66,13 @@ const hostOf = (url: string) => {
 	return HOST_NAMES[h] ?? h;
 };
 
+// the sort control's three modes, in the palette's cycle order
+const SORT_MODES: { mode: SortMode; label: string }[] = [
+	{ mode: 'frecency', label: 'Frecency' },
+	{ mode: 'activity', label: 'Activity' },
+	{ mode: 'name', label: 'A–Z' }
+];
+
 const AppInner = () => {
 	const runtime = useRuntime();
 	const maximized = useMaximized();
@@ -90,6 +97,7 @@ const AppInner = () => {
 		pinnedProjects,
 		sortMode,
 		toggleSort,
+		setSort,
 		togglePin
 	} = useProjects();
 	const { addWorkspace, removeWorkspace, openEditor, openTerminal, openBoth } =
@@ -928,39 +936,6 @@ const AppInner = () => {
 						}}
 					/>
 					<RuntimeIndicator runtime={runtime?.runtime ?? 'windows'} />
-					{/* add and refresh are not launch actions; the title bar already
-					    holds this class of control, and the row below does one job */}
-					<Button
-						variant='ghost'
-						className='w-7 h-7'
-						onClick={e => {
-							const r = e.currentTarget.getBoundingClientRect();
-							setAddMenu({ x: r.left, y: r.bottom + 4 });
-						}}
-						title='Add workspace'
-					>
-						+
-					</Button>
-					<Button
-						variant='ghost'
-						className='w-7 h-7'
-						onClick={handleRefresh}
-						title={`Refresh (${prettyKeys(shortcutFor('refresh'))})`}
-					>
-						<svg
-							width='15'
-							height='15'
-							viewBox='0 0 24 24'
-							fill='none'
-							stroke='currentColor'
-							strokeWidth='2'
-							strokeLinecap='round'
-							strokeLinejoin='round'
-						>
-							<path d='M21 12a9 9 0 1 1-2.64-6.36' />
-							<polyline points='21 3 21 9 15 9' />
-						</svg>
-					</Button>
 					<Button
 						variant='ghost'
 						onClick={() => openSettings()}
@@ -1298,8 +1273,6 @@ const AppInner = () => {
 				}}
 			/>
 
-			{/* the list is a table and wants the window; the search box is the
-			    one thing that reads badly stretched, so it caps alone */}
 			<div className='flex-1 flex flex-col w-full px-6 py-5 gap-4 overflow-hidden'>
 				{workspaces.length === 0 && !loading ? (
 					<Onboarding
@@ -1311,7 +1284,11 @@ const AppInner = () => {
 					/>
 				) : (
 					<>
-						<div className='w-full max-w-[1100px] mx-auto shrink-0'>
+						{/* the command row: the box spans the table it searches (it
+						    capped at 1100px; a heading spans what it heads), the sort
+						    beside it, then the two controls that change what the list
+						    holds. those lived in the title bar; this is the list's row */}
+						<div className='w-full shrink-0 flex items-center gap-3'>
 							<SearchBox
 								{...{
 									ref: searchRef,
@@ -1319,12 +1296,62 @@ const AppInner = () => {
 									onChange: setQuery,
 									onEnter: handleSearchEnter,
 									onArrow: handleArrow,
-									sortMode,
-									onToggleSort: toggleSort,
 									enterHint:
-										selected || filtered.length > 0 ? '⏎ Enter' : undefined
+										selected || filtered.length > 0 ? '⏎ Enter' : undefined,
+									className: 'flex-1 min-w-0'
 								}}
 							/>
+							<div
+								className='flex items-center gap-1 shrink-0'
+								role='group'
+								title='Sort order'
+							>
+								{SORT_MODES.map(m => (
+									<Button
+										key={m.mode}
+										variant='target'
+										aria-current={sortMode === m.mode ? 'true' : undefined}
+										onClick={() => setSort(m.mode)}
+									>
+										{m.label}
+									</Button>
+								))}
+							</div>
+							<Button
+								variant='ghost'
+								className='gap-1 px-2 shrink-0'
+								onClick={e => {
+									const r = e.currentTarget.getBoundingClientRect();
+									setAddMenu({ x: r.left, y: r.bottom + 4 });
+								}}
+								title={`Add workspace (${prettyKeys(shortcutFor('addWorkspace'))})`}
+							>
+								<span className='text-base leading-none'>+</span>
+								<span className='text-xs font-semibold leading-none'>
+									Workspace
+								</span>
+								<span className='text-[9px] leading-none opacity-70'>▾</span>
+							</Button>
+							<Button
+								variant='ghost'
+								className='w-7 h-7 shrink-0'
+								onClick={handleRefresh}
+								title={`Refresh (${prettyKeys(shortcutFor('refresh'))})`}
+							>
+								<svg
+									width='15'
+									height='15'
+									viewBox='0 0 24 24'
+									fill='none'
+									stroke='currentColor'
+									strokeWidth='2'
+									strokeLinecap='round'
+									strokeLinejoin='round'
+								>
+									<path d='M21 12a9 9 0 1 1-2.64-6.36' />
+									<polyline points='21 3 21 9 15 9' />
+								</svg>
+							</Button>
 						</div>
 						<ProjectTree
 							{...{
