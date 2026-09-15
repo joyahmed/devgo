@@ -179,6 +179,11 @@ pub struct Preferences {
     /// over full_names; see services::groups. `serde(default)`, as above.
     #[serde(default)]
     pub github_groups: Vec<super::groups::GithubGroup>,
+    /// Whether the GitHub box also asks GitHub, live, as you type.
+    /// Default off: this is the one place a keystroke becomes a network
+    /// call, and it is opted into, never inherited by an upgrade.
+    #[serde(default)]
+    pub github_live_search: bool,
 }
 
 // bare names, not globs: a cheap comparison on the listing the scan already has
@@ -407,6 +412,15 @@ impl PreferencesStore {
         orgs: Option<Vec<String>>,
     ) -> Result<(), String> {
         self.prefs.github_orgs = orgs;
+        self.save()
+    }
+
+    pub fn github_live_search(&self) -> bool {
+        self.prefs.github_live_search
+    }
+
+    pub fn set_github_live_search(&mut self, on: bool) -> Result<(), String> {
+        self.prefs.github_live_search = on;
         self.save()
     }
 
