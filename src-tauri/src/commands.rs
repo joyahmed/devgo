@@ -768,6 +768,31 @@ pub fn toggle_pin(
 /// The summon accelerator as the user will read it. Chapter 09 registers it
 /// from `setup`; nothing in the frontend needed the value until the Shortcuts
 /// panel wanted to show it. Changing it is still a prefs.json edit.
+// the new chord is registered before the old one is dropped, so a taken
+// key leaves the working binding in place
+#[tauri::command]
+pub fn set_summon_hotkey(
+    accelerator: Option<String>,
+    app: tauri::AppHandle,
+    state: State<AppState>,
+) -> Result<String, AppError> {
+    let previous = state.pref_store.lock().map_err(lock_err)?.summon_hotkey();
+    let next = accelerator.clone().unwrap_or_else(|| {
+        crate::services::preferences::DEFAULT_SUMMON_HOTKEY.to_string()
+    });
+
+    crate::summon::rebind(&app, &previous, &next)
+        .map_err(|e| AppError::HotkeyFailed(next.clone(), e))?;
+
+    state
+        .pref_store
+        .lock()
+        .map_err(lock_err)?
+        .set_summon_hotkey(accelerator)
+        .map_err(AppError::Lock)?;
+    Ok(next)
+}
+
 #[tauri::command]
 pub fn get_summon_hotkey(state: State<AppState>) -> Result<String, AppError> {
     Ok(state.pref_store.lock().map_err(lock_err)?.summon_hotkey())

@@ -150,6 +150,7 @@ pub fn run() {
             commands::quit_app,
             commands::toggle_pin,
             commands::get_summon_hotkey,
+            commands::set_summon_hotkey,
             commands::get_git_info,
             commands::get_project_tech,
             commands::get_project_scripts,

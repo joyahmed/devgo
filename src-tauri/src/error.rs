@@ -45,6 +45,9 @@ pub enum AppError {
 
     #[error("{0} has no run template, so it cannot run a command")]
     TargetCannotRun(String),
+
+    #[error("Could not bind {0}: {1}")]
+    HotkeyFailed(String, String),
 }
 
 // std::io::Error and serde_json::Error don't implement Serialize, so we can't
