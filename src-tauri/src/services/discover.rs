@@ -1,11 +1,6 @@
-use std::os::windows::process::CommandExt;
-use std::process::Command;
-
 use serde::Serialize;
 
 use super::platform::{paths, wsl};
-
-const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 /// A candidate workspace root to suggest on an empty first run.
 #[derive(Debug, Clone, Serialize)]
@@ -80,18 +75,8 @@ fn wsl_project_dirs(distro: &str) -> Vec<String> {
     let script =
         format!("for d in {list}; do [ -d \"$d\" ] && echo \"$d\"; done");
 
-    let output = Command::new("wsl")
-        .creation_flags(CREATE_NO_WINDOW)
-        .env("WSL_UTF8", "1")
-        .args(["-d", distro, "-e", "bash", "-lc", &script])
-        .output();
-
-    match output {
-        Ok(out) if out.status.success() => String::from_utf8_lossy(&out.stdout)
-            .lines()
-            .map(|l| l.trim_end_matches('\r').to_string())
-            .filter(|l| !l.is_empty())
-            .collect(),
-        _ => Vec::new(),
-    }
+    // this gated on status.success() and so found nothing whenever the last
+    // candidate ($HOME/work) was missing: the loop had printed the roots that
+    // exist, then exited 1
+    wsl::probe_lines(distro, &script)
 }
