@@ -120,3 +120,38 @@ pub fn run(
 ) -> Result<(), AppError> {
     super::launcher::launch_with_command(terminal, project, info, command)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn extracts_scripts_with_the_right_runner() {
+        let json =
+            r#"{"name":"x","scripts":{"dev":"next dev","build":"next build"}}"#;
+        let mut got = parse_scripts(json, "pnpm");
+        got.sort_by(|a, b| a.name.cmp(&b.name));
+        assert_eq!(got.len(), 2);
+        assert_eq!(got[0].name, "build");
+        assert_eq!(got[0].command, "pnpm run build");
+    }
+
+    #[test]
+    fn a_package_json_without_scripts_yields_nothing() {
+        assert!(parse_scripts(r#"{"name":"x"}"#, "npm").is_empty());
+    }
+
+    /// A malformed package.json must not take the feature down with it.
+    #[test]
+    fn malformed_json_degrades_quietly() {
+        assert!(parse_scripts("{ not json", "npm").is_empty());
+        assert!(parse_scripts("", "npm").is_empty());
+    }
+
+    #[test]
+    fn non_node_stacks_get_conventional_commands() {
+        let rust = conventional(&["rust".to_string()]);
+        assert!(rust.iter().any(|s| s.command == "cargo run"));
+        assert!(conventional(&["node".to_string()]).is_empty());
+    }
+}
