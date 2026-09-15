@@ -3,8 +3,8 @@ use tauri::State;
 
 use crate::error::AppError;
 use crate::models::Project;
-use crate::services::WorkspaceStore;
 use crate::services::platform::RuntimeInfo;
+use crate::services::WorkspaceStore;
 
 pub struct AppState {
     pub workspace_store: Mutex<WorkspaceStore>,
