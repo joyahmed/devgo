@@ -915,6 +915,8 @@ pub struct GithubPayload {
     /// full_name to local project path, for every row cloned here. As
     /// current as the last badge pass; the frontend re-reads after each
     pub local: HashMap<String, String>,
+    /// the opt-in for live gh search as you type. Off by default
+    pub live_search: bool,
 }
 
 /// The cache, immediately. No network here, ever: this is what renders
@@ -924,7 +926,10 @@ pub fn get_github_repos(
     state: State<AppState>,
 ) -> Result<GithubPayload, AppError> {
     let cache = state.github_store.lock().map_err(lock_err)?.get();
-    let orgs = state.pref_store.lock().map_err(lock_err)?.github_orgs();
+    let (orgs, live_search) = {
+        let prefs = state.pref_store.lock().map_err(lock_err)?;
+        (prefs.github_orgs(), prefs.github_live_search())
+    };
     let local = {
         let git = state.git_cache.lock().map_err(lock_err)?;
         github::local_matches(
@@ -936,6 +941,7 @@ pub fn get_github_repos(
     };
     Ok(GithubPayload {
         local,
+        live_search,
         stale: github::is_stale(
             cache.fetched_at,
             crate::services::preferences::now_secs(),
@@ -1026,6 +1032,43 @@ pub fn set_github_orgs(
         .map_err(lock_err)?
         .set_github_orgs(orgs)
         .map_err(AppError::Lock)
+}
+
+#[tauri::command]
+pub fn set_github_live_search(
+    on: bool,
+    state: State<AppState>,
+) -> Result<(), AppError> {
+    state
+        .pref_store
+        .lock()
+        .map_err(lock_err)?
+        .set_github_live_search(on)
+        .map_err(AppError::Lock)
+}
+
+/// What one live search answers: the hits, and the generation the
+/// frontend stamped on the request so it can drop an answer to a query
+/// it has since moved past.
+#[derive(Serialize)]
+pub struct SearchAnswer {
+    pub generation: u64,
+    pub repos: Vec<github::Repo>,
+}
+
+/// Search all of GitHub for query. Off the main thread, like
+/// add_github_repo; the debounce, the length floor and the switch are
+/// the frontend's. This command only answers what it is asked.
+#[tauri::command]
+pub async fn search_github(
+    query: String,
+    generation: u64,
+) -> Result<SearchAnswer, AppError> {
+    let repos =
+        tauri::async_runtime::spawn_blocking(move || github::search(&query))
+            .await
+            .map_err(|e| AppError::Lock(e.to_string()))??;
+    Ok(SearchAnswer { generation, repos })
 }
 
 /// Add one repository to the group by name: any owner, no clone.

@@ -421,6 +421,8 @@ pub fn run() {
             commands::add_github_repo,
             commands::get_github_groups,
             commands::edit_github_groups,
+            commands::set_github_live_search,
+            commands::search_github,
             commands::reveal_in_explorer,
             commands::get_wsl_path,
             commands::discover_roots,
