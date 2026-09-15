@@ -28,3 +28,15 @@ pub fn windows_to_wsl_path(windows_path: &str, distro: &str) -> String {
 
     normalized
 }
+
+/// Forward slashes, no trailing separator. windows_to_wsl_path keeps its own
+/// replace: it needs the trailing slash on a drive root.
+pub fn normalize(path: &str) -> String {
+    let forward = path.replace('\\', "/");
+    let trimmed = forward.trim_end_matches('/');
+    if trimmed.is_empty() {
+        "/".to_string()
+    } else {
+        trimmed.to_string()
+    }
+}

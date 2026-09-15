@@ -21,7 +21,7 @@ pub enum ScanOutcome {
 }
 
 fn detect_file_system(workspace: &str) -> &str {
-    let normalized = workspace.replace('\\', "/");
+    let normalized = super::platform::paths::normalize(workspace);
     if normalized.starts_with("//wsl.localhost/")
         || normalized.starts_with("//wsl$/")
     {
@@ -33,7 +33,7 @@ fn detect_file_system(workspace: &str) -> &str {
 
 /// The distro a workspace path belongs to, if it is a WSL-native path.
 pub fn distro_of(path: &str) -> Option<String> {
-    let normalized = path.replace('\\', "/");
+    let normalized = super::platform::paths::normalize(path);
     for prefix in ["//wsl.localhost/", "//wsl$/"] {
         if let Some(rest) = normalized.strip_prefix(prefix) {
             return rest.split('/').find(|s| !s.is_empty()).map(String::from);
