@@ -46,6 +46,14 @@ fn distro_from_project(
 /// it. `raw_arg` hands the string to Windows verbatim, so the target's own
 /// `args_template` is the only thing deciding how it is split.
 fn spawn_raw(exe: &str, args: &str) -> Result<(), AppError> {
+    // the process spawned below is cmd.exe, which always exists, so a
+    // missing editor "launched" fine: a console flashed, Ok came back, and a
+    // frecency launch was recorded. wsl is exempt: the program it runs lives
+    // inside the distro, where a windows PATH lookup means nothing
+    if exe != "wsl" && !super::editors::is_on_path(exe) {
+        return Err(AppError::TargetNotInstalled(exe.to_string()));
+    }
+
     Command::new("cmd")
         .creation_flags(CREATE_NO_WINDOW)
         .raw_arg(format!("/c {exe} {args}"))
@@ -208,6 +216,39 @@ pub fn launch_both(
 mod tests {
     use super::*;
     use crate::models::target::TargetKind;
+
+    #[test]
+    fn an_editor_that_is_not_installed_reports_instead_of_pretending() {
+        let ghost = LaunchTarget {
+            id: "ghost".into(),
+            name: "Ghost Editor".into(),
+            kind: TargetKind::Editor,
+            executable: "devgo-no-such-editor".into(),
+            args_template: "\"{path}\"".into(),
+            wsl_executable: None,
+            wsl_args_template: None,
+            run_args_template: None,
+            wsl_run_args_template: None,
+        };
+        let project = Project::new(
+            "proj".into(),
+            r"G:\some\project".into(),
+            r"G:\some".into(),
+            "Windows".into(),
+        );
+        let info = RuntimeInfo {
+            runtime: crate::services::platform::runtime::Runtime::Windows,
+            wsl_available: false,
+            distros: vec![],
+            default_distro: None,
+        };
+
+        let err = launch_target(&ghost, &project, &info).unwrap_err();
+        assert!(
+            matches!(err, AppError::TargetNotInstalled(ref e) if e == "devgo-no-such-editor"),
+            "expected TargetNotInstalled, got {err:?}"
+        );
+    }
 
     /// End-to-end proof that a template survives into a real process.
     ///

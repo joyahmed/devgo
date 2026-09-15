@@ -15,6 +15,9 @@ pub enum AppError {
     #[error("Could not determine which WSL distro to use for {0}. Check that WSL is installed and has at least one distro registered.")]
     NoWslDistro(String),
 
+    #[error("{0} is not installed, or not on PATH. Detect editors in Settings, or fix the executable")]
+    TargetNotInstalled(String),
+
     #[error("Failed to launch: {0}")]
     LaunchFailed(String),
 
