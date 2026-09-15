@@ -23,6 +23,10 @@ export const visibleRepos = (
 		.map(x => x.r);
 };
 
+// 8134 -> 8.1k, 95000 -> 95k: a star count is a magnitude, not a number
+export const compactCount = (n: number): string =>
+	n >= 1000 ? `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k` : String(n);
+
 const UNITS: [number, string][] = [
 	[60, 's'],
 	[60, 'min'],

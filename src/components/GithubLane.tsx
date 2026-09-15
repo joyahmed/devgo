@@ -1,4 +1,4 @@
-import { RECENT_LIMIT, relativeTime } from '../github';
+import { compactCount, RECENT_LIMIT, relativeTime } from '../github';
 import Button from './Button';
 import { col } from './rowStyles';
 
@@ -161,6 +161,11 @@ const RepoRow = ({
 					{repo.default_branch}
 				</span>
 			)}
+			{repo.stars !== null && repo.stars > 0 && (
+				<span className='text-[11px] text-text-muted shrink-0' title='Stars'>
+					★ {compactCount(repo.stars)}
+				</span>
+			)}
 			{gone ? null : job && job.status !== 'done' ? (
 				<span
 					className={`text-[11px] shrink-0 text-right truncate max-w-[14rem] ${
@@ -205,6 +210,9 @@ const GithubLane = ({
 		toggleOpen,
 		visible,
 		sections,
+		cacheMatches,
+		liveExtras,
+		searching,
 		folded,
 		toggleGroup
 	} = github;
@@ -214,6 +222,28 @@ const GithubLane = ({
 	const canRefresh = Boolean(status?.login);
 	// the ungrouped tail: the footer line speaks for it
 	const tail = sections?.[sections.length - 1];
+
+	// the flat search view: the cache's matches, then the hits from all of
+	// github. two labels while a live search is in play, so a stranger's
+	// hit never reads as one of yours; with the switch off, one list and
+	// no label
+	const liveInPlay = liveExtras.length > 0 || searching;
+	const flat = [
+		{
+			key: 'cache',
+			label: 'Your repos & bookmarks',
+			show: liveInPlay && (cacheMatches?.length ?? 0) > 0,
+			rows: cacheMatches ?? []
+		},
+		{
+			key: 'live',
+			label: searching
+				? 'Searching GitHub…'
+				: `More from GitHub — ${liveExtras.length}`,
+			show: liveInPlay,
+			rows: liveExtras
+		}
+	];
 
 	// one row, in the flat search list and under a heading alike
 	const rowFor = (repo: GithubRepo, nested: boolean, gone: boolean) => (
@@ -315,7 +345,7 @@ const GithubLane = ({
 							{emptyLine(status)}
 						</div>
 					)}
-					{total > 0 && visible.length === 0 && (
+					{total > 0 && visible.length === 0 && !searching && (
 						<div className='ml-6 px-3 py-2 text-sm text-text-muted'>
 							No repository matches{' '}
 							<span className='font-mono'>{query.trim()}</span>.
@@ -324,7 +354,17 @@ const GithubLane = ({
 					{/* searching: one flat list of matches, groups aside. otherwise
 					    the groups in the user's order, each a heading that folds
 					    like a workspace's, then the ungrouped tail */}
-					{!sections && visible.map(repo => rowFor(repo, false, false))}
+					{!sections &&
+						flat.map(part => (
+							<div key={part.key}>
+								{part.show && (
+									<div className='ml-6 px-3 py-1.5 text-[10px] uppercase tracking-wider text-text-muted'>
+										{part.label}
+									</div>
+								)}
+								{part.rows.map(repo => rowFor(repo, false, false))}
+							</div>
+						))}
 					{sections?.map(section => {
 						const name = section.group;
 						const isFolded = name !== null && folded.has(name);
