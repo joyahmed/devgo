@@ -811,6 +811,39 @@ pub fn get_wsl_path(
     ))
 }
 
+/// The remote branches of one project, read when asked and remembered.
+/// Not part of get_git_info: the badge pass is one git.exe per windows
+/// project already, and chapter 27 exists because that pass was too
+/// expensive to run on every focus. A branch list is a click away, never a
+/// pass away. Stored on the project's GitInfo so the second open is free;
+/// the next badge pass replaces the entry and clears it.
+#[tauri::command]
+pub fn get_remote_branches(
+    project: Project,
+    state: State<AppState>,
+) -> Result<Vec<String>, AppError> {
+    if let Some(cached) = state
+        .git_cache
+        .lock()
+        .map_err(lock_err)?
+        .get(&project.full_path)
+        .and_then(|i| i.remote_branches.clone())
+    {
+        return Ok(cached);
+    }
+    let running = running_for(std::slice::from_ref(&project));
+    let branches = git::remote_branches(&project, &running);
+    let mut cache = state.git_cache.lock().map_err(lock_err)?;
+    let entry = cache.entry(project.full_path.clone()).or_insert_with(|| {
+        git::GitInfo {
+            full_path: project.full_path.clone(),
+            ..Default::default()
+        }
+    });
+    entry.remote_branches = Some(branches.clone());
+    Ok(branches)
+}
+
 /// Open a project's remote in the browser.
 #[tauri::command]
 pub fn open_remote(

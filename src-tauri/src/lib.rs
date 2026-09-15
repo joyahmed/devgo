@@ -406,6 +406,7 @@ pub fn run() {
             commands::terminate_distro,
             commands::shutdown_wsl,
             commands::open_remote,
+            commands::get_remote_branches,
             commands::reveal_in_explorer,
             commands::get_wsl_path,
             commands::discover_roots,
