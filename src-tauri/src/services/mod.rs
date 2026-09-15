@@ -2,6 +2,7 @@ pub mod launcher;
 pub mod platform;
 pub mod project_cache;
 pub mod scanner;
+pub mod single_instance;
 pub mod workspace;
 
 pub use project_cache::ProjectCacheStore;
