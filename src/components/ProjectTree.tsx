@@ -16,6 +16,8 @@ const ProjectTree = ({
 	projects,
 	selected,
 	onSelect,
+	onDoubleClick,
+	onLaunch,
 	loading,
 	ref
 }: ProjectTreeProps) => {
@@ -42,19 +44,26 @@ const ProjectTree = ({
 	useImperativeHandle(ref, () => ({ navigate }));
 
 	useEffect(() => {
+		const launch = () => {
+			if (selected) onLaunch(selected);
+			else if (visible.length > 0) onLaunch(visible[0]);
+		};
+		const keys: Record<string, () => void> = {
+			ArrowDown: () => navigate(1),
+			ArrowUp: () => navigate(-1),
+			Enter: launch
+		};
 		const handler = (e: globalThis.KeyboardEvent) => {
 			if (e.target instanceof HTMLInputElement) return;
-			if (e.key === 'ArrowDown') {
-				e.preventDefault();
-				navigate(1);
-			} else if (e.key === 'ArrowUp') {
-				e.preventDefault();
-				navigate(-1);
-			}
+			if (e.ctrlKey || e.metaKey || e.altKey) return;
+			const action = keys[e.key];
+			if (!action) return;
+			e.preventDefault();
+			action();
 		};
 		window.addEventListener('keydown', handler);
 		return () => window.removeEventListener('keydown', handler);
-	}, [navigate]);
+	}, [selected, visible, navigate, onLaunch]);
 
 	const toggle = (ws: string) => {
 		setCollapsed(prev => {
@@ -145,6 +154,7 @@ const ProjectTree = ({
 													: 'text-text-secondary hover:bg-bg-hover/50 border-l-transparent'
 											}`}
 											onClick={() => onSelect(project)}
+											onDoubleClick={() => onDoubleClick(project)}
 										>
 											<div
 												className='truncate text-text-muted'

@@ -21,7 +21,7 @@ interface RuntimeInfo {
 
 /* Component props */
 
-type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'ghost';
+type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'ghost' | 'pill';
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
 	variant?: ButtonVariant;
@@ -71,8 +71,19 @@ interface ProjectTreeProps {
 	projects: Project[];
 	selected: Project | null;
 	onSelect: (p: Project) => void;
+	onDoubleClick: (p: Project) => void;
+	onLaunch: (p: Project) => void;
 	loading?: boolean;
 	ref?: React.Ref<ProjectTreeHandle>;
+}
+
+interface ActionButtonsProps {
+	hasSelection: boolean;
+	onAddWorkspace: () => void;
+	onRemoveWorkspace: () => void;
+	onVSCode: () => void;
+	onTerminal: () => void;
+	onBoth: () => void;
 }
 
 /* Toast */

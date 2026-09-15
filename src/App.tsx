@@ -1,10 +1,13 @@
 import { lazy, Suspense, useRef, useState } from 'react';
+import ActionButtons from './components/ActionButtons';
+import Button from './components/Button';
 import ConfirmDialog from './components/ConfirmDialog';
 import ProjectTree from './components/ProjectTree';
 import RuntimeIndicator from './components/RuntimeIndicator';
 import SearchBox from './components/SearchBox';
 import TitleBar from './components/TitleBar';
 import ToastProvider, { useToast } from './components/Toast';
+import { useLaunchActions } from './hooks/useLaunchActions';
 import { useProjects } from './hooks/useProjects';
 import { useRuntime } from './hooks/useRuntime';
 import { useWorkspaces } from './hooks/useWorkspaces';
@@ -25,21 +28,43 @@ const showError = (e: unknown): string => {
 };
 
 const AppInner = () => {
-	const {
-		workspaces,
-		add: addWorkspace,
-		remove: removeWorkspace
-	} = useWorkspaces();
-	const { filtered, query, setQuery, selected, setSelected, loading } =
-		useProjects();
-	const { toast } = useToast();
 	const runtime = useRuntime();
+	const { workspaces } = useWorkspaces();
+	const {
+		filtered,
+		query,
+		setQuery,
+		selected,
+		setSelected,
+		refresh,
+		loading
+	} = useProjects();
+	const {
+		showWorkspaces,
+		setShowWorkspaces,
+		addWorkspace,
+		removeWorkspace,
+		openVSCode,
+		openTerminal,
+		openBoth
+	} = useLaunchActions(selected, refresh);
+	const { toast } = useToast();
 	const [removeIndex, setRemoveIndex] = useState<number | null>(null);
 
 	const treeRef = useRef<ProjectTreeHandle>(null);
 	const handleArrow = (dir: 1 | -1) => treeRef.current?.navigate(dir);
 
 	const handleSelect = (p: Project) => setSelected(p);
+
+	const handleLaunch = (p: Project) => {
+		setSelected(p);
+		openBoth(p).catch(e => toast(showError(e)));
+	};
+
+	const handleSearchEnter = () => {
+		const target = selected ?? filtered[0];
+		if (target) handleLaunch(target);
+	};
 
 	const handleRemove = async (index: number) => {
 		try {
@@ -49,11 +74,44 @@ const AppInner = () => {
 		}
 	};
 
+	const handleOpenVSCode = () => openVSCode().catch(e => toast(showError(e)));
+	const handleOpenTerminal = () =>
+		openTerminal().catch(e => toast(showError(e)));
+	const handleOpenBoth = () => openBoth().catch(e => toast(showError(e)));
+
 	return (
 		<div className='flex flex-col h-screen w-screen rounded-xl overflow-hidden'>
 			<TitleBar>
 				<RuntimeIndicator runtime={runtime?.runtime ?? 'windows'} />
 			</TitleBar>
+
+			{showWorkspaces && (
+				<div
+					className='fixed inset-0 bg-black/60 flex items-center justify-center z-40'
+					onClick={() => setShowWorkspaces(false)}
+				>
+					<div
+						className='bg-bg-secondary border border-border rounded-xl p-6 w-screen h-screen min-w-md overflow-y-auto shadow-2xl'
+						onClick={e => e.stopPropagation()}
+					>
+						<Suspense>
+							<WorkspaceManager
+								{...{
+									workspaces,
+									onAdd: addWorkspace,
+									onRemove: (i: number) => setRemoveIndex(i)
+								}}
+							/>
+						</Suspense>
+						<Button
+							className='w-full mt-4'
+							onClick={() => setShowWorkspaces(false)}
+						>
+							Close
+						</Button>
+					</div>
+				</div>
+			)}
 
 			<ConfirmDialog
 				{...{
@@ -70,20 +128,14 @@ const AppInner = () => {
 			/>
 
 			<div className='flex-1 flex flex-col p-5 gap-4 overflow-hidden'>
-				<Suspense>
-					<WorkspaceManager
-						{...{
-							workspaces,
-							onAdd: addWorkspace,
-							onRemove: (i: number) => setRemoveIndex(i)
-						}}
-					/>
-				</Suspense>
 				<SearchBox
 					{...{
 						value: query,
 						onChange: setQuery,
-						onArrow: handleArrow
+						onEnter: handleSearchEnter,
+						onArrow: handleArrow,
+						enterHint:
+							selected || filtered.length > 0 ? '⏎ Enter' : undefined
 					}}
 				/>
 				<ProjectTree
@@ -92,7 +144,19 @@ const AppInner = () => {
 						projects: filtered,
 						selected,
 						onSelect: handleSelect,
+						onDoubleClick: handleLaunch,
+						onLaunch: handleLaunch,
 						loading
+					}}
+				/>
+				<ActionButtons
+					{...{
+						hasSelection: selected !== null,
+						onAddWorkspace: () => setShowWorkspaces(true),
+						onRemoveWorkspace: () => setShowWorkspaces(true),
+						onVSCode: handleOpenVSCode,
+						onTerminal: handleOpenTerminal,
+						onBoth: handleOpenBoth
 					}}
 				/>
 			</div>
