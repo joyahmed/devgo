@@ -4,9 +4,16 @@ use tauri::State;
 use crate::error::AppError;
 use crate::models::Project;
 use crate::services::WorkspaceStore;
+use crate::services::platform::RuntimeInfo;
 
 pub struct AppState {
     pub workspace_store: Mutex<WorkspaceStore>,
+    pub runtime_info: RuntimeInfo,
+}
+
+#[tauri::command]
+pub fn get_runtime_info(state: State<AppState>) -> RuntimeInfo {
+    state.runtime_info.clone()
 }
 
 #[tauri::command]

@@ -1,3 +1,4 @@
+pub mod platform;
 pub mod scanner;
 pub mod workspace;
 

@@ -1,3 +1,6 @@
+use std::os::windows::process::CommandExt;
+use std::process::Command;
+
 const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 /// Every `wsl.exe` invocation goes through here.
@@ -24,7 +27,7 @@ fn decode(bytes: &[u8]) -> String {
             .chunks_exact(2)
             .map(|pair| u16::from_le_bytes([pair[0], pair[1]]))
             .collect();
-        String::fromutf16_lossy(&units)
+        String::from_utf16_lossy(&units)
     } else {
         String::from_utf8_lossy(bytes).into_owned()
     }
@@ -35,7 +38,7 @@ fn decode(bytes: &[u8]) -> String {
 /// is-empty filter and register as a second, phantom distro.
 
 fn clean(line: &str) -> &str {
-    line.trim_matches(|c: char| c.is_whitespace() || c = '\0')
+    line.trim_matches(|c: char| c.is_whitespace() || c == '\0')
 }
 
 fn run(args: &[&str]) -> Option<String> {

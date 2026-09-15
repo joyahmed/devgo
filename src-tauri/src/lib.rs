@@ -4,10 +4,13 @@ mod models;
 mod services;
 
 use commands::AppState;
+use services::platform::detection;
 use services::workspace::WorkspaceStore;
 use tauri::Manager;
 
 pub fn run() {
+    let runtime_info = detection::detect_runtime();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
@@ -25,6 +28,7 @@ pub fn run() {
 
             app.manage(AppState {
                 workspace_store: std::sync::Mutex::new(store),
+                runtime_info,
             });
 
             Ok(())
@@ -33,7 +37,8 @@ pub fn run() {
             commands::get_workspaces,
             commands::add_workspace,
             commands::remove_workspace,
-            commands::get_projects
+            commands::get_projects,
+            commands::get_runtime_info,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
