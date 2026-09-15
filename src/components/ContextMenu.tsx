@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import Button from './Button';
 
 const ROW_H = 30;
+const WIDTH = 256;
 
 // renders what it is given and owns none of it; the actions live in App
 const ContextMenu = ({ x, y, items, onClose }: ContextMenuProps) => {
@@ -28,13 +29,13 @@ const ContextMenu = ({ x, y, items, onClose }: ContextMenuProps) => {
 			8,
 			Math.min(y, window.innerHeight - 8 - items.length * ROW_H)
 		),
-		left: Math.max(8, Math.min(x, window.innerWidth - 220))
+		left: Math.max(8, Math.min(x, window.innerWidth - 8 - WIDTH))
 	};
 
 	return (
 		<div
 			ref={ref}
-			className='fixed z-50 min-w-52 bg-bg-secondary border border-border rounded-lg shadow-2xl py-1 text-sm'
+			className='fixed z-50 w-64 bg-bg-secondary border border-border rounded-lg shadow-2xl py-1 text-sm'
 			style={style}
 			onContextMenu={e => e.preventDefault()}
 		>
