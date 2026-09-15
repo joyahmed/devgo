@@ -100,10 +100,18 @@ pub fn launch_target(
     })?;
 
     // the template decides, not the kind: a terminal whose args ignore
-    // {script} used to get a devgo-*.sh in %TEMP% that nothing ever read
+    // {script} used to get a devgo-*.sh in %TEMP% that nothing ever read.
+    // the filesystem decides which script: bash driving tmux in the distro,
+    // or powershell driving psmux, same windows from the same config. until
+    // psmux the windows side was the `_` arm, and a windows project opened
+    // one bare tab while the same launch on a wsl project opened three
     let args = match (&wsl, args.contains("{script}")) {
         (Some((distro, linux_path)), true) => {
             let script = write_tmux_script(project, distro, linux_path, tmux)?;
+            args.replace("{script}", &script)
+        }
+        (None, true) => {
+            let script = write_psmux_script(project, tmux)?;
             args.replace("{script}", &script)
         }
         _ => args,
@@ -135,6 +143,20 @@ fn write_tmux_script(
         &temp_file.to_string_lossy(),
         distro,
     ))
+}
+
+/// The Windows twin of write_tmux_script: same session name, same filename
+/// discipline, and no path conversion, because the shell reading it is the
+/// one that wrote it. The template double-quotes the path it gets back.
+fn write_psmux_script(
+    project: &Project,
+    tmux: &TmuxConfig,
+) -> Result<String, AppError> {
+    let session = tmux_session_name(project);
+    let script = build_psmux_script(&session, &project.full_path, tmux);
+    let temp_file = std::env::temp_dir().join(format!("devgo-{session}.ps1"));
+    std::fs::write(&temp_file, &script)?;
+    Ok(temp_file.to_string_lossy().into_owned())
 }
 
 /// A session name unique to this project. sanitize_file_stem already maps
@@ -415,6 +437,15 @@ mod tests {
             format!(r"\\wsl.localhost\Ubuntu\home\joy\{workspace}\{name}"),
             format!(r"\\wsl.localhost\Ubuntu\home\joy\{workspace}"),
             "WSL".into(),
+        )
+    }
+
+    fn windows_project(name: &str, workspace: &str) -> Project {
+        Project::new(
+            name.into(),
+            format!(r"G:\{workspace}\{name}"),
+            format!(r"G:\{workspace}"),
+            "Windows".into(),
         )
     }
 
@@ -1027,6 +1058,91 @@ mod tests {
             !bail.contains("throw") && !bail.contains("Write-Error"),
             "not installed is not an error: {bail}"
         );
+    }
+
+    /// The other half of the {script} contract, on the Windows side: a .ps1,
+    /// its Windows path, no conversion.
+    #[test]
+    fn the_script_placeholder_is_substituted_for_a_windows_project_too() {
+        let marker =
+            std::env::temp_dir().join("devgo-psmux-placeholder-proof.txt");
+        let _ = std::fs::remove_file(&marker);
+        let echoes = LaunchTarget {
+            id: "echo-script".into(),
+            name: "Echo Script".into(),
+            kind: TargetKind::Terminal,
+            executable: "cmd".into(),
+            args_template: format!(
+                "/c echo {{script}} > \"{}\"",
+                marker.display()
+            ),
+            wsl_executable: None,
+            wsl_args_template: None,
+            run_args_template: None,
+            wsl_run_args_template: None,
+        };
+        let project = windows_project("placeholder", "work");
+        let expected = std::env::temp_dir()
+            .join(format!("devgo-{}.ps1", tmux_session_name(&project)));
+        let _ = std::fs::remove_file(&expected);
+
+        launch_target(
+            &echoes,
+            &project,
+            &no_distro(),
+            &tmux_with(&["code", "git"]),
+        )
+        .unwrap();
+
+        // the write is synchronous inside launch_target; only the echo is not
+        let on_disk = std::fs::read_to_string(&expected)
+            .unwrap_or_else(|_| panic!("no script at {}", expected.display()));
+        assert!(on_disk.contains("psmux new-session -d -s "), "{on_disk}");
+        assert!(on_disk.contains("-n 'code'"), "{on_disk}");
+        assert!(
+            on_disk
+                .contains(r"Set-Location -LiteralPath 'G:\work\placeholder'"),
+            "the windows path, unconverted: {on_disk}"
+        );
+
+        let written_len = || std::fs::metadata(&marker).map_or(0, |m| m.len());
+        for _ in 0..40 {
+            if written_len() > 0 {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        let written =
+            std::fs::read_to_string(&marker).expect("target never ran");
+        assert!(!written.contains("{script}"), "{written:?}");
+        assert!(written.contains(".ps1"), "{written:?}");
+        assert!(!written.contains("/mnt/"), "{written:?}");
+        let _ = std::fs::remove_file(&marker);
+        let _ = std::fs::remove_file(&expected);
+    }
+
+    /// The `_` arm was what made a plain windows terminal fine by accident;
+    /// now that the arm is real, no placeholder still has to mean no file.
+    #[test]
+    fn a_windows_terminal_template_without_the_placeholder_writes_no_script() {
+        let project = windows_project("orphan-check", "work");
+        let script_path = std::env::temp_dir()
+            .join(format!("devgo-{}.ps1", tmux_session_name(&project)));
+        let _ = std::fs::remove_file(&script_path);
+        let plain = LaunchTarget {
+            id: "plain".into(),
+            name: "Plain".into(),
+            kind: TargetKind::Terminal,
+            executable: "cmd".into(),
+            args_template: "/c exit".into(),
+            wsl_executable: None,
+            wsl_args_template: None,
+            run_args_template: None,
+            wsl_run_args_template: None,
+        };
+        launch_target(&plain, &project, &no_distro(), &tmux_with(&["code"]))
+            .unwrap();
+        assert!(!script_path.exists(), "{}", script_path.display());
     }
 
     #[test]

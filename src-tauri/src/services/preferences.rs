@@ -28,8 +28,9 @@ pub struct WindowState {
     pub y: i32,
 }
 
-// the three windows a WSL launch has always opened, same names, same order,
-// so an upgrade into this setting is invisible
+// the three windows a WSL launch has always opened, and since psmux a
+// windows launch too, same names, same order, so an upgrade into this
+// setting is invisible
 fn default_window_names() -> Vec<String> {
     ["code", "agents", "git"]
         .iter()
@@ -43,11 +44,16 @@ fn default_enabled() -> bool {
     true
 }
 
-/// The tmux windows a WSL launch opens, in order. A name list, not a
+/// The windows a terminal launch opens, in order: tmux inside the distro
+/// for a WSL project, psmux for a Windows one. One list, not a parallel
+/// PsmuxConfig: nobody wants code/agents/git on one half of the machine
+/// and something else on the other, and two lists drift. Still called
+/// tmux because that is what prefs.json already says. A name list, not a
 /// count: "how many" would produce code, agents, git, window4, window5.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TmuxConfig {
-    /// Off means one plain login shell in the project directory, no tmux.
+    /// Off means one plain shell in the project directory, no multiplexer
+    /// on either side.
     #[serde(default = "default_enabled")]
     pub enabled: bool,
     #[serde(default = "default_window_names")]
