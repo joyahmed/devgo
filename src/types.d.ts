@@ -38,6 +38,11 @@ interface ProjectsPayload {
 	workspaces: WorkspaceState[];
 }
 
+interface LastProject {
+	full_path: string;
+	workspace: string;
+}
+
 /* Component props */
 
 type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'ghost' | 'pill';
@@ -92,6 +97,7 @@ interface ProjectTreeProps {
 	onSelect: (p: Project) => void;
 	onDoubleClick: (p: Project) => void;
 	onLaunch: (p: Project) => void;
+	query: string;
 	loading?: boolean;
 	workspaceStates?: WorkspaceState[];
 	ref?: React.Ref<ProjectTreeHandle>;

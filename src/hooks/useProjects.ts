@@ -83,9 +83,34 @@ export const useProjects = () => {
 		};
 	}, []);
 
+	// First-launch restore: scan, then re-select the project saved last time if
+	// it still exists. Runs exactly once — re-running it after a rescan would
+	// steal the selection the user just made.
 	useEffect(() => {
-		refresh();
+		refresh()
+			.then(payload =>
+				invoke<LastProject | null>('get_last_project')
+					.then(last => {
+						if (!last) return;
+						const match = payload.projects.find(
+							p => p.full_path === last.full_path
+						);
+						if (match) setSelected(match);
+					})
+					.catch(() => {})
+			)
+			.catch(() => {});
 	}, []);
+
+	// Every selection is persisted, so the next launch can land on it.
+	const selectAndSave = (proj: Project | null) => {
+		setSelected(proj);
+		if (proj) {
+			invoke('set_last_project', {
+				project: { full_path: proj.full_path, workspace: proj.workspace }
+			}).catch(() => {});
+		}
+	};
 
 	const q = query.trim().toLowerCase();
 	const filtered = q
@@ -99,7 +124,7 @@ export const useProjects = () => {
 		query,
 		setQuery,
 		selected,
-		setSelected,
+		setSelected: selectAndSave,
 		refresh,
 		loading
 	};
