@@ -242,6 +242,8 @@ pub fn run() {
             commands::open_editor,
             commands::open_terminal,
             commands::open_both,
+            commands::detect_targets,
+            commands::add_detected_target,
             commands::get_targets,
             commands::add_target,
             commands::remove_target,
