@@ -414,13 +414,17 @@ const ProjectTree = ({
 		else selectRepo(row.repo);
 	};
 
-	const navigate = (dir: 1 | -1) => {
+	// from the github box the arrows walk the github rows and nothing
+	// else, the way the project box's arrows have always started at the
+	// projects; the walk is narrowed, the cursor is the same
+	const navigate = (dir: 1 | -1, lane: SearchLane = 'projects') => {
+		const walk = lane === 'github' ? rows.filter(r => r.kind === 'repo') : rows;
 		const idx = repoCursor
-			? rows.findIndex(r => r.kind === 'repo' && r.repo.full_name === repoCursor)
-			: rows.findIndex(
+			? walk.findIndex(r => r.kind === 'repo' && r.repo.full_name === repoCursor)
+			: walk.findIndex(
 					r => r.kind === 'project' && r.project.full_path === selected?.full_path
 				);
-		const next = idx === -1 ? rows[0] : rows[idx + dir];
+		const next = idx === -1 ? walk[0] : walk[idx + dir];
 		if (next) land(next);
 	};
 

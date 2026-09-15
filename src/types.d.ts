@@ -690,7 +690,8 @@ interface SearchBoxProps {
 }
 
 interface ProjectTreeHandle {
-	navigate: (dir: 1 | -1) => void;
+	/// from the github box the arrows walk the github rows alone
+	navigate: (dir: 1 | -1, lane?: SearchLane) => void;
 	/// the repo under the cursor, opened; false when there is none
 	openRepo: () => boolean;
 }

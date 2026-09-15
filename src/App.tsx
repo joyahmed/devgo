@@ -188,6 +188,17 @@ const AppInner = () => {
 		if (target) handleLaunch(target);
 	};
 
+	// the github box: its arrows walk the github rows alone, and enter
+	// opens the row under the cursor, or the first match when there is none
+	const githubSearchRef = useRef<HTMLInputElement>(null);
+	const handleGithubArrow = (dir: 1 | -1) =>
+		treeRef.current?.navigate(dir, 'github');
+	const handleGithubEnter = () => {
+		if (treeRef.current?.openRepo()) return;
+		const first = github.visible[0];
+		if (first) handleOpenRepo(first);
+	};
+
 	// useLaunchActions refreshes projects only; the workspace list is a second
 	// view of the same state and goes stale without this
 	const handleAddWorkspace = async (path: string) => {
@@ -1284,11 +1295,14 @@ const AppInner = () => {
 					/>
 				) : (
 					<>
-						{/* the command row: the box spans the table it searches (it
-						    capped at 1100px; a heading spans what it heads), the sort
+						{/* the command row: the project box spans the table it searches
+						    (it capped at 1100px; a heading spans what it heads), the sort
 						    beside it, then the two controls that change what the list
-						    holds. those lived in the title bar; this is the list's row */}
-						<div className='w-full shrink-0 flex items-center gap-3'>
+						    holds, which lived in the title bar; this is the list's row.
+						    the github box sits level with it, over its own rows, at a
+						    third of the width */}
+						<div className='w-full shrink-0 flex items-center gap-4'>
+						<div className='flex-[2] min-w-0 flex items-center gap-3'>
 							<SearchBox
 								{...{
 									ref: searchRef,
@@ -1352,6 +1366,21 @@ const AppInner = () => {
 									<polyline points='21 3 21 9 15 9' />
 								</svg>
 							</Button>
+						</div>
+						{github.available && (
+							<SearchBox
+								{...{
+									ref: githubSearchRef,
+									value: github.query,
+									onChange: github.setQuery,
+									onEnter: handleGithubEnter,
+									onArrow: handleGithubArrow,
+									placeholder: 'Search GitHub repos…',
+									lane: 'github' as const,
+									className: 'flex-1 min-w-0'
+								}}
+							/>
+						)}
 						</div>
 						<ProjectTree
 							{...{
