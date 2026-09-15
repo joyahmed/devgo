@@ -192,6 +192,7 @@ const AppInner = () => {
 						onSelect: handleSelect,
 						onDoubleClick: handleLaunch,
 						onLaunch: handleLaunch,
+						query,
 						loading,
 						workspaceStates
 					}}

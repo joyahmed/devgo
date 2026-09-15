@@ -43,6 +43,7 @@ const ProjectTree = ({
 	onSelect,
 	onDoubleClick,
 	onLaunch,
+	query,
 	loading,
 	workspaceStates,
 	ref
@@ -68,6 +69,27 @@ const ProjectTree = ({
 	};
 
 	useImperativeHandle(ref, () => ({ navigate }));
+
+	// Searching expands everything; otherwise only the selected workspace stays
+	// open. Both were effects that called setCollapsed synchronously, which
+	// cascades an extra render on every keystroke. This is React's documented
+	// "adjust state while rendering" pattern instead: recompute the moment the
+	// inputs actually change, and leave manual toggles alone in between.
+	const derivedKey = `${query.trim() ? 'search' : 'browse'}|${
+		selected?.workspace ?? ''
+	}|${[...grouped.keys()].join('')}`;
+	const [lastKey, setLastKey] = useState(derivedKey);
+	if (derivedKey !== lastKey) {
+		setLastKey(derivedKey);
+		setCollapsed(() => {
+			if (query.trim()) return new Set<string>();
+			const next = new Set<string>();
+			for (const [ws] of grouped) {
+				if (ws !== selected?.workspace) next.add(ws);
+			}
+			return next;
+		});
+	}
 
 	useEffect(() => {
 		const launch = () => {
