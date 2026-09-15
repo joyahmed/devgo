@@ -78,14 +78,16 @@ const RepoRow = ({
 	isCursor,
 	localPath,
 	job,
+	nested,
+	gone,
 	onSelect,
 	onOpen,
 	onContextMenu,
 	onShowLocal
 }: RepoRowProps) => (
 	<div
-		className={`${col} px-3 py-1.5 ml-6 border-l cursor-pointer select-none transition-colors ${
-			repo.archived ? 'opacity-60' : ''
+		className={`${col} px-3 py-1.5 ${nested ? 'ml-12' : 'ml-6'} border-l cursor-pointer select-none transition-colors ${
+			repo.archived || gone ? 'opacity-60' : ''
 		} ${
 			isCursor
 				? 'bg-bg-selected text-text-primary border-l-accent'
@@ -111,6 +113,16 @@ const RepoRow = ({
 		</div>
 		<div className='text-text-muted'>GitHub</div>
 		<div className='flex items-center justify-end gap-1.5 min-w-0'>
+			{/* a repo you deleted or lost access to is a fact on screen, not a
+			    silent absence in a group you curated */}
+			{gone && (
+				<span
+					className='text-[9px] uppercase tracking-wider text-danger shrink-0'
+					title='Not in your GitHub list any more. Remove it from the group, or refresh'
+				>
+					gone
+				</span>
+			)}
 			{repo.archived && (
 				<span className='text-[9px] uppercase tracking-wider text-text-muted shrink-0'>
 					archived
@@ -149,7 +161,7 @@ const RepoRow = ({
 					{repo.default_branch}
 				</span>
 			)}
-			{job && job.status !== 'done' ? (
+			{gone ? null : job && job.status !== 'done' ? (
 				<span
 					className={`text-[11px] shrink-0 text-right truncate max-w-[14rem] ${
 						job.status === 'failed' ? 'text-danger' : 'text-accent'
@@ -183,13 +195,44 @@ const GithubLane = ({
 	onContextMenu,
 	onShowLocal,
 	jobs,
-	onAddMenu
+	onAddMenu,
+	onGroupContextMenu
 }: GithubLaneProps) => {
-	const { payload, status, isOpen, toggleOpen, visible } = github;
+	const {
+		payload,
+		status,
+		isOpen,
+		toggleOpen,
+		visible,
+		sections,
+		folded,
+		toggleGroup
+	} = github;
 	const login = payload?.cache.login ?? status?.login ?? null;
 	const total = payload?.cache.repos.length ?? 0;
 	const local = payload?.local ?? {};
 	const canRefresh = Boolean(status?.login);
+	// the ungrouped tail: the footer line speaks for it
+	const tail = sections?.[sections.length - 1];
+
+	// one row, in the flat search list and under a heading alike
+	const rowFor = (repo: GithubRepo, nested: boolean, gone: boolean) => (
+		<RepoRow
+			key={repo.full_name}
+			{...{
+				repo,
+				isCursor: cursor === repo.full_name,
+				localPath: local[repo.full_name],
+				job: jobs?.get(repo.full_name),
+				nested,
+				gone,
+				onSelect,
+				onOpen,
+				onContextMenu,
+				onShowLocal
+			}}
+		/>
+	);
 
 	return (
 		<div>
@@ -278,27 +321,69 @@ const GithubLane = ({
 							<span className='font-mono'>{query.trim()}</span>.
 						</div>
 					)}
-					{visible.map(repo => (
-						<RepoRow
-							key={repo.full_name}
-							{...{
-								repo,
-								isCursor: cursor === repo.full_name,
-								localPath: local[repo.full_name],
-								job: jobs?.get(repo.full_name),
-								onSelect,
-								onOpen,
-								onContextMenu,
-								onShowLocal
-							}}
-						/>
-					))}
+					{/* searching: one flat list of matches, groups aside. otherwise
+					    the groups in the user's order, each a heading that folds
+					    like a workspace's, then the ungrouped tail */}
+					{!sections && visible.map(repo => rowFor(repo, false, false))}
+					{sections?.map(section => {
+						const name = section.group;
+						const isFolded = name !== null && folded.has(name);
+						const heading = name !== null || sections.length > 1;
+						return (
+							<div key={name ?? '\u0000tail'}>
+								{heading && (
+									<div
+										className={`${col} px-3 py-1.5 ml-6 border-l border-l-border select-none ${
+											name !== null ? 'cursor-pointer hover:bg-bg-hover/50' : ''
+										}`}
+										onClick={() => name !== null && toggleGroup(name)}
+										onContextMenu={e => {
+											if (name === null) return;
+											e.preventDefault();
+											onGroupContextMenu?.(name, e.clientX, e.clientY);
+										}}
+										title={name ?? 'Repositories in no group'}
+									>
+										<div className='flex items-center gap-2 min-w-0'>
+											{name !== null && (
+												<span
+													className={`text-xs shrink-0 ${isFolded ? 'text-text-muted' : 'text-accent'}`}
+												>
+													{isFolded ? '▶' : '▼'}
+												</span>
+											)}
+											<span
+												className={`truncate font-semibold ${name === null ? 'text-text-muted' : 'text-text-primary'}`}
+											>
+												{name ?? 'Not in a group'}
+											</span>
+										</div>
+										<div />
+										<div />
+										<div className='text-right text-text-muted font-mono'>
+											{section.total}
+										</div>
+									</div>
+								)}
+								{!isFolded &&
+									section.rows.map(repo =>
+										rowFor(repo, heading, section.gone.has(repo.full_name))
+									)}
+								{name !== null && !isFolded && section.rows.length === 0 && (
+									<div className='ml-12 px-3 py-2 text-xs text-text-muted'>
+										Empty. Right-click a repo and choose Add to group.
+									</div>
+								)}
+							</div>
+						);
+					})}
 					{/* say what the default view is, so twenty rows out of a few
 					    hundred never reads as "where are the rest" */}
-					{isOpen && !query.trim() && total > RECENT_LIMIT && (
+					{isOpen && tail && tail.total > RECENT_LIMIT && (
 						<div className='ml-6 px-3 py-1.5 text-[10px] text-text-muted'>
-							{RECENT_LIMIT} most recently updated of {total}. Type to search
-							all of them.
+							{RECENT_LIMIT} most recently updated of {tail.total}
+							{sections && sections.length > 1 ? ' not in a group' : ''}. Type
+							to search all of them.
 						</div>
 					)}
 				</div>

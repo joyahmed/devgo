@@ -430,6 +430,8 @@ interface GithubLaneProps {
 	jobs?: Map<string, CloneJob>;
 	/// the header's +: clone repos / add repo by name, opened at (x, y)
 	onAddMenu?: (x: number, y: number) => void;
+	/// right-click on a group heading: rename, move, delete
+	onGroupContextMenu?: (name: string, x: number, y: number) => void;
 }
 
 interface RepoRowProps {
@@ -438,6 +440,10 @@ interface RepoRowProps {
 	localPath?: string;
 	/// a clone in flight or just finished, shown in the time's slot
 	job?: CloneJob;
+	/// under a group heading: one indent deeper
+	nested?: boolean;
+	/// a group member the cache no longer carries
+	gone?: boolean;
 	onSelect: (repo: GithubRepo) => void;
 	onOpen: (repo: GithubRepo) => void;
 	onContextMenu: (repo: GithubRepo, x: number, y: number) => void;
@@ -694,6 +700,7 @@ interface ProjectTreeProps {
 	onShowLocal?: (path: string) => void;
 	cloneJobs?: Map<string, CloneJob>;
 	onGithubAddMenu?: (x: number, y: number) => void;
+	onGroupContextMenu?: (name: string, x: number, y: number) => void;
 	ref?: React.Ref<ProjectTreeHandle>;
 }
 
