@@ -232,7 +232,7 @@ const AppInner = () => {
 	const handleOpenBoth = () => openBoth().catch(e => toast(showError(e)));
 
 	const revealInExplorer = (p: Project) => {
-		invoke('reveal_in_explorer', { project: p }).catch(e =>
+		invoke('reveal_in_explorer', { path: p.full_path }).catch(e =>
 			toast(showError(e))
 		);
 	};

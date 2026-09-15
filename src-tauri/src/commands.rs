@@ -719,10 +719,10 @@ pub fn reset_cache(
 /// Open the folder in Explorer. Works for WSL projects too: the UNC path is
 /// what Explorer wants. Boots the distro, but the user asked for that.
 #[tauri::command]
-pub fn reveal_in_explorer(project: Project) -> Result<(), AppError> {
+pub fn reveal_in_explorer(path: String) -> Result<(), AppError> {
     // explorer.exe exits 1 even on success, so don't wait on it
     std::process::Command::new("explorer")
-        .arg(&project.full_path)
+        .arg(&path)
         .spawn()
         .map_err(|e| AppError::LaunchFailed(format!("explorer: {e}")))?;
     Ok(())
