@@ -14,8 +14,6 @@ use tauri::tray::{
 use tauri::Manager;
 
 pub fn run() {
-    let runtime_info = detection::detect_runtime();
-
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
@@ -51,6 +49,21 @@ pub fn run() {
                 });
             });
 
+            let mut pref_store =
+                services::PreferencesStore::new(app_data_dir.clone())
+                    .expect("failed to initialize preferences store");
+
+            // Startup must not shell out to wsl.exe. Detection runs only on the
+            // first ever launch, or when the user explicitly refreshes.
+            let runtime_info = match pref_store.get_cached_runtime() {
+                Some(cached) => cached,
+                None => {
+                    let detected = detection::detect_runtime();
+                    let _ = pref_store.set_cached_runtime(detected.clone());
+                    detected
+                }
+            };
+
             let cache_store =
                 services::ProjectCacheStore::new(app_data_dir.clone())
                     .expect("failed to initialize project cache store");
@@ -60,6 +73,7 @@ pub fn run() {
 
             app.manage(AppState {
                 workspace_store: std::sync::Mutex::new(store),
+                pref_store: std::sync::Mutex::new(pref_store),
                 cache_store: std::sync::Mutex::new(cache_store),
                 runtime_info: std::sync::Mutex::new(runtime_info),
                 lock_path: lock_path.clone(),
@@ -127,6 +141,8 @@ pub fn run() {
             commands::open_vscode,
             commands::open_terminal,
             commands::open_both,
+            commands::get_last_project,
+            commands::set_last_project,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
