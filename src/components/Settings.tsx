@@ -17,22 +17,90 @@ const kbd =
 const heading =
 	'text-xs font-bold uppercase tracking-wider text-text-secondary mb-2';
 
+const MODIFIER_KEYS = new Set(['Control', 'Alt', 'Shift', 'Meta']);
+const NAV_KEYS: Record<string, string> = {
+	Space: 'Space',
+	ArrowUp: 'Up',
+	ArrowDown: 'Down',
+	ArrowLeft: 'Left',
+	ArrowRight: 'Right'
+};
+
+// a key event as a tauri accelerator, or null while only modifiers are down
+// or the key is one we cannot bind. a global hotkey must carry a modifier
+const toAccelerator = (e: KeyboardEvent): string | null => {
+	if (MODIFIER_KEYS.has(e.key)) return null;
+	const mods = [
+		e.ctrlKey && 'Ctrl',
+		e.altKey && 'Alt',
+		e.shiftKey && 'Shift',
+		e.metaKey && 'Super'
+	].filter(Boolean);
+	if (mods.length === 0) return null;
+
+	const c = e.code;
+	const key = c.startsWith('Key')
+		? c.slice(3)
+		: c.startsWith('Digit')
+			? c.slice(5)
+			: /^F\d{1,2}$/.test(c)
+				? c
+				: (NAV_KEYS[c] ?? null);
+	if (!key) return null;
+
+	return [...mods, key].join('+');
+};
+
 /// The third reader of the shortcut table. Not one key name lives here.
-const ShortcutTable = ({ summonHotkey }: ShortcutTableProps) => {
+const ShortcutTable = ({
+	summonHotkey,
+	onSummonChanged,
+	onError
+}: ShortcutTableProps) => {
 	const groups = [...new Set(SHORTCUTS.map(s => s.group))];
+	const [capturing, setCapturing] = useState(false);
+
+	// capture phase, so the keys pressed to choose a chord never reach the
+	// app's own bindings
+	useEffect(() => {
+		if (!capturing) return;
+		const onKey = (e: KeyboardEvent) => {
+			e.preventDefault();
+			const accel = toAccelerator(e);
+			if (!accel) return;
+			setCapturing(false);
+			// shown only once the backend has bound it
+			invoke<string>('set_summon_hotkey', { accelerator: accel })
+				.then(onSummonChanged)
+				.catch(err => onError(String(err)));
+		};
+		window.addEventListener('keydown', onKey, true);
+		return () => window.removeEventListener('keydown', onKey, true);
+	}, [capturing, onSummonChanged, onError]);
+
 	return (
 		<div className='flex flex-col gap-5'>
 			<div>
 				<h4 className={heading}>Summon</h4>
-				<div className='flex items-center justify-between py-1 text-sm'>
+				<div className='flex items-center justify-between gap-3 py-1 text-sm'>
 					<span className='text-text-secondary'>
 						Show / hide DevGo from anywhere
 					</span>
-					<kbd className={kbd}>{prettyKeys(summonHotkey)}</kbd>
+					<span className='flex items-center gap-2 shrink-0'>
+						<kbd className={kbd}>
+							{capturing ? 'Press keys…' : prettyKeys(summonHotkey)}
+						</kbd>
+						<Button variant='ghost' onClick={() => setCapturing(c => !c)}>
+							<span className={`text-xs ${capturing ? 'text-accent' : ''}`}>
+								{capturing ? 'Cancel' : 'Rebind'}
+							</span>
+						</Button>
+					</span>
 				</div>
 				<p className='text-xs text-text-muted mt-1'>
-					Rebinding this from the UI is not built yet — it lives in prefs.json
-					for now.
+					Click Rebind, then press the combination — it needs a modifier
+					(Ctrl / Alt / Shift / Super). If another app owns the keys, the old
+					binding stays.
 				</p>
 			</div>
 
@@ -265,7 +333,8 @@ const Settings = ({
 	onError,
 	panel,
 	onScanChanged,
-	onImported
+	onImported,
+	onSummonChanged
 }: SettingsProps) => {
 	const targets = useTargets();
 
@@ -312,7 +381,9 @@ const Settings = ({
 		{
 			id: 'shortcuts',
 			label: 'Shortcuts',
-			render: () => <ShortcutTable {...{ summonHotkey }} />
+			render: () => (
+				<ShortcutTable {...{ summonHotkey, onSummonChanged, onError }} />
+			)
 		},
 		{
 			id: 'appearance',

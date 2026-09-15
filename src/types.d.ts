@@ -259,10 +259,14 @@ interface SettingsProps {
 	onScanChanged: () => void;
 	/// an import can change workspaces, targets, the hotkey: reload them all
 	onImported: () => void;
+	onSummonChanged: (hotkey: string) => void;
 }
 
 interface ShortcutTableProps {
 	summonHotkey: string;
+	/// the accelerator the backend actually bound
+	onSummonChanged: (hotkey: string) => void;
+	onError: (message: string) => void;
 }
 
 /// The add form's fields — all strings, because an input cannot hold null.

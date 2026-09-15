@@ -536,7 +536,8 @@ const AppInner = () => {
 							refreshWorkspaces();
 							refresh();
 							loadHotkey();
-						}
+						},
+						onSummonChanged: setSummonHotkey
 					}}
 				/>
 			</Suspense>
