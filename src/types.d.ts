@@ -132,6 +132,12 @@ interface LaunchTarget {
 	args_template: string;
 	wsl_executable: string | null;
 	wsl_args_template: string | null;
+	/// `{command}` beside `{path}`; null means the target cannot run scripts.
+	/// These two existed on the Rust struct with serde(default), so every
+	/// terminal added through the form arrived without them and failed its
+	/// first run_script.
+	run_args_template: string | null;
+	wsl_run_args_template: string | null;
 }
 
 /// A target DevGo found installed but has not registered. It is added back
@@ -286,7 +292,13 @@ interface ShortcutTableProps {
 
 /// The add form's fields — all strings, because an input cannot hold null.
 type TargetDraft = Record<
-	'name' | 'executable' | 'args_template' | 'wsl_executable' | 'wsl_args_template',
+	| 'name'
+	| 'executable'
+	| 'args_template'
+	| 'wsl_executable'
+	| 'wsl_args_template'
+	| 'run_args_template'
+	| 'wsl_run_args_template',
 	string
 >;
 

@@ -8,7 +8,9 @@ const BLANK: TargetDraft = {
 	executable: '',
 	args_template: '"{path}"',
 	wsl_executable: '',
-	wsl_args_template: ''
+	wsl_args_template: '',
+	run_args_template: '',
+	wsl_run_args_template: ''
 };
 
 const FIELDS: { key: keyof TargetDraft; placeholder: string }[] = [
@@ -25,10 +27,20 @@ const FIELDS: { key: keyof TargetDraft; placeholder: string }[] = [
 	}
 ];
 
+// terminals only: blank means the target cannot run dev scripts
+const RUN_FIELDS: { key: keyof TargetDraft; placeholder: string }[] = [
+	{ key: 'run_args_template', placeholder: 'Run args — {command} in a Windows project' },
+	{
+		key: 'wsl_run_args_template',
+		placeholder: 'WSL run args — {command} in a WSL project'
+	}
+];
+
 const PLACEHOLDERS = [
 	{ code: '{path}', note: 'the Windows path' },
 	{ code: '{distro}', note: 'and' },
-	{ code: '{linux_path}', note: 'for WSL, and' },
+	{ code: '{linux_path}', note: 'for WSL,' },
+	{ code: '{command}', note: 'in the run templates, and' },
 	{ code: '{script}', note: '— terminals only — the generated tmux session script' }
 ];
 
@@ -198,7 +210,9 @@ const TargetManager = ({
 				// Rust side — a target with no WSL form refuses WSL projects
 				// rather than opening the wrong directory.
 				wsl_executable: draft.wsl_executable.trim() || null,
-				wsl_args_template: draft.wsl_args_template.trim() || null
+				wsl_args_template: draft.wsl_args_template.trim() || null,
+				run_args_template: draft.run_args_template.trim() || null,
+				wsl_run_args_template: draft.wsl_run_args_template.trim() || null
 			})
 		).then(close);
 	};
@@ -286,7 +300,7 @@ const TargetManager = ({
 						))}
 					</div>
 
-					{FIELDS.map(({ key, placeholder }) => (
+					{[...FIELDS, ...(kind === 'terminal' ? RUN_FIELDS : [])].map(({ key, placeholder }) => (
 						<input
 							key={key}
 							className={field}
