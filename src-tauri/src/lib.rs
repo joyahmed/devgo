@@ -86,6 +86,9 @@ pub fn run() {
                 git_cache: std::sync::Mutex::new(
                     std::collections::HashMap::new(),
                 ),
+                tech_cache: std::sync::Mutex::new(
+                    std::collections::HashMap::new(),
+                ),
             });
 
             // A hotkey another app already owns must not stop DevGo from
@@ -163,6 +166,7 @@ pub fn run() {
             commands::toggle_pin,
             commands::get_summon_hotkey,
             commands::get_git_info,
+            commands::get_project_tech,
             commands::get_running_distros,
             commands::terminate_distro,
             commands::shutdown_wsl,

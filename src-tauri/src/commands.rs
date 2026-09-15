@@ -7,6 +7,7 @@ use tauri::State;
 use crate::error::AppError;
 use crate::models::target::{LaunchTarget, TargetKind};
 use crate::models::Project;
+use crate::services::detect::{self, ProjectTech};
 use crate::services::frecency;
 use crate::services::git;
 use crate::services::launcher;
@@ -71,6 +72,9 @@ pub struct AppState {
     /// Git state, in memory only. Deliberately not persisted: a branch name
     /// read yesterday is worse than no branch name, because it looks current.
     pub git_cache: Mutex<HashMap<String, git::GitInfo>>,
+    /// Stack detection, in memory only, for the same reason as git: `node` on
+    /// a project whose package.json went last week looks current too.
+    pub tech_cache: Mutex<HashMap<String, ProjectTech>>,
 }
 
 #[tauri::command]
@@ -396,26 +400,46 @@ pub fn get_default_targets(
 /// spawns processes, and the project list must render immediately from cache
 /// without waiting on them. The frontend calls this after the list is on
 /// screen, and again only on an explicit refresh.
-#[tauri::command]
-pub fn get_git_info(
-    projects: Vec<Project>,
-    state: State<AppState>,
-) -> Result<Vec<git::GitInfo>, AppError> {
-    // Same liveness gate the scanner uses. Git state is never worth booting a
-    // virtual machine for.
-    let running = if projects
+/// The running-distro list, fetched only when some project actually needs it.
+/// Same liveness gate the scanner uses: neither git state nor a stack badge is
+/// ever worth booting a virtual machine for.
+fn running_for(projects: &[Project]) -> Vec<String> {
+    if projects
         .iter()
         .any(|p| crate::services::scanner::distro_of(&p.full_path).is_some())
     {
         wsl::running_distros()
     } else {
         Vec::new()
-    };
+    }
+}
 
+#[tauri::command]
+pub fn get_git_info(
+    projects: Vec<Project>,
+    state: State<AppState>,
+) -> Result<Vec<git::GitInfo>, AppError> {
+    let running = running_for(&projects);
     let fresh = git::collect(&projects, &running);
     let mut cache = state.git_cache.lock().map_err(lock_err)?;
     for info in &fresh {
         cache.insert(info.full_path.clone(), info.clone());
+    }
+    Ok(fresh)
+}
+
+/// Classify projects by stack. Same contract as `get_git_info`: a separate
+/// command, off the scan's hot path, and never worth booting a distro for.
+#[tauri::command]
+pub fn get_project_tech(
+    projects: Vec<Project>,
+    state: State<AppState>,
+) -> Result<Vec<ProjectTech>, AppError> {
+    let running = running_for(&projects);
+    let fresh = detect::collect(&projects, &running);
+    let mut cache = state.tech_cache.lock().map_err(lock_err)?;
+    for t in &fresh {
+        cache.insert(t.full_path.clone(), t.clone());
     }
     Ok(fresh)
 }

@@ -1,3 +1,4 @@
+pub mod detect;
 pub mod frecency;
 pub mod git;
 pub mod launcher;
