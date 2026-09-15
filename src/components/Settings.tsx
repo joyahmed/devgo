@@ -5,6 +5,7 @@ import { relativeTime } from '../github';
 import { prettyKeys, SHORTCUTS } from '../shortcuts';
 import { savedThemeId, setTheme, THEMES } from '../themes';
 import Button from './Button';
+import Drawer from './Drawer';
 import Kbd from './Kbd';
 import TargetManager from './TargetManager';
 import WorkspaceManager from './WorkspaceManager';
@@ -771,33 +772,28 @@ const Settings = ({
 		if (panel) choose(panel);
 	}
 
-	// Registered only while open: the shell is mounted on every render, and a
-	// closed dialog must not own a global key.
-	useEffect(() => {
-		if (!open) return;
-		const esc = (e: KeyboardEvent) => {
-			if (e.key === 'Escape') onClose();
-		};
-		window.addEventListener('keydown', esc);
-		return () => window.removeEventListener('keydown', esc);
-	}, [open, onClose]);
-
 	if (!open) return null;
 
 	// A stored id that no longer names a panel costs one click, not an empty pane.
 	const current = panels.find(p => p.id === active) ?? panels[0];
 
+	// a right drawer, full height, the nav column inside it and the list
+	// still visible beside it. escape, focus and the backdrop are the
+	// drawer's; this was a second copy of the modal frame with its own
+	// escape handler
 	return (
-		<div
-			className='fixed inset-0 bg-black/60 flex items-center justify-center z-40'
-			onClick={onClose}
+		<Drawer
+			{...{
+				open,
+				side: 'right' as const,
+				onClose,
+				width: 'w-[min(760px,94vw)]',
+				z: 40 as const
+			}}
 		>
-			<div
-				className='bg-bg-secondary border border-border rounded-panel w-[min(1040px,92vw)] h-[min(760px,86vh)] flex overflow-hidden shadow-surface'
-				onClick={e => e.stopPropagation()}
-			>
+			<div className='flex-1 min-h-0 flex overflow-hidden'>
 				<nav className='w-44 shrink-0 border-r border-border bg-bg-primary/40 p-2 flex flex-col gap-1'>
-					<h3 className='text-13 font-semibold text-text-muted px-2 py-2'>
+					<h3 className='text-18 font-bold text-text-primary px-2 py-2'>
 						Settings
 					</h3>
 					{panels.map(p => (
@@ -821,7 +817,7 @@ const Settings = ({
 					</div>
 				</div>
 			</div>
-		</div>
+		</Drawer>
 	);
 };
 
