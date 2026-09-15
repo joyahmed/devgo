@@ -91,11 +91,11 @@ interface ScanConfig {
 	depth: number;
 }
 
-/// The tmux windows a WSL launch opens, in order; the count is the length.
-/// snake_case: the Rust struct has no rename_all, so the wire field really is
-/// window_names.
+/// The windows a terminal launch opens, in order: tmux for a WSL project,
+/// psmux for a Windows one; the count is the length. snake_case: the Rust
+/// struct has no rename_all, so the wire field really is window_names.
 interface TmuxConfig {
-	/// off means one plain login shell in the project directory
+	/// off means one plain shell in the project directory, on either side
 	enabled: boolean;
 	window_names: string[];
 }

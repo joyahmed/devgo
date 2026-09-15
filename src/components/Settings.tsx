@@ -221,6 +221,7 @@ const ScanningPanel = ({ onSaved, onError }: ScanningPanelProps) => {
 	);
 };
 
+// one list for both sides: tmux for a WSL project, psmux for a Windows one.
 // no onSaved: a window list is not scan input, and the only "changed"
 // channel Settings hands a panel is onScanChanged, which re-walks every
 // workspace. Success is a line under the button, like ConfigPanel
@@ -268,7 +269,7 @@ const TmuxPanel = ({ onError }: TmuxPanelProps) => {
 	};
 
 	const modes = [
-		{ value: true, label: 'tmux session' },
+		{ value: true, label: 'Session' },
 		{ value: false, label: 'Plain shell' }
 	];
 
@@ -277,12 +278,21 @@ const TmuxPanel = ({ onError }: TmuxPanelProps) => {
 			{/* the switch first, and the list dims under it: a live text box
 			    under a disabled feature is a promise the app is not keeping */}
 			<div>
-				<h4 className={heading}>Use tmux</h4>
+				<h4 className={heading}>Use tmux / psmux</h4>
 				<p className='text-xs text-text-muted mb-2'>
-					On, a WSL terminal opens a tmux session with the windows below. Off,
-					it opens one plain login shell in the project directory and starts
-					no tmux server at all — the right answer if you only ever use one
+					On, a terminal launch opens a session with the windows below — tmux
+					inside the distro for a WSL project, psmux for a Windows project.
+					Off, it opens one plain shell in the project directory and starts
+					no multiplexer at all — the right answer if you only ever use one
 					tab.
+				</p>
+				<p className='text-xs text-text-muted mb-2'>
+					psmux is a tmux for Windows and is installed separately:{' '}
+					<code className='text-text-secondary'>
+						winget install marlocarlo.psmux
+					</code>
+					. Without it a Windows launch falls back to a plain shell and says
+					so.
 				</p>
 				<div className='flex items-center gap-2'>
 					{modes.map(m => (
@@ -515,7 +525,7 @@ const Settings = ({
 		},
 		{
 			id: 'tmux',
-			label: 'tmux',
+			label: 'tmux / psmux',
 			render: () => <TmuxPanel {...{ onError }} />
 		},
 		{
