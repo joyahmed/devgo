@@ -53,3 +53,23 @@ pub fn register(app: &AppHandle, accelerator: &str) -> Result<(), String> {
         })
         .map_err(|e| format!("{e}"))
 }
+
+pub fn unregister(app: &AppHandle, accelerator: &str) {
+    if let Ok(shortcut) = parse(accelerator) {
+        let _ = app.global_shortcut().unregister(shortcut);
+    }
+}
+
+// register first: if the new one fails the user keeps a working hotkey
+pub fn rebind(
+    app: &AppHandle,
+    previous: &str,
+    next: &str,
+) -> Result<(), String> {
+    if previous == next {
+        return Ok(());
+    }
+    register(app, next)?;
+    unregister(app, previous);
+    Ok(())
+}
