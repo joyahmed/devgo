@@ -57,6 +57,7 @@ pub fn scan_workspace(
     path: &str,
     running: &[String],
     allow_boot: bool,
+    ignore: &[String],
 ) -> ScanOutcome {
     // A \\wsl.localhost\ path is served by the distro's 9p file server, so even
     // a bare read_dir cold-boots the entire VM. Checking liveness first costs
@@ -97,6 +98,10 @@ pub fn scan_workspace(
                 // Skip hidden folders (.git, .vscode, .cache, ...) — they are
                 // never projects and only clutter the list.
                 if name.starts_with('.') {
+                    return None;
+                }
+                // user-configured junk, matched by name on the listing we already have
+                if ignore.iter().any(|ig| ig.eq_ignore_ascii_case(&name)) {
                     return None;
                 }
                 let full_path = entry.path().to_string_lossy().to_string();
@@ -148,6 +153,7 @@ mod tests {
             r"\\wsl.localhost\Ubuntu-26.04\home\joy",
             &[],
             false,
+            &[],
         );
         assert!(matches!(
             outcome,
@@ -157,7 +163,8 @@ mod tests {
 
     #[test]
     fn missing_local_path_is_not_mounted() {
-        let outcome = scan_workspace(r"Q:\definitely\not\here", &[], false);
+        let outcome =
+            scan_workspace(r"Q:\definitely\not\here", &[], false, &[]);
         assert!(matches!(
             outcome,
             ScanOutcome::Unavailable(UnavailableReason::NotMounted)
