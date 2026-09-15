@@ -78,6 +78,12 @@ interface DiscoveredRoot {
 	kind: 'windows' | 'wsl';
 }
 
+/// a runnable script: what to show, and the command line behind it
+interface DevScript {
+	name: string;
+	command: string;
+}
+
 /// bare folder names the scan skips, on top of dotfolders
 interface ScanConfig {
 	ignore: string[];
