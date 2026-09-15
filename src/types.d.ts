@@ -19,6 +19,25 @@ interface RuntimeInfo {
 	default_distro: string | null;
 }
 
+type WorkspaceStatus = 'live' | 'cached' | 'unavailable';
+
+/// Why a workspace could not be read. "distro_stopped" is not a failure — it
+/// means we declined to boot WSL just to render a list.
+type UnavailableReason = 'distro_stopped' | 'not_mounted' | 'access_denied';
+
+interface WorkspaceState {
+	workspace: string;
+	status: WorkspaceStatus;
+	reason: UnavailableReason | null;
+	scanned_at: number | null;
+	count: number;
+}
+
+interface ProjectsPayload {
+	projects: Project[];
+	workspaces: WorkspaceState[];
+}
+
 /* Component props */
 
 type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'ghost' | 'pill';
@@ -74,7 +93,12 @@ interface ProjectTreeProps {
 	onDoubleClick: (p: Project) => void;
 	onLaunch: (p: Project) => void;
 	loading?: boolean;
+	workspaceStates?: WorkspaceState[];
 	ref?: React.Ref<ProjectTreeHandle>;
+}
+
+interface StatusPillProps {
+	state: WorkspaceState | undefined;
 }
 
 interface ActionButtonsProps {
@@ -84,6 +108,7 @@ interface ActionButtonsProps {
 	onVSCode: () => void;
 	onTerminal: () => void;
 	onBoth: () => void;
+	onRefresh: () => void;
 }
 
 /* Toast */
