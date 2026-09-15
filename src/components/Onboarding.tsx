@@ -1,19 +1,15 @@
-import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
 import { useState } from 'react';
 import Button from './Button';
-
-const KIND_TONE: Record<DiscoveredRoot['kind'], string> = {
-	wsl: 'text-accent border-accent/30',
-	windows: 'text-text-muted border-border'
-};
+import ScanPicker from './ScanPicker';
 
 // scanning is behind a button on purpose: it never touches a stopped distro,
 // but it is still a thing the user asks for, not something an empty window does
 const Onboarding = ({ onAdd, onAddMany, onError }: OnboardingProps) => {
-	// null is "not scanned yet", [] is "scanned, found nothing"
-	const [roots, setRoots] = useState<DiscoveredRoot[] | null>(null);
-	const [scanning, setScanning] = useState(false);
+	// the picker scans when it mounts, so the button is the decision to
+	// mount it: the same component the + menu opens once there is a
+	// workspace, so the two never drift
+	const [showScan, setShowScan] = useState(false);
 
 	const pickFolder = async () => {
 		try {
@@ -21,17 +17,6 @@ const Onboarding = ({ onAdd, onAddMany, onError }: OnboardingProps) => {
 			if (typeof picked === 'string') onAdd(picked);
 		} catch (e) {
 			onError(String(e));
-		}
-	};
-
-	const scan = async () => {
-		setScanning(true);
-		try {
-			setRoots(await invoke<DiscoveredRoot[]>('discover_roots'));
-		} catch (e) {
-			onError(String(e));
-		} finally {
-			setScanning(false);
 		}
 	};
 
@@ -51,65 +36,14 @@ const Onboarding = ({ onAdd, onAddMany, onError }: OnboardingProps) => {
 					<Button variant='primary' onClick={pickFolder}>
 						Choose a folder…
 					</Button>
-					<Button onClick={scan} disabled={scanning}>
-						{scanning ? 'Scanning…' : 'Scan for projects'}
+					<Button onClick={() => setShowScan(true)} disabled={showScan}>
+						Scan for projects
 					</Button>
 				</div>
 
-				{roots !== null && (
-					<div className='text-left mt-6'>
-						{roots.length === 0 ? (
-							<p className='text-sm text-text-muted text-center'>
-								No common project folders found. Choose one manually, or start
-								a WSL distro and scan again.
-							</p>
-						) : (
-							<>
-								<div className='flex items-center justify-between mb-2'>
-									<span className='text-[10px] font-bold uppercase tracking-wider text-text-muted'>
-										Found {roots.length}
-									</span>
-									<Button
-										variant='ghost'
-										className='text-[11px] text-accent hover:bg-transparent'
-										onClick={() => onAddMany(roots.map(r => r.path))}
-									>
-										Add all
-									</Button>
-								</div>
-								<ul className='flex flex-col gap-1.5'>
-									{roots.map(r => (
-										<li
-											key={r.path}
-											className='flex items-center justify-between gap-3 px-3 py-2 bg-bg-panel border border-border rounded-md'
-										>
-											<span className='min-w-0'>
-												<span className='block text-[13px] text-text-primary truncate'>
-													{r.label}
-												</span>
-												<span className='block font-mono text-[10px] text-text-muted truncate'>
-													{r.path}
-												</span>
-											</span>
-											<span className='flex items-center gap-2 shrink-0'>
-												<span
-													className={`text-[9px] uppercase tracking-wider px-1 rounded border ${KIND_TONE[r.kind]}`}
-												>
-													{r.kind === 'wsl' ? 'WSL' : 'WIN'}
-												</span>
-												<Button
-													variant='ghost'
-													className='text-xs px-2'
-													onClick={() => onAdd(r.path)}
-												>
-													Add
-												</Button>
-											</span>
-										</li>
-									))}
-								</ul>
-							</>
-						)}
+				{showScan && (
+					<div className='mt-6'>
+						<ScanPicker {...{ existing: [], onAddMany, onError }} />
 					</div>
 				)}
 
