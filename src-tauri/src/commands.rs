@@ -456,6 +456,30 @@ pub fn reveal_in_explorer(project: Project) -> Result<(), AppError> {
     Ok(())
 }
 
+/// The path as WSL sees it. The Windows path is just full_path, which the
+/// frontend already has.
+#[tauri::command]
+pub fn get_wsl_path(
+    project: Project,
+    state: State<AppState>,
+) -> Result<String, AppError> {
+    // a windows path ignores the distro, so the fallback is never read there
+    let distro = match crate::services::scanner::distro_of(&project.full_path) {
+        Some(d) => d,
+        None => state
+            .runtime_info
+            .lock()
+            .map_err(lock_err)?
+            .default_distro
+            .clone()
+            .unwrap_or_default(),
+    };
+    Ok(crate::services::platform::paths::windows_to_wsl_path(
+        &project.full_path,
+        &distro,
+    ))
+}
+
 /// Open a project's remote in the browser.
 #[tauri::command]
 pub fn open_remote(
