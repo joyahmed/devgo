@@ -3,6 +3,7 @@ import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import ActionButtons from './components/ActionButtons';
+import CommandPalette from './components/CommandPalette';
 import ConfirmDialog from './components/ConfirmDialog';
 import ContextMenu from './components/ContextMenu';
 import ProjectTree from './components/ProjectTree';
@@ -206,6 +207,129 @@ const AppInner = () => {
 		}
 	};
 
+	// every run is a handler that already exists; the palette only finds them
+	const [paletteOpen, setPaletteOpen] = useState(false);
+	const buildCommands = (): PaletteCommand[] => {
+		const hint = (id: ShortcutId) => prettyKeys(shortcutFor(id));
+		const p = selected;
+		// project actions are disabled, not hidden, so they stay discoverable
+		const proj = (
+			id: ShortcutId,
+			title: string,
+			keywords: string[],
+			act: (p: Project) => void
+		): PaletteCommand => ({
+			id,
+			title,
+			hint: hint(id),
+			subtitle: p?.name ?? 'Select a project first',
+			keywords,
+			disabled: !p,
+			run: () => p && act(p)
+		});
+
+		const commands: PaletteCommand[] = [
+			{
+				id: 'refresh',
+				title: 'Refresh projects',
+				hint: hint('refresh'),
+				keywords: ['rescan', 'reload'],
+				run: handleRefresh
+			},
+			{
+				id: 'settings',
+				title: 'Open Settings',
+				hint: hint('settings'),
+				keywords: ['preferences', 'config'],
+				run: () => openSettings()
+			},
+			{
+				id: 'settings.workspaces',
+				title: 'Settings: Workspaces',
+				subtitle: 'Add or remove workspace folders',
+				keywords: ['add', 'remove', 'folder'],
+				run: () => openSettings('workspaces')
+			},
+			{
+				id: 'settings.targets',
+				title: 'Settings: Editors & Terminals',
+				keywords: ['editor', 'terminal', 'vscode'],
+				run: () => openSettings('targets')
+			},
+			{
+				id: 'settings.shortcuts',
+				title: 'Settings: Shortcuts',
+				keywords: ['keybindings', 'keys', 'hotkey'],
+				run: () => openSettings('shortcuts')
+			},
+			{
+				id: 'sort',
+				title: `Sort order: ${sortMode} (cycle)`,
+				keywords: ['order', 'frecency', 'activity', 'name'],
+				run: toggleSort
+			},
+			proj('openEditor', 'Open in editor', ['code', 'edit'], pr =>
+				openEditor(pr).catch(e => toast(showError(e)))
+			),
+			proj('openTerminal', 'Open terminal', ['term', 'shell', 'wt'], pr =>
+				openTerminal(pr).catch(e => toast(showError(e)))
+			),
+			proj('openBoth', 'Open both', ['launch'], handleLaunch),
+			proj(
+				'revealExplorer',
+				'Reveal in Explorer',
+				['folder', 'files'],
+				revealInExplorer
+			),
+			proj('copyWinPath', 'Copy Windows path', ['path', 'clipboard'], copyWindowsPath),
+			proj('copyWslPath', 'Copy WSL path', ['path', 'linux'], copyWslPath),
+			proj(
+				'togglePin',
+				p && ranks.get(p.full_path)?.pinned ? 'Unpin project' : 'Pin project',
+				['favorite', 'star'],
+				handleTogglePin
+			),
+			{
+				id: 'quit',
+				title: 'Quit DevGo',
+				hint: hint('quit'),
+				keywords: ['exit', 'close'],
+				run: () => invoke('quit_app').catch(() => {})
+			}
+		];
+
+		// present only when they apply; nothing to teach by showing them otherwise
+		if (p && git.get(p.full_path)?.remote) {
+			commands.push({
+				id: 'openRemote',
+				title: 'Open remote in browser',
+				subtitle: p.name,
+				keywords: ['git', 'github', 'url'],
+				run: () => handleOpenRemote(p)
+			});
+		}
+		if (distros.length > 0) {
+			commands.push({
+				id: 'wsl.shutdown',
+				title: 'Shut down all WSL',
+				subtitle: distros.join(', '),
+				keywords: ['wsl', 'stop', 'kill'],
+				run: () =>
+					setConfirmAction({
+						message:
+							'Shut down all of WSL? This stops every distro and the virtual machine itself, including Docker Desktop on the WSL2 backend.',
+						run: () =>
+							invoke<string>('shutdown_wsl')
+								.then(m => toast(m, 'success'))
+								.catch(e => toast(showError(e), 'error'))
+								.finally(refreshDistros)
+					})
+			});
+		}
+
+		return commands;
+	};
+
 	// hints come from the shortcut table so the menu can't lie about the keys
 	const [menu, setMenu] = useState<{
 		project: Project;
@@ -277,6 +401,7 @@ const AppInner = () => {
 				return true;
 			};
 
+			if (fire('commandPalette', () => setPaletteOpen(true))) return;
 			if (fire('focusSearch', () => searchRef.current?.select())) return;
 			if (fire('clearSearch', () => setQuery(''))) return;
 			if (fire('refresh', handleRefresh)) return;
@@ -340,6 +465,15 @@ const AppInner = () => {
 					}}
 				/>
 			</Suspense>
+
+			{paletteOpen && (
+				<CommandPalette
+					{...{
+						commands: buildCommands(),
+						onClose: () => setPaletteOpen(false)
+					}}
+				/>
+			)}
 
 			{menu && (
 				<ContextMenu
