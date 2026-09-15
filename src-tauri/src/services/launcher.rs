@@ -83,10 +83,16 @@ pub fn launch_target(
         (target.resolve(&project.full_path, None), None)
     };
 
-    // A target with no WSL form cannot open a WSL project. Saying so is the
-    // whole point — launching anyway would open the wrong directory silently.
+    // A target with no form for this side cannot open the project. Saying so
+    // is the whole point — launching anyway would open the wrong directory
+    // silently.
     let (exe, args) = resolved.ok_or_else(|| {
-        AppError::TargetCannotOpenWsl(target.name.clone(), project.name.clone())
+        let (t, p) = (target.name.clone(), project.name.clone());
+        if is_wsl(project) {
+            AppError::TargetCannotOpenWsl(t, p)
+        } else {
+            AppError::TargetWslOnly(t, p)
+        }
     })?;
 
     let args = match script {

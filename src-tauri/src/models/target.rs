@@ -74,7 +74,10 @@ impl LaunchTarget {
         let template = match (wsl.is_some(), command) {
             (true, None) => self.wsl_args_template.as_ref()?,
             (true, Some(_)) => self.wsl_run_args_template.as_ref()?,
-            (false, None) => &self.args_template,
+            // empty means no windows form at all: a linux-only editor
+            (false, None) => {
+                Some(&self.args_template).filter(|t| !t.is_empty())?
+            }
             (false, Some(_)) => self.run_args_template.as_ref()?,
         };
 
@@ -211,6 +214,27 @@ mod tests {
         };
         assert!(notepad.resolve("x", Some(("Ubuntu", "/home"))).is_none());
         assert!(notepad.resolve("x", None).is_some());
+    }
+
+    /// The other way round: a Linux binary cannot take a Windows path, and
+    /// an empty Windows template says so.
+    #[test]
+    fn wsl_only_targets_refuse_windows_projects() {
+        let nvim = LaunchTarget {
+            id: "nvim".into(),
+            name: "Neovim".into(),
+            kind: TargetKind::Editor,
+            executable: "wsl".into(),
+            args_template: String::new(),
+            wsl_executable: Some("wsl".into()),
+            wsl_args_template: Some(
+                "-d {distro} --cd \"{linux_path}\" -e nvim .".into(),
+            ),
+            run_args_template: None,
+            wsl_run_args_template: None,
+        };
+        assert!(nvim.resolve(r"G:\dev", None).is_none());
+        assert!(nvim.resolve("x", Some(("Ubuntu", "/home"))).is_some());
     }
 
     #[test]

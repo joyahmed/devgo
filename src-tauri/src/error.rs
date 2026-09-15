@@ -43,6 +43,9 @@ pub enum AppError {
     )]
     TargetCannotOpenWsl(String, String),
 
+    #[error("{0} runs inside WSL, so it cannot open the Windows project {1}")]
+    TargetWslOnly(String, String),
+
     #[error("{0} has no run template, so it cannot run a command")]
     TargetCannotRun(String),
 
