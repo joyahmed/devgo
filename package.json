@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "bun run check:contrast && tsc && vite build",
+    "check:contrast": "bun scripts/check-contrast.mjs",
     "preview": "vite preview",
     "tauri": "tauri"
   },
