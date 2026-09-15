@@ -6,7 +6,7 @@ import { useEffect, useState } from 'react';
 /// Defaults are resolved on the Rust side and returned here rather than being
 /// read straight from prefs, because a default can point at a target the user
 /// has since deleted. One fallback chain, in one place.
-export const useTargets = () => {
+export const useTargets = (): TargetRegistry => {
 	const [targets, setTargets] = useState<LaunchTarget[]>([]);
 	const [defaults, setDefaults] = useState<Record<string, string>>({});
 

@@ -3,7 +3,6 @@ import { open as openDialog, save } from '@tauri-apps/plugin-dialog';
 import { useEffect, useState } from 'react';
 import { prettyKeys, SHORTCUTS } from '../shortcuts';
 import { savedThemeId, setTheme, THEMES } from '../themes';
-import { useTargets } from '../hooks/useTargets';
 import Button from './Button';
 import Kbd from './Kbd';
 import TargetManager from './TargetManager';
@@ -362,9 +361,9 @@ const Settings = ({
 	panel,
 	onScanChanged,
 	onImported,
-	onSummonChanged
+	onSummonChanged,
+	targets
 }: SettingsProps) => {
-	const targets = useTargets();
 
 	// The registry. A later chapter adds a panel by adding an object here; the
 	// nav, the persistence, Escape and the layout never learn what a panel holds.

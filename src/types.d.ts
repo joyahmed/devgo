@@ -285,6 +285,7 @@ interface SettingsProps {
 	/// an import can change workspaces, targets, the hotkey: reload them all
 	onImported: () => void;
 	onSummonChanged: (hotkey: string) => void;
+	targets: TargetRegistry;
 }
 
 interface ShortcutTableProps {
@@ -305,6 +306,19 @@ type TargetDraft = Record<
 	| 'wsl_run_args_template',
 	string
 >;
+
+/// What useTargets returns. Named so Settings can take it as a prop: App
+/// owns the one copy, and the row and the panel read the same list.
+interface TargetRegistry {
+	editors: LaunchTarget[];
+	terminals: LaunchTarget[];
+	defaults: Record<string, string>;
+	addTarget: (target: Omit<LaunchTarget, 'id'>) => Promise<void>;
+	detect: () => Promise<DetectedTarget[]>;
+	addDetected: (id: string) => Promise<void>;
+	removeTarget: (id: string) => Promise<void>;
+	setDefaultTarget: (kind: TargetKind, id: string) => Promise<void>;
+}
 
 interface TargetListProps {
 	kind: TargetKind;

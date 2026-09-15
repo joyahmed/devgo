@@ -20,6 +20,7 @@ import { useLaunchActions } from './hooks/useLaunchActions';
 import { useMaximized } from './hooks/useMaximized';
 import { useProjects } from './hooks/useProjects';
 import { useRuntime } from './hooks/useRuntime';
+import { useTargets } from './hooks/useTargets';
 import { useWorkspaces } from './hooks/useWorkspaces';
 import { isTypingTarget, matches, prettyKeys, shortcutFor } from './shortcuts';
 
@@ -64,6 +65,9 @@ const AppInner = () => {
 	} = useProjects();
 	const { addWorkspace, removeWorkspace, openEditor, openTerminal, openBoth } =
 		useLaunchActions(selected, refresh);
+	// one registry: a second useTargets in Settings would leave the row stale
+	// after an add until the next mount
+	const targets = useTargets();
 	const { toast } = useToast();
 	const [removeIndex, setRemoveIndex] = useState<number | null>(null);
 
@@ -594,7 +598,8 @@ const AppInner = () => {
 							refresh();
 							loadHotkey();
 						},
-						onSummonChanged: setSummonHotkey
+						onSummonChanged: setSummonHotkey,
+						targets
 					}}
 				/>
 			</Suspense>
