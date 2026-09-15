@@ -537,7 +537,14 @@ interface RuntimeIndicatorProps {
 
 interface ProjectTreeHandle {
 	navigate: (dir: 1 | -1) => void;
+	/// the repo under the cursor, opened; false when there is none
+	openRepo: () => boolean;
 }
+
+/// one row the arrows can land on, in the order the tree renders them
+type NavRow =
+	| { kind: 'project'; project: Project }
+	| { kind: 'repo'; repo: GithubRepo };
 
 interface ProjectTreeProps {
 	projects: Project[];
@@ -562,6 +569,14 @@ interface ProjectTreeProps {
 	workspaceOrder?: string[];
 	/// the FULL new order after a drag or an Alt+Arrow move
 	onReorder?: (order: string[]) => void;
+	/// the github group. absent when gh is not installed and nothing was
+	/// ever cached; then the table is exactly what it was
+	github?: GithubState;
+	/// Enter / double-click on a repo row: its page in the browser
+	onRepoOpen?: (repo: GithubRepo) => void;
+	onRepoContextMenu?: (repo: GithubRepo, x: number, y: number) => void;
+	/// the local mark: select the disk project this repo is cloned at
+	onShowLocal?: (path: string) => void;
 	ref?: React.Ref<ProjectTreeHandle>;
 }
 

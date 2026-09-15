@@ -2,6 +2,7 @@ import { useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { lastSegment } from '../paths';
 import { isTypingTarget, matches, shortcutFor } from '../shortcuts';
 import Button from './Button';
+import GithubLane from './GithubLane';
 import { col } from './rowStyles';
 
 const COLUMNS = [
@@ -265,9 +266,18 @@ const ProjectTree = ({
 	onWorkspaceContextMenu,
 	workspaceOrder,
 	onReorder,
+	github,
+	onRepoOpen,
+	onRepoContextMenu,
+	onShowLocal,
 	ref
 }: ProjectTreeProps) => {
 	const [collapsed, setCollapsed] = useState<Set<string>>(loadCollapsed);
+	// a repo row under the cursor: not a Project, so never selected, but
+	// reachable by arrow. beside the selection, and any change of the
+	// selection drops it, so the two are never lit at once
+	const [repoCursor, setRepoCursor] = useState<string | null>(null);
+	useEffect(() => setRepoCursor(null), [selected]);
 	const searching = query.trim().length > 0;
 	const isCollapsed = (ws: string) => !searching && collapsed.has(ws);
 
@@ -384,13 +394,41 @@ const ProjectTree = ({
 		}
 	}
 
-	const navigate = (dir: 1 | -1) => {
-		const idx = visible.findIndex(p => p.full_path === selected?.full_path);
-		const next = idx === -1 ? visible[0] : visible[idx + dir];
-		if (next) onSelect(next);
+	// the navigable sequence in the order the rows render: the projects
+	// above, then the github rows when that group is open
+	const rows: NavRow[] = visible.map(project => ({ kind: 'project', project }));
+	for (const repo of github?.isOpen ? github.visible : []) {
+		rows.push({ kind: 'repo', repo });
+	}
+
+	const selectProject = (p: Project) => {
+		setRepoCursor(null);
+		onSelect(p);
+	};
+	const selectRepo = (r: GithubRepo) => setRepoCursor(r.full_name);
+	const land = (row: NavRow) => {
+		if (row.kind === 'project') selectProject(row.project);
+		else selectRepo(row.repo);
 	};
 
-	useImperativeHandle(ref, () => ({ navigate }));
+	const navigate = (dir: 1 | -1) => {
+		const idx = repoCursor
+			? rows.findIndex(r => r.kind === 'repo' && r.repo.full_name === repoCursor)
+			: rows.findIndex(
+					r => r.kind === 'project' && r.project.full_path === selected?.full_path
+				);
+		const next = idx === -1 ? rows[0] : rows[idx + dir];
+		if (next) land(next);
+	};
+
+	const openRepo = () => {
+		const repo = github?.visible.find(r => r.full_name === repoCursor);
+		if (!repo) return false;
+		onRepoOpen?.(repo);
+		return true;
+	};
+
+	useImperativeHandle(ref, () => ({ navigate, openRepo }));
 
 	// Takes the state wanted rather than toggling: → always expands and ←
 	// always collapses, and only Ctrl+Space computes the flip, at its call site.
@@ -404,11 +442,11 @@ const ProjectTree = ({
 		});
 	};
 
-	// Reads `visible` — the flattened, filtered list on screen — so Home and
+	// Reads `rows` — the flattened, filtered list on screen — so Home and
 	// End land on what you can see, not on the unfiltered project set.
 	const jump = (to: 'top' | 'bottom') => {
-		const target = to === 'top' ? visible[0] : visible[visible.length - 1];
-		if (target) onSelect(target);
+		const target = to === 'top' ? rows[0] : rows[rows.length - 1];
+		if (target) land(target);
 	};
 
 	useEffect(() => {
@@ -419,15 +457,22 @@ const ProjectTree = ({
 		const ws = selected?.workspace;
 		// Bare navigation keys. While the search box has focus these belong to
 		// it — it forwards ↑ ↓ ⏎ itself, and ← → Home End move its caret.
-		const keys: Record<string, () => void> = {
+		const walk: Record<string, () => void> = {
 			ArrowDown: () => navigate(1),
 			ArrowUp: () => navigate(-1),
-			ArrowRight: () => ws && setCollapsedFor(ws, false),
-			ArrowLeft: () => ws && setCollapsedFor(ws, true),
 			Home: () => jump('top'),
-			End: () => jump('bottom'),
-			Enter: launch
+			End: () => jump('bottom')
 		};
+		// a repo under the cursor: enter opens its page, and the workspace
+		// keys are off since there is nothing to collapse
+		const keys: Record<string, () => void> = repoCursor
+			? { ...walk, Enter: () => openRepo() }
+			: {
+					...walk,
+					ArrowRight: () => ws && setCollapsedFor(ws, false),
+					ArrowLeft: () => ws && setCollapsedFor(ws, true),
+					Enter: launch
+				};
 		// Modifier combos are app-level and must still work while the search
 		// box is focused — which is exactly where summon leaves you. A bare
 		// letter is unreachable there, which is why every project action is
@@ -461,11 +506,13 @@ const ProjectTree = ({
 		return () => window.removeEventListener('keydown', handler);
 	}, [
 		selected,
-		visible,
+		rows,
+		repoCursor,
 		collapsed,
 		navigate,
 		onLaunch,
 		onTogglePin,
+		onRepoOpen,
 		workspaceOrder,
 		onReorder
 	]);
@@ -483,6 +530,21 @@ const ProjectTree = ({
 			</div>
 		);
 	}
+
+	const githubLane = github?.available ? (
+		<GithubLane
+			{...{
+				github,
+				query,
+				cursor: repoCursor,
+				onSelect: selectRepo,
+				onOpen: (r: GithubRepo) => onRepoOpen?.(r),
+				onContextMenu: (r: GithubRepo, x: number, y: number) =>
+					onRepoContextMenu?.(r, x, y),
+				onShowLocal: (path: string) => onShowLocal?.(path)
+			}}
+		/>
+	) : null;
 
 	if (projects.length === 0) {
 		// "Nothing configured" and "everything is offline right now" are very
@@ -512,9 +574,26 @@ const ProjectTree = ({
 				</div>
 			);
 		}
+		if (!githubLane) {
+			return (
+				<div className='flex-1 flex items-center justify-center text-sm text-text-muted'>
+					No projects found. Add a workspace to begin.
+				</div>
+			);
+		}
+		// a query no project matches may still have an answer in the github
+		// rows, which is half of why they are here: the empty line is a
+		// line, not the whole screen, when there is a group to show under it
 		return (
-			<div className='flex-1 flex items-center justify-center text-sm text-text-muted'>
-				No projects found. Add a workspace to begin.
+			<div className='flex-1 flex flex-col min-h-0'>
+				<div className='flex-1 overflow-y-auto'>
+					<div className='px-3 py-3 text-sm text-text-muted'>
+						{query.trim()
+							? 'No project matches.'
+							: 'No projects found. Add a workspace to begin.'}
+					</div>
+					{githubLane}
+				</div>
 			</div>
 		);
 	}
@@ -525,7 +604,7 @@ const ProjectTree = ({
 		rank: ranks?.get(project.full_path),
 		git: gitInfo?.get(project.full_path),
 		tech: techInfo?.get(project.full_path),
-		onSelect,
+		onSelect: selectProject,
 		onDoubleClick,
 		onTogglePin,
 		onOpenBranches,
@@ -637,6 +716,8 @@ const ProjectTree = ({
 						</div>
 					);
 				})}
+
+				{githubLane}
 			</div>
 		</div>
 	);
