@@ -468,6 +468,8 @@ interface GithubLaneProps {
 	onContextMenu: (repo: GithubRepo, x: number, y: number) => void;
 	/// a row cloned here can jump to its disk row
 	onShowLocal: (path: string) => void;
+	/// the branch chip: every branch on GitHub, read on the click
+	onOpenBranches: (repo: GithubRepo, x: number, y: number) => void;
 	/// clones in flight or just finished, by full_name
 	jobs?: Map<string, CloneJob>;
 	/// right-click on a group heading: rename, move, delete
@@ -495,6 +497,7 @@ interface RepoRowProps {
 	onOpen: (repo: GithubRepo) => void;
 	onContextMenu: (repo: GithubRepo, x: number, y: number) => void;
 	onShowLocal: (path: string) => void;
+	onOpenBranches: (repo: GithubRepo, x: number, y: number) => void;
 }
 
 interface ConfigPanelProps {
@@ -682,6 +685,14 @@ interface BranchMenu {
 	branches: string[] | null;
 }
 
+/// the same popover on a github row: null while gh api is answering
+interface RepoBranchMenu {
+	repo: GithubRepo;
+	x: number;
+	y: number;
+	branches: string[] | null;
+}
+
 interface RepoMenu {
 	repo: GithubRepo;
 	x: number;
@@ -794,6 +805,8 @@ interface ProjectTreeProps {
 	onRepoContextMenu?: (repo: GithubRepo, x: number, y: number) => void;
 	/// the local mark: select the disk project this repo is cloned at
 	onShowLocal?: (path: string) => void;
+	/// the branch chip on a repo row: the popover at (x, y)
+	onRepoBranches?: (repo: GithubRepo, x: number, y: number) => void;
 	cloneJobs?: Map<string, CloneJob>;
 	onGroupContextMenu?: (name: string, x: number, y: number) => void;
 	/// the recent / frequent words on rows, off unless Appearance says so

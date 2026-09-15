@@ -294,6 +294,7 @@ const ProjectTree = ({
 	onRepoOpen,
 	onRepoContextMenu,
 	onShowLocal,
+	onRepoBranches,
 	cloneJobs,
 	onGroupContextMenu,
 	showHints,
@@ -573,6 +574,8 @@ const ProjectTree = ({
 				onContextMenu: (r: GithubRepo, x: number, y: number) =>
 					onRepoContextMenu?.(r, x, y),
 				onShowLocal: (path: string) => onShowLocal?.(path),
+				onOpenBranches: (r: GithubRepo, x: number, y: number) =>
+					onRepoBranches?.(r, x, y),
 				jobs: cloneJobs,
 				onGroupContextMenu
 			}}

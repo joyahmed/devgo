@@ -346,13 +346,53 @@ const AppInner = () => {
 		}).catch(e => toast(showError(e)));
 	};
 
-	// the same open_remote, through its url door
-	const openUrl = (url: string) => {
-		invoke('open_remote', { fullPath: null, url, branch: null }).catch(e =>
-			toast(showError(e))
+	// the same open_remote, through its url door; a branch reaches
+	// branch_url there, so no url is assembled here
+	const openUrl = (url: string, branch?: string) => {
+		invoke('open_remote', { fullPath: null, url, branch: branch ?? null }).catch(
+			e => toast(showError(e))
 		);
 	};
-	const handleOpenRepo = (repo: GithubRepo) => openUrl(repo.url);
+	const handleOpenRepo = (repo: GithubRepo, branch?: string) =>
+		openUrl(repo.url, branch);
+
+	// the same popover a project row has, for a github row: the repo page,
+	// then every branch from gh api, read on the click and cached for the
+	// session. one shape, two sources; the row may have no clone on disk
+	const [repoBranchMenu, setRepoBranchMenu] = useState<RepoBranchMenu | null>(
+		null
+	);
+	const openRepoBranches = (repo: GithubRepo, x: number, y: number) => {
+		setRepoBranchMenu({ repo, x, y, branches: null });
+		// only the popover that asked gets the answer
+		const fill = (list: string[]) =>
+			setRepoBranchMenu(m =>
+				m && m.repo.full_name === repo.full_name ? { ...m, branches: list } : m
+			);
+		invoke<string[]>('get_github_branches', { fullName: repo.full_name })
+			.then(fill)
+			.catch(e => {
+				toast(showError(e));
+				fill([]);
+			});
+	};
+	const buildRepoBranchMenu = (m: RepoBranchMenu): MenuEntry[] => {
+		const def = m.repo.default_branch;
+		const others = (m.branches ?? []).filter(b => b !== def);
+		const open = (branch?: string) => () => handleOpenRepo(m.repo, branch);
+		const rest: MenuEntry[] =
+			m.branches === null
+				? [{ label: 'Loading branches…', disabled: true, onClick: () => {} }]
+				: others.length === 0
+					? [{ label: 'No other branches', disabled: true, onClick: () => {} }]
+					: others.map(b => ({ label: b, onClick: open(b) }));
+		return [
+			{ label: 'Open repo on GitHub', onClick: open() },
+			'separator',
+			...(def ? [{ label: def, hint: 'default', onClick: open(def) }] : []),
+			...rest
+		];
+	};
 
 	// the local mark: a github row cloned here selects its disk row
 	const showLocal = (path: string) => {
@@ -1288,6 +1328,17 @@ const AppInner = () => {
 				/>
 			)}
 
+			{repoBranchMenu && (
+				<ContextMenu
+					{...{
+						x: repoBranchMenu.x,
+						y: repoBranchMenu.y,
+						items: buildRepoBranchMenu(repoBranchMenu),
+						onClose: () => setRepoBranchMenu(null)
+					}}
+				/>
+			)}
+
 			{addMenu && (
 				<ContextMenu
 					{...{
@@ -1496,6 +1547,7 @@ const AppInner = () => {
 									}),
 								github,
 								onRepoOpen: handleOpenRepo,
+								onRepoBranches: openRepoBranches,
 								onRepoContextMenu: (r: GithubRepo, x: number, y: number) =>
 									setRepoMenu({ repo: r, x, y }),
 								onShowLocal: showLocal,

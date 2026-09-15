@@ -66,7 +66,8 @@ const RepoRow = ({
 	onSelect,
 	onOpen,
 	onContextMenu,
-	onShowLocal
+	onShowLocal,
+	onOpenBranches
 }: RepoRowProps) => (
 	<div
 		className={`${col} px-3 py-1.5 ${nested ? 'ml-6' : ''} cursor-pointer select-none transition-colors ${
@@ -136,10 +137,19 @@ const RepoRow = ({
 					added
 				</span>
 			)}
+			{/* the same chip a project row has: click for the repo's branches,
+			    each a link, from GitHub here since there may be no clone to
+			    read refs/remotes from */}
 			{repo.default_branch && (
 				<span
-					className='truncate font-mono text-11 text-text-muted'
-					title='Default branch'
+					className='truncate font-mono text-11 text-text-muted hover:text-accent cursor-pointer'
+					title={`${repo.default_branch} — branches on GitHub`}
+					onClick={e => {
+						e.stopPropagation();
+						onSelect(repo);
+						const r = e.currentTarget.getBoundingClientRect();
+						onOpenBranches(repo, r.left, r.bottom + 4);
+					}}
 				>
 					{repo.default_branch}
 				</span>
@@ -181,6 +191,7 @@ const GithubLane = ({
 	onOpen,
 	onContextMenu,
 	onShowLocal,
+	onOpenBranches,
 	jobs,
 	onGroupContextMenu
 }: GithubLaneProps) => {
@@ -243,7 +254,8 @@ const GithubLane = ({
 				onSelect,
 				onOpen,
 				onContextMenu,
-				onShowLocal
+				onShowLocal,
+				onOpenBranches
 			}}
 		/>
 	);
