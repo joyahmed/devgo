@@ -286,13 +286,6 @@ pub fn refresh_projects(
     Ok(payload)
 }
 
-#[tauri::command]
-pub fn get_runtime_info(
-    state: State<AppState>,
-) -> Result<RuntimeInfo, AppError> {
-    Ok(state.runtime_info.lock().map_err(lock_err)?.clone())
-}
-
 /// Count a launch. Deliberately runs only after the launch itself succeeded, so
 /// a project that fails to open does not climb the ranking.
 fn record_launch(state: &AppState, project: &Project) -> Result<(), AppError> {
