@@ -249,6 +249,16 @@ interface TitleBarButtonProps {
 	children: React.ReactNode;
 }
 
+interface ScanPickerProps {
+	/// workspaces already in the list: shown checked and disabled, not
+	/// hidden, or a rescan looks like it found less than last time
+	existing: string[];
+	onAddMany: (paths: string[]) => void;
+	onError: (message: string) => void;
+	/// after a successful add, so a modal host can close itself
+	onDone?: () => void;
+}
+
 interface OnboardingProps {
 	onAdd: (path: string) => void;
 	onAddMany: (paths: string[]) => void;
