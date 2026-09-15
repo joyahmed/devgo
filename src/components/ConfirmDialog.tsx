@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import Button from './Button';
 
 const ConfirmDialog = ({
 	open,
@@ -20,18 +21,9 @@ const ConfirmDialog = ({
 
 	if (!open) return null;
 
-	const actions = [
-		{
-			label: 'Cancel',
-			className:
-				'border-border bg-bg-panel text-text-secondary hover:bg-bg-hover hover:text-text-primary',
-			onClick: onCancel
-		},
-		{
-			label: 'Remove',
-			className: 'border-danger bg-danger text-white hover:bg-danger/80',
-			onClick: onConfirm
-		}
+	const actions: { label: string; variant: ButtonVariant; onClick: () => void }[] = [
+		{ label: 'Cancel', variant: 'secondary', onClick: onCancel },
+		{ label: 'Remove', variant: 'danger', onClick: onConfirm }
 	];
 
 	return (
@@ -46,15 +38,10 @@ const ConfirmDialog = ({
 				<h3 className='text-base font-bold mb-2'>{title}</h3>
 				<p className='text-sm text-text-secondary mb-6'>{message}</p>
 				<div className='flex justify-end gap-3'>
-					{actions.map(({ label, className, onClick }) => (
-						<button
-							key={label}
-							type='button'
-							className={`px-5 py-2 text-[13px] font-semibold border rounded-lg cursor-pointer ${className}`}
-							onClick={onClick}
-						>
+					{actions.map(({ label, ...button }) => (
+						<Button key={label} {...button}>
 							{label}
-						</button>
+						</Button>
 					))}
 				</div>
 			</div>

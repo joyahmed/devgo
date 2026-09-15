@@ -1,7 +1,7 @@
 // ambient type declarations — usable everywhere, no import needed.
 // No top-level import/export in this file: the moment one appears, every
-// interface here stops being global. React types are referenced inline —
-// import('react').ReactNode — for the same reason.
+// interface here stops being global. React's types are reached through the
+// global `React` namespace (React.ReactNode, React.Ref<T>) for the same reason.
 
 /* Rust wire types — mirror the structs in src-tauri/src/models */
 
@@ -14,14 +14,20 @@ interface Project {
 
 /* Component props */
 
+type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'ghost';
+
+interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+	variant?: ButtonVariant;
+}
+
 interface TitleBarProps {
-	children?: import('react').ReactNode;
+	children?: React.ReactNode;
 }
 
 interface TitleBarButtonProps {
 	className?: string;
 	onClick: () => void;
-	children: import('react').ReactNode;
+	children: React.ReactNode;
 }
 
 interface WorkspaceManagerProps {
@@ -54,5 +60,5 @@ interface ToastContextType {
 }
 
 interface ToastProviderProps {
-	children: import('react').ReactNode;
+	children: React.ReactNode;
 }
