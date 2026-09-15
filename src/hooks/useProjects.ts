@@ -14,6 +14,7 @@ const isRetryable = (w: WorkspaceState) =>
 	w.status !== 'live' && w.reason !== 'distro_stopped';
 
 const SORT_KEY = 'devgo.sortMode';
+const SORT_CYCLE: SortMode[] = ['frecency', 'activity', 'name'];
 
 export const useProjects = () => {
 	const [projects, setProjects] = useState<Project[]>([]);
@@ -21,6 +22,7 @@ export const useProjects = () => {
 		[]
 	);
 	const [ranks, setRanks] = useState<Map<string, ProjectRank>>(new Map());
+	const [git, setGit] = useState<Map<string, GitInfo>>(new Map());
 	const [query, setQuery] = useState('');
 	const [selected, setSelected] = useState<Project | null>(null);
 	const [loading, setLoading] = useState(true);
@@ -30,10 +32,22 @@ export const useProjects = () => {
 	const retryTimer = useRef<number | null>(null);
 	const retryStep = useRef(0);
 
+	// Git reads spawn processes, so they never gate the list. This fires after
+	// the payload is already on screen and merges results in as they arrive.
+	const loadGit = (list: Project[]) => {
+		if (list.length === 0) return;
+		invoke<GitInfo[]>('get_git_info', { projects: list })
+			.then(infos => {
+				setGit(new Map(infos.map(i => [i.full_path, i])));
+			})
+			.catch(() => {});
+	};
+
 	const apply = (payload: ProjectsPayload) => {
 		setProjects(payload.projects);
 		setWorkspaceStates(payload.workspaces);
 		setRanks(new Map(payload.ranks.map(r => [r.full_path, r])));
+		loadGit(payload.projects);
 		return payload;
 	};
 
@@ -121,7 +135,8 @@ export const useProjects = () => {
 
 	const toggleSort = () => {
 		setSortMode(prev => {
-			const next: SortMode = prev === 'frecency' ? 'name' : 'frecency';
+			const next =
+				SORT_CYCLE[(SORT_CYCLE.indexOf(prev) + 1) % SORT_CYCLE.length];
 			localStorage.setItem(SORT_KEY, next);
 			return next;
 		});
@@ -146,18 +161,26 @@ export const useProjects = () => {
 		? projects.filter(p => p.name.toLowerCase().includes(q))
 		: projects;
 
-	// Frecency descending, falling back to name so equal-scored projects (the
-	// long tail, all zero) keep a stable alphabetical order rather than
-	// whatever the scan happened to return. `[...matched]` because sort mutates.
+	// Both ranked modes fall back to name, so the long tail (equal scores, or
+	// projects with no git history) keeps a stable alphabetical order instead
+	// of whatever the scan happened to return. `[...matched]` because sort
+	// mutates.
+	const byName = (a: Project, b: Project) =>
+		a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+	const byActivity = (a: Project, b: Project) => {
+		const ta = git.get(a.full_path)?.last_commit ?? 0;
+		const tb = git.get(b.full_path)?.last_commit ?? 0;
+		return tb !== ta ? tb - ta : byName(a, b);
+	};
+	const byFrecency = (a: Project, b: Project) => {
+		const sa = ranks.get(a.full_path)?.score ?? 0;
+		const sb = ranks.get(b.full_path)?.score ?? 0;
+		return sb !== sa ? sb - sa : byName(a, b);
+	};
 	const filtered =
 		sortMode === 'name'
 			? matched
-			: [...matched].sort((a, b) => {
-					const sa = ranks.get(a.full_path)?.score ?? 0;
-					const sb = ranks.get(b.full_path)?.score ?? 0;
-					if (sb !== sa) return sb - sa;
-					return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
-				});
+			: [...matched].sort(sortMode === 'activity' ? byActivity : byFrecency);
 
 	// Derived from `filtered`, not `projects`, so pins respect the search.
 	const pinnedProjects = filtered.filter(p => ranks.get(p.full_path)?.pinned);
@@ -166,6 +189,7 @@ export const useProjects = () => {
 		projects,
 		workspaceStates,
 		ranks,
+		git,
 		filtered,
 		pinnedProjects,
 		query,

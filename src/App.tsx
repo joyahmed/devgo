@@ -43,6 +43,7 @@ const AppInner = () => {
 		loading,
 		workspaceStates,
 		ranks,
+		git,
 		pinnedProjects,
 		sortMode,
 		toggleSort,
@@ -144,6 +145,12 @@ const AppInner = () => {
 		togglePin(p).catch(e => toast(showError(e)));
 	};
 
+	const handleOpenRemote = (p: Project) => {
+		invoke('open_remote', { fullPath: p.full_path }).catch(e =>
+			toast(showError(e))
+		);
+	};
+
 	const handleOpenVSCode = () => openVSCode().catch(e => toast(showError(e)));
 	const handleOpenTerminal = () =>
 		openTerminal().catch(e => toast(showError(e)));
@@ -223,8 +230,10 @@ const AppInner = () => {
 						loading,
 						workspaceStates,
 						ranks,
+						gitInfo: git,
 						pinnedProjects,
-						onTogglePin: handleTogglePin
+						onTogglePin: handleTogglePin,
+						onOpenRemote: handleOpenRemote
 					}}
 				/>
 				<ActionButtons

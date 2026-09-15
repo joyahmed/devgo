@@ -38,11 +38,50 @@ const StatusPill = ({ state }: StatusPillProps) => {
 	);
 };
 
-/// The right-hand cell of a project row: its frecency hint and pin star.
-const RowMeta = ({ project, rank, onTogglePin }: RowMetaProps) => (
-	<div className='flex items-center justify-end gap-1.5'>
+/// Branch name plus a dot when the tree is dirty. Absent entirely for anything
+/// that is not a git repository, or whose distro is stopped — no placeholder,
+/// no "unknown", nothing to read as a state that it isn't.
+const GitBadge = ({ info, onOpenRemote }: GitBadgeProps) => {
+	if (!info?.branch) return null;
+	return (
+		<span className='flex items-center gap-1 min-w-0'>
+			{info.dirty && (
+				<span className='text-amber-400 leading-none' title='Uncommitted changes'>
+					●
+				</span>
+			)}
+			<span
+				className={`truncate font-mono text-[11px] text-text-muted ${
+					info.remote ? 'hover:text-accent cursor-pointer' : ''
+				}`}
+				title={info.remote ? `${info.branch} — open ${info.remote}` : info.branch}
+				onClick={
+					info.remote
+						? e => {
+								e.stopPropagation();
+								onOpenRemote?.();
+							}
+						: undefined
+				}
+			>
+				{info.branch}
+			</span>
+		</span>
+	);
+};
+
+/// The right-hand cell of a project row: git state, frecency hint, pin star.
+const RowMeta = ({
+	project,
+	rank,
+	git,
+	onTogglePin,
+	onOpenRemote
+}: RowMetaProps) => (
+	<div className='flex items-center justify-end gap-1.5 min-w-0'>
+		<GitBadge {...{ info: git, onOpenRemote: () => onOpenRemote?.(project) }} />
 		{rank?.hint && (
-			<span className='text-[9px] uppercase tracking-wider text-text-muted'>
+			<span className='text-[9px] uppercase tracking-wider text-text-muted shrink-0'>
 				{rank.hint}
 			</span>
 		)}
@@ -73,9 +112,11 @@ const ProjectRow = ({
 	pinnedStrip,
 	stale,
 	rank,
+	git,
 	onSelect,
 	onDoubleClick,
-	onTogglePin
+	onTogglePin,
+	onOpenRemote
 }: ProjectRowProps) => (
 	<div
 		className={`${col} px-3 py-1.5 cursor-pointer select-none transition-colors ${
@@ -105,7 +146,7 @@ const ProjectRow = ({
 		>
 			{project.file_system}
 		</div>
-		<RowMeta {...{ project, rank, onTogglePin }} />
+		<RowMeta {...{ project, rank, git, onTogglePin, onOpenRemote }} />
 	</div>
 );
 
@@ -119,8 +160,10 @@ const ProjectTree = ({
 	loading,
 	workspaceStates,
 	ranks,
+	gitInfo,
 	pinnedProjects,
 	onTogglePin,
+	onOpenRemote,
 	ref
 }: ProjectTreeProps) => {
 	const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
@@ -270,9 +313,11 @@ const ProjectTree = ({
 		project,
 		selected: selected?.full_path === project.full_path,
 		rank: ranks?.get(project.full_path),
+		git: gitInfo?.get(project.full_path),
 		onSelect,
 		onDoubleClick,
-		onTogglePin
+		onTogglePin,
+		onOpenRemote
 	});
 
 	return (

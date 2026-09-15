@@ -50,7 +50,17 @@ interface ProjectsPayload {
 	ranks: ProjectRank[];
 }
 
-type SortMode = 'frecency' | 'name';
+type SortMode = 'frecency' | 'name' | 'activity';
+
+/// Git state, read off the scan's hot path and never persisted — a branch name
+/// from yesterday is worse than none, because it looks current.
+interface GitInfo {
+	full_path: string;
+	branch: string | null;
+	dirty: boolean;
+	remote: string | null;
+	last_commit: number;
+}
 
 interface LastProject {
 	full_path: string;
@@ -118,9 +128,16 @@ interface ProjectTreeProps {
 	loading?: boolean;
 	workspaceStates?: WorkspaceState[];
 	ranks?: Map<string, ProjectRank>;
+	gitInfo?: Map<string, GitInfo>;
 	pinnedProjects?: Project[];
 	onTogglePin?: (p: Project) => void;
+	onOpenRemote?: (p: Project) => void;
 	ref?: React.Ref<ProjectTreeHandle>;
+}
+
+interface GitBadgeProps {
+	info?: GitInfo;
+	onOpenRemote?: () => void;
 }
 
 interface StatusPillProps {
@@ -130,7 +147,9 @@ interface StatusPillProps {
 interface RowMetaProps {
 	project: Project;
 	rank?: ProjectRank;
+	git?: GitInfo;
 	onTogglePin?: (p: Project) => void;
+	onOpenRemote?: (p: Project) => void;
 }
 
 interface ProjectRowProps {
@@ -141,9 +160,11 @@ interface ProjectRowProps {
 	/// Served from cache — the row dims to say so.
 	stale?: boolean;
 	rank?: ProjectRank;
+	git?: GitInfo;
 	onSelect: (p: Project) => void;
 	onDoubleClick: (p: Project) => void;
 	onTogglePin?: (p: Project) => void;
+	onOpenRemote?: (p: Project) => void;
 }
 
 interface ActionButtonsProps {

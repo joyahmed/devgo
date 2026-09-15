@@ -1,6 +1,12 @@
 import type { KeyboardEvent } from 'react';
 import Button from './Button';
 
+const SORT_LABEL: Record<SortMode, string> = {
+	frecency: 'frecency',
+	activity: 'activity',
+	name: 'A–Z'
+};
+
 const SearchBox = ({
 	value,
 	onChange,
@@ -38,7 +44,7 @@ const SearchBox = ({
 						title='Toggle sort order'
 						onClick={onToggleSort}
 					>
-						sort: {sortMode === 'name' ? 'A–Z' : 'frecency'}
+						sort: {SORT_LABEL[sortMode ?? 'frecency']}
 					</Button>
 				)}
 			</div>
