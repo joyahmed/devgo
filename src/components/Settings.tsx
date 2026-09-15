@@ -395,6 +395,8 @@ const Settings = ({
 						terminals: targets.terminals,
 						defaults: targets.defaults,
 						onAdd: targets.addTarget,
+						onDetect: targets.detect,
+						onAddDetected: targets.addDetected,
 						onRemove: targets.removeTarget,
 						onSetDefault: targets.setDefaultTarget,
 						onError

@@ -60,6 +60,12 @@ const TargetList = ({
 					label: 'windows only',
 					className: 'text-text-muted border-border-strong',
 					title: 'No WSL configuration — this target cannot open WSL projects'
+				},
+				{
+					show: !t.args_template,
+					label: 'wsl only',
+					className: 'text-text-muted border-border-strong',
+					title: 'Runs inside a distro — this target cannot open Windows projects'
 				}
 			];
 			const actions = [
@@ -121,6 +127,8 @@ const TargetManager = ({
 	terminals,
 	defaults,
 	onAdd,
+	onDetect,
+	onAddDetected,
 	onRemove,
 	onSetDefault,
 	onError
@@ -128,6 +136,10 @@ const TargetManager = ({
 	const [kind, setKind] = useState<TargetKind>('editor');
 	const [draft, setDraft] = useState(BLANK);
 	const [open, setOpen] = useState(false);
+	// null is never scanned; [] is scanned and everything is already
+	// registered. They say different things and must read differently.
+	const [found, setFound] = useState<DetectedTarget[] | null>(null);
+	const [scanning, setScanning] = useState(false);
 
 	// Every action here can fail on purpose — removing the last editor is
 	// refused with a sentence the user needs to read. The panel does not own
@@ -143,6 +155,29 @@ const TargetManager = ({
 		setDraft(BLANK);
 		setOpen(false);
 	};
+
+	// a probe is a thing you ask for: it shells out to where.exe and wsl.exe,
+	// which has no place on the launch path
+	const scan = () => {
+		setScanning(true);
+		onDetect()
+			.then(setFound)
+			.catch(e => onError(String(e)))
+			.finally(() => setScanning(false));
+	};
+
+	const addDetected = (id: string) =>
+		guard(onAddDetected(id)).then(() =>
+			setFound(prev => (prev ?? []).filter(d => d.target.id !== id))
+		);
+
+	const scanLabel = scanning ? 'Scanning…' : found ? 'Scan again' : 'Scan';
+	const scanHint =
+		found === null
+			? 'Looks for installed editors and terminals on PATH, and for command-line editors inside distros that are already running. It never starts a distro.'
+			: found.length === 0
+				? 'Nothing new: everything found is already registered.'
+				: null;
 
 	const submit = () => {
 		if (!draft.name.trim() || !draft.executable.trim()) {
@@ -181,6 +216,56 @@ const TargetManager = ({
 					/>
 				</div>
 			))}
+
+			{/* detection proposes; nothing is written until a specific Add */}
+			<div>
+				<div className='flex items-center justify-between mb-2'>
+					<h4 className='text-xs font-bold uppercase tracking-wider text-text-secondary'>
+						Detected on this machine
+					</h4>
+					<Button
+						variant='ghost'
+						className='text-xs px-2 hover:text-accent'
+						disabled={scanning}
+						onClick={scan}
+					>
+						{scanLabel}
+					</Button>
+				</div>
+				{scanHint ? (
+					<p className='text-xs text-text-muted'>{scanHint}</p>
+				) : (
+					<ul className='list-none flex flex-col gap-1.5'>
+						{(found ?? []).map(d => (
+							<li
+								key={d.target.id}
+								className='flex items-center justify-between gap-3 px-3 py-2 bg-bg-panel rounded-md'
+							>
+								<span className='flex flex-col min-w-0 flex-1' title={d.detail}>
+									<span className='text-sm text-text-primary truncate'>
+										{d.target.name}
+									</span>
+									{/* where it came from: an entry with no provenance is
+									    the guessing the old seed policy refused */}
+									<span className='font-mono text-[11px] text-text-muted truncate'>
+										{d.source === 'path' ? d.detail : `in ${d.source}`}
+									</span>
+								</span>
+								<span className={`${badge} text-text-muted border-border-strong shrink-0`}>
+									{d.target.kind}
+								</span>
+								<Button
+									variant='ghost'
+									className='text-xs px-2 hover:text-accent'
+									onClick={() => addDetected(d.target.id)}
+								>
+									Add
+								</Button>
+							</li>
+						))}
+					</ul>
+				)}
+			</div>
 
 			{open ? (
 				<div className='flex flex-col gap-2 border border-border rounded-lg p-3'>

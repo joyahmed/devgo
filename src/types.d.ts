@@ -304,6 +304,8 @@ interface TargetManagerProps {
 	/// Kind → id of the target that would actually launch, resolved in Rust.
 	defaults: Record<string, string>;
 	onAdd: (t: Omit<LaunchTarget, 'id'>) => Promise<void>;
+	onDetect: () => Promise<DetectedTarget[]>;
+	onAddDetected: (id: string) => Promise<void>;
 	onRemove: (id: string) => Promise<void>;
 	onSetDefault: (kind: TargetKind, id: string) => Promise<void>;
 	onError: (message: string) => void;
