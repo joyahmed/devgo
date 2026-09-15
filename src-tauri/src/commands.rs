@@ -231,9 +231,12 @@ fn collect_projects(
 
 #[tauri::command]
 pub fn get_projects(
+    app: tauri::AppHandle,
     state: State<AppState>,
 ) -> Result<ProjectsPayload, AppError> {
-    collect_projects(&state, false)
+    let payload = collect_projects(&state, false)?;
+    crate::tray::refresh(&app);
+    Ok(payload)
 }
 
 /// Explicit user refresh. `force` is the only path allowed to start a stopped
@@ -241,6 +244,7 @@ pub fn get_projects(
 #[tauri::command]
 pub fn refresh_projects(
     force: bool,
+    app: tauri::AppHandle,
     state: State<AppState>,
 ) -> Result<ProjectsPayload, AppError> {
     if force {
@@ -253,7 +257,9 @@ pub fn refresh_projects(
             .set_cached_runtime(fresh)
             .map_err(AppError::Lock)?;
     }
-    collect_projects(&state, force)
+    let payload = collect_projects(&state, force)?;
+    crate::tray::refresh(&app);
+    Ok(payload)
 }
 
 #[tauri::command]

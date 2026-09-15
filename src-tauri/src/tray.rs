@@ -71,3 +71,15 @@ pub(crate) fn build_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
 
     b.separator().item(&quit).build()
 }
+
+// tray mutation must happen on the main thread
+pub fn refresh(app: &AppHandle) {
+    let app = app.clone();
+    let _ = app.clone().run_on_main_thread(move || {
+        if let Some(tray) = app.tray_by_id(TRAY_ID) {
+            if let Ok(menu) = build_menu(&app) {
+                let _ = tray.set_menu(Some(menu));
+            }
+        }
+    });
+}
