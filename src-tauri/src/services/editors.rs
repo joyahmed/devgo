@@ -8,6 +8,9 @@ use std::collections::HashMap;
 use std::os::windows::process::CommandExt;
 use std::process::Command;
 
+use serde::Serialize;
+
+use super::platform::wsl;
 use crate::models::target::{LaunchTarget, TargetKind};
 
 const CREATE_NO_WINDOW: u32 = 0x08000000;
@@ -237,6 +240,65 @@ fn distro_target(exe: &str, name: &str, distro: &str) -> LaunchTarget {
         run_args_template: None,
         wsl_run_args_template: None,
     }
+}
+
+/// A target found installed but not yet registered, with where it came
+/// from so the UI can say why it is offered.
+#[derive(Debug, Clone, Serialize)]
+pub struct DetectedTarget {
+    pub target: LaunchTarget,
+    /// "path" for a Windows program, or the distro name
+    pub source: String,
+    /// the resolved exe path, or "Ubuntu-26.04 · nvim"
+    pub detail: String,
+}
+
+/// Everything installed, as targets ready to be added. `running` is passed
+/// in so a caller that already paid for `wsl -l --running` does not pay
+/// twice; only those distros are asked.
+pub fn detect(running: &[String]) -> Vec<DetectedTarget> {
+    let names: Vec<&str> = WINDOWS.iter().map(|c| c.exe).collect();
+    let found = where_lookup(&names);
+
+    let mut out: Vec<DetectedTarget> = WINDOWS
+        .iter()
+        .filter_map(|c| {
+            found.get(&c.exe.to_lowercase()).map(|path| DetectedTarget {
+                target: to_target(c),
+                source: "path".to_string(),
+                detail: path.clone(),
+            })
+        })
+        .collect();
+
+    for distro in running {
+        for (exe, name) in in_distro(distro) {
+            out.push(DetectedTarget {
+                target: distro_target(exe, name, distro),
+                source: distro.clone(),
+                detail: format!("{distro} · {exe}"),
+            });
+        }
+    }
+    out
+}
+
+/// Which of the in-distro editors exist, in one bash -lc per distro.
+fn in_distro(distro: &str) -> Vec<(&'static str, &'static str)> {
+    let list = IN_DISTRO
+        .iter()
+        .map(|(exe, _)| *exe)
+        .collect::<Vec<_>>()
+        .join(" ");
+    let script = format!(
+        "for c in {list}; do command -v \"$c\" >/dev/null 2>&1 && echo \"$c\"; done"
+    );
+    let present = wsl::probe_lines(distro, &script);
+    IN_DISTRO
+        .iter()
+        .filter(|(exe, _)| present.iter().any(|p| p == exe))
+        .copied()
+        .collect()
 }
 
 fn slugify(s: &str) -> String {
