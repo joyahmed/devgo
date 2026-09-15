@@ -378,6 +378,16 @@ interface ScanPickerProps {
 	onDone?: () => void;
 }
 
+interface NameDialogProps {
+	/// what the name is for, shown above the box
+	hint: string;
+	initial?: string;
+	submitLabel: string;
+	/// resolves on success; a thrown error is shown under the box
+	onSubmit: (name: string) => Promise<void>;
+	onDone: () => void;
+}
+
 interface AddRepoProps {
 	onAdded: (repo: GithubRepo) => void;
 	onDone: () => void;
