@@ -20,6 +20,12 @@ pub enum AppError {
 
     #[error("No browsable remote for {0}")]
     NoRemote(String),
+
+    /// Carries an already-phrased message: the distinction between "timed out"
+    /// and "returned but still running" is the useful part, and only the caller
+    /// knows which it was.
+    #[error("{0}")]
+    WslStopFailed(String),
 }
 
 // std::io::Error and serde_json::Error don't implement Serialize, so we can't

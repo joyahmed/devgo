@@ -342,6 +342,39 @@ pub fn open_remote(
     Ok(())
 }
 
+/// Which distros are up right now. Costs one management call and boots nothing,
+/// so the UI can show live state without violating the no-timer rule.
+#[tauri::command]
+pub fn get_running_distros() -> Vec<String> {
+    wsl::running_distros()
+}
+
+fn describe(outcome: wsl::StopOutcome, what: &str) -> Result<String, AppError> {
+    match outcome {
+        wsl::StopOutcome::Stopped => Ok(format!("{what} stopped")),
+        wsl::StopOutcome::StillRunning => Err(AppError::WslStopFailed(format!(
+            "{what} is still running — something may be holding it open"
+        ))),
+        wsl::StopOutcome::TimedOut => Err(AppError::WslStopFailed(format!(
+            "timed out waiting for {what} to stop — WSLService may be unresponsive"
+        ))),
+    }
+}
+
+/// Stop one distro. Blocking, but Tauri runs commands off the UI thread, so a
+/// wedged WSLService stalls this call rather than the window.
+#[tauri::command]
+pub fn terminate_distro(distro: String) -> Result<String, AppError> {
+    let outcome = wsl::terminate(&distro).map_err(AppError::WslStopFailed)?;
+    describe(outcome, &distro)
+}
+
+#[tauri::command]
+pub fn shutdown_wsl() -> Result<String, AppError> {
+    let outcome = wsl::shutdown_all().map_err(AppError::WslStopFailed)?;
+    describe(outcome, "WSL")
+}
+
 #[tauri::command]
 pub fn toggle_pin(
     full_path: String,

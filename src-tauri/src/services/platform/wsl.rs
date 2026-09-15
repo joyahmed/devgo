@@ -143,3 +143,71 @@ mod tests {
         assert_eq!(default, Some("Ubuntu-26.04"));
     }
 }
+
+/// How long to wait for a stop command before giving up on it.
+///
+/// This is the one place a timeout is load-bearing rather than defensive. The
+/// whole feature exists for a wedged VM, and a wedged VM is exactly when
+/// WSLService stops answering — this machine's System log carries five
+/// 30-second WSLService transaction timeouts. Without a bound, the command that
+/// fixes the hang would itself hang, taking DevGo with it.
+const STOP_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(20);
+
+pub enum StopOutcome {
+    /// The command returned and the distro is genuinely no longer running.
+    Stopped,
+    /// The command returned, but the distro is still listed as running.
+    StillRunning,
+    /// We gave up waiting.
+    TimedOut,
+}
+
+fn run_with_timeout(args: &[&str]) -> Result<bool, String> {
+    let mut child = wsl_command()
+        .args(args)
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .map_err(|e| format!("could not run wsl: {e}"))?;
+
+    let deadline = std::time::Instant::now() + STOP_TIMEOUT;
+    loop {
+        match child.try_wait() {
+            Ok(Some(_)) => return Ok(true),
+            Ok(None) => {
+                if std::time::Instant::now() >= deadline {
+                    // Leave the process alone rather than killing it — wsl.exe is
+                    // a thin client, and the work is happening in WSLService.
+                    return Ok(false);
+                }
+                std::thread::sleep(std::time::Duration::from_millis(100));
+            }
+            Err(e) => return Err(format!("waiting on wsl: {e}")),
+        }
+    }
+}
+
+/// Stop a single distro, leaving any others (and the VM) alone.
+pub fn terminate(distro: &str) -> Result<StopOutcome, String> {
+    if !run_with_timeout(&["--terminate", distro])? {
+        return Ok(StopOutcome::TimedOut);
+    }
+    // Never trust the exit code alone — report what is actually true.
+    if is_running(distro, &running_distros()) {
+        Ok(StopOutcome::StillRunning)
+    } else {
+        Ok(StopOutcome::Stopped)
+    }
+}
+
+/// Stop every distro and the VM itself. The escalation, not the default.
+pub fn shutdown_all() -> Result<StopOutcome, String> {
+    if !run_with_timeout(&["--shutdown"])? {
+        return Ok(StopOutcome::TimedOut);
+    }
+    if running_distros().is_empty() {
+        Ok(StopOutcome::Stopped)
+    } else {
+        Ok(StopOutcome::StillRunning)
+    }
+}
