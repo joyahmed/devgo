@@ -288,6 +288,9 @@ pub fn run() {
                 ),
                 github_store: std::sync::Mutex::new(github_store),
                 github_refreshing: std::sync::atomic::AtomicBool::new(false),
+                github_branches: std::sync::Mutex::new(
+                    std::collections::HashMap::new(),
+                ),
             });
 
             // geometry goes on before the webview calls show(), so the first
@@ -412,6 +415,8 @@ pub fn run() {
             commands::shutdown_wsl,
             commands::open_remote,
             commands::get_remote_branches,
+            commands::get_github_branches,
+            commands::refresh_remote_branches_github,
             commands::get_github_repos,
             commands::get_github_status,
             commands::refresh_github_repos,

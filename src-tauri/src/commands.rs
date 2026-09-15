@@ -84,6 +84,9 @@ pub struct AppState {
     /// One GitHub refresh at a time. A second refresh_github_repos while
     /// one is in flight returns at once; the running one serves both.
     pub github_refreshing: std::sync::atomic::AtomicBool,
+    /// Branch lists fetched from GitHub this session, by owner/name. In
+    /// memory only, like git_cache, and for the same reason.
+    pub github_branches: Mutex<HashMap<String, Vec<String>>>,
 }
 
 #[tauri::command]
@@ -842,6 +845,77 @@ pub fn get_remote_branches(
         }
     });
     entry.remote_branches = Some(branches.clone());
+    Ok(branches)
+}
+
+/// The branches of a GitHub row that is not on disk: gh api, one network
+/// call, on the click and never in a pass. async + spawn_blocking keeps
+/// it off the main thread; the second open of the same repo is served
+/// from github_branches without asking again.
+#[tauri::command]
+pub async fn get_github_branches(
+    full_name: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<String>, AppError> {
+    if let Some(cached) = state
+        .github_branches
+        .lock()
+        .map_err(lock_err)?
+        .get(&full_name)
+    {
+        return Ok(cached.clone());
+    }
+    let key = full_name.clone();
+    let branches =
+        tauri::async_runtime::spawn_blocking(move || github::branches(&key))
+            .await
+            .map_err(|e| AppError::Lock(e.to_string()))??;
+    state
+        .github_branches
+        .lock()
+        .map_err(lock_err)?
+        .insert(full_name, branches.clone());
+    Ok(branches)
+}
+
+/// Refresh from GitHub on a clone's own popover: the live list from the
+/// API replaces the one refs/remotes remembered, on the same GitInfo
+/// slot get_remote_branches fills, so the next open is the fresh list
+/// until the badge pass replaces the entry. The remote is read from the
+/// cache, which the badge pass filled; only a github.com remote parses.
+#[tauri::command]
+pub async fn refresh_remote_branches_github(
+    project: Project,
+    state: State<'_, AppState>,
+) -> Result<Vec<String>, AppError> {
+    let remote = state
+        .git_cache
+        .lock()
+        .map_err(lock_err)?
+        .get(&project.full_path)
+        .and_then(|i| i.remote.clone())
+        .ok_or_else(|| {
+            AppError::GhUnavailable(
+                "This project has no remote on record".into(),
+            )
+        })?;
+    let full_name = github::parse_spec(&remote).ok_or_else(|| {
+        AppError::GhUnavailable(format!("{remote} is not a GitHub repository"))
+    })?;
+    let key = full_name.clone();
+    let branches =
+        tauri::async_runtime::spawn_blocking(move || github::branches(&key))
+            .await
+            .map_err(|e| AppError::Lock(e.to_string()))??;
+    state
+        .github_branches
+        .lock()
+        .map_err(lock_err)?
+        .insert(full_name, branches.clone());
+    let mut cache = state.git_cache.lock().map_err(lock_err)?;
+    if let Some(entry) = cache.get_mut(&project.full_path) {
+        entry.remote_branches = Some(branches.clone());
+    }
     Ok(branches)
 }
 
