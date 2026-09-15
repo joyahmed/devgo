@@ -507,7 +507,8 @@ const AppInner = () => {
 						onRemoveWorkspace: (i: number) => setRemoveIndex(i),
 						summonHotkey,
 						onError: (m: string) => toast(m, 'error'),
-						panel: settingsPanel
+						panel: settingsPanel,
+						onScanChanged: () => refresh()
 					}}
 				/>
 			</Suspense>

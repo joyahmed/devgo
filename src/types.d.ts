@@ -221,6 +221,8 @@ interface SettingsProps {
 	onError: (message: string) => void;
 	/// a panel to land on when opened this way, else the last one used
 	panel?: string;
+	/// the launcher re-scans with the saved config
+	onScanChanged: () => void;
 }
 
 interface ShortcutTableProps {

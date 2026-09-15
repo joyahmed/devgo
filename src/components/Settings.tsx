@@ -1,3 +1,4 @@
+import { invoke } from '@tauri-apps/api/core';
 import { useEffect, useState } from 'react';
 import { prettyKeys, SHORTCUTS } from '../shortcuts';
 import { useTargets } from '../hooks/useTargets';
@@ -59,6 +60,70 @@ const ShortcutTable = ({ summonHotkey }: ShortcutTableProps) => {
 	);
 };
 
+// just the ignore list. depth, monorepo expansion and a watcher were left out:
+// each would cost the scan hot path, this one is a filter on a listing in hand
+const ScanningPanel = ({ onSaved, onError }: ScanningPanelProps) => {
+	const [text, setText] = useState<string | null>(null);
+	const [saving, setSaving] = useState(false);
+
+	useEffect(() => {
+		invoke<ScanConfig>('get_scan_config')
+			.then(c => setText(c.ignore.join('\n')))
+			.catch(e => {
+				onError(String(e));
+				setText('');
+			});
+	}, []);
+
+	const save = async () => {
+		setSaving(true);
+		const ignore = [
+			...new Set(
+				(text ?? '')
+					.split(/[\n,]/)
+					.map(s => s.trim())
+					.filter(Boolean)
+			)
+		];
+		try {
+			await invoke('set_scan_config', { config: { ignore } });
+			onSaved();
+		} catch (e) {
+			onError(String(e));
+		} finally {
+			setSaving(false);
+		}
+	};
+
+	return (
+		<div className='flex flex-col gap-4'>
+			<div>
+				<h4 className={heading}>Ignore folders</h4>
+				<p className='text-xs text-text-muted mb-2'>
+					Folder names to skip while scanning, one per line — on top of the
+					hidden dotfolders that are always skipped. Matched by name,
+					case-insensitive.
+				</p>
+				<textarea
+					className='w-full h-40 px-3 py-2 bg-bg-panel border border-border rounded-md font-mono text-xs text-text-primary outline-none focus:border-accent resize-none'
+					placeholder={'node_modules\narchive\nvendor'}
+					value={text ?? ''}
+					onChange={e => setText(e.target.value)}
+					disabled={text === null}
+				/>
+			</div>
+			<Button
+				variant='primary'
+				className='self-start'
+				onClick={save}
+				disabled={saving || text === null}
+			>
+				{saving ? 'Saving…' : 'Save & rescan'}
+			</Button>
+		</div>
+	);
+};
+
 const Settings = ({
 	open,
 	onClose,
@@ -67,7 +132,8 @@ const Settings = ({
 	onRemoveWorkspace,
 	summonHotkey,
 	onError,
-	panel
+	panel,
+	onScanChanged
 }: SettingsProps) => {
 	const targets = useTargets();
 
@@ -102,6 +168,13 @@ const Settings = ({
 						onError
 					}}
 				/>
+			)
+		},
+		{
+			id: 'scanning',
+			label: 'Scanning',
+			render: () => (
+				<ScanningPanel {...{ onSaved: onScanChanged, onError }} />
 			)
 		},
 		{
