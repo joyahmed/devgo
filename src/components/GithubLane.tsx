@@ -214,7 +214,9 @@ const GithubLane = ({
 		liveExtras,
 		searching,
 		folded,
-		toggleGroup
+		toggleGroup,
+		showRecents,
+		toggleRecents
 	} = github;
 	const login = payload?.cache.login ?? status?.login ?? null;
 	const total = payload?.cache.repos.length ?? 0;
@@ -222,6 +224,8 @@ const GithubLane = ({
 	const canRefresh = Boolean(status?.login);
 	// the ungrouped tail: the footer line speaks for it
 	const tail = sections?.[sections.length - 1];
+	// the sections on screen: the tail only while recents is on
+	const shown = sections?.filter(s => s.group !== null || showRecents);
 
 	// the flat search view: the cache's matches, then the hits from all of
 	// github. two labels while a live search is in play, so a stranger's
@@ -296,6 +300,31 @@ const GithubLane = ({
 				</div>
 				<div className='text-text-muted truncate'>{headerLine(github)}</div>
 				<div className='flex items-center gap-1'>
+					{/* the recents switch: a word that reads as a state, on in the
+					    accent and off in muted, like the local mark */}
+					{total > 0 && sections && (
+						<Button
+							variant='ghost'
+							className='-my-1 hover:bg-transparent'
+							title={
+								showRecents
+									? 'Hide the recently updated repos not in a group'
+									: 'Show the recently updated repos not in a group'
+							}
+							onClick={e => {
+								e.stopPropagation();
+								toggleRecents();
+							}}
+						>
+							<span
+								className={`text-[9px] uppercase tracking-wider hover:underline ${
+									showRecents ? 'text-accent' : 'text-text-muted'
+								}`}
+							>
+								recents
+							</span>
+						</Button>
+					)}
 					{onAddMenu && total > 0 && (
 						<Button
 							variant='ghost'
@@ -365,10 +394,10 @@ const GithubLane = ({
 								{part.rows.map(repo => rowFor(repo, false, false))}
 							</div>
 						))}
-					{sections?.map(section => {
+					{shown?.map(section => {
 						const name = section.group;
 						const isFolded = name !== null && folded.has(name);
-						const heading = name !== null || sections.length > 1;
+						const heading = name !== null || (sections?.length ?? 0) > 1;
 						return (
 							<div key={name ?? '\u0000tail'}>
 								{heading && (
@@ -419,7 +448,7 @@ const GithubLane = ({
 					})}
 					{/* say what the default view is, so twenty rows out of a few
 					    hundred never reads as "where are the rest" */}
-					{isOpen && tail && tail.total > RECENT_LIMIT && (
+					{isOpen && showRecents && tail && tail.total > RECENT_LIMIT && (
 						<div className='ml-6 px-3 py-1.5 text-[10px] text-text-muted'>
 							{RECENT_LIMIT} most recently updated of {tail.total}
 							{sections && sections.length > 1 ? ' not in a group' : ''}. Type

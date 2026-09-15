@@ -568,6 +568,9 @@ interface GithubState {
 	editGroups: (edit: GroupEdit) => Promise<GithubGroup[]>;
 	folded: Set<string>;
 	toggleGroup: (name: string) => void;
+	/// the ungrouped tail on or off, remembered
+	showRecents: boolean;
+	toggleRecents: () => void;
 	refresh: () => void;
 	reload: () => void;
 	setOrgs: (orgs: string[] | null) => Promise<void>;

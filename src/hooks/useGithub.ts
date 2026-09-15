@@ -10,6 +10,10 @@ import { laneSections, visibleRepos } from '../github';
 const OPEN_KEY = 'devgo.githubLane';
 // which groups are folded, remembered like the tree's collapse set
 const FOLDED_KEY = 'devgo.githubGroupsFolded';
+// whether the ungrouped tail, the newest twenty, is shown. once the
+// repos you care about are in groups the tail is noise under them, and
+// a switch is cheaper than a group called everything else
+const RECENTS_KEY = 'devgo.githubRecents';
 
 // live search fires only after the box has been still this long, and
 // only for a query at least this many characters: two of the three gates
@@ -132,6 +136,22 @@ export const useGithub = (git: Map<string, GitInfo>): GithubState => {
 		return next;
 	};
 
+	const [showRecents, setShowRecents] = useState(() => {
+		try {
+			return localStorage.getItem(RECENTS_KEY) !== 'off';
+		} catch {
+			return true;
+		}
+	});
+	const toggleRecents = () => {
+		try {
+			localStorage.setItem(RECENTS_KEY, showRecents ? 'off' : 'on');
+		} catch {
+			// per-viewer convenience only
+		}
+		setShowRecents(!showRecents);
+	};
+
 	const [folded, setFolded] = useState<Set<string>>(loadFolded);
 	const toggleGroup = (name: string) => {
 		const next = new Set(folded);
@@ -199,10 +219,12 @@ export const useGithub = (git: Map<string, GitInfo>): GithubState => {
 			: [];
 
 	// the flat row order the keyboard walks: the sections with folded
-	// groups contributing nothing, or the cache's matches then the live
-	// extras
+	// groups and a hidden tail contributing nothing, or the cache's
+	// matches then the live extras
+	const hidden = (s: LaneSection) =>
+		s.group ? folded.has(s.group) : !showRecents;
 	const visible = sections
-		? sections.flatMap(s => (s.group && folded.has(s.group) ? [] : s.rows))
+		? sections.flatMap(s => (hidden(s) ? [] : s.rows))
 		: [...(cacheMatches ?? []), ...liveExtras];
 
 	const setLiveSearch = async (on: boolean) => {
@@ -236,6 +258,8 @@ export const useGithub = (git: Map<string, GitInfo>): GithubState => {
 		editGroups,
 		folded,
 		toggleGroup,
+		showRecents,
+		toggleRecents,
 		refresh,
 		reload,
 		setOrgs
