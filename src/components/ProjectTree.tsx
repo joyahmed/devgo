@@ -12,6 +12,31 @@ const COLUMNS = [
 const lastSegment = (path: string) =>
 	path.replace(/[\\/]+$/, '').split(/[\\/]/).pop() ?? path;
 
+const pill =
+	'inline-block px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider rounded-full bg-bg-panel border border-border shrink-0';
+
+const REASON_LABEL: Record<UnavailableReason, string> = {
+	distro_stopped: 'WSL stopped',
+	not_mounted: 'not mounted',
+	access_denied: 'no access'
+};
+
+const StatusPill = ({ state }: StatusPillProps) => {
+	if (!state || state.status === 'live') return null;
+	const label = state.reason ? REASON_LABEL[state.reason] : 'unavailable';
+	const cached = state.status === 'cached';
+	return (
+		<span
+			className={`${pill} ${cached ? 'text-text-muted' : 'text-danger'}`}
+			title={
+				cached ? `Showing cached projects — ${label}` : `Unavailable — ${label}`
+			}
+		>
+			{cached ? `cached · ${label}` : label}
+		</span>
+	);
+};
+
 const ProjectTree = ({
 	projects,
 	selected,
@@ -19,6 +44,7 @@ const ProjectTree = ({
 	onDoubleClick,
 	onLaunch,
 	loading,
+	workspaceStates,
 	ref
 }: ProjectTreeProps) => {
 	const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
@@ -65,6 +91,9 @@ const ProjectTree = ({
 		return () => window.removeEventListener('keydown', handler);
 	}, [selected, visible, navigate, onLaunch]);
 
+	const stateFor = (ws: string) =>
+		workspaceStates?.find(s => s.workspace === ws);
+
 	const toggle = (ws: string) => {
 		setCollapsed(prev => {
 			const next = new Set(prev);
@@ -84,6 +113,33 @@ const ProjectTree = ({
 	}
 
 	if (projects.length === 0) {
+		// "Nothing configured" and "everything is offline right now" are very
+		// different situations and must never look the same.
+		const blocked =
+			workspaceStates?.filter(s => s.status === 'unavailable') ?? [];
+		if (blocked.length > 0) {
+			return (
+				<div className='flex-1 flex flex-col items-center justify-center gap-2 text-sm text-text-muted px-6 text-center'>
+					<span className='text-danger font-semibold'>
+						{blocked.length === 1
+							? '1 workspace is unavailable'
+							: `All ${blocked.length} workspaces are unavailable`}
+					</span>
+					{blocked.map(s => (
+						<span
+							key={s.workspace}
+							className='font-mono text-xs truncate max-w-full'
+						>
+							{s.workspace} —{' '}
+							{s.reason ? REASON_LABEL[s.reason] : 'unavailable'}
+						</span>
+					))}
+					<span className='text-xs'>
+						Nothing was cached for these yet. Refresh once they are back.
+					</span>
+				</div>
+			);
+		}
 		return (
 			<div className='flex-1 flex items-center justify-center text-sm text-text-muted'>
 				No projects found. Add a workspace to begin.
@@ -110,6 +166,8 @@ const ProjectTree = ({
 					const isOpen = !collapsed.has(ws);
 					const count = wsProjects.length;
 					const fs = wsProjects[0]?.file_system ?? 'Windows';
+					const wsState = stateFor(ws);
+					const isStale = wsState?.status === 'cached';
 
 					return (
 						<div key={ws}>
@@ -127,6 +185,7 @@ const ProjectTree = ({
 									<span className='truncate font-semibold text-text-primary'>
 										{lastSegment(ws)}
 									</span>
+									<StatusPill state={wsState} />
 								</div>
 								<div className='text-text-muted truncate' title={ws}>
 									{ws}
@@ -149,6 +208,8 @@ const ProjectTree = ({
 										<div
 											key={project.full_path}
 											className={`${col} ml-6 px-3 py-1.5 cursor-pointer select-none transition-colors border-l border-border ${
+												isStale ? 'opacity-60' : ''
+											} ${
 												isSelected
 													? 'bg-bg-selected text-text-primary border-l-accent'
 													: 'text-text-secondary hover:bg-bg-hover/50 border-l-transparent'
