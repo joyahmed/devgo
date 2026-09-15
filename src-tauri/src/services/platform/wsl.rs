@@ -1,5 +1,7 @@
 use std::os::windows::process::CommandExt;
 use std::process::Command;
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
 
 const CREATE_NO_WINDOW: u32 = 0x08000000;
 
@@ -95,6 +97,49 @@ pub fn running_distros() -> Vec<String> {
         .unwrap_or_default()
 }
 
+// one refresh is three commands back to back (scan, git, stack), each
+// gated on the same liveness question; five seconds spans the three and
+// nothing more. WSL's own idle shutdown waits a minute, and a stop DevGo
+// issues clears the memo outright
+const RUNNING_TTL: Duration = Duration::from_secs(5);
+
+// process-wide rather than an AppState field: every service that gates on
+// liveness can reach it, and the stop paths clear it from in here
+static RUNNING_MEMO: Mutex<Option<(Instant, Vec<String>)>> = Mutex::new(None);
+
+// the decision, kept pure so the ttl rule tests without a clock or a wsl.exe
+fn memo_hit(
+    entry: Option<&(Instant, Vec<String>)>,
+    now: Instant,
+    ttl: Duration,
+) -> Option<&[String]> {
+    let (taken, list) = entry?;
+    // now can sit before taken; saturating keeps that a hit, not a panic
+    (now.saturating_duration_since(*taken) < ttl).then_some(list.as_slice())
+}
+
+/// `running_distros` for the automatic paths: a repeat within the ttl reuses
+/// the last answer. The explicit paths (detection, discovery, the WSL
+/// control) keep asking wsl.exe, because after "stop this distro" the user
+/// is owed the truth, not a five-second-old copy.
+pub fn running_distros_memo() -> Vec<String> {
+    let now = Instant::now();
+    // a poisoned lock means a thread panicked mid-write; the list is still fine
+    let mut memo = RUNNING_MEMO.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(list) = memo_hit(memo.as_ref(), now, RUNNING_TTL) {
+        return list.to_vec();
+    }
+    let fresh = running_distros();
+    *memo = Some((now, fresh.clone()));
+    fresh
+}
+
+// a memo that still says running after a stop would send the next scan
+// into \\wsl.localhost\, which boots the distro right back
+fn forget_running() {
+    *RUNNING_MEMO.lock().unwrap_or_else(|e| e.into_inner()) = None;
+}
+
 /// Run a "print what exists" script in a distro and return its lines.
 ///
 /// The exit status is ignored on purpose. These scripts are all
@@ -159,6 +204,47 @@ mod tests {
             .next();
         assert_eq!(default, Some("Ubuntu-26.04"));
     }
+
+    fn entry(taken: Instant) -> (Instant, Vec<String>) {
+        (taken, vec!["Ubuntu-26.04".to_string()])
+    }
+
+    #[test]
+    fn running_memo_misses_when_empty() {
+        assert_eq!(memo_hit(None, Instant::now(), RUNNING_TTL), None);
+    }
+
+    #[test]
+    fn running_memo_hits_inside_ttl() {
+        let now = Instant::now();
+        let e = entry(now);
+        let ttl = Duration::from_secs(5);
+        assert_eq!(
+            memo_hit(Some(&e), now + Duration::from_secs(4), ttl),
+            Some(&["Ubuntu-26.04".to_string()][..])
+        );
+    }
+
+    /// Exclusive at the boundary: "5 s" means at most five, not five-and-a-bit.
+    #[test]
+    fn running_memo_misses_at_and_past_ttl() {
+        let now = Instant::now();
+        let e = entry(now);
+        let ttl = Duration::from_secs(5);
+        assert_eq!(memo_hit(Some(&e), now + ttl, ttl), None);
+        assert_eq!(
+            memo_hit(Some(&e), now + Duration::from_secs(60), ttl),
+            None
+        );
+    }
+
+    /// Clock skew between threads must read as fresh, not panic.
+    #[test]
+    fn running_memo_tolerates_now_before_taken() {
+        let now = Instant::now();
+        let e = entry(now + Duration::from_secs(1));
+        assert!(memo_hit(Some(&e), now, Duration::from_secs(5)).is_some());
+    }
 }
 
 /// How long to wait for a stop command before giving up on it.
@@ -206,7 +292,11 @@ fn run_with_timeout(args: &[&str]) -> Result<bool, String> {
 
 /// Stop a single distro, leaving any others (and the VM) alone.
 pub fn terminate(distro: &str) -> Result<StopOutcome, String> {
-    if !run_with_timeout(&["--terminate", distro])? {
+    let stopped = run_with_timeout(&["--terminate", distro])?;
+    // after the stop, not before, so a pass that overlapped it cannot
+    // re-memoise "running"; even on a timeout, since the stop may still land
+    forget_running();
+    if !stopped {
         return Ok(StopOutcome::TimedOut);
     }
     // Never trust the exit code alone — report what is actually true.
@@ -219,7 +309,9 @@ pub fn terminate(distro: &str) -> Result<StopOutcome, String> {
 
 /// Stop every distro and the VM itself. The escalation, not the default.
 pub fn shutdown_all() -> Result<StopOutcome, String> {
-    if !run_with_timeout(&["--shutdown"])? {
+    let stopped = run_with_timeout(&["--shutdown"])?;
+    forget_running();
+    if !stopped {
         return Ok(StopOutcome::TimedOut);
     }
     if running_distros().is_empty() {
