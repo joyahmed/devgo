@@ -66,6 +66,7 @@ const ShortcutTable = ({
 		if (!capturing) return;
 		const onKey = (e: KeyboardEvent) => {
 			e.preventDefault();
+			e.stopPropagation();
 			const accel = toAccelerator(e);
 			if (!accel) return;
 			setCapturing(false);
