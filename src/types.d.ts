@@ -351,6 +351,18 @@ interface ScanPickerProps {
 	onDone?: () => void;
 }
 
+interface ClonePickerProps {
+	/// every cached repo. rows already on disk are ticked and disabled,
+	/// the way ScanPicker shows folders already added
+	repos: GithubRepo[];
+	local: Record<string, string>;
+	workspaces: string[];
+	/// the repo that opened the picker from its row's menu: pre-ticked
+	preselect?: string;
+	onStart: (repos: GithubRepo[], workspace: string) => void;
+	onDone: () => void;
+}
+
 interface OnboardingProps {
 	onAdd: (path: string) => void;
 	onAddMany: (paths: string[]) => void;

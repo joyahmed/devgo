@@ -2,18 +2,12 @@ import { invoke } from '@tauri-apps/api/core';
 import { useEffect, useState } from 'react';
 import { normalizePath } from '../paths';
 import Button from './Button';
+import { pickTone } from './rowStyles';
 
 const KIND_TONE: Record<DiscoveredRoot['kind'], string> = {
 	wsl: 'text-accent border-accent/30',
 	windows: 'text-text-muted border-border'
 };
-
-const rowTone = (added: boolean, on: boolean) =>
-	added
-		? 'border-border opacity-60 cursor-default'
-		: on
-			? 'border-accent cursor-pointer'
-			: 'border-border cursor-pointer hover:border-border-strong';
 
 // the list that lived inside Onboarding with an Add button per root. it
 // moved out because discovery was reachable from exactly one screen, the
@@ -122,7 +116,7 @@ const ScanPicker = ({
 					return (
 						<li key={r.path}>
 							<label
-								className={`flex items-center gap-3 px-3 py-2 bg-bg-panel border rounded-md ${rowTone(added, on)}`}
+								className={`flex items-center gap-3 px-3 py-2 bg-bg-panel border rounded-md ${pickTone(added, on)}`}
 							>
 								<input
 									type='checkbox'
