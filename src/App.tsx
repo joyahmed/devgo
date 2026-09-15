@@ -67,8 +67,10 @@ const AppInner = () => {
 	// Read once, on mount. The literal is only what the Shortcuts panel shows
 	// for the frame before the command answers; prefs.json is the value.
 	const [summonHotkey, setSummonHotkey] = useState('Ctrl+Alt+Space');
-	useEffect(() => {
+	const loadHotkey = () =>
 		invoke<string>('get_summon_hotkey').then(setSummonHotkey).catch(() => {});
+	useEffect(() => {
+		loadHotkey();
 	}, []);
 
 	// Live WSL state, refreshed on the passes the app already makes — every
@@ -508,7 +510,13 @@ const AppInner = () => {
 						summonHotkey,
 						onError: (m: string) => toast(m, 'error'),
 						panel: settingsPanel,
-						onScanChanged: () => refresh()
+						onScanChanged: () => refresh(),
+						// an import touches three stores; each has its own reader
+						onImported: () => {
+							refreshWorkspaces();
+							refresh();
+							loadHotkey();
+						}
 					}}
 				/>
 			</Suspense>

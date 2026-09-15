@@ -251,6 +251,8 @@ interface SettingsProps {
 	panel?: string;
 	/// the launcher re-scans with the saved config
 	onScanChanged: () => void;
+	/// an import can change workspaces, targets, the hotkey: reload them all
+	onImported: () => void;
 }
 
 interface ShortcutTableProps {

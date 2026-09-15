@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
+import { open as openDialog, save } from '@tauri-apps/plugin-dialog';
 import { useEffect, useState } from 'react';
 import { prettyKeys, SHORTCUTS } from '../shortcuts';
 import { savedThemeId, setTheme, THEMES } from '../themes';
@@ -174,6 +175,86 @@ const AppearancePanel = () => {
 	);
 };
 
+const FILTERS = [{ name: 'JSON', extensions: ['json'] }];
+
+// the backend does the file io; this panel runs the dialogs and hands over
+// the path
+const ConfigPanel = ({ onChanged, onError }: ConfigPanelProps) => {
+	const [msg, setMsg] = useState<string | null>(null);
+
+	// null means the dialog was cancelled: nothing to say
+	const attempt = async (action: () => Promise<string | null>) => {
+		try {
+			const done = await action();
+			if (done) setMsg(done);
+		} catch (e) {
+			onError(String(e));
+		}
+	};
+
+	const exportConfig = () =>
+		attempt(async () => {
+			const path = await save({
+				defaultPath: 'devgo-config.json',
+				filters: FILTERS
+			});
+			if (!path) return null;
+			await invoke('export_config_to_file', { path });
+			return 'Exported.';
+		});
+
+	const importConfig = () =>
+		attempt(async () => {
+			const path = await openDialog({ filters: FILTERS });
+			if (typeof path !== 'string') return null;
+			await invoke('import_config_from_file', { path });
+			onChanged();
+			return 'Imported.';
+		});
+
+	const resetCache = () =>
+		attempt(async () => {
+			await invoke('reset_cache');
+			onChanged();
+			return 'Cache cleared.';
+		});
+
+	const sections = [
+		{
+			title: 'Export / Import',
+			text: 'Carry your workspaces, editors and settings to another machine as one file. Import is additive — it never removes what you already have. The project cache is deliberately not exported; those paths are machine-local.',
+			actions: [
+				{ label: 'Export…', onClick: exportConfig },
+				{ label: 'Import…', onClick: importConfig }
+			]
+		},
+		{
+			title: 'Project cache',
+			text: 'Clear the cached project list. The next scan rebuilds it — useful if a moved or renamed folder is lingering.',
+			actions: [{ label: 'Reset cache', onClick: resetCache }]
+		}
+	];
+
+	return (
+		<div className='flex flex-col gap-5'>
+			{sections.map(s => (
+				<div key={s.title}>
+					<h4 className={heading}>{s.title}</h4>
+					<p className='text-xs text-text-muted mb-3'>{s.text}</p>
+					<div className='flex gap-2'>
+						{s.actions.map(a => (
+							<Button key={a.label} onClick={a.onClick}>
+								{a.label}
+							</Button>
+						))}
+					</div>
+				</div>
+			))}
+			{msg && <p className='text-xs text-accent'>{msg}</p>}
+		</div>
+	);
+};
+
 const Settings = ({
 	open,
 	onClose,
@@ -183,7 +264,8 @@ const Settings = ({
 	summonHotkey,
 	onError,
 	panel,
-	onScanChanged
+	onScanChanged,
+	onImported
 }: SettingsProps) => {
 	const targets = useTargets();
 
@@ -236,6 +318,11 @@ const Settings = ({
 			id: 'appearance',
 			label: 'Appearance',
 			render: () => <AppearancePanel />
+		},
+		{
+			id: 'config',
+			label: 'Config',
+			render: () => <ConfigPanel {...{ onChanged: onImported, onError }} />
 		}
 	];
 
