@@ -10,8 +10,8 @@ import ClonePicker from './components/ClonePicker';
 import CommandPalette from './components/CommandPalette';
 import ConfirmDialog from './components/ConfirmDialog';
 import ContextMenu from './components/ContextMenu';
+import Drawer from './components/Drawer';
 import GithubControls from './components/GithubControls';
-import Modal from './components/Modal';
 import NameDialog from './components/NameDialog';
 import Onboarding from './components/Onboarding';
 import ProjectTree from './components/ProjectTree';
@@ -1128,8 +1128,9 @@ const AppInner = () => {
 				/>
 			)}
 
-			<Modal
+			<Drawer
 				{...{
+					side: 'right' as const,
 					open: namePrompt !== null,
 					title:
 						namePrompt?.kind === 'rename' ? `Rename ${namePrompt.from}` : 'New group',
@@ -1162,14 +1163,15 @@ const AppInner = () => {
 						}}
 					/>
 				)}
-			</Modal>
+			</Drawer>
 
-			<Modal
+			<Drawer
 				{...{
+					side: 'right' as const,
 					open: groupPicker,
 					title: 'Group repos',
 					onClose: () => setGroupPicker(false),
-					width: 'w-[min(680px,92vw)]'
+					width: 'w-[min(640px,92vw)]'
 				}}
 			>
 				{groupPicker && (
@@ -1194,14 +1196,15 @@ const AppInner = () => {
 						}}
 					/>
 				)}
-			</Modal>
+			</Drawer>
 
-			<Modal
+			<Drawer
 				{...{
+					side: 'right' as const,
 					open: clonePicker !== null,
 					title: 'Clone from GitHub',
 					onClose: () => setClonePicker(null),
-					width: 'w-[min(680px,92vw)]'
+					width: 'w-[min(640px,92vw)]'
 				}}
 			>
 				{clonePicker && (
@@ -1224,10 +1227,11 @@ const AppInner = () => {
 						}}
 					/>
 				)}
-			</Modal>
+			</Drawer>
 
-			<Modal
+			<Drawer
 				{...{
+					side: 'right' as const,
 					open: addRepoOpen,
 					title: 'Add a repo by name',
 					onClose: () => setAddRepoOpen(false)
@@ -1244,7 +1248,7 @@ const AppInner = () => {
 						}}
 					/>
 				)}
-			</Modal>
+			</Drawer>
 
 			{repoMenu && (
 				<ContextMenu
@@ -1289,8 +1293,9 @@ const AppInner = () => {
 			{/* discovery used to live only on the empty screen, so from the
 			    first workspace on the scan was unreachable. the same picker
 			    as Onboarding; the modal is the only difference */}
-			<Modal
+			<Drawer
 				{...{
+					side: 'right' as const,
 					open: scanOpen,
 					title: 'Scan for folders',
 					onClose: () => setScanOpen(false),
@@ -1305,7 +1310,7 @@ const AppInner = () => {
 						onDone: () => setScanOpen(false)
 					}}
 				/>
-			</Modal>
+			</Drawer>
 
 			<ConfirmDialog
 				{...{
@@ -1324,7 +1329,7 @@ const AppInner = () => {
 			<ConfirmDialog
 				{...{
 					open: removeIndex !== null,
-					title: 'Remove Workspace',
+					title: 'Remove workspace',
 					message:
 						'Are you sure you want to remove this workspace folder? Your files will not be deleted.',
 					confirmLabel: 'Remove',

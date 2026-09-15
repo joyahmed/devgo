@@ -1,5 +1,5 @@
 import Button from './Button';
-import Modal from './Modal';
+import Drawer from './Drawer';
 
 const ConfirmDialog = ({
 	open,
@@ -14,8 +14,10 @@ const ConfirmDialog = ({
 		{ label: confirmLabel, variant: 'danger', onClick: onConfirm }
 	];
 
+	// a sentence and two buttons as a sheet under the title bar. the list
+	// stays in view behind it: a confirm is a pause, not a place
 	return (
-		<Modal {...{ open, title, onClose: onCancel }}>
+		<Drawer {...{ open, side: 'top' as const, title, onClose: onCancel }}>
 			<p className='text-15 text-text-secondary mb-6'>{message}</p>
 			<div className='flex justify-end gap-3'>
 				{actions.map(({ label, ...button }) => (
@@ -24,7 +26,7 @@ const ConfirmDialog = ({
 					</Button>
 				))}
 			</div>
-		</Modal>
+		</Drawer>
 	);
 };
 

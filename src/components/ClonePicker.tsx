@@ -92,7 +92,7 @@ const ClonePicker = ({
 	};
 
 	return (
-		<div className='text-left'>
+		<div className='text-left flex-1 min-h-0 flex flex-col'>
 			<input
 				type='text'
 				autoFocus
@@ -124,7 +124,7 @@ const ClonePicker = ({
 					{allOn ? 'Untick shown' : 'Tick shown'}
 				</Button>
 			</div>
-			<ul className='flex flex-col gap-1 max-h-[46vh] overflow-y-auto'>
+			<ul className='flex flex-col gap-1 flex-1 min-h-0 overflow-y-auto'>
 				{visible.map(r => {
 					const here = grouping ? undefined : local[r.full_name];
 					const on = Boolean(here) || picked.has(r.full_name);

@@ -65,6 +65,33 @@
 		}
 	}
 
+	/* the drawers: a panel arrives from the edge it belongs to. 180ms, the
+	   same as the toast; a drawer is the answer to a click. the top sheet
+	   keeps its translateX(-50%) centring through the slide, or it would
+	   jump sideways on the last frame */
+	--animate-slide-left: slide-left 180ms ease-out;
+	@keyframes slide-left {
+		from {
+			transform: translateX(24px);
+			opacity: 0;
+		}
+		to {
+			transform: none;
+			opacity: 1;
+		}
+	}
+	--animate-slide-down: slide-down 180ms ease-out;
+	@keyframes slide-down {
+		from {
+			transform: translate(-50%, -16px);
+			opacity: 0;
+		}
+		to {
+			transform: translate(-50%, 0);
+			opacity: 1;
+		}
+	}
+
 	/* Toast entrance. Tailwind v4 mints `animate-fade-in` from this variable. */
 	--animate-fade-in: fade-in 0.18s ease-out;
 	@keyframes fade-in {

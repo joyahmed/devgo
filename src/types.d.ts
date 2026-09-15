@@ -636,13 +636,22 @@ interface CommandPaletteProps {
 	onClose: () => void;
 }
 
-interface ModalProps {
+/// right for anything you work inside (settings, a picker, a name box):
+/// full height, the list still visible beside it. top for a sentence and
+/// two buttons, a confirm sheet under the title bar, and the palette
+type DrawerSide = 'right' | 'top';
+
+interface DrawerProps {
 	open: boolean;
-	title: string;
+	side: DrawerSide;
+	/// omit for a surface that is its own heading (the palette's input)
+	title?: string;
 	onClose: () => void;
 	children: React.ReactNode;
-	/// the confirm dialog is a sentence and two buttons; a list wants more
+	/// a right drawer's default fits a form; a picker with a list wants more
 	width?: string;
+	/// settings sits at 40 so a confirm sheet (50) opens over it
+	z?: 40 | 50;
 }
 
 interface ConfirmDialogProps {
