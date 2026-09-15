@@ -468,10 +468,22 @@ const AppInner = () => {
 
 	// Delete acts on the selected project's workspace. With no selection there
 	// is nothing unambiguous to remove, so it opens Settings rather than guess.
+	// a settings window appearing for no stated reason reads as the key
+	// being broken
 	const handleRemoveShortcut = () => {
-		const idx = selected ? workspaces.indexOf(selected.workspace) : -1;
-		if (idx >= 0) setRemoveIndex(idx);
-		else openSettings();
+		if (!selected) {
+			toast('Select a project first — Delete removes its workspace', 'info');
+			return;
+		}
+		const idx = workspaces.indexOf(selected.workspace);
+		if (idx < 0) {
+			toast(
+				`Can't find the workspace for ${selected.name} — open Settings to remove it`,
+				'error'
+			);
+			return;
+		}
+		setRemoveIndex(idx);
 	};
 
 	// One handler, driven by the declared shortcut table. Everything here is
