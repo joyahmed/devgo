@@ -360,6 +360,15 @@ interface CommandPaletteProps {
 	onClose: () => void;
 }
 
+interface ModalProps {
+	open: boolean;
+	title: string;
+	onClose: () => void;
+	children: React.ReactNode;
+	/// the confirm dialog is a sentence and two buttons; a list wants more
+	width?: string;
+}
+
 interface ConfirmDialogProps {
 	open: boolean;
 	title: string;
