@@ -1,4 +1,5 @@
-import { lazy, Suspense, useRef, useState } from 'react';
+import { invoke } from '@tauri-apps/api/core';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import ActionButtons from './components/ActionButtons';
 import Button from './components/Button';
 import ConfirmDialog from './components/ConfirmDialog';
@@ -37,7 +38,8 @@ const AppInner = () => {
 		selected,
 		setSelected,
 		refresh,
-		loading
+		loading,
+		workspaceStates
 	} = useProjects();
 	const {
 		showWorkspaces,
@@ -73,6 +75,49 @@ const AppInner = () => {
 			toast(showError(e));
 		}
 	};
+
+	// A forced refresh is the one path allowed to start a stopped WSL distro.
+	const handleRefresh = () => {
+		refresh(true).catch(e => toast(showError(e)));
+	};
+
+	// Report workspaces we could not read, but stay quiet about a stopped distro
+	// — that is DevGo working as intended, not a failure worth interrupting for.
+	const reported = useRef<string>('');
+	useEffect(() => {
+		const degraded = workspaceStates.filter(
+			s => s.status !== 'live' && s.reason !== 'distro_stopped'
+		);
+		const key = degraded.map(s => `${s.workspace}:${s.status}`).join('|');
+		if (!key || key === reported.current) {
+			reported.current = key;
+			return;
+		}
+		reported.current = key;
+		const names = degraded.map(s => s.workspace).join(', ');
+		const allCached = degraded.every(s => s.status === 'cached');
+		toast(
+			allCached
+				? `Showing cached projects for ${names}`
+				: `Could not read ${names}`,
+			allCached ? 'info' : 'error'
+		);
+	}, [workspaceStates]);
+
+	useEffect(() => {
+		const handler = (e: KeyboardEvent) => {
+			const mod = e.ctrlKey || e.metaKey;
+			if (e.key === 'F5' || (mod && e.key === 'r')) {
+				e.preventDefault();
+				handleRefresh();
+			} else if (mod && e.key === 'q') {
+				e.preventDefault();
+				invoke('quit_app').catch(() => {});
+			}
+		};
+		window.addEventListener('keydown', handler);
+		return () => window.removeEventListener('keydown', handler);
+	}, []);
 
 	const handleOpenVSCode = () => openVSCode().catch(e => toast(showError(e)));
 	const handleOpenTerminal = () =>
@@ -146,7 +191,8 @@ const AppInner = () => {
 						onSelect: handleSelect,
 						onDoubleClick: handleLaunch,
 						onLaunch: handleLaunch,
-						loading
+						loading,
+						workspaceStates
 					}}
 				/>
 				<ActionButtons
@@ -156,7 +202,8 @@ const AppInner = () => {
 						onRemoveWorkspace: () => setShowWorkspaces(true),
 						onVSCode: handleOpenVSCode,
 						onTerminal: handleOpenTerminal,
-						onBoth: handleOpenBoth
+						onBoth: handleOpenBoth,
+						onRefresh: handleRefresh
 					}}
 				/>
 			</div>

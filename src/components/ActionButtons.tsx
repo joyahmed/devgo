@@ -3,11 +3,14 @@ import Button from './Button';
 const BUTTONS = [
 	{ key: 'remove', label: 'Remove' },
 	{ key: 'add', label: 'Add' },
+	{ key: 'refresh', label: 'Refresh' },
 	{ key: 'code', label: 'VS Code' },
 	{ key: 'terminal', label: 'Terminal' },
 	{ key: 'both', label: 'Open Both' }
 ] as const;
 
+// Refresh is deliberately absent: it is the way out of an empty list, so it must
+// stay enabled when nothing is selected.
 const NEEDS_SELECTION = new Set(['code', 'terminal', 'both']);
 
 const ActionButtons = ({
@@ -16,11 +19,13 @@ const ActionButtons = ({
 	onRemoveWorkspace,
 	onVSCode,
 	onTerminal,
-	onBoth
+	onBoth,
+	onRefresh
 }: ActionButtonsProps) => {
 	const handlers: Record<(typeof BUTTONS)[number]['key'], () => void> = {
 		remove: onRemoveWorkspace,
 		add: onAddWorkspace,
+		refresh: onRefresh,
 		code: onVSCode,
 		terminal: onTerminal,
 		both: onBoth
