@@ -1,8 +1,19 @@
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::platform::RuntimeInfo;
+
+pub const DEFAULT_SUMMON_HOTKEY: &str = "Ctrl+Alt+Space";
+
+/// How often and how recently a project has been launched.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ProjectStat {
+    pub launch_count: u32,
+    pub last_opened: u64,
+}
 
 #[derive(Debug, Serialize, Deserialize, Default)]
 pub struct Preferences {
@@ -12,6 +23,24 @@ pub struct Preferences {
     /// `wsl -l -q` and `wsl -l -v`, which hit WSLService — the service whose
     /// timeouts this work exists to stop provoking.
     pub cached_runtime: Option<RuntimeInfo>,
+    /// Launch history keyed by `Project::full_path`, used for frecency ranking.
+    #[serde(default)]
+    pub project_stats: HashMap<String, ProjectStat>,
+    /// Pinned project paths, kept as a Vec so the on-disk order is stable and
+    /// diffable rather than reshuffling on every write.
+    #[serde(default)]
+    pub pinned: Vec<String>,
+    /// None means "use the default"; storing it explicitly only once the user
+    /// changes it keeps prefs.json honest about what was actually chosen.
+    #[serde(default)]
+    pub summon_hotkey: Option<String>,
+}
+
+pub fn now_secs() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
 }
 
 pub struct PreferencesStore {
@@ -61,11 +90,151 @@ impl PreferencesStore {
         self.save()
     }
 
+    pub fn project_stats(&self) -> HashMap<String, ProjectStat> {
+        self.prefs.project_stats.clone()
+    }
+
+    /// Record that a project was just launched. Called from every launch path,
+    /// so opening the same project three ways in a row counts three times —
+    /// which is the honest signal, since each was a deliberate act.
+    pub fn record_launch(&mut self, full_path: &str) -> Result<(), String> {
+        let entry = self
+            .prefs
+            .project_stats
+            .entry(full_path.to_string())
+            .or_default();
+        entry.launch_count = entry.launch_count.saturating_add(1);
+        entry.last_opened = now_secs();
+        self.save()
+    }
+
+    pub fn pinned(&self) -> Vec<String> {
+        self.prefs.pinned.clone()
+    }
+
+    pub fn toggle_pin(&mut self, full_path: &str) -> Result<bool, String> {
+        let pinned = match self.prefs.pinned.iter().position(|p| p == full_path)
+        {
+            Some(i) => {
+                self.prefs.pinned.remove(i);
+                false
+            }
+            None => {
+                self.prefs.pinned.push(full_path.to_string());
+                true
+            }
+        };
+        self.save()?;
+        Ok(pinned)
+    }
+
+    /// Drop stats and pins for projects that no longer exist, so a renamed or
+    /// deleted folder doesn't keep a phantom entry forever. Only ever called
+    /// with a *live* scan result — never with a cached or unavailable one, or a
+    /// detached drive would erase its own history.
+    pub fn retain_known(
+        &mut self,
+        live_paths: &[String],
+    ) -> Result<(), String> {
+        let before = (self.prefs.project_stats.len(), self.prefs.pinned.len());
+        self.prefs
+            .project_stats
+            .retain(|path, _| live_paths.iter().any(|p| p == path));
+        self.prefs
+            .pinned
+            .retain(|path| live_paths.iter().any(|p| p == path));
+        if before != (self.prefs.project_stats.len(), self.prefs.pinned.len()) {
+            self.save()?;
+        }
+        Ok(())
+    }
+
+    pub fn summon_hotkey(&self) -> String {
+        self.prefs
+            .summon_hotkey
+            .clone()
+            .unwrap_or_else(|| DEFAULT_SUMMON_HOTKEY.to_string())
+    }
+
     fn save(&self) -> Result<(), String> {
         let json = serde_json::to_string_pretty(&self.prefs)
             .map_err(|e| format!("Failed to serialize prefs: {e}"))?;
         fs::write(&self.file_path, json)
             .map_err(|e| format!("Failed to write prefs: {e}"))?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn store(name: &str) -> PreferencesStore {
+        let dir = std::env::temp_dir().join(format!("devgo-prefs-test-{name}"));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        PreferencesStore::new(dir).unwrap()
+    }
+
+    #[test]
+    fn record_launch_counts_and_stamps() {
+        let mut s = store("record");
+        s.record_launch(r"G:\a").unwrap();
+        s.record_launch(r"G:\a").unwrap();
+        s.record_launch(r"G:\b").unwrap();
+
+        let stats = s.project_stats();
+        assert_eq!(stats[r"G:\a"].launch_count, 2);
+        assert_eq!(stats[r"G:\b"].launch_count, 1);
+        assert!(stats[r"G:\a"].last_opened > 0, "launch must be timestamped");
+    }
+
+    #[test]
+    fn launches_survive_a_reload() {
+        let dir = std::env::temp_dir().join("devgo-prefs-test-reload");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+
+        let mut s = PreferencesStore::new(dir.clone()).unwrap();
+        s.record_launch(r"G:\a").unwrap();
+        s.toggle_pin(r"G:\a").unwrap();
+
+        let reloaded = PreferencesStore::new(dir).unwrap();
+        assert_eq!(reloaded.project_stats()[r"G:\a"].launch_count, 1);
+        assert_eq!(reloaded.pinned(), vec![r"G:\a".to_string()]);
+    }
+
+    #[test]
+    fn toggle_pin_round_trips() {
+        let mut s = store("pin");
+        assert!(s.toggle_pin(r"G:\a").unwrap(), "first toggle pins");
+        assert_eq!(s.pinned(), vec![r"G:\a".to_string()]);
+        assert!(!s.toggle_pin(r"G:\a").unwrap(), "second toggle unpins");
+        assert!(s.pinned().is_empty());
+    }
+
+    #[test]
+    fn retain_known_prunes_vanished_projects() {
+        let mut s = store("retain");
+        s.record_launch(r"G:\gone").unwrap();
+        s.record_launch(r"G:\here").unwrap();
+        s.toggle_pin(r"G:\gone").unwrap();
+
+        s.retain_known(&[r"G:\here".to_string()]).unwrap();
+
+        assert!(!s.project_stats().contains_key(r"G:\gone"));
+        assert!(s.project_stats().contains_key(r"G:\here"));
+        assert!(
+            s.pinned().is_empty(),
+            "pin for a vanished project is dropped"
+        );
+    }
+
+    /// The hotkey is read through a getter that falls back to the default, so
+    /// a prefs.json that never mentions it still summons.
+    #[test]
+    fn hotkey_defaults_when_unset() {
+        let s = store("hotkey");
+        assert_eq!(s.summon_hotkey(), DEFAULT_SUMMON_HOTKEY);
     }
 }

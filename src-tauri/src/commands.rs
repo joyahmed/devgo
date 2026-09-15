@@ -4,6 +4,7 @@ use tauri::State;
 
 use crate::error::AppError;
 use crate::models::Project;
+use crate::services::frecency;
 use crate::services::launcher;
 use crate::services::platform::{wsl, RuntimeInfo};
 use crate::services::scanner::{ScanOutcome, UnavailableReason};
@@ -36,10 +37,23 @@ pub struct WorkspaceState {
     pub count: usize,
 }
 
+/// Ranking metadata, kept beside `Project` rather than on it so `Project` stays
+/// the four fields the scanner produces.
+#[derive(Serialize)]
+pub struct ProjectRank {
+    pub full_path: String,
+    pub score: f64,
+    pub launch_count: u32,
+    pub last_opened: u64,
+    pub hint: Option<&'static str>,
+    pub pinned: bool,
+}
+
 #[derive(Serialize)]
 pub struct ProjectsPayload {
     pub projects: Vec<Project>,
     pub workspaces: Vec<WorkspaceState>,
+    pub ranks: Vec<ProjectRank>,
 }
 
 pub struct AppState {
@@ -147,9 +161,49 @@ fn collect_projects(
     }
 
     projects.sort_by_key(|p| p.name.to_lowercase());
+
+    let mut prefs = state.pref_store.lock().map_err(lock_err)?;
+
+    // Only prune history against workspaces we actually read this pass. Pruning
+    // against the merged list would let a stopped distro or a detached drive
+    // erase the launch history of every project it holds.
+    let live: Vec<String> = states
+        .iter()
+        .filter(|s| matches!(s.status, WorkspaceStatus::Live))
+        .flat_map(|s| {
+            projects
+                .iter()
+                .filter(|p| p.workspace == s.workspace)
+                .map(|p| p.full_path.clone())
+        })
+        .collect();
+    if !live.is_empty() {
+        prefs.retain_known(&live).map_err(AppError::Lock)?;
+    }
+
+    let stats = prefs.project_stats();
+    let pinned = prefs.pinned();
+    let now = crate::services::preferences::now_secs();
+
+    let ranks = projects
+        .iter()
+        .map(|p| {
+            let stat = stats.get(&p.full_path).cloned().unwrap_or_default();
+            ProjectRank {
+                score: frecency::score(&stat, now),
+                hint: frecency::hint(&stat, now),
+                launch_count: stat.launch_count,
+                last_opened: stat.last_opened,
+                pinned: pinned.iter().any(|p2| p2 == &p.full_path),
+                full_path: p.full_path.clone(),
+            }
+        })
+        .collect();
+
     Ok(ProjectsPayload {
         projects,
         workspaces: states,
+        ranks,
     })
 }
 
@@ -187,13 +241,25 @@ pub fn get_runtime_info(
     Ok(state.runtime_info.lock().map_err(lock_err)?.clone())
 }
 
+/// Count a launch. Deliberately runs only after the launch itself succeeded, so
+/// a project that fails to open does not climb the ranking.
+fn record_launch(state: &AppState, project: &Project) -> Result<(), AppError> {
+    state
+        .pref_store
+        .lock()
+        .map_err(lock_err)?
+        .record_launch(&project.full_path)
+        .map_err(AppError::Lock)
+}
+
 #[tauri::command]
 pub fn open_vscode(
     project: Project,
     state: State<AppState>,
 ) -> Result<(), AppError> {
     let info = state.runtime_info.lock().map_err(lock_err)?.clone();
-    launcher::launch_vscode(&project, &info)
+    launcher::launch_vscode(&project, &info)?;
+    record_launch(&state, &project)
 }
 
 #[tauri::command]
@@ -202,7 +268,8 @@ pub fn open_terminal(
     state: State<AppState>,
 ) -> Result<(), AppError> {
     let info = state.runtime_info.lock().map_err(lock_err)?.clone();
-    launcher::launch_terminal(&project, &info)
+    launcher::launch_terminal(&project, &info)?;
+    record_launch(&state, &project)
 }
 
 #[tauri::command]
@@ -211,7 +278,21 @@ pub fn open_both(
     state: State<AppState>,
 ) -> Result<(), AppError> {
     let info = state.runtime_info.lock().map_err(lock_err)?.clone();
-    launcher::launch_both(&project, &info)
+    launcher::launch_both(&project, &info)?;
+    record_launch(&state, &project)
+}
+
+#[tauri::command]
+pub fn toggle_pin(
+    full_path: String,
+    state: State<AppState>,
+) -> Result<bool, AppError> {
+    state
+        .pref_store
+        .lock()
+        .map_err(lock_err)?
+        .toggle_pin(&full_path)
+        .map_err(AppError::Lock)
 }
 
 /// Quit for real.
