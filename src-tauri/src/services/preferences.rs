@@ -16,6 +16,32 @@ pub struct ProjectStat {
     pub last_opened: u64,
 }
 
+/// Where the window was left. The rect is always the restored one: while
+/// maximized the window is the screen, and saving that would hand the
+/// restore button a screen-sized window.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct WindowState {
+    pub maximized: bool,
+    pub width: u32,
+    pub height: u32,
+    pub x: i32,
+    pub y: i32,
+}
+
+// the configured 900x720, so a maximized window that was never restored
+// has somewhere to go
+impl Default for WindowState {
+    fn default() -> Self {
+        Self {
+            maximized: false,
+            width: 900,
+            height: 720,
+            x: 0,
+            y: 0,
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Default)]
 pub struct Preferences {
     pub last_project_path: Option<String>,
@@ -43,6 +69,10 @@ pub struct Preferences {
     pub default_terminal: Option<String>,
     #[serde(default)]
     pub scan_config: ScanConfig,
+    /// None until the window is first moved or resized; absent means open
+    /// maximized. `serde(default)` keeps an older prefs.json out of `.bak`.
+    #[serde(default)]
+    pub window_state: Option<WindowState>,
 }
 
 // bare names, not globs: a cheap comparison on the listing the scan already has
