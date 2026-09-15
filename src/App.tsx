@@ -544,6 +544,19 @@ const AppInner = () => {
 				label: pinned ? 'Unpin' : 'Pin to top',
 				hint: hint('togglePin'),
 				onClick: () => handleTogglePin(p)
+			},
+			'separator',
+			// the row the eye lands on is a project, and "get rid of this
+			// workspace" was only on the header's menu. same lookup and the
+			// same confirm as the header entry, so two menus reach one path
+			{
+				label: `Remove workspace ${lastSegment(p.workspace)}`,
+				danger: true,
+				onClick: () => {
+					const idx = workspaces.indexOf(p.workspace);
+					if (idx >= 0) setRemoveIndex(idx);
+					else toast(`${lastSegment(p.workspace)} is no longer in the list`, 'error');
+				}
 			}
 		];
 	};
