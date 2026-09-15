@@ -156,6 +156,7 @@ type ButtonVariant =
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
 	variant?: ButtonVariant;
+	ref?: React.Ref<HTMLButtonElement>;
 }
 
 interface TitleBarProps {
@@ -219,6 +220,11 @@ interface TargetManagerProps {
 	onRemove: (id: string) => Promise<void>;
 	onSetDefault: (kind: TargetKind, id: string) => Promise<void>;
 	onError: (message: string) => void;
+}
+
+interface CommandPaletteProps {
+	commands: PaletteCommand[];
+	onClose: () => void;
 }
 
 interface ConfirmDialogProps {
