@@ -355,6 +355,14 @@ pub fn toggle_pin(
         .map_err(AppError::Lock)
 }
 
+/// The summon accelerator as the user will read it. Chapter 09 registers it
+/// from `setup`; nothing in the frontend needed the value until the Shortcuts
+/// panel wanted to show it. Changing it is still a prefs.json edit.
+#[tauri::command]
+pub fn get_summon_hotkey(state: State<AppState>) -> Result<String, AppError> {
+    Ok(state.pref_store.lock().map_err(lock_err)?.summon_hotkey())
+}
+
 /// Quit for real.
 ///
 /// Closing the window only hides it — that is the point of a tray launcher — but

@@ -157,6 +157,7 @@ pub fn run() {
             commands::refresh_projects,
             commands::quit_app,
             commands::toggle_pin,
+            commands::get_summon_hotkey,
             commands::get_git_info,
             commands::open_remote,
             commands::get_runtime_info,
