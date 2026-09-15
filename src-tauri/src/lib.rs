@@ -23,12 +23,17 @@ pub fn run() {
             std::fs::create_dir_all(&app_data_dir)
                 .expect("failed to create app data dir");
 
+            let cache_store =
+                services::ProjectCacheStore::new(app_data_dir.clone())
+                    .expect("failed to initialize project cache store");
+
             let store = WorkspaceStore::new(app_data_dir)
                 .expect("failed to initialize workspace store");
 
             app.manage(AppState {
                 workspace_store: std::sync::Mutex::new(store),
-                runtime_info,
+                cache_store: std::sync::Mutex::new(cache_store),
+                runtime_info: std::sync::Mutex::new(runtime_info),
             });
 
             Ok(())
@@ -38,6 +43,8 @@ pub fn run() {
             commands::add_workspace,
             commands::remove_workspace,
             commands::get_projects,
+            commands::refresh_projects,
+            commands::quit_app,
             commands::get_runtime_info,
             commands::open_vscode,
             commands::open_terminal,
