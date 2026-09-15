@@ -26,6 +26,22 @@ pub enum AppError {
     /// knows which it was.
     #[error("{0}")]
     WslStopFailed(String),
+
+    #[error("A target with id {0} already exists")]
+    TargetExists(String),
+
+    #[error("No such editor or terminal: {0}")]
+    TargetNotFound(String),
+
+    #[error(
+        "{0} is the only one of its kind — add another before removing it"
+    )]
+    LastTarget(String),
+
+    #[error(
+        "{0} has no WSL configuration, so it cannot open the WSL project {1}"
+    )]
+    TargetCannotOpenWsl(String, String),
 }
 
 // std::io::Error and serde_json::Error don't implement Serialize, so we can't

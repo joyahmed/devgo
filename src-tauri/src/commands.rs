@@ -5,6 +5,7 @@ use std::sync::Mutex;
 use tauri::State;
 
 use crate::error::AppError;
+use crate::models::target::{LaunchTarget, TargetKind};
 use crate::models::Project;
 use crate::services::frecency;
 use crate::services::git;
@@ -13,6 +14,7 @@ use crate::services::platform::{wsl, RuntimeInfo};
 use crate::services::scanner::{ScanOutcome, UnavailableReason};
 use crate::services::PreferencesStore;
 use crate::services::ProjectCacheStore;
+use crate::services::TargetStore;
 use crate::services::WorkspaceStore;
 
 fn lock_err<E: std::fmt::Display>(e: E) -> AppError {
@@ -63,6 +65,7 @@ pub struct AppState {
     pub workspace_store: Mutex<WorkspaceStore>,
     pub pref_store: Mutex<PreferencesStore>,
     pub cache_store: Mutex<ProjectCacheStore>,
+    pub target_store: Mutex<TargetStore>,
     pub runtime_info: Mutex<RuntimeInfo>,
     pub lock_path: std::path::PathBuf,
     /// Git state, in memory only. Deliberately not persisted: a branch name
@@ -258,23 +261,52 @@ fn record_launch(state: &AppState, project: &Project) -> Result<(), AppError> {
         .map_err(AppError::Lock)
 }
 
+/// Pick the target to launch: the caller's explicit choice, else the saved
+/// default, else the first of that kind. The last fallback matters — a default
+/// pointing at a target the user has since deleted must not break launching.
+fn resolve_target(
+    state: &AppState,
+    kind: TargetKind,
+    explicit: Option<String>,
+) -> Result<LaunchTarget, AppError> {
+    let store = state.target_store.lock().map_err(lock_err)?;
+    if let Some(id) = explicit {
+        return store.get(&id).ok_or(AppError::TargetNotFound(id));
+    }
+    let saved = state
+        .pref_store
+        .lock()
+        .map_err(lock_err)?
+        .default_target(kind);
+    if let Some(target) = saved.and_then(|id| store.get(&id)) {
+        return Ok(target);
+    }
+    store
+        .first_of(kind)
+        .ok_or_else(|| AppError::TargetNotFound(format!("{kind:?}")))
+}
+
 #[tauri::command]
-pub fn open_vscode(
+pub fn open_editor(
     project: Project,
+    target_id: Option<String>,
     state: State<AppState>,
 ) -> Result<(), AppError> {
     let info = state.runtime_info.lock().map_err(lock_err)?.clone();
-    launcher::launch_vscode(&project, &info)?;
+    let target = resolve_target(&state, TargetKind::Editor, target_id)?;
+    launcher::launch_target(&target, &project, &info)?;
     record_launch(&state, &project)
 }
 
 #[tauri::command]
 pub fn open_terminal(
     project: Project,
+    target_id: Option<String>,
     state: State<AppState>,
 ) -> Result<(), AppError> {
     let info = state.runtime_info.lock().map_err(lock_err)?.clone();
-    launcher::launch_terminal(&project, &info)?;
+    let target = resolve_target(&state, TargetKind::Terminal, target_id)?;
+    launcher::launch_target(&target, &project, &info)?;
     record_launch(&state, &project)
 }
 
@@ -284,8 +316,78 @@ pub fn open_both(
     state: State<AppState>,
 ) -> Result<(), AppError> {
     let info = state.runtime_info.lock().map_err(lock_err)?.clone();
-    launcher::launch_both(&project, &info)?;
+    let editor = resolve_target(&state, TargetKind::Editor, None)?;
+    let terminal = resolve_target(&state, TargetKind::Terminal, None)?;
+    launcher::launch_both(&editor, &terminal, &project, &info)?;
     record_launch(&state, &project)
+}
+
+#[tauri::command]
+pub fn get_targets(
+    state: State<AppState>,
+) -> Result<Vec<LaunchTarget>, AppError> {
+    Ok(state.target_store.lock().map_err(lock_err)?.list())
+}
+
+#[tauri::command]
+pub fn add_target(
+    target: LaunchTarget,
+    state: State<AppState>,
+) -> Result<LaunchTarget, AppError> {
+    state.target_store.lock().map_err(lock_err)?.add(target)
+}
+
+#[tauri::command]
+pub fn remove_target(
+    id: String,
+    state: State<AppState>,
+) -> Result<(), AppError> {
+    state.target_store.lock().map_err(lock_err)?.remove(&id)
+}
+
+#[tauri::command]
+pub fn set_default_target(
+    kind: TargetKind,
+    id: String,
+    state: State<AppState>,
+) -> Result<(), AppError> {
+    // Reject unknown ids here rather than storing a dangling default.
+    if state
+        .target_store
+        .lock()
+        .map_err(lock_err)?
+        .get(&id)
+        .is_none()
+    {
+        return Err(AppError::TargetNotFound(id));
+    }
+    state
+        .pref_store
+        .lock()
+        .map_err(lock_err)?
+        .set_default_target(kind, &id)
+        .map_err(AppError::Lock)
+}
+
+/// The id that would actually launch for each kind — the same fallback chain
+/// as `resolve_target`, so the UI's "default" badge cannot disagree with the
+/// button.
+#[tauri::command]
+pub fn get_default_targets(
+    state: State<AppState>,
+) -> Result<Vec<(String, String)>, AppError> {
+    let prefs = state.pref_store.lock().map_err(lock_err)?;
+    let store = state.target_store.lock().map_err(lock_err)?;
+    Ok([TargetKind::Editor, TargetKind::Terminal]
+        .into_iter()
+        .filter_map(|k| {
+            let id = prefs
+                .default_target(k)
+                .filter(|id| store.get(id).is_some())
+                .or_else(|| store.first_of(k).map(|t| t.id))?;
+            Some((format!("{k:?}").to_lowercase(), id))
+        })
+        .collect())
 }
 
 /// Read git state for the current project list.

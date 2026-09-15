@@ -70,6 +70,9 @@ pub fn run() {
                 services::ProjectCacheStore::new(app_data_dir.clone())
                     .expect("failed to initialize project cache store");
 
+            let target_store = services::TargetStore::new(app_data_dir.clone())
+                .expect("failed to initialize target store");
+
             let store = WorkspaceStore::new(app_data_dir)
                 .expect("failed to initialize workspace store");
 
@@ -77,6 +80,7 @@ pub fn run() {
                 workspace_store: std::sync::Mutex::new(store),
                 pref_store: std::sync::Mutex::new(pref_store),
                 cache_store: std::sync::Mutex::new(cache_store),
+                target_store: std::sync::Mutex::new(target_store),
                 runtime_info: std::sync::Mutex::new(runtime_info),
                 lock_path: lock_path.clone(),
                 git_cache: std::sync::Mutex::new(
@@ -164,9 +168,14 @@ pub fn run() {
             commands::shutdown_wsl,
             commands::open_remote,
             commands::get_runtime_info,
-            commands::open_vscode,
+            commands::open_editor,
             commands::open_terminal,
             commands::open_both,
+            commands::get_targets,
+            commands::add_target,
+            commands::remove_target,
+            commands::set_default_target,
+            commands::get_default_targets,
             commands::get_last_project,
             commands::set_last_project,
         ])

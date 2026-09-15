@@ -5,6 +5,7 @@ use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::platform::RuntimeInfo;
+use crate::models::target::TargetKind;
 
 pub const DEFAULT_SUMMON_HOTKEY: &str = "Ctrl+Alt+Space";
 
@@ -34,6 +35,12 @@ pub struct Preferences {
     /// changes it keeps prefs.json honest about what was actually chosen.
     #[serde(default)]
     pub summon_hotkey: Option<String>,
+    /// Chosen editor / terminal, by target id. Stored by id rather than name so
+    /// renaming a target does not orphan the default.
+    #[serde(default)]
+    pub default_editor: Option<String>,
+    #[serde(default)]
+    pub default_terminal: Option<String>,
 }
 
 pub fn now_secs() -> u64 {
@@ -154,6 +161,29 @@ impl PreferencesStore {
             .summon_hotkey
             .clone()
             .unwrap_or_else(|| DEFAULT_SUMMON_HOTKEY.to_string())
+    }
+
+    pub fn default_target(&self, kind: TargetKind) -> Option<String> {
+        match kind {
+            TargetKind::Editor => self.prefs.default_editor.clone(),
+            TargetKind::Terminal => self.prefs.default_terminal.clone(),
+        }
+    }
+
+    pub fn set_default_target(
+        &mut self,
+        kind: TargetKind,
+        id: &str,
+    ) -> Result<(), String> {
+        match kind {
+            TargetKind::Editor => {
+                self.prefs.default_editor = Some(id.to_string())
+            }
+            TargetKind::Terminal => {
+                self.prefs.default_terminal = Some(id.to_string())
+            }
+        }
+        self.save()
     }
 
     fn save(&self) -> Result<(), String> {
