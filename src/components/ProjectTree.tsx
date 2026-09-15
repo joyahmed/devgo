@@ -27,7 +27,7 @@ const loadCollapsed = (): Set<string> => {
 };
 
 const pill =
-	'inline-block px-2 py-0.5 text-11 font-semibold uppercase tracking-wider rounded-full bg-bg-panel border border-border-strong shrink-0';
+	'inline-block px-2 py-0.5 text-11 font-semibold rounded-full bg-bg-panel border border-border-strong shrink-0';
 
 const FS_TONE: Record<string, string> = {
 	WSL: 'text-accent',
@@ -97,7 +97,7 @@ const TechBadges = ({ tech }: TechBadgesProps) => {
 			{tech.tags.map(t => (
 				<span
 					key={t}
-					className={`text-11 uppercase tracking-wider border rounded-control px-1 ${
+					className={`text-11 border rounded-control px-1 ${
 						TAG_TONE[t] ?? 'text-text-muted border-border'
 					}`}
 				>
@@ -105,7 +105,7 @@ const TechBadges = ({ tech }: TechBadgesProps) => {
 				</span>
 			))}
 			{tech.package_manager && (
-				<span className='text-11 uppercase tracking-wider text-text-muted'>
+				<span className='text-11 text-text-muted'>
 					{tech.package_manager}
 				</span>
 			)}
@@ -176,7 +176,7 @@ const RowMeta = ({
 			}}
 		/>
 		{rank?.hint && (
-			<span className='text-11 uppercase tracking-wider text-text-muted shrink-0'>
+			<span className='text-11 text-text-muted shrink-0'>
 				{rank.hint}
 			</span>
 		)}
@@ -646,7 +646,7 @@ const ProjectTree = ({
 			<div className='flex-1 overflow-y-auto'>
 				{pinned.length > 0 && (
 					<div className='mb-1'>
-						<div className='px-3 py-1 text-11 font-bold uppercase tracking-wider text-text-muted'>
+						<div className='px-3 py-1 text-13 font-semibold text-text-muted'>
 							Pinned
 						</div>
 						{pinned.map(project => (
@@ -710,7 +710,7 @@ const ProjectTree = ({
 									{ws}
 								</div>
 								<FsCell {...{ fs, className: 'font-medium' }} />
-								<div className='text-right text-text-muted font-mono'>
+								<div className='text-right text-13 text-text-muted font-mono'>
 									{count}
 								</div>
 							</div>

@@ -22,7 +22,7 @@ const pushRecent = (id: string) => {
 };
 
 const divider =
-	'px-4 pt-2 pb-1 text-11 font-bold uppercase tracking-wider text-text-muted';
+	'px-4 pt-2 pb-1 text-13 font-semibold text-text-muted';
 
 const CommandPalette = ({ commands, onClose }: CommandPaletteProps) => {
 	const [query, setQuery] = useState('');

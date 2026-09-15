@@ -93,7 +93,7 @@ const ScanPicker = ({
 	return (
 		<div className='text-left'>
 			<div className='flex items-center justify-between mb-2'>
-				<span className='text-11 font-bold uppercase tracking-wider text-text-muted'>
+				<span className='text-13 text-text-muted'>
 					Found {roots.length}
 					{addable.length < roots.length &&
 						` · ${roots.length - addable.length} already added`}
@@ -134,7 +134,7 @@ const ScanPicker = ({
 									</span>
 								</span>
 								<span
-									className={`text-11 uppercase tracking-wider px-1 rounded-control border shrink-0 ${KIND_TONE[r.kind]}`}
+									className={`text-11 px-1 rounded-control border shrink-0 ${KIND_TONE[r.kind]}`}
 								>
 									{added ? 'added' : r.kind === 'wsl' ? 'WSL' : 'WIN'}
 								</span>

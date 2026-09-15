@@ -44,11 +44,10 @@ const PLACEHOLDERS = [
 	{ code: '{script}', note: '— terminals only — the generated tmux session script' }
 ];
 
-const heading =
-	'text-13 font-bold uppercase tracking-wider text-text-secondary mb-2';
+const heading = 'text-15 font-semibold text-text-primary mb-2';
 const field =
 	'w-full px-2 py-1.5 bg-bg-panel border border-border-strong rounded-control text-13 font-mono text-text-primary outline-none focus:border-accent';
-const badge = 'text-11 uppercase tracking-wider rounded-control px-1 border';
+const badge = 'text-11 rounded-control px-1 border';
 
 const TargetList = ({
 	kind,
@@ -238,7 +237,7 @@ const TargetManager = ({
 			{/* detection proposes; nothing is written until a specific Add */}
 			<div>
 				<div className='flex items-center justify-between mb-2'>
-					<h4 className='text-13 font-bold uppercase tracking-wider text-text-secondary'>
+					<h4 className='text-15 font-semibold text-text-primary'>
 						Detected on this machine
 					</h4>
 					<Button

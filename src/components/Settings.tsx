@@ -13,8 +13,7 @@ import WorkspaceManager from './WorkspaceManager';
 // nothing in Rust reads it, so it never goes near prefs.json.
 const LAST_PANEL = 'devgo.settingsPanel';
 
-const heading =
-	'text-13 font-bold uppercase tracking-wider text-text-secondary mb-2';
+const heading = 'text-15 font-semibold text-text-primary mb-2';
 
 const MODIFIER_KEYS = new Set(['Control', 'Alt', 'Shift', 'Meta']);
 const NAV_KEYS: Record<string, string> = {
@@ -768,7 +767,7 @@ const Settings = ({
 				onClick={e => e.stopPropagation()}
 			>
 				<nav className='w-44 shrink-0 border-r border-border bg-bg-primary/40 p-2 flex flex-col gap-1'>
-					<h3 className='text-13 font-bold uppercase tracking-wider text-text-muted px-2 py-2'>
+					<h3 className='text-13 font-semibold text-text-muted px-2 py-2'>
 						Settings
 					</h3>
 					{panels.map(p => (

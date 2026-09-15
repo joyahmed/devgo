@@ -15,7 +15,7 @@ const TargetGroup = ({
 	onPick
 }: TargetGroupProps) => (
 	<div className='flex items-center gap-1.5 min-w-0'>
-		<span className='text-11 uppercase tracking-wider text-text-muted shrink-0'>
+		<span className='text-13 text-text-muted shrink-0'>
 			{label}
 		</span>
 		{items.map(t => {

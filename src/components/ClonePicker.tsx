@@ -102,7 +102,7 @@ const ClonePicker = ({
 				onChange={e => setQuery(e.target.value)}
 			/>
 			<div className='flex items-center justify-between mb-2'>
-				<span className='text-11 font-bold uppercase tracking-wider text-text-muted'>
+				<span className='text-13 text-text-muted'>
 					{visible.length} of {repos.length}
 					{count > 0 && ` · ${count} ticked`}
 				</span>

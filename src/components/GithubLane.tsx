@@ -117,14 +117,14 @@ const RepoRow = ({
 			    silent absence in a group you curated */}
 			{gone && (
 				<span
-					className='text-11 uppercase tracking-wider text-danger shrink-0'
+					className='text-11 text-danger shrink-0'
 					title='Not in your GitHub list any more. Remove it from the group, or refresh'
 				>
 					gone
 				</span>
 			)}
 			{repo.archived && (
-				<span className='text-11 uppercase tracking-wider text-text-muted shrink-0'>
+				<span className='text-11 text-text-muted shrink-0'>
 					archived
 				</span>
 			)}
@@ -140,14 +140,14 @@ const RepoRow = ({
 						onShowLocal(localPath);
 					}}
 				>
-					<span className='text-11 uppercase tracking-wider text-accent hover:underline'>
+					<span className='text-11 text-accent hover:underline'>
 						local
 					</span>
 				</Button>
 			)}
 			{repo.added && !localPath && (
 				<span
-					className='text-11 uppercase tracking-wider text-text-muted shrink-0'
+					className='text-11 text-text-muted shrink-0'
 					title='Added by name. Not one of your repositories'
 				>
 					added
@@ -317,7 +317,7 @@ const GithubLane = ({
 							}}
 						>
 							<span
-								className={`text-11 uppercase tracking-wider hover:underline ${
+								className={`text-11 hover:underline ${
 									showRecents ? 'text-accent' : 'text-text-muted'
 								}`}
 							>
@@ -354,7 +354,7 @@ const GithubLane = ({
 						</Button>
 					)}
 				</div>
-				<div className='text-right text-text-muted font-mono'>
+				<div className='text-right text-13 text-text-muted font-mono'>
 					{total > 0 ? total : ''}
 				</div>
 			</div>
@@ -387,7 +387,7 @@ const GithubLane = ({
 						flat.map(part => (
 							<div key={part.key}>
 								{part.show && (
-									<div className='ml-6 px-3 py-1.5 text-11 uppercase tracking-wider text-text-muted'>
+									<div className='ml-6 px-3 py-1.5 text-11 text-text-muted'>
 										{part.label}
 									</div>
 								)}
@@ -429,7 +429,7 @@ const GithubLane = ({
 										</div>
 										<div />
 										<div />
-										<div className='text-right text-text-muted font-mono'>
+										<div className='text-right text-13 text-text-muted font-mono'>
 											{section.total}
 										</div>
 									</div>
