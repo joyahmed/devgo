@@ -165,9 +165,16 @@ pub fn run() {
                     .lock()
                     .ok()
                     .and_then(|p| p.window_state());
+                // a rect that cannot be shown (a config written before the
+                // minimize guard, or a monitor since unplugged) would strand
+                // the window; maximized is recoverable
+                let monitors = window
+                    .available_monitors()
+                    .map(|m| monitor_rects(&m))
+                    .unwrap_or_default();
                 match saved {
                     // set_size is ignored on a maximized window
-                    Some(s) if !s.maximized => {
+                    Some(s) if !s.maximized && s.is_restorable(&monitors) => {
                         let _ = window.unmaximize();
                         let _ = window.set_size(tauri::PhysicalSize::new(
                             s.width, s.height,
