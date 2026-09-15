@@ -138,16 +138,15 @@ fn collect_projects(
     let mut states = Vec::new();
 
     // read once per pass, keeps the lock out of the scan loop
-    let ignore = state
-        .pref_store
-        .lock()
-        .map_err(lock_err)?
-        .scan_config()
-        .ignore;
+    let (ignore, depth) = {
+        let cfg = state.pref_store.lock().map_err(lock_err)?.scan_config();
+        (cfg.ignore, cfg.depth)
+    };
 
     for ws in &workspaces {
-        match crate::services::scan_workspace(ws, &running, allow_boot, &ignore)
-        {
+        match crate::services::scan_workspace(
+            ws, &running, allow_boot, &ignore, depth,
+        ) {
             ScanOutcome::Scanned(found) => {
                 cache.store(ws, found.clone())?;
                 states.push(WorkspaceState {

@@ -8,6 +8,10 @@ use crate::models::Project;
 
 const CREATE_NO_WINDOW: u32 = 0x08000000;
 
+// whatever the config says: prefs.json is text and import reads foreign
+// files, so the cap lives where every path meets
+const MAX_DEPTH: usize = 5;
+
 // a nested folder is a project only if it says so. .git is a directory and
 // is handled on its own in both walkers
 const FILE_MARKERS: &[&str] = &[
@@ -73,7 +77,7 @@ pub fn distro_of(path: &str) -> Option<String> {
     None
 }
 
-/// Scan one workspace, one level deep.
+/// Scan one workspace.
 ///
 /// `running` is the already-fetched list of live distros — passed in rather than
 /// queried here so a multi-workspace scan spawns `wsl.exe` once, not once per
@@ -81,11 +85,15 @@ pub fn distro_of(path: &str) -> Option<String> {
 ///
 /// `allow_boot` lifts the liveness gate. It must only ever be set from an
 /// explicit user action (the Refresh control), never from startup or a timer.
+///
+/// `depth` 1 is the one-level scan, the exact original code path. Above 1,
+/// nested folders that carry a marker are projects too.
 pub fn scan_workspace(
     path: &str,
     running: &[String],
     allow_boot: bool,
     ignore: &[String],
+    depth: usize,
 ) -> ScanOutcome {
     // A \\wsl.localhost\ path is served by the distro's 9p file server, so even
     // a bare read_dir cold-boots the entire VM. Checking liveness first costs
@@ -101,6 +109,20 @@ pub fn scan_workspace(
         }
     }
 
+    if depth <= 1 {
+        return scan_flat(path, ignore);
+    }
+
+    // opt-in. wsl asks the distro to walk, once; windows walks itself
+    let depth = depth.min(MAX_DEPTH);
+    match distro_of(path) {
+        Some(distro) => scan_wsl_nested(path, &distro, depth, ignore),
+        None => scan_windows_nested(path, depth, ignore),
+    }
+}
+
+// the original one-level scan: every immediate subdirectory is a project
+fn scan_flat(path: &str, ignore: &[String]) -> ScanOutcome {
     let entries = match std::fs::read_dir(path) {
         Ok(entries) => entries,
         Err(e) => {
@@ -341,7 +363,7 @@ mod tests {
 
         let ignore = vec!["node_modules".to_string(), "archive".to_string()];
         let ScanOutcome::Scanned(projects) =
-            scan_workspace(&path, &[], false, &ignore)
+            scan_workspace(&path, &[], false, &ignore, 1)
         else {
             panic!("local temp dir should scan");
         };
@@ -382,6 +404,7 @@ mod tests {
             &[],
             false,
             &[],
+            1,
         );
         assert!(matches!(
             outcome,
@@ -392,7 +415,7 @@ mod tests {
     #[test]
     fn missing_local_path_is_not_mounted() {
         let outcome =
-            scan_workspace(r"Q:\definitely\not\here", &[], false, &[]);
+            scan_workspace(r"Q:\definitely\not\here", &[], false, &[], 1);
         assert!(matches!(
             outcome,
             ScanOutcome::Unavailable(UnavailableReason::NotMounted)
