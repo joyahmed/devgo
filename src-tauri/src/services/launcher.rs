@@ -319,11 +319,20 @@ fn build_psmux_script(
         })
         .collect();
 
+    // not installed is not an error: the user keeps the plain tab they had
+    // before psmux, in the project, plus one line saying how to get the
+    // windows. return ends the script and nothing else; exit would end pwsh
+    // regardless of -NoExit and close the tab on the one machine where the
+    // message matters.
     // has-session answers with its exit code, and 1 is the answer we are
     // asking for; a profile that turns the native preference on under
     // ErrorActionPreference Stop would abort the script on it
     format!(
-        r#"{cd}$PSNativeCommandUseErrorActionPreference = $false
+        r#"{cd}if (-not (Get-Command psmux -ErrorAction SilentlyContinue)) {{
+    Write-Host 'DevGo: psmux is not installed, so this is a plain shell. For named windows: winget install marlocarlo.psmux'
+    return
+}}
+$PSNativeCommandUseErrorActionPreference = $false
 psmux has-session -t {exact_q} 2>$null
 if ($LASTEXITCODE -ne 0) {{
 {create}}}
@@ -991,6 +1000,33 @@ mod tests {
         let script = build_psmux_script("api-1f2e3d4c", r"G:\dev\api", &off);
         assert!(!script.contains("psmux"), "{script}");
         assert_eq!(script, "Set-Location -LiteralPath 'G:\\dev\\api'\n");
+    }
+
+    #[test]
+    fn a_machine_without_psmux_gets_a_plain_shell_and_the_install_command() {
+        let script = build_psmux_script(
+            "app-deadbeef",
+            r"G:\srv\app",
+            &tmux_with(&["code"]),
+        );
+        let check = script
+            .find("if (-not (Get-Command psmux -ErrorAction SilentlyContinue))")
+            .expect("asks whether psmux is installed");
+        let cd = script.find("Set-Location").expect("enters the project");
+        let first_call = script.find("psmux has-session").expect("then talks");
+        assert!(cd < check, "the directory comes before any bail: {script}");
+        assert!(check < first_call, "the check comes first: {script}");
+        assert!(
+            script.contains("winget install marlocarlo.psmux"),
+            "{script}"
+        );
+        let bail = &script[check..first_call];
+        assert!(bail.contains("    return\n"), "{bail}");
+        assert!(!bail.contains("exit"), "exit would close the tab: {bail}");
+        assert!(
+            !bail.contains("throw") && !bail.contains("Write-Error"),
+            "not installed is not an error: {bail}"
+        );
     }
 
     #[test]
