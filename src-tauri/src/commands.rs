@@ -549,6 +549,69 @@ pub fn export_config_to_file(
     Ok(())
 }
 
+// additive: what is already here stays; returns the workspaces for a rescan
+#[tauri::command]
+pub fn import_config_from_file(
+    path: String,
+    app: tauri::AppHandle,
+    state: State<AppState>,
+) -> Result<Vec<String>, AppError> {
+    let config: PortableConfig =
+        serde_json::from_str(&std::fs::read_to_string(&path)?)?;
+
+    {
+        let mut ws = state.workspace_store.lock().map_err(lock_err)?;
+        for w in &config.workspaces {
+            // add dedupes by path
+            let _ = ws.add(w);
+        }
+    }
+    let (editor, terminal) = {
+        let mut store = state.target_store.lock().map_err(lock_err)?;
+        for t in config.targets {
+            if store.get(&t.id).is_none() {
+                let _ = store.add(t);
+            }
+        }
+        // a default only for a target that exists here now
+        (
+            config.default_editor.filter(|id| store.get(id).is_some()),
+            config.default_terminal.filter(|id| store.get(id).is_some()),
+        )
+    };
+    {
+        let mut prefs = state.pref_store.lock().map_err(lock_err)?;
+        prefs
+            .set_scan_config(config.scan_config)
+            .map_err(AppError::Lock)?;
+        if let Some(id) = editor {
+            prefs
+                .set_default_target(TargetKind::Editor, &id)
+                .map_err(AppError::Lock)?;
+        }
+        if let Some(id) = terminal {
+            prefs
+                .set_default_target(TargetKind::Terminal, &id)
+                .map_err(AppError::Lock)?;
+        }
+    }
+
+    // best effort: the key may be taken on this machine, and that must not
+    // fail the import. persisted only if it binds
+    let previous = state.pref_store.lock().map_err(lock_err)?.summon_hotkey();
+    if config.summon_hotkey != previous
+        && crate::summon::rebind(&app, &previous, &config.summon_hotkey).is_ok()
+    {
+        let _ = state
+            .pref_store
+            .lock()
+            .map_err(lock_err)?
+            .set_summon_hotkey(Some(config.summon_hotkey));
+    }
+
+    Ok(state.workspace_store.lock().map_err(lock_err)?.list())
+}
+
 /// Open the folder in Explorer. Works for WSL projects too: the UNC path is
 /// what Explorer wants. Boots the distro, but the user asked for that.
 #[tauri::command]
