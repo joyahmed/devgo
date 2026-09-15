@@ -16,7 +16,8 @@ impl WorkspaceStore {
         let file_path = app_data_dir.join("workspaces.json");
         let workspaces = if file_path.exists() {
             let data = fs::read_to_string(&file_path)?;
-            serde_json::from_str(&data).unwrap_or_default()
+            // a corrupt file goes to .bak, not under the next save
+            super::config_io::parse_or_backup(&file_path, &data)
         } else {
             let default: Vec<String> = Vec::new();
             fs::write(&file_path, serde_json::to_string_pretty(&default)?)?;

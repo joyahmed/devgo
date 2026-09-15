@@ -94,7 +94,8 @@ impl PreferencesStore {
         let prefs = if file_path.exists() {
             let data = fs::read_to_string(&file_path)
                 .map_err(|e| format!("Failed to read prefs: {e}"))?;
-            serde_json::from_str(&data).unwrap_or_default()
+            // a corrupt file goes to .bak, not under the next save
+            super::config_io::parse_or_backup(&file_path, &data)
         } else {
             Preferences::default()
         };
