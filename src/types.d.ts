@@ -327,6 +327,11 @@ interface TmuxPanelProps {
 	onError: (message: string) => void;
 }
 
+interface GithubPanelProps {
+	github: GithubState;
+	onError: (message: string) => void;
+}
+
 interface GithubLaneProps {
 	github: GithubState;
 	query: string;
@@ -386,6 +391,9 @@ interface SettingsProps {
 	onImported: () => void;
 	onSummonChanged: (hotkey: string) => void;
 	targets: TargetRegistry;
+	/// owned by App for the same reason targets is: the panel's Refresh
+	/// and the lane's header must agree on "refreshing"
+	github: GithubState;
 }
 
 interface ShortcutTableProps {

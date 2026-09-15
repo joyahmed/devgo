@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { open as openDialog, save } from '@tauri-apps/plugin-dialog';
 import { useEffect, useState } from 'react';
+import { relativeTime } from '../github';
 import { prettyKeys, SHORTCUTS } from '../shortcuts';
 import { savedThemeId, setTheme, THEMES } from '../themes';
 import Button from './Button';
@@ -337,6 +338,146 @@ const TmuxPanel = ({ onError }: TmuxPanelProps) => {
 	);
 };
 
+// the three-state status line, which organisations to list, the cache's
+// age, and the one button that fetches. the line is the same three
+// sentences the lane header says, each with its fix, and a refresh here
+// is the same thread the header's ↻ starts. devgo holds no token; gh
+// does, which is why log out is gh auth logout and not a button
+const GithubPanel = ({ github, onError }: GithubPanelProps) => {
+	const { status, payload } = github;
+	const cache = payload?.cache;
+	const known = cache?.orgs ?? [];
+	// undefined: untouched, show the saved choice. null: every org
+	const [chosen, setChosen] = useState<string[] | null | undefined>(
+		undefined
+	);
+	const effective = chosen === undefined ? (payload?.orgs ?? null) : chosen;
+	const isOn = (org: string) => effective === null || effective.includes(org);
+	const [saving, setSaving] = useState(false);
+	const [msg, setMsg] = useState<string | null>(null);
+
+	const toggle = (org: string) => {
+		const next = known.filter(o => (o === org ? !isOn(o) : isOn(o)));
+		// every box ticked is "all" again, so a new org joins the list
+		// without a visit here, which is what a default should mean
+		setChosen(next.length === known.length ? null : next);
+		setMsg(null);
+	};
+
+	const save = async () => {
+		if (chosen === undefined) return;
+		setSaving(true);
+		try {
+			await github.setOrgs(chosen);
+			setChosen(undefined);
+			setMsg('Saved. Applies on the next refresh.');
+		} catch (e) {
+			onError(String(e));
+		} finally {
+			setSaving(false);
+		}
+	};
+
+	const statusLine = !status
+		? 'Checking for gh…'
+		: !status.installed
+			? 'gh not found. Install it: winget install GitHub.cli'
+			: !status.login
+				? 'gh is installed but not logged in. Run: gh auth login'
+				: `gh ${status.version ?? ''} · logged in as ${status.login}`;
+
+	const cacheLine =
+		cache && cache.fetched_at > 0
+			? `${cache.repos.length} repositories, fetched ${relativeTime(cache.fetched_at)}${
+					payload?.stale ? ' (stale)' : ''
+				}.`
+			: 'Nothing fetched yet.';
+
+	return (
+		<div className='flex flex-col gap-5'>
+			<div>
+				<h4 className={heading}>GitHub CLI</h4>
+				<p
+					className={`text-sm font-mono ${status?.login ? 'text-text-primary' : 'text-danger'}`}
+				>
+					{statusLine}
+				</p>
+				<p className='text-xs text-text-muted mt-2'>
+					DevGo lists your repositories through{' '}
+					<code className='text-text-secondary'>gh</code> and stores no token
+					of its own: <code className='text-text-secondary'>gh auth login</code>{' '}
+					signs in, <code className='text-text-secondary'>gh auth logout</code>{' '}
+					signs out. The list is fetched only when you ask (↻ on the group, or
+					here) or when the group opens on a cache older than six hours. Never
+					on launch, never on focus.
+				</p>
+			</div>
+
+			<div>
+				<h4 className={heading}>Organisations</h4>
+				<p className='text-xs text-text-muted mb-2'>
+					Your own repositories are always listed. Tick the organisations to
+					list beside them; all of them are ticked until you change it.
+				</p>
+				{known.length === 0 ? (
+					<p className='text-xs text-text-muted italic'>
+						{cache && cache.fetched_at > 0
+							? 'You are not a member of any organisation.'
+							: 'Refresh once to discover your organisations.'}
+					</p>
+				) : (
+					<div className='flex flex-col gap-1'>
+						{known.map(org => (
+							<label
+								key={org}
+								className='flex items-center gap-2 text-sm text-text-secondary cursor-pointer'
+							>
+								<input
+									type='checkbox'
+									className='accent-accent'
+									checked={isOn(org)}
+									onChange={() => toggle(org)}
+								/>
+								<span className='font-mono'>{org}</span>
+							</label>
+						))}
+					</div>
+				)}
+				{chosen !== undefined && (
+					<Button
+						variant='primary'
+						className='mt-3'
+						onClick={save}
+						disabled={saving}
+					>
+						{saving ? 'Saving…' : 'Save'}
+					</Button>
+				)}
+				{msg && <p className='text-xs text-accent mt-2'>{msg}</p>}
+			</div>
+
+			<div>
+				<h4 className={heading}>Cache</h4>
+				<p className='text-xs text-text-muted mb-2'>{cacheLine}</p>
+				<Button
+					onClick={github.refresh}
+					disabled={!status?.login || github.refreshing}
+					title={
+						status?.login
+							? 'Runs gh repo list on a background thread'
+							: 'Log in with gh first'
+					}
+				>
+					{github.refreshing ? 'Refreshing…' : 'Refresh now'}
+				</Button>
+				{github.lastError && (
+					<p className='text-xs text-danger mt-2'>{github.lastError}</p>
+				)}
+			</div>
+		</div>
+	);
+};
+
 const SWATCHES: ThemeKey[] = [
 	'bg-primary',
 	'bg-panel',
@@ -478,7 +619,8 @@ const Settings = ({
 	onScanChanged,
 	onImported,
 	onSummonChanged,
-	targets
+	targets,
+	github
 }: SettingsProps) => {
 
 	// The registry. A later chapter adds a panel by adding an object here; the
@@ -527,6 +669,11 @@ const Settings = ({
 			id: 'tmux',
 			label: 'tmux / psmux',
 			render: () => <TmuxPanel {...{ onError }} />
+		},
+		{
+			id: 'github',
+			label: 'GitHub',
+			render: () => <GithubPanel {...{ github, onError }} />
 		},
 		{
 			id: 'shortcuts',

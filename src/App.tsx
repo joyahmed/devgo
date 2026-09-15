@@ -865,7 +865,8 @@ const AppInner = () => {
 							loadHotkey();
 						},
 						onSummonChanged: setSummonHotkey,
-						targets
+						targets,
+						github
 					}}
 				/>
 			</Suspense>
