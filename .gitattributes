@@ -1,0 +1,6 @@
+# Source is LF in the repo. Without this, editing on Windows silently rewrites
+# whole files to CRLF and buries a 20-line change in a 2000-line diff.
+* text=auto eol=lf
+*.png binary
+*.ico binary
+*.icns binary
