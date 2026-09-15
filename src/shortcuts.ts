@@ -5,6 +5,12 @@
 /// guarantees the three drift apart — a shortcut the UI advertises but does not
 /// bind is worse than one it never mentions.
 export const SHORTCUTS: Shortcut[] = [
+	{
+		id: 'commandPalette',
+		keys: 'Ctrl+Shift+P',
+		label: 'Command palette',
+		group: 'Global'
+	},
 	{ id: 'focusSearch', keys: 'Ctrl+K', label: 'Focus search', group: 'Global' },
 	{ id: 'clearSearch', keys: 'Ctrl+L', label: 'Clear search', group: 'Global' },
 	{ id: 'refresh', keys: 'F5', label: 'Refresh projects', group: 'Global' },

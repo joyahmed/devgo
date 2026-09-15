@@ -95,6 +95,7 @@ interface LaunchTarget {
 /* Shortcuts — see src/shortcuts.ts */
 
 type ShortcutId =
+	| 'commandPalette'
 	| 'focusSearch'
 	| 'clearSearch'
 	| 'refresh'
