@@ -1,5 +1,24 @@
-use crate::error::AppError;
+use serde::Serialize;
+
+use super::platform::wsl;
 use crate::models::Project;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum UnavailableReason {
+    /// The workspace lives inside a WSL distro that is not currently running.
+    /// Reading it would cold-boot the VM, so we decline.
+    DistroStopped,
+    /// The path does not resolve — an unplugged drive, or a virtual disk that
+    /// has not finished attaching yet.
+    NotMounted,
+    AccessDenied,
+}
+
+pub enum ScanOutcome {
+    Scanned(Vec<Project>),
+    Unavailable(UnavailableReason),
+}
 
 fn detect_file_system(workspace: &str) -> &str {
     let normalized = workspace.replace('\\', "/");
@@ -12,9 +31,57 @@ fn detect_file_system(workspace: &str) -> &str {
     }
 }
 
-pub fn scan_workspace(path: &str) -> Result<Vec<Project>, AppError> {
-    let entries = std::fs::read_dir(path)
-        .map_err(|_| AppError::DirAccess(path.to_string()))?;
+/// The distro a workspace path belongs to, if it is a WSL-native path.
+pub fn distro_of(path: &str) -> Option<String> {
+    let normalized = path.replace('\\', "/");
+    for prefix in ["//wsl.localhost/", "//wsl$/"] {
+        if let Some(rest) = normalized.strip_prefix(prefix) {
+            return rest.split('/').find(|s| !s.is_empty()).map(String::from);
+        }
+    }
+    None
+}
+
+/// Scan one workspace, one level deep.
+///
+/// `running` is the already-fetched list of live distros — passed in rather than
+/// queried here so a multi-workspace scan spawns `wsl.exe` once, not once per
+/// workspace.
+///
+/// `allow_boot` lifts the liveness gate. It must only ever be set from an
+/// explicit user action (the Refresh control), never from startup or a timer.
+pub fn scan_workspace(
+    path: &str,
+    running: &[String],
+    allow_boot: bool,
+) -> ScanOutcome {
+    // A \\wsl.localhost\ path is served by the distro's 9p file server, so even
+    // a bare read_dir cold-boots the entire VM. Checking liveness first costs
+    // nothing — the check itself starts no distro — and lets us skip the path
+    // entirely while it is stopped.
+    if !allow_boot {
+        if let Some(distro) = distro_of(path) {
+            if !wsl::is_running(&distro, running) {
+                return ScanOutcome::Unavailable(
+                    UnavailableReason::DistroStopped,
+                );
+            }
+        }
+    }
+
+    let entries = match std::fs::read_dir(path) {
+        Ok(entries) => entries,
+        Err(e) => {
+            return ScanOutcome::Unavailable(match e.kind() {
+                std::io::ErrorKind::PermissionDenied => {
+                    UnavailableReason::AccessDenied
+                }
+                // NotFound covers a deleted folder; everything else here is a
+                // drive that is absent or not ready, which reads the same to us.
+                _ => UnavailableReason::NotMounted,
+            });
+        }
+    };
 
     let fs_type = detect_file_system(path).to_string();
 
@@ -43,5 +110,43 @@ pub fn scan_workspace(path: &str) -> Result<Vec<Project>, AppError> {
         .collect();
 
     projects.sort_by_key(|p| p.name.to_lowercase());
-    Ok(projects)
+    ScanOutcome::Scanned(projects)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn extracts_distro_from_wsl_paths() {
+        assert_eq!(
+            distro_of(r"\\wsl.localhost\Ubuntu-26.04\home\joy").as_deref(),
+            Some("Ubuntu-26.04")
+        );
+        assert_eq!(distro_of(r"\\wsl$\Debian\home").as_deref(), Some("Debian"));
+        assert_eq!(distro_of(r"G:\01_tauri"), None);
+    }
+
+    /// The gate must refuse a stopped distro rather than touching the path.
+    #[test]
+    fn stopped_distro_is_unavailable_without_touching_the_path() {
+        let outcome = scan_workspace(
+            r"\\wsl.localhost\Ubuntu-26.04\home\joy",
+            &[],
+            false,
+        );
+        assert!(matches!(
+            outcome,
+            ScanOutcome::Unavailable(UnavailableReason::DistroStopped)
+        ));
+    }
+
+    #[test]
+    fn missing_local_path_is_not_mounted() {
+        let outcome = scan_workspace(r"Q:\definitely\not\here", &[], false);
+        assert!(matches!(
+            outcome,
+            ScanOutcome::Unavailable(UnavailableReason::NotMounted)
+        ));
+    }
 }

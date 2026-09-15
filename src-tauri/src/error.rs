@@ -9,9 +9,6 @@ pub enum AppError {
     #[error("JSON error: {0}")]
     Json(#[from] serde_json::Error),
 
-    #[error("Cannot access directory: {0}")]
-    DirAccess(String),
-
     #[error("Internal lock poisoned: {0}")]
     Lock(String),
 

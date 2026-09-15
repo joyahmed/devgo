@@ -82,6 +82,23 @@ pub fn default_distro() -> Option<String> {
     list_distros().into_iter().next()
 }
 
+/// Distros that are already running.
+///
+/// This is a management call: it does **not** start anything. That is what makes
+/// it safe as a gate — reading a `\\wsl.localhost\...` path cold-boots the whole
+/// VM, so we check liveness this way first and skip the path entirely when the
+/// distro is stopped.
+pub fn running_distros() -> Vec<String> {
+    run(&["-l", "-q", "--running"])
+        .as_deref()
+        .map(parse_list)
+        .unwrap_or_default()
+}
+
+pub fn is_running(distro: &str, running: &[String]) -> bool {
+    running.iter().any(|d| d.eq_ignore_ascii_case(distro))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
