@@ -1,7 +1,10 @@
-import { lazy, Suspense, useState } from 'react';
+import { lazy, Suspense, useRef, useState } from 'react';
 import ConfirmDialog from './components/ConfirmDialog';
+import ProjectTree from './components/ProjectTree';
+import SearchBox from './components/SearchBox';
 import TitleBar from './components/TitleBar';
 import ToastProvider, { useToast } from './components/Toast';
+import { useProjects } from './hooks/useProjects';
 import { useWorkspaces } from './hooks/useWorkspaces';
 
 const WorkspaceManager = lazy(() => import('./components/WorkspaceManager'));
@@ -25,8 +28,15 @@ const AppInner = () => {
 		add: addWorkspace,
 		remove: removeWorkspace
 	} = useWorkspaces();
+	const { filtered, query, setQuery, selected, setSelected, loading } =
+		useProjects();
 	const { toast } = useToast();
 	const [removeIndex, setRemoveIndex] = useState<number | null>(null);
+
+	const treeRef = useRef<ProjectTreeHandle>(null);
+	const handleArrow = (dir: 1 | -1) => treeRef.current?.navigate(dir);
+
+	const handleSelect = (p: Project) => setSelected(p);
 
 	const handleRemove = async (index: number) => {
 		try {
@@ -64,6 +74,22 @@ const AppInner = () => {
 						}}
 					/>
 				</Suspense>
+				<SearchBox
+					{...{
+						value: query,
+						onChange: setQuery,
+						onArrow: handleArrow
+					}}
+				/>
+				<ProjectTree
+					{...{
+						ref: treeRef,
+						projects: filtered,
+						selected,
+						onSelect: handleSelect,
+						loading
+					}}
+				/>
 			</div>
 		</div>
 	);

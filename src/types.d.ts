@@ -44,6 +44,26 @@ interface ConfirmDialogProps {
 	onCancel: () => void;
 }
 
+interface SearchBoxProps {
+	value: string;
+	onChange: (v: string) => void;
+	onEnter?: () => void;
+	onArrow?: (dir: 1 | -1) => void;
+	enterHint?: string;
+}
+
+interface ProjectTreeHandle {
+	navigate: (dir: 1 | -1) => void;
+}
+
+interface ProjectTreeProps {
+	projects: Project[];
+	selected: Project | null;
+	onSelect: (p: Project) => void;
+	loading?: boolean;
+	ref?: React.Ref<ProjectTreeHandle>;
+}
+
 /* Toast */
 
 type ToastType = 'error' | 'success' | 'info';
