@@ -83,6 +83,27 @@ interface ScanConfig {
 	ignore: string[];
 }
 
+// the --color-* names in index.css; a theme must set every one
+type ThemeKey =
+	| 'bg-primary'
+	| 'bg-secondary'
+	| 'bg-panel'
+	| 'bg-hover'
+	| 'bg-selected'
+	| 'text-primary'
+	| 'text-secondary'
+	| 'text-muted'
+	| 'accent'
+	| 'accent-hover'
+	| 'danger'
+	| 'border';
+
+interface Theme {
+	id: string;
+	name: string;
+	colors: Record<ThemeKey, string>;
+}
+
 interface LastProject {
 	full_path: string;
 	workspace: string;
@@ -194,6 +215,12 @@ interface OnboardingProps {
 
 interface ScanningPanelProps {
 	onSaved: () => void;
+	onError: (message: string) => void;
+}
+
+interface ConfigPanelProps {
+	/// an import or a cache reset changed what the launcher should show
+	onChanged: () => void;
 	onError: (message: string) => void;
 }
 
