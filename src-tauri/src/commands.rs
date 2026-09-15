@@ -1,10 +1,13 @@
 use serde::Serialize;
+use std::collections::HashMap;
+use std::os::windows::process::CommandExt;
 use std::sync::Mutex;
 use tauri::State;
 
 use crate::error::AppError;
 use crate::models::Project;
 use crate::services::frecency;
+use crate::services::git;
 use crate::services::launcher;
 use crate::services::platform::{wsl, RuntimeInfo};
 use crate::services::scanner::{ScanOutcome, UnavailableReason};
@@ -62,6 +65,9 @@ pub struct AppState {
     pub cache_store: Mutex<ProjectCacheStore>,
     pub runtime_info: Mutex<RuntimeInfo>,
     pub lock_path: std::path::PathBuf,
+    /// Git state, in memory only. Deliberately not persisted: a branch name
+    /// read yesterday is worse than no branch name, because it looks current.
+    pub git_cache: Mutex<HashMap<String, git::GitInfo>>,
 }
 
 #[tauri::command]
@@ -280,6 +286,60 @@ pub fn open_both(
     let info = state.runtime_info.lock().map_err(lock_err)?.clone();
     launcher::launch_both(&project, &info)?;
     record_launch(&state, &project)
+}
+
+/// Read git state for the current project list.
+///
+/// Deliberately a separate command rather than part of `get_projects`: git
+/// spawns processes, and the project list must render immediately from cache
+/// without waiting on them. The frontend calls this after the list is on
+/// screen, and again only on an explicit refresh.
+#[tauri::command]
+pub fn get_git_info(
+    projects: Vec<Project>,
+    state: State<AppState>,
+) -> Result<Vec<git::GitInfo>, AppError> {
+    // Same liveness gate the scanner uses. Git state is never worth booting a
+    // virtual machine for.
+    let running = if projects
+        .iter()
+        .any(|p| crate::services::scanner::distro_of(&p.full_path).is_some())
+    {
+        wsl::running_distros()
+    } else {
+        Vec::new()
+    };
+
+    let fresh = git::collect(&projects, &running);
+    let mut cache = state.git_cache.lock().map_err(lock_err)?;
+    for info in &fresh {
+        cache.insert(info.full_path.clone(), info.clone());
+    }
+    Ok(fresh)
+}
+
+/// Open a project's remote in the browser.
+#[tauri::command]
+pub fn open_remote(
+    full_path: String,
+    state: State<AppState>,
+) -> Result<(), AppError> {
+    let url = state
+        .git_cache
+        .lock()
+        .map_err(lock_err)?
+        .get(&full_path)
+        .and_then(|i| i.remote.clone())
+        .ok_or_else(|| AppError::NoRemote(full_path))?;
+
+    // `start` is a cmd builtin, so it needs a shell. The empty "" is the window
+    // title argument, which start would otherwise steal the URL for.
+    std::process::Command::new("cmd")
+        .creation_flags(0x08000000)
+        .args(["/c", "start", "", &url])
+        .spawn()
+        .map_err(|e| AppError::LaunchFailed(format!("{url}: {e}")))?;
+    Ok(())
 }
 
 #[tauri::command]

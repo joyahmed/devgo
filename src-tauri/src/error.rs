@@ -17,6 +17,9 @@ pub enum AppError {
 
     #[error("Failed to launch: {0}")]
     LaunchFailed(String),
+
+    #[error("No browsable remote for {0}")]
+    NoRemote(String),
 }
 
 // std::io::Error and serde_json::Error don't implement Serialize, so we can't

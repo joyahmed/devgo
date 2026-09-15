@@ -1,4 +1,5 @@
 pub mod frecency;
+pub mod git;
 pub mod launcher;
 pub mod platform;
 pub mod preferences;

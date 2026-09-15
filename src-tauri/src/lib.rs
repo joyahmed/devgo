@@ -79,6 +79,9 @@ pub fn run() {
                 cache_store: std::sync::Mutex::new(cache_store),
                 runtime_info: std::sync::Mutex::new(runtime_info),
                 lock_path: lock_path.clone(),
+                git_cache: std::sync::Mutex::new(
+                    std::collections::HashMap::new(),
+                ),
             });
 
             // A hotkey another app already owns must not stop DevGo from
@@ -154,6 +157,8 @@ pub fn run() {
             commands::refresh_projects,
             commands::quit_app,
             commands::toggle_pin,
+            commands::get_git_info,
+            commands::open_remote,
             commands::get_runtime_info,
             commands::open_vscode,
             commands::open_terminal,
