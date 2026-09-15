@@ -94,7 +94,8 @@ fn show_window(app: &AppHandle) {
 // a click is an ask: booting a stopped distro here is fine
 fn launch(app: &AppHandle, project: &Project) {
     let state = app.state::<AppState>();
-    let _ = launch_project_default(&state, project);
+    // no ids: a tray launch has no UI to pick with, so the saved defaults
+    let _ = launch_project_default(&state, project, None, None);
     refresh(app);
 }
 

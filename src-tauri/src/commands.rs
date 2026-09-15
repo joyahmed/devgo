@@ -337,20 +337,26 @@ pub fn open_terminal(
 pub fn launch_project_default(
     state: &AppState,
     project: &Project,
+    editor_id: Option<String>,
+    terminal_id: Option<String>,
 ) -> Result<(), AppError> {
     let info = state.runtime_info.lock().map_err(lock_err)?.clone();
-    let editor = resolve_target(state, TargetKind::Editor, None)?;
-    let terminal = resolve_target(state, TargetKind::Terminal, None)?;
+    let editor = resolve_target(state, TargetKind::Editor, editor_id)?;
+    let terminal = resolve_target(state, TargetKind::Terminal, terminal_id)?;
     launcher::launch_both(&editor, &terminal, project, &info)?;
     record_launch(state, project)
 }
 
+/// Unlike open_editor and open_terminal this took no ids at all, so "open
+/// both, but in Cursor" was a signature change. None keeps the old behaviour.
 #[tauri::command]
 pub fn open_both(
     project: Project,
+    editor_id: Option<String>,
+    terminal_id: Option<String>,
     state: State<AppState>,
 ) -> Result<(), AppError> {
-    launch_project_default(&state, &project)
+    launch_project_default(&state, &project, editor_id, terminal_id)
 }
 
 /// Editors and terminals installed but not yet registered. This is the
