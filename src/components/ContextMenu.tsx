@@ -35,7 +35,7 @@ const ContextMenu = ({ x, y, items, onClose }: ContextMenuProps) => {
 	return (
 		<div
 			ref={ref}
-			className='fixed z-50 w-64 bg-bg-secondary border border-border rounded-control shadow-surface py-1 text-15'
+			className='fixed z-50 w-64 bg-bg-secondary border border-border rounded-panel shadow-surface py-1 text-15 overflow-hidden'
 			style={style}
 			onContextMenu={e => e.preventDefault()}
 		>

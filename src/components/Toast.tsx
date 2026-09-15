@@ -31,7 +31,7 @@ const ToastProvider = ({ children }: ToastProviderProps) => {
 				{toasts.map(t => (
 					<div
 						key={t.id}
-						className={`px-4 py-3 bg-bg-panel border rounded-control text-15 shadow-surface animate-fade-in ${VARIANT[t.type]}`}
+						className={`px-4 py-3 bg-bg-secondary border rounded-panel text-15 shadow-surface animate-fade-in ${VARIANT[t.type]}`}
 					>
 						{t.message}
 					</div>
