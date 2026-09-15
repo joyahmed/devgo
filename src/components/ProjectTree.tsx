@@ -1,4 +1,5 @@
 import { useEffect, useImperativeHandle, useState } from 'react';
+import Button from './Button';
 
 const col = 'grid grid-cols-[1fr_1fr_80px_52px] items-center text-sm';
 
@@ -37,6 +38,77 @@ const StatusPill = ({ state }: StatusPillProps) => {
 	);
 };
 
+/// The right-hand cell of a project row: its frecency hint and pin star.
+const RowMeta = ({ project, rank, onTogglePin }: RowMetaProps) => (
+	<div className='flex items-center justify-end gap-1.5'>
+		{rank?.hint && (
+			<span className='text-[9px] uppercase tracking-wider text-text-muted'>
+				{rank.hint}
+			</span>
+		)}
+		{onTogglePin && (
+			<Button
+				variant='ghost'
+				className={`text-xs leading-none p-0.5 hover:scale-110 hover:bg-transparent ${
+					rank?.pinned ? 'text-accent' : 'text-text-muted/40'
+				}`}
+				title={rank?.pinned ? 'Unpin' : 'Pin to top'}
+				onClick={e => {
+					// The row itself selects on click; pinning must not also select.
+					e.stopPropagation();
+					onTogglePin(project);
+				}}
+			>
+				{rank?.pinned ? '★' : '☆'}
+			</Button>
+		)}
+	</div>
+);
+
+/// One project row — the same element whether it sits in the Pinned strip or
+/// under its workspace header; only the left border and the dimming differ.
+const ProjectRow = ({
+	project,
+	selected,
+	pinnedStrip,
+	stale,
+	rank,
+	onSelect,
+	onDoubleClick,
+	onTogglePin
+}: ProjectRowProps) => (
+	<div
+		className={`${col} px-3 py-1.5 cursor-pointer select-none transition-colors ${
+			pinnedStrip ? 'border-l-2' : 'ml-6 border-l border-border'
+		} ${stale ? 'opacity-60' : ''} ${
+			selected
+				? 'bg-bg-selected text-text-primary border-l-accent'
+				: `text-text-secondary hover:bg-bg-hover/50 ${
+						pinnedStrip ? 'border-l-accent/40' : 'border-l-transparent'
+					}`
+		}`}
+		onClick={() => onSelect(project)}
+		onDoubleClick={() => onDoubleClick(project)}
+	>
+		<div className='truncate text-text-muted' title={project.workspace}>
+			{lastSegment(project.workspace)}
+		</div>
+		<div
+			className={`font-medium font-mono truncate ${selected ? 'text-text-primary' : ''}`}
+		>
+			{project.name}
+		</div>
+		<div
+			className={
+				project.file_system === 'WSL' ? 'text-accent' : 'text-text-muted'
+			}
+		>
+			{project.file_system}
+		</div>
+		<RowMeta {...{ project, rank, onTogglePin }} />
+	</div>
+);
+
 const ProjectTree = ({
 	projects,
 	selected,
@@ -46,6 +118,9 @@ const ProjectTree = ({
 	query,
 	loading,
 	workspaceStates,
+	ranks,
+	pinnedProjects,
+	onTogglePin,
 	ref
 }: ProjectTreeProps) => {
 	const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
@@ -57,9 +132,16 @@ const ProjectTree = ({
 		grouped.set(p.workspace, existing);
 	}
 
-	const visible: Project[] = [];
+	// Pinned rows come first for keyboard navigation, and are then skipped in
+	// the tree below so arrowing down never lands on the same project twice.
+	const pinned = pinnedProjects ?? [];
+	const pinnedPaths = new Set(pinned.map(p => p.full_path));
+
+	const visible: Project[] = [...pinned];
 	for (const [ws, wsProjects] of grouped) {
-		if (!collapsed.has(ws)) visible.push(...wsProjects);
+		if (!collapsed.has(ws)) {
+			visible.push(...wsProjects.filter(p => !pinnedPaths.has(p.full_path)));
+		}
 	}
 
 	const navigate = (dir: 1 | -1) => {
@@ -102,8 +184,21 @@ const ProjectTree = ({
 			Enter: launch
 		};
 		const handler = (e: globalThis.KeyboardEvent) => {
-			if (e.target instanceof HTMLInputElement) return;
-			if (e.ctrlKey || e.metaKey || e.altKey) return;
+			// Bare keys belong to whatever input has focus, but modifier combos are
+			// app-level and must still work while the search box is focused —
+			// which is exactly where summon leaves you.
+			const mod = e.ctrlKey || e.metaKey;
+			const modified = mod || e.altKey;
+			if (e.target instanceof HTMLInputElement && !modified) return;
+			if (modified) {
+				// Ctrl+S rather than bare "s": the search box is the primary input,
+				// and a bare letter is unreachable while it has focus.
+				if (mod && e.key === 's' && selected) {
+					e.preventDefault();
+					onTogglePin?.(selected);
+				}
+				return;
+			}
 			const action = keys[e.key];
 			if (!action) return;
 			e.preventDefault();
@@ -111,7 +206,7 @@ const ProjectTree = ({
 		};
 		window.addEventListener('keydown', handler);
 		return () => window.removeEventListener('keydown', handler);
-	}, [selected, visible, navigate, onLaunch]);
+	}, [selected, visible, navigate, onLaunch, onTogglePin]);
 
 	const stateFor = (ws: string) =>
 		workspaceStates?.find(s => s.workspace === ws);
@@ -171,6 +266,15 @@ const ProjectTree = ({
 
 	const workspaces = [...grouped.entries()];
 
+	const rowProps = (project: Project) => ({
+		project,
+		selected: selected?.full_path === project.full_path,
+		rank: ranks?.get(project.full_path),
+		onSelect,
+		onDoubleClick,
+		onTogglePin
+	});
+
 	return (
 		<div className='flex-1 flex flex-col min-h-0'>
 			<div
@@ -184,6 +288,21 @@ const ProjectTree = ({
 			</div>
 
 			<div className='flex-1 overflow-y-auto'>
+				{pinned.length > 0 && (
+					<div className='mb-1'>
+						<div className='px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-text-muted'>
+							Pinned
+						</div>
+						{pinned.map(project => (
+							<ProjectRow
+								key={`pinned-${project.full_path}`}
+								{...{ ...rowProps(project), pinnedStrip: true }}
+							/>
+						))}
+						<div className='mx-3 my-1 border-b border-border' />
+					</div>
+				)}
+
 				{workspaces.map(([ws, wsProjects]) => {
 					const isOpen = !collapsed.has(ws);
 					const count = wsProjects.length;
@@ -223,46 +342,14 @@ const ProjectTree = ({
 							</div>
 
 							{isOpen &&
-								wsProjects.map(project => {
-									const isSelected =
-										selected?.full_path === project.full_path;
-									return (
-										<div
+								wsProjects
+									.filter(p => !pinnedPaths.has(p.full_path))
+									.map(project => (
+										<ProjectRow
 											key={project.full_path}
-											className={`${col} ml-6 px-3 py-1.5 cursor-pointer select-none transition-colors border-l border-border ${
-												isStale ? 'opacity-60' : ''
-											} ${
-												isSelected
-													? 'bg-bg-selected text-text-primary border-l-accent'
-													: 'text-text-secondary hover:bg-bg-hover/50 border-l-transparent'
-											}`}
-											onClick={() => onSelect(project)}
-											onDoubleClick={() => onDoubleClick(project)}
-										>
-											<div
-												className='truncate text-text-muted'
-												title={project.workspace}
-											>
-												{lastSegment(project.workspace)}
-											</div>
-											<div
-												className={`font-medium font-mono truncate ${isSelected ? 'text-text-primary' : ''}`}
-											>
-												{project.name}
-											</div>
-											<div
-												className={
-													project.file_system === 'WSL'
-														? 'text-accent'
-														: 'text-text-muted'
-												}
-											>
-												{project.file_system}
-											</div>
-											<div />
-										</div>
-									);
-								})}
+											{...{ ...rowProps(project), stale: isStale }}
+										/>
+									))}
 						</div>
 					);
 				})}

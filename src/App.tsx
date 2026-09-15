@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import ActionButtons from './components/ActionButtons';
@@ -40,7 +41,12 @@ const AppInner = () => {
 		setSelected,
 		refresh,
 		loading,
-		workspaceStates
+		workspaceStates,
+		ranks,
+		pinnedProjects,
+		sortMode,
+		toggleSort,
+		togglePin
 	} = useProjects();
 	const {
 		showWorkspaces,
@@ -56,6 +62,20 @@ const AppInner = () => {
 
 	const treeRef = useRef<ProjectTreeHandle>(null);
 	const handleArrow = (dir: 1 | -1) => treeRef.current?.navigate(dir);
+
+	// Summoned by the global hotkey: put the caret in the search box and clear
+	// whatever was left over, so the window is always ready to be typed into.
+	const searchRef = useRef<HTMLInputElement>(null);
+	useEffect(() => {
+		const unlisten = listen('devgo://summoned', () => {
+			setQuery('');
+			searchRef.current?.focus();
+			searchRef.current?.select();
+		});
+		return () => {
+			unlisten.then(f => f()).catch(() => {});
+		};
+	}, []);
 
 	const handleSelect = (p: Project) => setSelected(p);
 
@@ -120,6 +140,10 @@ const AppInner = () => {
 		return () => window.removeEventListener('keydown', handler);
 	}, []);
 
+	const handleTogglePin = (p: Project) => {
+		togglePin(p).catch(e => toast(showError(e)));
+	};
+
 	const handleOpenVSCode = () => openVSCode().catch(e => toast(showError(e)));
 	const handleOpenTerminal = () =>
 		openTerminal().catch(e => toast(showError(e)));
@@ -176,10 +200,13 @@ const AppInner = () => {
 			<div className='flex-1 flex flex-col p-5 gap-4 overflow-hidden'>
 				<SearchBox
 					{...{
+						ref: searchRef,
 						value: query,
 						onChange: setQuery,
 						onEnter: handleSearchEnter,
 						onArrow: handleArrow,
+						sortMode,
+						onToggleSort: toggleSort,
 						enterHint:
 							selected || filtered.length > 0 ? '⏎ Enter' : undefined
 					}}
@@ -194,7 +221,10 @@ const AppInner = () => {
 						onLaunch: handleLaunch,
 						query,
 						loading,
-						workspaceStates
+						workspaceStates,
+						ranks,
+						pinnedProjects,
+						onTogglePin: handleTogglePin
 					}}
 				/>
 				<ActionButtons
