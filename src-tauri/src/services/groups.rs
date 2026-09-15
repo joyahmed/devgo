@@ -83,6 +83,52 @@ pub fn unassign(
     groups
 }
 
+pub fn rename(
+    mut groups: Vec<GithubGroup>,
+    from: &str,
+    to: &str,
+) -> Result<Vec<GithubGroup>, AppError> {
+    let name = valid_name(&groups, to, Some(from))?;
+    match groups.iter_mut().find(|g| g.name == from) {
+        Some(g) => {
+            g.name = name;
+            Ok(groups)
+        }
+        None => Err(AppError::GroupRefused(format!("No group called {from}"))),
+    }
+}
+
+/// Delete the group. Its repos are labels, not files: nothing else changes.
+pub fn delete(mut groups: Vec<GithubGroup>, name: &str) -> Vec<GithubGroup> {
+    groups.retain(|g| g.name != name);
+    groups
+}
+
+/// Reorder by name list. The workspace reorder's rule (chapter 31): the
+/// order must be a permutation of what is stored, or it would drop
+/// whatever the client did not know about.
+pub fn reorder(
+    groups: Vec<GithubGroup>,
+    order: &[String],
+) -> Result<Vec<GithubGroup>, AppError> {
+    if order.len() != groups.len()
+        || !groups.iter().all(|g| order.contains(&g.name))
+    {
+        return Err(AppError::GroupRefused(format!(
+            "The order names {} groups but {} are stored. The list changed; refresh and try again",
+            order.len(),
+            groups.len()
+        )));
+    }
+    let mut out = Vec::with_capacity(groups.len());
+    for name in order {
+        if let Some(g) = groups.iter().find(|g| &g.name == name) {
+            out.push(g.clone());
+        }
+    }
+    Ok(out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -117,6 +163,49 @@ mod tests {
         let left = unassign(groups, "a", "o/r");
         assert!(left[0].repos.is_empty(), "the empty group stays");
         assert_eq!(left[1].repos, vec!["o/r"]);
+    }
+
+    #[test]
+    fn names_are_trimmed_unique_and_never_empty() {
+        assert!(assign(vec![], "  ", "o/r").is_err());
+        let groups = vec![g("zetta", &[]), g("clients", &[])];
+        assert!(
+            rename(groups.clone(), "clients", "Zetta").is_err(),
+            "case-insensitive clash"
+        );
+        assert!(
+            rename(groups.clone(), "clients", "clients").is_ok(),
+            "renaming to itself is fine"
+        );
+        let renamed = rename(groups.clone(), "clients", "  old  ").unwrap();
+        assert_eq!(renamed[1].name, "old");
+        assert!(rename(groups, "nope", "x").is_err());
+    }
+
+    #[test]
+    fn delete_removes_the_label_only() {
+        let groups = vec![g("a", &["o/r"]), g("b", &["o/r"])];
+        let left = delete(groups, "a");
+        assert_eq!(left, vec![g("b", &["o/r"])]);
+    }
+
+    #[test]
+    fn reorder_must_be_a_permutation() {
+        let groups = vec![g("a", &[]), g("b", &[]), g("c", &[])];
+        let ok = reorder(groups.clone(), &["c".into(), "a".into(), "b".into()])
+            .unwrap();
+        assert_eq!(
+            ok.iter().map(|g| g.name.as_str()).collect::<Vec<_>>(),
+            ["c", "a", "b"]
+        );
+        assert!(
+            reorder(groups.clone(), &["c".into(), "a".into()]).is_err(),
+            "one missing"
+        );
+        assert!(
+            reorder(groups, &["c".into(), "a".into(), "x".into()]).is_err(),
+            "one unknown"
+        );
     }
 
     #[test]
