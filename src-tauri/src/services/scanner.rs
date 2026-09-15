@@ -121,6 +121,17 @@ mod tests {
     use super::*;
 
     #[test]
+    fn classifies_filesystem_kinds() {
+        assert_eq!(detect_file_system(r"G:\01_tauri"), "Windows");
+        assert_eq!(
+            detect_file_system(r"\\wsl.localhost\Ubuntu-26.04\home"),
+            "WSL"
+        );
+        assert_eq!(detect_file_system(r"\\wsl$\Debian\home"), "WSL");
+        assert_eq!(detect_file_system(r"\\nas\share\projects"), "Network");
+    }
+
+    #[test]
     fn extracts_distro_from_wsl_paths() {
         assert_eq!(
             distro_of(r"\\wsl.localhost\Ubuntu-26.04\home\joy").as_deref(),
