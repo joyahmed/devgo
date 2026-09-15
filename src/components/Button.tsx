@@ -19,6 +19,9 @@ const VARIANT: Record<ButtonVariant, string> = {
 		'px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider rounded-full bg-bg-panel border border-border-strong text-accent hover:not-disabled:border-accent disabled:text-text-muted',
 	// A choice among several; the chosen one says so with aria-pressed.
 	card: 'flex-col items-stretch w-full p-3 text-left border border-border-strong bg-transparent text-text-primary hover:border-text-muted aria-[pressed=true]:border-accent aria-[pressed=true]:bg-bg-hover/40',
+	// A launch target on the row; the default says so with aria-current.
+	target:
+		'gap-1.5 px-3 py-1.5 text-xs border border-border-strong bg-bg-panel text-text-secondary hover:not-disabled:text-text-primary hover:not-disabled:border-accent aria-[current=true]:border-accent aria-[current=true]:bg-bg-hover/40 aria-[current=true]:text-text-primary',
 	// One of a small fixed set, like a number; the chosen one is aria-pressed.
 	choice:
 		'w-9 h-9 text-sm rounded-md border border-border-strong bg-bg-panel text-text-secondary hover:text-text-primary hover:border-text-muted aria-[pressed=true]:border-accent aria-[pressed=true]:bg-bg-hover/40 aria-[pressed=true]:text-text-primary'

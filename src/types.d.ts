@@ -214,6 +214,7 @@ type ButtonVariant =
 	| 'tab'
 	| 'badge'
 	| 'card'
+	| 'target'
 	| 'choice';
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
@@ -466,14 +467,27 @@ interface ProjectRowProps {
 	onContextMenu?: (p: Project, x: number, y: number) => void;
 }
 
+interface TargetGroupProps {
+	label: string;
+	items: LaunchTarget[];
+	defaultId?: string;
+	/// a target with no WSL form is disabled for a WSL selection, not hidden
+	isWsl: boolean;
+	hasSelection: boolean;
+	shortcut: string;
+	onPick: (id?: string) => void;
+}
+
 interface ActionButtonsProps {
 	hasSelection: boolean;
-	onAddWorkspace: () => void;
-	onRemoveWorkspace: () => void;
-	onEditor: () => void;
-	onTerminal: () => void;
+	selectionIsWsl: boolean;
+	editors: LaunchTarget[];
+	terminals: LaunchTarget[];
+	defaults: Record<string, string>;
+	onEditor: (targetId?: string) => void;
+	onTerminal: (targetId?: string) => void;
 	onBoth: () => void;
-	onRefresh: () => void;
+	onManageTargets: () => void;
 }
 
 /* Toast */

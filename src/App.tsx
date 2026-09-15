@@ -242,10 +242,14 @@ const AppInner = () => {
 		);
 	};
 
-	const handleOpenEditor = () => openEditor().catch(e => toast(showError(e)));
-	const handleOpenTerminal = () =>
-		openTerminal().catch(e => toast(showError(e)));
+	const handleOpenEditor = (targetId?: string) =>
+		openEditor(undefined, targetId).catch(e => toast(showError(e)));
+	const handleOpenTerminal = (targetId?: string) =>
+		openTerminal(undefined, targetId).catch(e => toast(showError(e)));
 	const handleOpenBoth = () => openBoth().catch(e => toast(showError(e)));
+	// a target with no WSL form cannot open a WSL project; the row disables
+	// it instead of letting the launch fail after the click
+	const selectionIsWsl = selected?.file_system === 'WSL';
 
 	const revealInExplorer = (p: Project) => {
 		invoke('reveal_in_explorer', { path: p.full_path }).catch(e =>
@@ -568,8 +572,8 @@ const AppInner = () => {
 			}
 
 			if (!selected) return;
-			if (fire('openEditor', handleOpenEditor)) return;
-			if (fire('openTerminal', handleOpenTerminal)) return;
+			if (fire('openEditor', () => handleOpenEditor())) return;
+			if (fire('openTerminal', () => handleOpenTerminal())) return;
 			if (fire('openBoth', handleOpenBoth)) return;
 			if (fire('revealExplorer', () => revealInExplorer(selected))) return;
 			if (fire('copyWinPath', () => copyWindowsPath(selected))) return;
@@ -787,12 +791,14 @@ const AppInner = () => {
 						<ActionButtons
 							{...{
 								hasSelection: selected !== null,
-								onAddWorkspace: () => openSettings('workspaces'),
-								onRemoveWorkspace: handleRemoveShortcut,
+								selectionIsWsl,
+								editors: targets.editors,
+								terminals: targets.terminals,
+								defaults: targets.defaults,
 								onEditor: handleOpenEditor,
 								onTerminal: handleOpenTerminal,
 								onBoth: handleOpenBoth,
-								onRefresh: handleRefresh
+								onManageTargets: () => openSettings('targets')
 							}}
 						/>
 					</>
