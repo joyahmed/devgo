@@ -64,10 +64,20 @@ const emptyLine = (status: GhStatus | null): string =>
 // a repo in the same four columns a project uses: owner where the
 // workspace goes, name where the location goes, GitHub as its file
 // system, and the meta cell on the right
+// the one moment the row has something more current to say than the
+// time: a clone in flight takes the time's slot
+const jobLine = (job: CloneJob): string =>
+	job.status === 'failed'
+		? 'clone failed'
+		: job.status === 'queued'
+			? 'queued'
+			: `${job.phase}${job.percent !== null ? ` ${job.percent}%` : '…'}`;
+
 const RepoRow = ({
 	repo,
 	isCursor,
 	localPath,
+	job,
 	onSelect,
 	onOpen,
 	onContextMenu,
@@ -139,12 +149,23 @@ const RepoRow = ({
 					{repo.default_branch}
 				</span>
 			)}
-			<span
-				className='text-[11px] text-text-muted shrink-0 w-16 text-right'
-				title={repo.updated_at}
-			>
-				{relativeTime(repo.updated_at)}
-			</span>
+			{job && job.status !== 'done' ? (
+				<span
+					className={`text-[11px] shrink-0 text-right truncate max-w-[14rem] ${
+						job.status === 'failed' ? 'text-danger' : 'text-accent'
+					}`}
+					title={job.error ?? jobLine(job)}
+				>
+					{jobLine(job)}
+				</span>
+			) : (
+				<span
+					className='text-[11px] text-text-muted shrink-0 w-16 text-right'
+					title={repo.updated_at}
+				>
+					{relativeTime(repo.updated_at)}
+				</span>
+			)}
 		</div>
 	</div>
 );
@@ -160,7 +181,8 @@ const GithubLane = ({
 	onSelect,
 	onOpen,
 	onContextMenu,
-	onShowLocal
+	onShowLocal,
+	jobs
 }: GithubLaneProps) => {
 	const { payload, status, isOpen, toggleOpen, visible } = github;
 	const login = payload?.cache.login ?? status?.login ?? null;
@@ -248,6 +270,7 @@ const GithubLane = ({
 								repo,
 								isCursor: cursor === repo.full_name,
 								localPath: local[repo.full_name],
+								job: jobs?.get(repo.full_name),
 								onSelect,
 								onOpen,
 								onContextMenu,

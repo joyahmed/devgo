@@ -382,12 +382,16 @@ interface GithubLaneProps {
 	onContextMenu: (repo: GithubRepo, x: number, y: number) => void;
 	/// a row cloned here can jump to its disk row
 	onShowLocal: (path: string) => void;
+	/// clones in flight or just finished, by full_name
+	jobs?: Map<string, CloneJob>;
 }
 
 interface RepoRowProps {
 	repo: GithubRepo;
 	isCursor: boolean;
 	localPath?: string;
+	/// a clone in flight or just finished, shown in the time's slot
+	job?: CloneJob;
 	onSelect: (repo: GithubRepo) => void;
 	onOpen: (repo: GithubRepo) => void;
 	onContextMenu: (repo: GithubRepo, x: number, y: number) => void;
@@ -630,6 +634,7 @@ interface ProjectTreeProps {
 	onRepoContextMenu?: (repo: GithubRepo, x: number, y: number) => void;
 	/// the local mark: select the disk project this repo is cloned at
 	onShowLocal?: (path: string) => void;
+	cloneJobs?: Map<string, CloneJob>;
 	ref?: React.Ref<ProjectTreeHandle>;
 }
 
