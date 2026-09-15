@@ -126,6 +126,29 @@ mod tests {
     use super::*;
 
     #[test]
+    fn ignore_list_skips_matching_folders() {
+        let dir = std::env::temp_dir().join("devgo-scan-ignore-test");
+        let _ = std::fs::remove_dir_all(&dir);
+        for name in ["web", "api", "node_modules", "Archive"] {
+            std::fs::create_dir_all(dir.join(name)).unwrap();
+        }
+        let path = dir.to_string_lossy().to_string();
+
+        let ignore = vec!["node_modules".to_string(), "archive".to_string()];
+        let ScanOutcome::Scanned(projects) =
+            scan_workspace(&path, &[], false, &ignore)
+        else {
+            panic!("local temp dir should scan");
+        };
+        let mut names: Vec<_> =
+            projects.iter().map(|p| p.name.as_str()).collect();
+        names.sort();
+        assert_eq!(names, vec!["api", "web"]);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn classifies_filesystem_kinds() {
         assert_eq!(detect_file_system(r"G:\01_tauri"), "Windows");
         assert_eq!(
