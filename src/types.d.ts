@@ -422,6 +422,8 @@ interface ProjectTreeProps {
 	onTogglePin?: (p: Project) => void;
 	onOpenRemote?: (p: Project) => void;
 	onContextMenu?: (p: Project, x: number, y: number) => void;
+	/// right-click on a workspace row; workspaces had no menu at all
+	onWorkspaceContextMenu?: (workspace: string, x: number, y: number) => void;
 	ref?: React.Ref<ProjectTreeHandle>;
 }
 

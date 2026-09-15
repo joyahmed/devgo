@@ -23,6 +23,7 @@ import { useProjects } from './hooks/useProjects';
 import { useRuntime } from './hooks/useRuntime';
 import { useTargets } from './hooks/useTargets';
 import { useWorkspaces } from './hooks/useWorkspaces';
+import { lastSegment } from './paths';
 import { isTypingTarget, matches, prettyKeys, shortcutFor } from './shortcuts';
 
 // Settings pulls in WorkspaceManager and the shortcut table, none of which the
@@ -434,6 +435,35 @@ const AppInner = () => {
 		}
 	};
 
+	// acts on the row that was right-clicked, never on indexOf(selected
+	// .workspace): that indirection is what made Delete fall through when the
+	// lookup missed
+	const buildWorkspaceMenu = (ws: string): MenuEntry[] => [
+		{
+			label: 'Refresh this workspace',
+			hint: prettyKeys(shortcutFor('refresh')),
+			onClick: handleRefresh
+		},
+		{
+			label: 'Reveal in Explorer',
+			onClick: () =>
+				invoke('reveal_in_explorer', { path: ws }).catch(e =>
+					toast(showError(e))
+				)
+		},
+		'separator',
+		{
+			label: `Remove ${lastSegment(ws)}`,
+			hint: prettyKeys(shortcutFor('removeWorkspace')),
+			danger: true,
+			onClick: () => {
+				const idx = workspaces.indexOf(ws);
+				if (idx >= 0) setRemoveIndex(idx);
+				else toast(`${lastSegment(ws)} is no longer in the list`, 'error');
+			}
+		}
+	];
+
 	const buildMenu = (p: Project): MenuEntry[] => {
 		const hint = (id: ShortcutId) => prettyKeys(shortcutFor(id));
 		const remote = git.get(p.full_path)?.remote;
@@ -749,7 +779,9 @@ const AppInner = () => {
 								onTogglePin: handleTogglePin,
 								onOpenRemote: handleOpenRemote,
 								onContextMenu: (p: Project, x: number, y: number) =>
-									setMenu({ project: p, x, y })
+									setMenu({ project: p, x, y }),
+								onWorkspaceContextMenu: (ws: string, x: number, y: number) =>
+									setScriptMenu({ x, y, items: buildWorkspaceMenu(ws) })
 							}}
 						/>
 						<ActionButtons

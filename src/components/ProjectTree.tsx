@@ -254,6 +254,7 @@ const ProjectTree = ({
 	onTogglePin,
 	onOpenRemote,
 	onContextMenu,
+	onWorkspaceContextMenu,
 	ref
 }: ProjectTreeProps) => {
 	const [collapsed, setCollapsed] = useState<Set<string>>(loadCollapsed);
@@ -458,6 +459,10 @@ const ProjectTree = ({
 							<div
 								className={`${col} px-3 py-2 cursor-pointer hover:bg-bg-hover/50 select-none`}
 								onClick={() => toggle(ws)}
+								onContextMenu={e => {
+									e.preventDefault();
+									onWorkspaceContextMenu?.(ws, e.clientX, e.clientY);
+								}}
 								title={ws}
 							>
 								<div className='flex items-center gap-2 text-text-secondary min-w-0'>
