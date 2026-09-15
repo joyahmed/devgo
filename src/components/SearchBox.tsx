@@ -56,7 +56,7 @@ const SearchBox = ({
 				{value && (
 					<Button
 						variant='ghost'
-						className='text-text-secondary'
+						className='text-15 text-text-secondary'
 						title='Clear'
 						onClick={() => onChange('')}
 					>

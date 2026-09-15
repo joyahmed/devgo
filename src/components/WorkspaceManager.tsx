@@ -35,7 +35,7 @@ const WorkspaceManager = ({
 							</span>
 							<Button
 								variant='ghost'
-								className='px-2 hover:text-danger hover:bg-danger/10'
+								className='text-15 px-2 hover:text-danger hover:bg-danger/10'
 								onClick={() => onRemove(i)}
 							>
 								&#10005;
