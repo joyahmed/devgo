@@ -15,6 +15,18 @@ const COLUMNS = [
 	{ label: 'Count', className: 'text-right' }
 ];
 
+// the collapse set is the user's, saved; search is a view on top of it
+const COLLAPSED_KEY = 'devgo.collapsed';
+
+const loadCollapsed = (): Set<string> => {
+	try {
+		const raw = JSON.parse(localStorage.getItem(COLLAPSED_KEY) ?? '[]');
+		return new Set(Array.isArray(raw) ? (raw as string[]) : []);
+	} catch {
+		return new Set();
+	}
+};
+
 const pill =
 	'inline-block px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider rounded-full bg-bg-panel border border-border shrink-0';
 
@@ -244,7 +256,9 @@ const ProjectTree = ({
 	onContextMenu,
 	ref
 }: ProjectTreeProps) => {
-	const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+	const [collapsed, setCollapsed] = useState<Set<string>>(loadCollapsed);
+	const searching = query.trim().length > 0;
+	const isCollapsed = (ws: string) => !searching && collapsed.has(ws);
 
 	const grouped = new Map<string, Project[]>();
 	for (const p of projects) {
@@ -260,7 +274,7 @@ const ProjectTree = ({
 
 	const visible: Project[] = [...pinned];
 	for (const [ws, wsProjects] of grouped) {
-		if (!collapsed.has(ws)) {
+		if (!isCollapsed(ws)) {
 			visible.push(...wsProjects.filter(p => !pinnedPaths.has(p.full_path)));
 		}
 	}
@@ -280,6 +294,7 @@ const ProjectTree = ({
 			const next = new Set(prev);
 			if (want) next.add(ws);
 			else next.delete(ws);
+			localStorage.setItem(COLLAPSED_KEY, JSON.stringify([...next]));
 			return next;
 		});
 	};
@@ -290,27 +305,6 @@ const ProjectTree = ({
 		const target = to === 'top' ? visible[0] : visible[visible.length - 1];
 		if (target) onSelect(target);
 	};
-
-	// Searching expands everything; otherwise only the selected workspace stays
-	// open. Both were effects that called setCollapsed synchronously, which
-	// cascades an extra render on every keystroke. This is React's documented
-	// "adjust state while rendering" pattern instead: recompute the moment the
-	// inputs actually change, and leave manual toggles alone in between.
-	const derivedKey = `${query.trim() ? 'search' : 'browse'}|${
-		selected?.workspace ?? ''
-	}|${[...grouped.keys()].join('')}`;
-	const [lastKey, setLastKey] = useState(derivedKey);
-	if (derivedKey !== lastKey) {
-		setLastKey(derivedKey);
-		setCollapsed(() => {
-			if (query.trim()) return new Set<string>();
-			const next = new Set<string>();
-			for (const [ws] of grouped) {
-				if (ws !== selected?.workspace) next.add(ws);
-			}
-			return next;
-		});
-	}
 
 	useEffect(() => {
 		const launch = () => {
@@ -335,7 +329,7 @@ const ProjectTree = ({
 		// a combo.
 		const combos: [ShortcutId, () => void][] = [
 			['togglePin', () => selected && onTogglePin?.(selected)],
-			['toggleWorkspace', () => ws && setCollapsedFor(ws, !collapsed.has(ws))]
+			['toggleWorkspace', () => ws && setCollapsedFor(ws, !isCollapsed(ws))]
 		];
 		const handler = (e: globalThis.KeyboardEvent) => {
 			const modified = e.ctrlKey || e.metaKey || e.altKey;
@@ -363,14 +357,7 @@ const ProjectTree = ({
 	const stateFor = (ws: string) =>
 		workspaceStates?.find(s => s.workspace === ws);
 
-	const toggle = (ws: string) => {
-		setCollapsed(prev => {
-			const next = new Set(prev);
-			if (next.has(ws)) next.delete(ws);
-			else next.add(ws);
-			return next;
-		});
-	};
+	const toggle = (ws: string) => setCollapsedFor(ws, !isCollapsed(ws));
 
 	if (loading) {
 		return (
@@ -460,7 +447,7 @@ const ProjectTree = ({
 				)}
 
 				{workspaces.map(([ws, wsProjects]) => {
-					const isOpen = !collapsed.has(ws);
+					const isOpen = !isCollapsed(ws);
 					const count = wsProjects.length;
 					const fs = wsProjects[0]?.file_system ?? 'Windows';
 					const wsState = stateFor(ws);
