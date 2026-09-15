@@ -37,7 +37,7 @@ const Onboarding = ({ onAdd, onAddMany, onError }: OnboardingProps) => {
 
 	return (
 		<div className='flex-1 flex items-center justify-center min-h-0 overflow-y-auto'>
-			<div className='w-[min(560px,92%)] py-8 text-center'>
+			<div className='w-[min(720px,92%)] py-8 text-center'>
 				<div className='text-4xl text-accent mb-3'>&#10022;</div>
 				<h2 className='text-xl font-bold text-text-primary mb-1'>
 					Welcome to DevGo

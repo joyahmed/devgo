@@ -465,7 +465,7 @@ const Settings = ({
 			onClick={onClose}
 		>
 			<div
-				className='bg-bg-secondary border border-border rounded-xl w-[min(760px,92vw)] h-[min(560px,88vh)] flex overflow-hidden shadow-2xl'
+				className='bg-bg-secondary border border-border rounded-xl w-[min(1040px,92vw)] h-[min(760px,86vh)] flex overflow-hidden shadow-2xl'
 				onClick={e => e.stopPropagation()}
 			>
 				<nav className='w-44 shrink-0 border-r border-border bg-bg-primary/40 p-2 flex flex-col gap-1'>

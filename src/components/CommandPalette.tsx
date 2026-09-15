@@ -85,7 +85,7 @@ const CommandPalette = ({ commands, onClose }: CommandPaletteProps) => {
 			onClick={onClose}
 		>
 			<div
-				className='w-[min(640px,92vw)] max-h-[70vh] flex flex-col bg-bg-secondary border border-border rounded-xl shadow-2xl overflow-hidden'
+				className='w-[min(780px,92vw)] max-h-[70vh] flex flex-col bg-bg-secondary border border-border rounded-xl shadow-2xl overflow-hidden'
 				onClick={e => e.stopPropagation()}
 			>
 				<input

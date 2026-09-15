@@ -33,7 +33,7 @@ const ConfirmDialog = ({
 			onClick={onCancel}
 		>
 			<div
-				className='bg-bg-secondary border border-border rounded-xl p-6 max-w-sm w-90 shadow-2xl'
+				className='bg-bg-secondary border border-border rounded-xl p-6 w-[min(460px,92vw)] shadow-2xl'
 				onClick={e => e.stopPropagation()}
 			>
 				<h3 className='text-base font-bold mb-2'>{title}</h3>
