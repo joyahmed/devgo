@@ -71,6 +71,8 @@ const SORT_MODES: { mode: SortMode; label: string }[] = [
 	{ mode: 'name', label: 'A–Z' }
 ];
 
+const HINTS_KEY = 'devgo.hints';
+
 const AppInner = () => {
 	const maximized = useMaximized();
 	const {
@@ -161,6 +163,23 @@ const AppInner = () => {
 	// The search box keeps focus under the dialog's backdrop, and its own
 	// Escape handler would clear the query on the keystroke that closes the
 	// dialog. So opening Settings takes focus away and closing it gives it back.
+	// the recent / frequent words on rows: off unless Appearance says so
+	const [showHints, setShowHints] = useState(() => {
+		try {
+			return localStorage.getItem(HINTS_KEY) === 'on';
+		} catch {
+			return false;
+		}
+	});
+	const toggleHints = () => {
+		try {
+			localStorage.setItem(HINTS_KEY, showHints ? 'off' : 'on');
+		} catch {
+			// per-viewer convenience only
+		}
+		setShowHints(!showHints);
+	};
+
 	const [showSettings, setShowSettings] = useState(false);
 	const [settingsPanel, setSettingsPanel] = useState<string | undefined>();
 	const openSettings = (panel?: string) => {
@@ -991,7 +1010,9 @@ const AppInner = () => {
 						},
 						onSummonChanged: setSummonHotkey,
 						targets,
-						github
+						github,
+						showHints,
+						onToggleHints: toggleHints
 					}}
 				/>
 			</Suspense>
@@ -1422,7 +1443,8 @@ const AppInner = () => {
 								onGithubAddMenu: (x: number, y: number) =>
 									setGithubAddMenu({ x, y }),
 								onGroupContextMenu: (name: string, x: number, y: number) =>
-									setGroupHeaderMenu({ name, x, y })
+									setGroupHeaderMenu({ name, x, y }),
+								showHints
 							}}
 						/>
 					</>

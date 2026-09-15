@@ -517,6 +517,13 @@ interface SettingsProps {
 	/// owned by App for the same reason targets is: the panel's Refresh
 	/// and the lane's header must agree on "refreshing"
 	github: GithubState;
+	showHints: boolean;
+	onToggleHints: () => void;
+}
+
+interface AppearancePanelProps {
+	showHints: boolean;
+	onToggleHints: () => void;
 }
 
 interface ShortcutTableProps {
@@ -756,6 +763,8 @@ interface ProjectTreeProps {
 	cloneJobs?: Map<string, CloneJob>;
 	onGithubAddMenu?: (x: number, y: number) => void;
 	onGroupContextMenu?: (name: string, x: number, y: number) => void;
+	/// the recent / frequent words on rows, off unless Appearance says so
+	showHints?: boolean;
 	ref?: React.Ref<ProjectTreeHandle>;
 }
 
@@ -775,6 +784,8 @@ interface StatusPillProps {
 
 interface RowMetaProps {
 	project: Project;
+	/// whether the recent / frequent words render (Appearance)
+	showHints?: boolean;
 	rank?: ProjectRank;
 	git?: GitInfo;
 	tech?: ProjectTech;
@@ -792,6 +803,7 @@ interface ProjectRowProps {
 	/// a github row has the cursor: the selection stays, dimmed, so the
 	/// strong blue is always the row Enter acts on
 	quiet?: boolean;
+	showHints?: boolean;
 	rank?: ProjectRank;
 	git?: GitInfo;
 	tech?: ProjectTech;

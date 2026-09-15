@@ -163,6 +163,7 @@ const GitBadge = ({ info, onOpenBranches }: GitBadgeProps) => {
 /// The right-hand cell of a project row: git state, frecency hint, pin star.
 const RowMeta = ({
 	project,
+	showHints,
 	rank,
 	git,
 	tech,
@@ -177,7 +178,10 @@ const RowMeta = ({
 				onOpenBranches: (x: number, y: number) => onOpenBranches?.(project, x, y)
 			}}
 		/>
-		{rank?.hint && (
+		{/* recent / frequent: off unless Appearance says otherwise. the
+		    frecency sort already puts them first, and they were the fourth
+		    item in a five-item cluster on every row */}
+		{showHints && rank?.hint && (
 			<span className='text-11 text-text-muted shrink-0'>
 				{rank.hint}
 			</span>
@@ -213,6 +217,7 @@ const ProjectRow = ({
 	pinnedStrip,
 	stale,
 	quiet,
+	showHints,
 	rank,
 	git,
 	tech,
@@ -252,7 +257,9 @@ const ProjectRow = ({
 			{project.name}
 		</div>
 		<FsCell fs={project.file_system} />
-		<RowMeta {...{ project, rank, git, tech, onTogglePin, onOpenBranches }} />
+		<RowMeta
+			{...{ project, showHints, rank, git, tech, onTogglePin, onOpenBranches }}
+		/>
 	</div>
 );
 
@@ -282,6 +289,7 @@ const ProjectTree = ({
 	cloneJobs,
 	onGithubAddMenu,
 	onGroupContextMenu,
+	showHints,
 	ref
 }: ProjectTreeProps) => {
 	const [collapsed, setCollapsed] = useState<Set<string>>(loadCollapsed);
@@ -627,6 +635,7 @@ const ProjectTree = ({
 		project,
 		selected: selected?.full_path === project.full_path,
 		quiet: cursorLit,
+		showHints,
 		rank: ranks?.get(project.full_path),
 		git: gitInfo?.get(project.full_path),
 		tech: techInfo?.get(project.full_path),

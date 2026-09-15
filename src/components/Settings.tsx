@@ -519,7 +519,13 @@ const SWATCHES: ThemeKey[] = [
 ];
 
 // no reload, no round trip: a theme is CSS variables and lives in localStorage
-const AppearancePanel = () => {
+// on or off; the same pair the tmux and github panels use
+const HINT_MODES = [
+	{ label: 'On', value: true },
+	{ label: 'Off', value: false }
+];
+
+const AppearancePanel = ({ showHints, onToggleHints }: AppearancePanelProps) => {
 	const [current, setCurrent] = useState(savedThemeId());
 	const pick = (id: string) => {
 		setTheme(id);
@@ -527,7 +533,8 @@ const AppearancePanel = () => {
 	};
 
 	return (
-		<div>
+		<div className='flex flex-col gap-5'>
+			<div>
 			<h4 className={heading}>Theme</h4>
 			<div className='grid grid-cols-2 gap-2.5'>
 				{THEMES.map(t => (
@@ -554,6 +561,27 @@ const AppearancePanel = () => {
 						</span>
 					</Button>
 				))}
+			</div>
+			</div>
+			<div>
+				<h4 className={heading}>Hint words</h4>
+				<p className='text-13 text-text-muted mb-2'>
+					<em>recent</em> and <em>frequent</em> on project rows. Off by
+					default: the frecency sort already puts those projects first, and
+					the word was one more thing on every row.
+				</p>
+				<div className='flex items-center gap-2'>
+					{HINT_MODES.map(m => (
+						<Button
+							key={m.label}
+							variant='target'
+							aria-current={showHints === m.value ? 'true' : undefined}
+							onClick={() => showHints !== m.value && onToggleHints()}
+						>
+							{m.label}
+						</Button>
+					))}
+				</div>
 			</div>
 		</div>
 	);
@@ -652,7 +680,9 @@ const Settings = ({
 	onImported,
 	onSummonChanged,
 	targets,
-	github
+	github,
+	showHints,
+	onToggleHints
 }: SettingsProps) => {
 
 	// The registry. A later chapter adds a panel by adding an object here; the
@@ -717,7 +747,7 @@ const Settings = ({
 		{
 			id: 'appearance',
 			label: 'Appearance',
-			render: () => <AppearancePanel />
+			render: () => <AppearancePanel {...{ showHints, onToggleHints }} />
 		},
 		{
 			id: 'config',
