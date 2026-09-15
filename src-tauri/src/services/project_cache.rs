@@ -39,6 +39,22 @@ impl ProjectCacheStore {
         self.entries.get(workspace)
     }
 
+    // every cached project, no scan
+    pub fn all_projects(&self) -> Vec<Project> {
+        self.entries
+            .values()
+            .flat_map(|w| w.projects.iter().cloned())
+            .collect()
+    }
+
+    pub fn find(&self, full_path: &str) -> Option<Project> {
+        self.entries
+            .values()
+            .flat_map(|w| w.projects.iter())
+            .find(|p| p.full_path == full_path)
+            .cloned()
+    }
+
     /// Record a successful scan.
     ///
     /// There is deliberately no counterpart for a failed one. An unavailable
