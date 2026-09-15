@@ -197,6 +197,14 @@ impl PreferencesStore {
             .unwrap_or_else(|| DEFAULT_SUMMON_HOTKEY.to_string())
     }
 
+    pub fn set_summon_hotkey(
+        &mut self,
+        accelerator: Option<String>,
+    ) -> Result<(), String> {
+        self.prefs.summon_hotkey = accelerator;
+        self.save()
+    }
+
     pub fn default_target(&self, kind: TargetKind) -> Option<String> {
         match kind {
             TargetKind::Editor => self.prefs.default_editor.clone(),
