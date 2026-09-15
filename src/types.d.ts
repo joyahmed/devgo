@@ -350,7 +350,17 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
 	ref?: React.Ref<HTMLButtonElement>;
 }
 
+/// the footer: the launch groups, and the palette's door
 interface StatusBarProps {
+	hasSelection: boolean;
+	selectionIsWsl: boolean;
+	editors: LaunchTarget[];
+	terminals: LaunchTarget[];
+	defaults: Record<string, string>;
+	onEditor: (targetId?: string) => void;
+	onTerminal: (targetId?: string) => void;
+	onBoth: () => void;
+	onManageTargets: () => void;
 	onOpenPalette: () => void;
 }
 
@@ -780,18 +790,6 @@ interface TargetGroupProps {
 	hasSelection: boolean;
 	shortcut: string;
 	onPick: (id?: string) => void;
-}
-
-interface ActionButtonsProps {
-	hasSelection: boolean;
-	selectionIsWsl: boolean;
-	editors: LaunchTarget[];
-	terminals: LaunchTarget[];
-	defaults: Record<string, string>;
-	onEditor: (targetId?: string) => void;
-	onTerminal: (targetId?: string) => void;
-	onBoth: () => void;
-	onManageTargets: () => void;
 }
 
 /* Toast */

@@ -4,7 +4,6 @@ import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
-import ActionButtons from './components/ActionButtons';
 import AddRepo from './components/AddRepo';
 import Button from './components/Button';
 import ClonePicker from './components/ClonePicker';
@@ -1368,19 +1367,6 @@ const AppInner = () => {
 									setGroupHeaderMenu({ name, x, y })
 							}}
 						/>
-						<ActionButtons
-							{...{
-								hasSelection: selected !== null,
-								selectionIsWsl,
-								editors: targets.editors,
-								terminals: targets.terminals,
-								defaults: targets.defaults,
-								onEditor: handleOpenEditor,
-								onTerminal: handleOpenTerminal,
-								onBoth: handleOpenBoth,
-								onManageTargets: () => openSettings('targets')
-							}}
-						/>
 					</>
 				)}
 			</div>
@@ -1393,7 +1379,20 @@ const AppInner = () => {
 				</div>
 			)}
 
-			<StatusBar {...{ onOpenPalette: () => setPaletteOpen(true) }} />
+			<StatusBar
+				{...{
+					hasSelection: selected !== null,
+					selectionIsWsl,
+					editors: targets.editors,
+					terminals: targets.terminals,
+					defaults: targets.defaults,
+					onEditor: handleOpenEditor,
+					onTerminal: handleOpenTerminal,
+					onBoth: handleOpenBoth,
+					onManageTargets: () => openSettings('targets'),
+					onOpenPalette: () => setPaletteOpen(true)
+				}}
+			/>
 		</div>
 	);
 };
