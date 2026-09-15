@@ -428,6 +428,43 @@ pub fn get_default_targets(
 /// without waiting on them. The frontend calls this after the list is on
 /// screen, and again only on an explicit refresh.
 /// The running-distro list, fetched only when some project actually needs it.
+// one project, one read, at the moment of the click
+#[tauri::command]
+pub fn get_project_scripts(
+    project: Project,
+    state: State<AppState>,
+) -> Result<Vec<crate::services::scripts::DevScript>, AppError> {
+    let (tags, pm) = {
+        let cache = state.tech_cache.lock().map_err(lock_err)?;
+        match cache.get(&project.full_path) {
+            Some(t) => (
+                t.tags.iter().map(|s| s.to_string()).collect::<Vec<_>>(),
+                t.package_manager.map(|s| s.to_string()),
+            ),
+            None => (Vec::new(), None),
+        }
+    };
+    let running = running_for(std::slice::from_ref(&project));
+    Ok(crate::services::scripts::for_project(
+        &project,
+        &tags,
+        pm.as_deref(),
+        &running,
+    ))
+}
+
+#[tauri::command]
+pub fn run_script(
+    project: Project,
+    command: String,
+    state: State<AppState>,
+) -> Result<(), AppError> {
+    let info = state.runtime_info.lock().map_err(lock_err)?.clone();
+    let terminal = resolve_target(&state, TargetKind::Terminal, None)?;
+    crate::services::scripts::run(&project, &command, &terminal, &info)?;
+    record_launch(&state, &project)
+}
+
 /// Same liveness gate the scanner uses: neither git state nor a stack badge is
 /// ever worth booting a virtual machine for.
 fn running_for(projects: &[Project]) -> Vec<String> {
