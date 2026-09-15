@@ -62,7 +62,7 @@ const ContextMenu = ({ x, y, items, onClose }: ContextMenuProps) => {
 						>
 							<span className='truncate'>{item.label}</span>
 							{item.hint && (
-								<span className='font-mono text-11 text-text-muted shrink-0'>
+								<span className='font-mono text-11 uppercase text-text-muted shrink-0'>
 									{item.hint}
 								</span>
 							)}
