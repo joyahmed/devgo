@@ -566,6 +566,11 @@ interface RepoMenu {
 	y: number;
 }
 
+/// the clone picker modal; preselect is the row whose menu opened it
+interface ClonePickerRequest {
+	preselect?: string;
+}
+
 interface MenuAction {
 	label: string;
 	hint?: string;

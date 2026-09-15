@@ -5,7 +5,9 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import ActionButtons from './components/ActionButtons';
+import AddRepo from './components/AddRepo';
 import Button from './components/Button';
+import ClonePicker from './components/ClonePicker';
 import CommandPalette from './components/CommandPalette';
 import ConfirmDialog from './components/ConfirmDialog';
 import ContextMenu from './components/ContextMenu';
@@ -19,6 +21,7 @@ import StatusBar from './components/StatusBar';
 import TitleBar from './components/TitleBar';
 import WslControl from './components/WslControl';
 import ToastProvider, { useToast } from './components/Toast';
+import { useClone } from './hooks/useClone';
 import { useGithub } from './hooks/useGithub';
 import { useLaunchActions } from './hooks/useLaunchActions';
 import { useMaximized } from './hooks/useMaximized';
@@ -297,6 +300,25 @@ const AppInner = () => {
 
 	const [repoMenu, setRepoMenu] = useState<RepoMenu | null>(null);
 
+	// clones: the queue lives in the hook. a finished one rescans so the new
+	// project row appears, and re-reads the github payload so its row gains
+	// the local mark
+	const clone = useClone((dest: string) => {
+		toast(`Cloned into ${dest}`, 'success');
+		refresh().catch(() => {});
+		github.reload();
+	});
+	const [clonePicker, setClonePicker] = useState<ClonePickerRequest | null>(
+		null
+	);
+	const [addRepoOpen, setAddRepoOpen] = useState(false);
+	const [githubAddMenu, setGithubAddMenu] = useState<{
+		x: number;
+		y: number;
+	} | null>(null);
+	const canClone =
+		workspaces.length > 0 && (github.payload?.cache.repos.length ?? 0) > 0;
+
 	// the branch popover: the repo on its host, then every branch the last
 	// git fetch left in refs/remotes, read when the chip is clicked and
 	// never in the badge pass; remembered on the project's GitInfo
@@ -359,6 +381,20 @@ const AppInner = () => {
 		return [
 			{ label: 'Open on GitHub', hint: 'Enter', onClick: () => handleOpenRepo(repo) },
 			'separator',
+			// not on disk yet: the door to getting it here. disabled, not
+			// hidden, with no workspace to land in, and it says so
+			...(localPath
+				? []
+				: [
+						{
+							label: 'Clone into…',
+							onClick: () => setClonePicker({ preselect: repo.full_name }),
+							disabled:
+								workspaces.length === 0 ||
+								clone.jobs.get(repo.full_name)?.status === 'running',
+							hint: workspaces.length === 0 ? 'add a workspace first' : undefined
+						}
+					]),
 			{ label: 'Copy clone URL (ssh)', onClick: copyClone(0, 'SSH clone URL') },
 			{
 				label: 'Copy clone URL (https)',
@@ -497,6 +533,24 @@ const AppInner = () => {
 				keywords: ['gh', 'fetch', 'repositories'],
 				disabled: !github.status?.login || github.refreshing,
 				run: github.refresh
+			},
+			{
+				id: 'github.clone',
+				title: 'GitHub: clone repos…',
+				subtitle: canClone
+					? 'tick repos, pick a workspace'
+					: 'needs a workspace and a fetched list',
+				keywords: ['gh', 'git clone', 'download', 'scan'],
+				disabled: !canClone,
+				run: () => setClonePicker({})
+			},
+			{
+				id: 'github.add',
+				title: 'GitHub: add repo by name…',
+				subtitle: 'owner/name or a URL. Any owner, no clone',
+				keywords: ['gh', 'watch', 'follow', 'url'],
+				disabled: !github.status?.login,
+				run: () => setAddRepoOpen(true)
 			},
 			{
 				id: 'github.profile',
@@ -902,6 +956,79 @@ const AppInner = () => {
 				/>
 			)}
 
+			{githubAddMenu && (
+				<ContextMenu
+					{...{
+						x: githubAddMenu.x,
+						y: githubAddMenu.y,
+						items: [
+							{
+								label: 'Clone repos…',
+								onClick: () => setClonePicker({}),
+								disabled: !canClone,
+								hint: workspaces.length === 0 ? 'add a workspace first' : undefined
+							},
+							{
+								label: 'Add repo by name…',
+								onClick: () => setAddRepoOpen(true),
+								disabled: !github.status?.login
+							}
+						],
+						onClose: () => setGithubAddMenu(null)
+					}}
+				/>
+			)}
+
+			<Modal
+				{...{
+					open: clonePicker !== null,
+					title: 'Clone from GitHub',
+					onClose: () => setClonePicker(null),
+					width: 'w-[min(680px,92vw)]'
+				}}
+			>
+				{clonePicker && (
+					<ClonePicker
+						{...{
+							repos: github.payload?.cache.repos ?? [],
+							local: github.payload?.local ?? {},
+							workspaces,
+							preselect: clonePicker.preselect,
+							onStart: (repos: GithubRepo[], workspace: string) => {
+								clone.enqueue(repos, workspace);
+								toast(
+									repos.length === 1
+										? `Cloning ${repos[0].name} into ${lastSegment(workspace)}…`
+										: `Cloning ${repos.length} repos into ${lastSegment(workspace)}, one at a time…`,
+									'info'
+								);
+							},
+							onDone: () => setClonePicker(null)
+						}}
+					/>
+				)}
+			</Modal>
+
+			<Modal
+				{...{
+					open: addRepoOpen,
+					title: 'Add a repo by name',
+					onClose: () => setAddRepoOpen(false)
+				}}
+			>
+				{addRepoOpen && (
+					<AddRepo
+						{...{
+							onAdded: (r: GithubRepo) => {
+								toast(`Added ${r.full_name} to the GitHub list`, 'success');
+								github.reload();
+							},
+							onDone: () => setAddRepoOpen(false)
+						}}
+					/>
+				)}
+			</Modal>
+
 			{repoMenu && (
 				<ContextMenu
 					{...{
@@ -1053,7 +1180,10 @@ const AppInner = () => {
 								onRepoOpen: handleOpenRepo,
 								onRepoContextMenu: (r: GithubRepo, x: number, y: number) =>
 									setRepoMenu({ repo: r, x, y }),
-								onShowLocal: showLocal
+								onShowLocal: showLocal,
+								cloneJobs: clone.jobs,
+								onGithubAddMenu: (x: number, y: number) =>
+									setGithubAddMenu({ x, y })
 							}}
 						/>
 						<ActionButtons
