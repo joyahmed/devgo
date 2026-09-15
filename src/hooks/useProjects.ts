@@ -14,6 +14,13 @@ const RETRY_DELAYS = [2000, 5000, 15000];
 const isRetryable = (w: WorkspaceState) =>
 	w.status !== 'live' && w.reason !== 'distro_stopped';
 
+// focus used to refresh unconditionally, and a refresh is nine wsl.exe and
+// ~20 git.exe for six workspaces; every launch opens another window and
+// hands focus back, so each launch paid all of it on the way back. A minute
+// makes two summons cost one pass and still shows a distro started or a
+// branch switched by the next visit
+const FOCUS_REFRESH_COOLDOWN_MS = 60_000;
+
 const SORT_KEY = 'devgo.sortMode';
 const SORT_CYCLE: SortMode[] = ['frecency', 'activity', 'name'];
 
@@ -33,6 +40,14 @@ export const useProjects = () => {
 	);
 	const retryTimer = useRef<number | null>(null);
 	const retryStep = useRef(0);
+	// when the last pass landed and whether one is in flight: the focus
+	// handler reads them, nothing renders from them
+	const lastPassAt = useRef(0);
+	const inFlight = useRef(false);
+	// the paths the badge pass last covered; a payload with a path not in
+	// here (a workspace that just attached) is the one case a non-explicit
+	// refresh still pays for git
+	const badgedPaths = useRef<Set<string>>(new Set());
 
 	// Git and stack detection both spawn processes, so neither gates the list.
 	// These fire after the payload is already on screen and merge in as they
@@ -51,25 +66,41 @@ export const useProjects = () => {
 			.catch(() => {});
 	};
 
-	const apply = (payload: ProjectsPayload) => {
+	// badges used to run on every apply, which is how one focus gain turned
+	// into three backend commands; get_git_info's own comment said "only on
+	// an explicit refresh" for ten chapters
+	const apply = (payload: ProjectsPayload, withBadges: boolean) => {
 		setProjects(payload.projects);
 		setWorkspaceStates(payload.workspaces);
 		setRanks(new Map(payload.ranks.map(r => [r.full_path, r])));
-		loadDetails(payload.projects);
+		lastPassAt.current = Date.now();
+		const unseen = payload.projects.some(
+			p => !badgedPaths.current.has(p.full_path)
+		);
+		if (withBadges || unseen) {
+			badgedPaths.current = new Set(payload.projects.map(p => p.full_path));
+			loadDetails(payload.projects);
+		}
 		return payload;
 	};
 
-	const refresh = async (force = false) => {
+	// force is the explicit refresh, the only path allowed to boot a stopped
+	// distro, and it always re-reads badges
+	const runPass = async (force: boolean, withBadges: boolean) => {
+		inFlight.current = true;
 		setLoading(true);
 		try {
 			const payload = force
 				? await invoke<ProjectsPayload>('refresh_projects', { force: true })
 				: await invoke<ProjectsPayload>('get_projects');
-			return apply(payload);
+			return apply(payload, force || withBadges);
 		} finally {
+			inFlight.current = false;
 			setLoading(false);
 		}
 	};
+
+	const refresh = (force = false) => runPass(force, false);
 
 	// Schedule a retry whenever something is recoverably missing. Cleared as soon
 	// as a pass comes back with nothing left to retry.
@@ -97,14 +128,19 @@ export const useProjects = () => {
 		};
 	}, [workspaceStates]);
 
-	// Summoning the window should show a current list. Resets the retry budget so
-	// a workspace that came back is picked up promptly.
+	// Summoning the window should show a current list, but not at any price:
+	// focus is the one trigger the user does not choose, so it is the one
+	// that is rate-limited. Skipped while a pass is in flight (the window
+	// takes focus as it first appears) and while the last one is younger
+	// than the cooldown. The retry budget still resets on every focus.
 	useEffect(() => {
 		const unlisten = getCurrentWindow().onFocusChanged(
 			({ payload: focused }) => {
 				if (!focused) return;
 				retryStep.current = 0;
-				refresh().catch(() => {});
+				if (inFlight.current) return;
+				if (Date.now() - lastPassAt.current < FOCUS_REFRESH_COOLDOWN_MS) return;
+				runPass(false, true).catch(() => {});
 			}
 		);
 		return () => {
@@ -116,7 +152,7 @@ export const useProjects = () => {
 	// it still exists. Runs exactly once — re-running it after a rescan would
 	// steal the selection the user just made.
 	useEffect(() => {
-		refresh()
+		runPass(false, true)
 			.then(payload =>
 				invoke<LastProject | null>('get_last_project')
 					.then(last => {
