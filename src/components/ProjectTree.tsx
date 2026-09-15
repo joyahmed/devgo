@@ -1,4 +1,4 @@
-import { useEffect, useImperativeHandle, useState } from 'react';
+import { useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { lastSegment } from '../paths';
 import { isTypingTarget, matches, shortcutFor } from '../shortcuts';
 import Button from './Button';
@@ -17,6 +17,8 @@ const COLUMNS = [
 
 // the collapse set is the user's, saved; search is a view on top of it
 const COLLAPSED_KEY = 'devgo.collapsed';
+// pixels of travel before a press on a header becomes a drag
+const DRAG_THRESHOLD = 4;
 
 const loadCollapsed = (): Set<string> => {
 	try {
@@ -256,6 +258,7 @@ const ProjectTree = ({
 	onContextMenu,
 	onWorkspaceContextMenu,
 	workspaceOrder,
+	onReorder,
 	ref
 }: ProjectTreeProps) => {
 	const [collapsed, setCollapsed] = useState<Set<string>>(loadCollapsed);
@@ -277,6 +280,83 @@ const ProjectTree = ({
 	const rank = new Map((workspaceOrder ?? []).map((w, i) => [w, i]));
 	const at = (ws: string) => rank.get(ws) ?? Number.MAX_SAFE_INTEGER;
 	const entries = [...grouped].sort(([a], [b]) => at(a) - at(b));
+
+	// move ws to sit before or after target and hand back the whole order:
+	// the store can check a permutation, it cannot check a move
+	const moveWorkspace = (ws: string, target: string, after: boolean) => {
+		if (!onReorder || ws === target) return;
+		const without = (workspaceOrder ?? []).filter(w => w !== ws);
+		const i = without.indexOf(target);
+		if (i < 0) return;
+		without.splice(after ? i + 1 : i, 0, ws);
+		onReorder(without);
+	};
+
+	// pointer events, not the html5 drag api: tauri owns os drag-drop on
+	// this window (that is how a dropped folder becomes a workspace), and on
+	// windows that swallows every dragstart in the webview. press, move
+	// past a threshold, follow the pointer with elementFromPoint, release
+	const [dragging, setDragging] = useState<string | null>(null);
+	const [drop, setDrop] = useState<{ ws: string; after: boolean } | null>(
+		null
+	);
+	const drag = useRef<{ ws: string; startY: number; active: boolean } | null>(
+		null
+	);
+	// a finished drag ends with a pointerup on the header, and the browser
+	// follows it with a click, which toggles the workspace; eat that one
+	const swallowClick = useRef(false);
+
+	const dropTargetAt = (x: number, y: number) => {
+		const el = document
+			.elementFromPoint(x, y)
+			?.closest<HTMLElement>('[data-ws-header]');
+		if (!el) return null;
+		const r = el.getBoundingClientRect();
+		// which half of the row decides before or after, so the line is honest
+		return { ws: el.dataset.wsHeader ?? '', after: y > r.top + r.height / 2 };
+	};
+
+	const headerPointerDown = (
+		e: React.PointerEvent<HTMLDivElement>,
+		ws: string
+	) => {
+		if (!onReorder || e.button !== 0) return;
+		drag.current = { ws, startY: e.clientY, active: false };
+	};
+
+	const headerPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+		const d = drag.current;
+		if (!d) return;
+		if (!d.active) {
+			if (Math.abs(e.clientY - d.startY) < DRAG_THRESHOLD) return;
+			d.active = true;
+			setDragging(d.ws);
+			// keeps the moves coming after the pointer leaves the header
+			e.currentTarget.setPointerCapture(e.pointerId);
+		}
+		const t = dropTargetAt(e.clientX, e.clientY);
+		const next = t && t.ws !== d.ws ? t : null;
+		setDrop(prev =>
+			prev?.ws === next?.ws && prev?.after === next?.after ? prev : next
+		);
+	};
+
+	const endDrag = (e: React.PointerEvent<HTMLDivElement>, commit: boolean) => {
+		const d = drag.current;
+		drag.current = null;
+		if (!d?.active) return;
+		if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+			e.currentTarget.releasePointerCapture(e.pointerId);
+		}
+		swallowClick.current = true;
+		if (commit) {
+			const t = dropTargetAt(e.clientX, e.clientY);
+			if (t && t.ws !== d.ws) moveWorkspace(d.ws, t.ws, t.after);
+		}
+		setDragging(null);
+		setDrop(null);
+	};
 
 	// Pinned rows come first for keyboard navigation, and are then skipped in
 	// the tree below so arrowing down never lands on the same project twice.
@@ -464,15 +544,33 @@ const ProjectTree = ({
 
 					return (
 						<div key={ws}>
+							{/* the header is the handle, open or collapsed, and the only
+							    thing that accepts a drop */}
 							<div
-								className={`${col} px-3 py-2 cursor-pointer hover:bg-bg-hover/50 select-none`}
-								onClick={() => toggle(ws)}
+								className={`${col} relative px-3 py-2 cursor-pointer hover:bg-bg-hover/50 select-none ${dragging === ws ? 'opacity-40' : ''}`}
+								data-ws-header={ws}
+								onPointerDown={e => headerPointerDown(e, ws)}
+								onPointerMove={headerPointerMove}
+								onPointerUp={e => endDrag(e, true)}
+								onPointerCancel={e => endDrag(e, false)}
+								onClick={() => {
+									if (swallowClick.current) {
+										swallowClick.current = false;
+										return;
+									}
+									toggle(ws);
+								}}
 								onContextMenu={e => {
 									e.preventDefault();
 									onWorkspaceContextMenu?.(ws, e.clientX, e.clientY);
 								}}
 								title={ws}
 							>
+								{drop?.ws === ws && (
+									<div
+										className={`absolute left-4 right-4 h-0.5 bg-accent rounded pointer-events-none ${drop.after ? 'bottom-0' : 'top-0'}`}
+									/>
+								)}
 								<div className='flex items-center gap-2 text-text-secondary min-w-0'>
 									<span
 										className={`text-xs shrink-0 ${isOpen ? 'text-accent' : 'text-text-muted'}`}

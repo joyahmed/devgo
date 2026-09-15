@@ -460,6 +460,8 @@ interface ProjectTreeProps {
 	/// the store's order; without it the tree fell back to first-seen order
 	/// of the name-sorted project list
 	workspaceOrder?: string[];
+	/// the FULL new order after a drag or an Alt+Arrow move
+	onReorder?: (order: string[]) => void;
 	ref?: React.Ref<ProjectTreeHandle>;
 }
 

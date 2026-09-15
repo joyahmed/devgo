@@ -49,7 +49,11 @@ const showError = (e: unknown): string => {
 const AppInner = () => {
 	const runtime = useRuntime();
 	const maximized = useMaximized();
-	const { workspaces, refresh: refreshWorkspaces } = useWorkspaces();
+	const {
+		workspaces,
+		refresh: refreshWorkspaces,
+		reorder: reorderWorkspaces
+	} = useWorkspaces();
 	const {
 		filtered,
 		query,
@@ -857,7 +861,14 @@ const AppInner = () => {
 									setMenu({ project: p, x, y }),
 								onWorkspaceContextMenu: (ws: string, x: number, y: number) =>
 									setScriptMenu({ x, y, items: buildWorkspaceMenu(ws) }),
-								workspaceOrder: workspaces
+								workspaceOrder: workspaces,
+								// the store may refuse an order built from a stale list; the
+								// message says to refresh, and refreshing is what fixes it
+								onReorder: (order: string[]) =>
+									reorderWorkspaces(order).catch(e => {
+										toast(showError(e));
+										refreshWorkspaces();
+									})
 							}}
 						/>
 						<ActionButtons
