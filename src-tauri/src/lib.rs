@@ -414,6 +414,7 @@ pub fn run() {
             commands::get_remote_branches,
             commands::get_github_repos,
             commands::get_github_status,
+            commands::refresh_github_repos,
             commands::set_github_orgs,
             commands::github_clone_urls,
             commands::reveal_in_explorer,

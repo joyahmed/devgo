@@ -2,7 +2,7 @@ use serde::Serialize;
 use std::collections::HashMap;
 use std::os::windows::process::CommandExt;
 use std::sync::Mutex;
-use tauri::State;
+use tauri::{Manager, State};
 
 use crate::error::AppError;
 use crate::models::target::{LaunchTarget, TargetKind};
@@ -933,6 +933,65 @@ pub fn get_github_repos(
 #[tauri::command]
 pub fn get_github_status() -> GhStatus {
     github::status()
+}
+
+/// Fetch the repo list on a spawned thread and return before it finishes.
+///
+/// Twenty seconds must never sit under a click. The thread runs gh,
+/// writes the cache and emits devgo://github-updated with { ok, error };
+/// the frontend re-reads get_github_repos on ok and shows error
+/// otherwise. A failed fetch writes nothing, so the cache is what it was.
+///
+/// The only function in DevGo that starts a network request. Its callers
+/// are the refresh button, the palette, and the lane's first open in a
+/// session on a stale cache. Not launch, not focus, not the badge pass.
+#[tauri::command]
+pub fn refresh_github_repos(
+    app: tauri::AppHandle,
+    state: State<AppState>,
+) -> Result<(), AppError> {
+    use std::sync::atomic::Ordering;
+    if state
+        .github_refreshing
+        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+        .is_err()
+    {
+        return Ok(());
+    }
+    let chosen = state.pref_store.lock().map_err(lock_err)?.github_orgs();
+
+    std::thread::spawn(move || {
+        let result = (|| -> Result<(), AppError> {
+            // every org the user belongs to, always: the panel's
+            // checkboxes come from this list. the chosen subset is listed
+            let all_orgs = github::list_orgs()?;
+            let listed: Vec<String> = match &chosen {
+                Some(c) => {
+                    all_orgs.iter().filter(|o| c.contains(o)).cloned().collect()
+                }
+                None => all_orgs.clone(),
+            };
+            let (login, repos) = github::list_repos(&listed)?;
+            let st = app.state::<AppState>();
+            let mut store = st.github_store.lock().map_err(lock_err)?;
+            store.store(GithubCache {
+                fetched_at: crate::services::preferences::now_secs(),
+                login: Some(login),
+                orgs: all_orgs,
+                repos,
+            })
+        })();
+        let st = app.state::<AppState>();
+        st.github_refreshing.store(false, Ordering::Release);
+        let payload = match &result {
+            Ok(()) => serde_json::json!({ "ok": true, "error": null }),
+            Err(e) => {
+                serde_json::json!({ "ok": false, "error": e.to_string() })
+            }
+        };
+        let _ = tauri::Emitter::emit(&app, "devgo://github-updated", payload);
+    });
+    Ok(())
 }
 
 /// Save the org choice. Takes effect on the next refresh; nothing here
