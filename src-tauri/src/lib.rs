@@ -419,6 +419,8 @@ pub fn run() {
             commands::github_clone_urls,
             commands::clone_repo,
             commands::add_github_repo,
+            commands::get_github_groups,
+            commands::edit_github_groups,
             commands::reveal_in_explorer,
             commands::get_wsl_path,
             commands::discover_roots,

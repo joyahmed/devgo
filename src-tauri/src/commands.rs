@@ -13,6 +13,7 @@ use crate::services::editors::{self, DetectedTarget};
 use crate::services::frecency;
 use crate::services::git;
 use crate::services::github::{self, GhStatus, GithubCache};
+use crate::services::groups::{self, GithubGroup};
 use crate::services::launcher;
 use crate::services::platform::{wsl, RuntimeInfo};
 use crate::services::scanner::{ScanOutcome, UnavailableReason};
@@ -1053,6 +1054,52 @@ pub async fn add_github_repo(
         .map_err(lock_err)?
         .add(repo.clone())?;
     Ok(repo)
+}
+
+/// One edit to the GitHub groups. An enum rather than five commands: the
+/// frontend has one door, the store has one write, and every variant is a
+/// pure function in services::groups with its own test.
+#[derive(serde::Deserialize)]
+#[serde(tag = "op", rename_all = "snake_case")]
+pub enum GroupEdit {
+    Assign { group: String, repo: String },
+    Unassign { group: String, repo: String },
+    Rename { from: String, to: String },
+    Delete { name: String },
+    Reorder { order: Vec<String> },
+}
+
+#[tauri::command]
+pub fn get_github_groups(
+    state: State<AppState>,
+) -> Result<Vec<GithubGroup>, AppError> {
+    Ok(state.pref_store.lock().map_err(lock_err)?.github_groups())
+}
+
+/// Apply one edit and return the whole list, so the frontend never has to
+/// predict what the store did.
+#[tauri::command]
+pub fn edit_github_groups(
+    edit: GroupEdit,
+    state: State<AppState>,
+) -> Result<Vec<GithubGroup>, AppError> {
+    let mut prefs = state.pref_store.lock().map_err(lock_err)?;
+    let current = prefs.github_groups();
+    let next = match edit {
+        GroupEdit::Assign { group, repo } => {
+            groups::assign(current, &group, &repo)?
+        }
+        GroupEdit::Unassign { group, repo } => {
+            groups::unassign(current, &group, &repo)
+        }
+        GroupEdit::Rename { from, to } => groups::rename(current, &from, &to)?,
+        GroupEdit::Delete { name } => groups::delete(current, &name),
+        GroupEdit::Reorder { order } => groups::reorder(current, &order)?,
+    };
+    prefs
+        .set_github_groups(next.clone())
+        .map_err(AppError::Lock)?;
+    Ok(next)
 }
 
 /// What clone_repo answers before the clone has started.
