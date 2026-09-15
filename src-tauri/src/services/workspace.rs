@@ -65,11 +65,17 @@ impl WorkspaceStore {
         Ok(())
     }
 
+    // Ok with nothing removed was a removal that never happened, reported
+    // as done
     pub fn remove(&mut self, index: usize) -> Result<(), AppError> {
-        if index < self.workspaces.len() {
-            self.workspaces.remove(index);
-            self.save()?;
+        if index >= self.workspaces.len() {
+            return Err(AppError::WorkspaceIndexOutOfRange(
+                index,
+                self.workspaces.len(),
+            ));
         }
+        self.workspaces.remove(index);
+        self.save()?;
         Ok(())
     }
 
