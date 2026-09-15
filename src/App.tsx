@@ -385,6 +385,38 @@ const AppInner = () => {
 		x: number;
 		y: number;
 	} | null>(null);
+	// one package.json, read when you ask: never per row, never in the scan
+	const [scriptMenu, setScriptMenu] = useState<{
+		x: number;
+		y: number;
+		items: MenuEntry[];
+	} | null>(null);
+	const openScripts = async (p: Project, x: number, y: number) => {
+		try {
+			const scripts = await invoke<DevScript[]>('get_project_scripts', {
+				project: p
+			});
+			if (scripts.length === 0) {
+				toast('No dev scripts found for this project', 'info');
+				return;
+			}
+			setScriptMenu({
+				x,
+				y,
+				items: scripts.map(s => ({
+					label: s.name,
+					hint: s.command,
+					onClick: () =>
+						invoke('run_script', { project: p, command: s.command }).catch(
+							e => toast(showError(e), 'error')
+						)
+				}))
+			});
+		} catch (e) {
+			toast(showError(e), 'error');
+		}
+	};
+
 	const buildMenu = (p: Project): MenuEntry[] => {
 		const hint = (id: ShortcutId) => prettyKeys(shortcutFor(id));
 		const remote = git.get(p.full_path)?.remote;
@@ -420,6 +452,11 @@ const AppInner = () => {
 			...(remote
 				? [{ label: 'Open remote', onClick: () => handleOpenRemote(p) }]
 				: []),
+			'separator',
+			{
+				label: 'Run dev script…',
+				onClick: () => openScripts(p, menu?.x ?? 240, menu?.y ?? 200)
+			},
 			'separator',
 			{
 				label: pinned ? 'Unpin' : 'Pin to top',
@@ -558,6 +595,17 @@ const AppInner = () => {
 						y: menu.y,
 						items: buildMenu(menu.project),
 						onClose: () => setMenu(null)
+					}}
+				/>
+			)}
+
+			{scriptMenu && (
+				<ContextMenu
+					{...{
+						x: scriptMenu.x,
+						y: scriptMenu.y,
+						items: scriptMenu.items,
+						onClose: () => setScriptMenu(null)
 					}}
 				/>
 			)}
