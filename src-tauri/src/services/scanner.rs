@@ -26,6 +26,9 @@ fn detect_file_system(workspace: &str) -> &str {
         || normalized.starts_with("//wsl$/")
     {
         "WSL"
+    } else if normalized.starts_with("//") {
+        // a UNC path that isn't WSL is a network share, slow for dev tooling
+        "Network"
     } else {
         "Windows"
     }
