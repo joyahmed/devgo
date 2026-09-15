@@ -12,6 +12,12 @@ export const SHORTCUTS: Shortcut[] = [
 		group: 'Global'
 	},
 	{ id: 'focusSearch', keys: 'Ctrl+K', label: 'Focus search', group: 'Global' },
+	{
+		id: 'focusGithubSearch',
+		keys: 'Ctrl+G',
+		label: 'Focus GitHub search',
+		group: 'Global'
+	},
 	{ id: 'clearSearch', keys: 'Ctrl+L', label: 'Clear search', group: 'Global' },
 	{ id: 'refresh', keys: 'F5', label: 'Refresh projects', group: 'Global' },
 	{ id: 'settings', keys: 'Ctrl+,', label: 'Open settings', group: 'Global' },

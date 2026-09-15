@@ -275,6 +275,7 @@ interface DetectedTarget {
 type ShortcutId =
 	| 'commandPalette'
 	| 'focusSearch'
+	| 'focusGithubSearch'
 	| 'clearSearch'
 	| 'refresh'
 	| 'settings'

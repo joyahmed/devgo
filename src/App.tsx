@@ -894,6 +894,8 @@ const AppInner = () => {
 
 			if (fire('commandPalette', () => setPaletteOpen(true))) return;
 			if (fire('focusSearch', () => searchRef.current?.select())) return;
+			if (fire('focusGithubSearch', () => githubSearchRef.current?.select()))
+				return;
 			if (fire('clearSearch', () => setQuery(''))) return;
 			if (fire('refresh', handleRefresh)) return;
 			if (fire('settings', () => openSettings())) return;
