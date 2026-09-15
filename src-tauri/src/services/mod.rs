@@ -15,6 +15,7 @@ pub mod single_instance;
 pub mod target_store;
 pub mod workspace;
 
+pub use github::GithubStore;
 pub use preferences::PreferencesStore;
 pub use project_cache::ProjectCacheStore;
 pub use scanner::scan_workspace;

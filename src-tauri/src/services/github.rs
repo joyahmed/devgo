@@ -8,7 +8,9 @@
 //! errors with the fix in them rather than an empty list that looks like
 //! "you have no repos".
 use std::collections::HashMap;
+use std::fs;
 use std::os::windows::process::CommandExt;
+use std::path::PathBuf;
 use std::process::Command;
 
 use serde::{Deserialize, Serialize};
@@ -22,6 +24,12 @@ const CREATE_NO_WINDOW: u32 = 0x08000000;
 const LIST_LIMIT: &str = "1000";
 
 const NOT_INSTALLED: &str = "GitHub CLI (gh) is not installed or not on PATH. Install it with: winget install GitHub.cli";
+
+/// How old the cache may be before the lane's first open in a session
+/// asks for a fresh one. Six hours: a repo pushed this morning is there
+/// by lunch, and a machine that opens DevGo ten times a day fetches once
+/// or twice.
+pub const STALE_AFTER_SECS: u64 = 6 * 60 * 60;
 
 /// One repository, as the lane shows it. Flat on purpose: gh nests the
 /// owner and the default branch, and neither nesting means anything to a
@@ -53,6 +61,60 @@ pub struct GhStatus {
     pub installed: bool,
     pub version: Option<String>,
     pub login: Option<String>,
+}
+
+/// What github-cache.json holds. orgs is every org the last refresh
+/// found; the Settings panel draws its checkboxes from this list so it
+/// never has to ask the network to render.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct GithubCache {
+    pub fetched_at: u64,
+    #[serde(default)]
+    pub login: Option<String>,
+    #[serde(default)]
+    pub orgs: Vec<String>,
+    #[serde(default)]
+    pub repos: Vec<Repo>,
+}
+
+/// The on-disk cache, the same shape as every store since chapter 22:
+/// parse_or_backup on read, so a corrupt file becomes .bak rather than
+/// being overwritten.
+#[derive(Debug)]
+pub struct GithubStore {
+    cache: GithubCache,
+    file_path: PathBuf,
+}
+
+impl GithubStore {
+    pub fn new(app_data_dir: PathBuf) -> Result<Self, AppError> {
+        fs::create_dir_all(&app_data_dir)?;
+        let file_path = app_data_dir.join("github-cache.json");
+        let cache = if file_path.exists() {
+            let data = fs::read_to_string(&file_path)?;
+            super::config_io::parse_or_backup(&file_path, &data)
+        } else {
+            GithubCache::default()
+        };
+        Ok(Self { cache, file_path })
+    }
+
+    pub fn get(&self) -> GithubCache {
+        self.cache.clone()
+    }
+
+    pub fn store(&mut self, cache: GithubCache) -> Result<(), AppError> {
+        self.cache = cache;
+        let data = serde_json::to_string_pretty(&self.cache)?;
+        fs::write(&self.file_path, data)?;
+        Ok(())
+    }
+}
+
+/// The staleness rule as a pure function of two timestamps, so it can be
+/// tested without a clock. Never fetched (fetched_at 0) is stale.
+pub fn is_stale(fetched_at: u64, now: u64) -> bool {
+    fetched_at == 0 || now.saturating_sub(fetched_at) > STALE_AFTER_SECS
 }
 
 /// Run gh with args, or say why it could not run.
@@ -341,6 +403,48 @@ mod tests {
             local["joyahmed/devgo-app-private"],
             r"G:\01_tauri\devgo-app-private"
         );
+    }
+
+    #[test]
+    fn staleness_is_a_function_of_two_timestamps() {
+        assert!(is_stale(0, 1_000), "never fetched is stale");
+        assert!(
+            !is_stale(1_000, 1_000 + STALE_AFTER_SECS),
+            "exactly the limit is still fresh"
+        );
+        assert!(is_stale(1_000, 1_000 + STALE_AFTER_SECS + 1));
+        assert!(
+            !is_stale(2_000, 1_000),
+            "a clock that went backwards is not stale"
+        );
+    }
+
+    #[test]
+    fn cache_round_trips_and_a_corrupt_file_is_backed_up() {
+        let dir = std::env::temp_dir().join("devgo-github-store");
+        let _ = fs::remove_dir_all(&dir);
+        let mut store = GithubStore::new(dir.clone()).unwrap();
+        assert_eq!(store.get().fetched_at, 0, "nothing fetched yet");
+        store
+            .store(GithubCache {
+                fetched_at: 42,
+                login: Some("joyahmed".into()),
+                orgs: vec!["joyahmed007".into()],
+                repos: parse_repos(SAMPLE).unwrap(),
+            })
+            .unwrap();
+        let again = GithubStore::new(dir.clone()).unwrap();
+        assert_eq!(again.get().fetched_at, 42);
+        assert_eq!(again.get().repos.len(), 3);
+
+        fs::write(dir.join("github-cache.json"), "{ broken").unwrap();
+        let fresh = GithubStore::new(dir.clone()).unwrap();
+        assert_eq!(fresh.get().fetched_at, 0, "a corrupt cache starts empty");
+        assert!(
+            dir.join("github-cache.json.bak").exists(),
+            "and the original is kept"
+        );
+        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]
