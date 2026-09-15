@@ -216,6 +216,23 @@ interface ConfirmDialogProps {
 	onCancel: () => void;
 }
 
+interface MenuAction {
+	label: string;
+	hint?: string;
+	onClick: () => void;
+	danger?: boolean;
+	disabled?: boolean;
+}
+
+type MenuEntry = MenuAction | 'separator';
+
+interface ContextMenuProps {
+	x: number;
+	y: number;
+	items: MenuEntry[];
+	onClose: () => void;
+}
+
 interface WslControlProps {
 	distros: string[];
 	/// Called after every stop attempt, success or not — the caller re-reads.
