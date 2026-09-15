@@ -21,3 +21,41 @@ pub fn parse_or_backup<T: DeserializeOwned + Default>(
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn corrupt_file_is_backed_up_not_lost() {
+        let dir = std::env::temp_dir().join("devgo-config-io-corrupt");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("prefs.json");
+
+        let corrupt = "{ not valid json";
+        let value: Vec<String> = parse_or_backup(&path, corrupt);
+
+        assert!(value.is_empty(), "a corrupt file yields the default");
+        let backup =
+            std::fs::read_to_string(dir.join("prefs.json.bak")).unwrap();
+        assert_eq!(backup, corrupt, "the original is in .bak, not lost");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A guard that writes a backup on every start is noise.
+    #[test]
+    fn valid_file_parses_without_a_backup() {
+        let dir = std::env::temp_dir().join("devgo-config-io-valid");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("workspaces.json");
+
+        let value: Vec<String> = parse_or_backup(&path, r#"["a","b"]"#);
+        assert_eq!(value, vec!["a".to_string(), "b".to_string()]);
+        assert!(!dir.join("workspaces.json.bak").exists());
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}
