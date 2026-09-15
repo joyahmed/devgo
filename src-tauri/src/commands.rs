@@ -607,6 +607,28 @@ pub fn get_scan_config(
 }
 
 #[tauri::command]
+pub fn get_tmux_config(
+    state: State<AppState>,
+) -> Result<crate::services::preferences::TmuxConfig, AppError> {
+    Ok(state.pref_store.lock().map_err(lock_err)?.tmux_config())
+}
+
+/// Takes effect on the next launch: the script is built per launch, so
+/// there is nothing to signal and no rescan to trigger.
+#[tauri::command]
+pub fn set_tmux_config(
+    config: crate::services::preferences::TmuxConfig,
+    state: State<AppState>,
+) -> Result<(), AppError> {
+    state
+        .pref_store
+        .lock()
+        .map_err(lock_err)?
+        .set_tmux_config(config)
+        .map_err(AppError::Lock)
+}
+
+#[tauri::command]
 pub fn set_scan_config(
     config: crate::services::preferences::ScanConfig,
     state: State<AppState>,
@@ -627,7 +649,13 @@ pub struct PortableConfig {
     pub default_editor: Option<String>,
     pub default_terminal: Option<String>,
     pub summon_hotkey: String,
+    // a missing field is a hard parse error, so a file exported before a
+    // field existed would not import at all; scan_config had that bug since
+    // it landed
+    #[serde(default)]
     pub scan_config: crate::services::preferences::ScanConfig,
+    #[serde(default)]
+    pub tmux_config: crate::services::preferences::TmuxConfig,
 }
 
 // the backend writes the file; the frontend only picks where
@@ -647,6 +675,7 @@ pub fn export_config_to_file(
             default_terminal: prefs.default_target(TargetKind::Terminal),
             summon_hotkey: prefs.summon_hotkey(),
             scan_config: prefs.scan_config(),
+            tmux_config: prefs.tmux_config(),
         }
     };
     std::fs::write(&path, serde_json::to_string_pretty(&config)?)?;
@@ -688,6 +717,11 @@ pub fn import_config_from_file(
         let mut prefs = state.pref_store.lock().map_err(lock_err)?;
         prefs
             .set_scan_config(config.scan_config)
+            .map_err(AppError::Lock)?;
+        // applied wholesale like scan_config: an older file resets the layout
+        // to the default three, and import means "look like that machine"
+        prefs
+            .set_tmux_config(config.tmux_config)
             .map_err(AppError::Lock)?;
         if let Some(id) = editor {
             prefs

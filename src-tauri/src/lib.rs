@@ -269,6 +269,8 @@ pub fn run() {
             commands::add_workspace_folders,
             commands::get_scan_config,
             commands::set_scan_config,
+            commands::get_tmux_config,
+            commands::set_tmux_config,
             commands::export_config_to_file,
             commands::import_config_from_file,
             commands::reset_cache,
