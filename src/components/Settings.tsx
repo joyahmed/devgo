@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { useEffect, useState } from 'react';
 import { prettyKeys, SHORTCUTS } from '../shortcuts';
+import { savedThemeId, setTheme, THEMES } from '../themes';
 import { useTargets } from '../hooks/useTargets';
 import Button from './Button';
 import TargetManager from './TargetManager';
@@ -124,6 +125,55 @@ const ScanningPanel = ({ onSaved, onError }: ScanningPanelProps) => {
 	);
 };
 
+const SWATCHES: ThemeKey[] = [
+	'bg-primary',
+	'bg-panel',
+	'accent',
+	'text-primary',
+	'danger'
+];
+
+// no reload, no round trip: a theme is CSS variables and lives in localStorage
+const AppearancePanel = () => {
+	const [current, setCurrent] = useState(savedThemeId());
+	const pick = (id: string) => {
+		setTheme(id);
+		setCurrent(id);
+	};
+
+	return (
+		<div>
+			<h4 className={heading}>Theme</h4>
+			<div className='grid grid-cols-2 gap-2.5'>
+				{THEMES.map(t => (
+					<Button
+						key={t.id}
+						variant='card'
+						aria-pressed={t.id === current}
+						onClick={() => pick(t.id)}
+					>
+						<span className='flex items-center justify-between mb-2'>
+							<span className='text-[13px]'>{t.name}</span>
+							{t.id === current && (
+								<span className='text-accent text-xs'>✓</span>
+							)}
+						</span>
+						<span className='flex gap-1'>
+							{SWATCHES.map(k => (
+								<span
+									key={k}
+									className='w-6 h-6 rounded border border-white/10'
+									style={{ background: t.colors[k] }}
+								/>
+							))}
+						</span>
+					</Button>
+				))}
+			</div>
+		</div>
+	);
+};
+
 const Settings = ({
 	open,
 	onClose,
@@ -181,6 +231,11 @@ const Settings = ({
 			id: 'shortcuts',
 			label: 'Shortcuts',
 			render: () => <ShortcutTable {...{ summonHotkey }} />
+		},
+		{
+			id: 'appearance',
+			label: 'Appearance',
+			render: () => <AppearancePanel />
 		}
 	];
 
