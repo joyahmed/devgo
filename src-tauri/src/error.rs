@@ -30,6 +30,11 @@ pub enum AppError {
     #[error("{0}")]
     GhUnavailable(String),
 
+    /// A url the browser should not be handed. Only https:// reaches
+    /// start, and only from the two places that build one.
+    #[error("Refusing to open {0}: not an https url")]
+    BadUrl(String),
+
     /// Carries an already-phrased message: the distinction between "timed out"
     /// and "returned but still running" is the useful part, and only the caller
     /// knows which it was.

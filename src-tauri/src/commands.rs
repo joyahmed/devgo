@@ -850,32 +850,49 @@ pub fn get_remote_branches(
     Ok(branches)
 }
 
-/// Open a project's remote in the browser: the repo root, or one branch
-/// of it. The url is built here from the cached remote and branch_url, so
-/// the frontend never assembles a url out of strings the user can see.
+/// Open a repo in the browser: the repo root, or one branch of it.
+///
+/// Two doors, one command. A project (full_path) resolves its root from
+/// the cached remote; a GitHub row (url) brings its own, straight from
+/// gh. Either way the url is built here with branch_url, so the frontend
+/// never assembles a url out of strings the user can see, and only
+/// https:// ever reaches start.
 #[tauri::command]
 pub fn open_remote(
-    full_path: String,
+    full_path: Option<String>,
+    url: Option<String>,
     branch: Option<String>,
     state: State<AppState>,
 ) -> Result<(), AppError> {
-    let root = state
-        .git_cache
-        .lock()
-        .map_err(lock_err)?
-        .get(&full_path)
-        .and_then(|i| i.remote.clone())
-        .ok_or_else(|| AppError::NoRemote(full_path))?;
+    let root = match (full_path, url) {
+        (Some(path), _) => state
+            .git_cache
+            .lock()
+            .map_err(lock_err)?
+            .get(&path)
+            .and_then(|i| i.remote.clone())
+            .ok_or(AppError::NoRemote(path))?,
+        (None, Some(url)) => url,
+        (None, None) => return Err(AppError::NoRemote("nothing".into())),
+    };
     let url = match branch.as_deref().map(str::trim).filter(|b| !b.is_empty()) {
         Some(b) => git::branch_url(&root, b),
         None => root,
     };
+    open_in_browser(&url)
+}
 
-    // `start` is a cmd builtin, so it needs a shell. The empty "" is the window
-    // title argument, which start would otherwise steal the URL for.
+/// Hand an https:// url to the default browser, and nothing else.
+///
+/// `start` is a cmd builtin, so it needs a shell. The empty "" is the window
+/// title argument, which start would otherwise steal the URL for.
+fn open_in_browser(url: &str) -> Result<(), AppError> {
+    if !url.starts_with("https://") {
+        return Err(AppError::BadUrl(url.to_string()));
+    }
     std::process::Command::new("cmd")
         .creation_flags(0x08000000)
-        .args(["/c", "start", "", &url])
+        .args(["/c", "start", "", url])
         .spawn()
         .map_err(|e| AppError::LaunchFailed(format!("{url}: {e}")))?;
     Ok(())
