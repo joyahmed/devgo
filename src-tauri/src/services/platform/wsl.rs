@@ -95,6 +95,23 @@ pub fn running_distros() -> Vec<String> {
         .unwrap_or_default()
 }
 
+/// Run a "print what exists" script in a distro and return its lines.
+///
+/// The exit status is ignored on purpose. These scripts are all
+/// `for x in ...; do test && echo; done`, and a shell loop exits with the
+/// status of its last iteration: a missing last candidate makes the whole
+/// probe "fail" after printing perfectly good output. A spawn failure is an
+/// empty vec too, which is the honest answer for optional discovery.
+pub fn probe_lines(distro: &str, script: &str) -> Vec<String> {
+    let Ok(out) = wsl_command()
+        .args(["-d", distro, "-e", "bash", "-lc", script])
+        .output()
+    else {
+        return Vec::new();
+    };
+    parse_list(&decode(&out.stdout))
+}
+
 pub fn is_running(distro: &str, running: &[String]) -> bool {
     running.iter().any(|d| d.eq_ignore_ascii_case(distro))
 }
