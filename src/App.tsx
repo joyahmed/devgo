@@ -12,6 +12,7 @@ import CommandPalette from './components/CommandPalette';
 import ConfirmDialog from './components/ConfirmDialog';
 import ContextMenu from './components/ContextMenu';
 import Modal from './components/Modal';
+import NameDialog from './components/NameDialog';
 import Onboarding from './components/Onboarding';
 import ProjectTree from './components/ProjectTree';
 import RuntimeIndicator from './components/RuntimeIndicator';
@@ -318,6 +319,70 @@ const AppInner = () => {
 	} | null>(null);
 	const canClone =
 		workspaces.length > 0 && (github.payload?.cache.repos.length ?? 0) > 0;
+	const hasRepos = (github.payload?.cache.repos.length ?? 0) > 0;
+
+	// groups. groupMenu is the second menu under Add to group… (one entry
+	// per group, ticked when the repo is in it, plus New group…);
+	// groupHeaderMenu is a heading's own; namePrompt is the one dialog new
+	// and rename share; groupPicker is the picker in group mode. every edit
+	// goes through github.editGroups, which hands back the whole list
+	const [groupMenu, setGroupMenu] = useState<RepoMenu | null>(null);
+	const [groupHeaderMenu, setGroupHeaderMenu] =
+		useState<GroupHeaderMenu | null>(null);
+	const [namePrompt, setNamePrompt] = useState<NamePrompt | null>(null);
+	const [groupPicker, setGroupPicker] = useState(false);
+	const groupEdit = (edit: GroupEdit) =>
+		github.editGroups(edit).catch(e => {
+			toast(showError(e), 'error');
+			throw e;
+		});
+	const buildGroupMenu = (repo: GithubRepo): MenuEntry[] => [
+		...github.groups.map(g => {
+			const member = g.repos.includes(repo.full_name);
+			const edit: GroupEdit = member
+				? { op: 'unassign', group: g.name, repo: repo.full_name }
+				: { op: 'assign', group: g.name, repo: repo.full_name };
+			return {
+				label: `${member ? '✓ ' : ''}${g.name}`,
+				onClick: () => groupEdit(edit).catch(() => {})
+			};
+		}),
+		...(github.groups.length ? ['separator' as const] : []),
+		{
+			label: 'New group…',
+			onClick: () => setNamePrompt({ kind: 'new', repos: [repo.full_name] })
+		}
+	];
+	const buildGroupHeaderMenu = (name: string): MenuEntry[] => {
+		const order = github.groups.map(g => g.name);
+		const i = order.indexOf(name);
+		const move = (to: number) => {
+			const next = [...order];
+			next.splice(i, 1);
+			next.splice(to, 0, name);
+			groupEdit({ op: 'reorder', order: next }).catch(() => {});
+		};
+		return [
+			{ label: 'Rename…', onClick: () => setNamePrompt({ kind: 'rename', from: name }) },
+			{ label: 'Move up', disabled: i <= 0, onClick: () => move(i - 1) },
+			{
+				label: 'Move down',
+				disabled: i < 0 || i >= order.length - 1,
+				onClick: () => move(i + 1)
+			},
+			'separator',
+			// no confirm: a group is a label, and deleting one touches no
+			// repo. the toast says so, which is the undo hint
+			{
+				label: `Delete group ${name}`,
+				danger: true,
+				onClick: () =>
+					groupEdit({ op: 'delete', name })
+						.then(() => toast(`Deleted group ${name}. Its repos are untouched`, 'info'))
+						.catch(() => {})
+			}
+		];
+	};
 
 	// the branch popover: the repo on its host, then every branch the last
 	// git fetch left in refs/remotes, read when the chip is clicked and
@@ -399,6 +464,17 @@ const AppInner = () => {
 			{
 				label: 'Copy clone URL (https)',
 				onClick: copyClone(1, 'HTTPS clone URL')
+			},
+			'separator',
+			{
+				label: 'Add to group…',
+				hint:
+					github.groups
+						.filter(g => g.repos.includes(repo.full_name))
+						.map(g => g.name)
+						.join(', ') || undefined,
+				onClick: () =>
+					setGroupMenu({ repo, x: repoMenu?.x ?? 240, y: repoMenu?.y ?? 200 })
 			},
 			...(localPath
 				? [
@@ -543,6 +619,14 @@ const AppInner = () => {
 				keywords: ['gh', 'git clone', 'download', 'scan'],
 				disabled: !canClone,
 				run: () => setClonePicker({})
+			},
+			{
+				id: 'github.group',
+				title: 'GitHub: group repos…',
+				subtitle: 'tick repos, name a group',
+				keywords: ['gh', 'label', 'organise', 'folder'],
+				disabled: !hasRepos,
+				run: () => setGroupPicker(true)
 			},
 			{
 				id: 'github.add',
@@ -972,12 +1056,108 @@ const AppInner = () => {
 								label: 'Add repo by name…',
 								onClick: () => setAddRepoOpen(true),
 								disabled: !github.status?.login
+							},
+							'separator',
+							{
+								label: 'Group repos…',
+								onClick: () => setGroupPicker(true),
+								disabled: !hasRepos
 							}
 						],
 						onClose: () => setGithubAddMenu(null)
 					}}
 				/>
 			)}
+
+			{groupMenu && (
+				<ContextMenu
+					{...{
+						x: groupMenu.x,
+						y: groupMenu.y,
+						items: buildGroupMenu(groupMenu.repo),
+						onClose: () => setGroupMenu(null)
+					}}
+				/>
+			)}
+
+			{groupHeaderMenu && (
+				<ContextMenu
+					{...{
+						x: groupHeaderMenu.x,
+						y: groupHeaderMenu.y,
+						items: buildGroupHeaderMenu(groupHeaderMenu.name),
+						onClose: () => setGroupHeaderMenu(null)
+					}}
+				/>
+			)}
+
+			<Modal
+				{...{
+					open: namePrompt !== null,
+					title:
+						namePrompt?.kind === 'rename' ? `Rename ${namePrompt.from}` : 'New group',
+					onClose: () => setNamePrompt(null)
+				}}
+			>
+				{namePrompt && (
+					<NameDialog
+						{...{
+							hint:
+								namePrompt.kind === 'rename'
+									? 'A new name for the group. Its repos stay where they are.'
+									: `A name for the group. ${
+											namePrompt.repos.length === 1
+												? namePrompt.repos[0]
+												: `${namePrompt.repos.length} repos`
+										} go in it.`,
+							initial: namePrompt.kind === 'rename' ? namePrompt.from : '',
+							submitLabel: namePrompt.kind === 'rename' ? 'Rename' : 'Create group',
+							onSubmit: async (name: string) => {
+								if (namePrompt.kind === 'rename') {
+									await github.editGroups({ op: 'rename', from: namePrompt.from, to: name });
+									return;
+								}
+								for (const repo of namePrompt.repos) {
+									await github.editGroups({ op: 'assign', group: name, repo });
+								}
+							},
+							onDone: () => setNamePrompt(null)
+						}}
+					/>
+				)}
+			</Modal>
+
+			<Modal
+				{...{
+					open: groupPicker,
+					title: 'Group repos',
+					onClose: () => setGroupPicker(false),
+					width: 'w-[min(680px,92vw)]'
+				}}
+			>
+				{groupPicker && (
+					<ClonePicker
+						{...{
+							mode: 'group' as const,
+							repos: github.payload?.cache.repos ?? [],
+							local: github.payload?.local ?? {},
+							workspaces,
+							groups: github.groups,
+							onStart: () => {},
+							onGroup: async (repos: GithubRepo[], group: string) => {
+								for (const r of repos) {
+									await github.editGroups({ op: 'assign', group, repo: r.full_name });
+								}
+								toast(
+									`${repos.length === 1 ? repos[0].name : `${repos.length} repos`} → ${group.trim()}`,
+									'success'
+								);
+							},
+							onDone: () => setGroupPicker(false)
+						}}
+					/>
+				)}
+			</Modal>
 
 			<Modal
 				{...{
@@ -1183,7 +1363,9 @@ const AppInner = () => {
 								onShowLocal: showLocal,
 								cloneJobs: clone.jobs,
 								onGithubAddMenu: (x: number, y: number) =>
-									setGithubAddMenu({ x, y })
+									setGithubAddMenu({ x, y }),
+								onGroupContextMenu: (name: string, x: number, y: number) =>
+									setGroupHeaderMenu({ name, x, y })
 							}}
 						/>
 						<ActionButtons

@@ -626,6 +626,18 @@ interface ClonePickerRequest {
 	preselect?: string;
 }
 
+/// a group heading's menu
+interface GroupHeaderMenu {
+	name: string;
+	x: number;
+	y: number;
+}
+
+/// the one name dialog: a new group for these repos, or a rename
+type NamePrompt =
+	| { kind: 'new'; repos: string[] }
+	| { kind: 'rename'; from: string };
+
 interface MenuAction {
 	label: string;
 	hint?: string;
