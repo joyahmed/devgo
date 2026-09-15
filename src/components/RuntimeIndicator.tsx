@@ -4,7 +4,7 @@ const LABELS: Record<RuntimeInfo['runtime'], string> = {
 };
 
 const RuntimeIndicator = ({ runtime }: RuntimeIndicatorProps) => (
-	<span className='inline-block px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider rounded-full bg-bg-panel text-accent border border-border'>
+	<span className='inline-block px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider rounded-full bg-bg-panel text-accent border border-border-strong'>
 		{LABELS[runtime]}
 	</span>
 );

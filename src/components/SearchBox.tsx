@@ -52,7 +52,7 @@ const SearchBox = ({
 					</Button>
 				)}
 			</div>
-			<div className='relative bg-bg-panel rounded-lg border border-border focus-within:border-accent transition-colors'>
+			<div className='relative bg-bg-panel rounded-lg border border-border-strong focus-within:border-accent transition-colors'>
 				<input
 					ref={ref}
 					type='text'
@@ -75,7 +75,7 @@ const SearchBox = ({
 						</Button>
 					)}
 					{enterHint && (
-						<span className='text-[10px] text-text-muted px-1.5 py-0.5 border border-border rounded'>
+						<span className='text-[10px] text-text-muted px-1.5 py-0.5 border border-border-strong rounded'>
 							{enterHint}
 						</span>
 					)}

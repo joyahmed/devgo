@@ -132,7 +132,7 @@ const CommandPalette = ({ commands, onClose }: CommandPaletteProps) => {
 										)}
 									</span>
 									{cmd.hint && (
-										<kbd className='font-mono text-[10px] shrink-0 px-1.5 py-0.5 border border-border rounded bg-bg-panel text-text-muted'>
+										<kbd className='font-mono text-[10px] shrink-0 px-1.5 py-0.5 border border-border-strong rounded bg-bg-panel text-text-muted'>
 											{cmd.hint}
 										</kbd>
 									)}

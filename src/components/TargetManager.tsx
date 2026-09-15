@@ -35,7 +35,7 @@ const PLACEHOLDERS = [
 const heading =
 	'text-xs font-bold uppercase tracking-wider text-text-secondary mb-2';
 const field =
-	'w-full px-2 py-1.5 bg-bg-panel border border-border rounded text-xs font-mono text-text-primary outline-none focus:border-accent';
+	'w-full px-2 py-1.5 bg-bg-panel border border-border-strong rounded text-xs font-mono text-text-primary outline-none focus:border-accent';
 const badge = 'text-[9px] uppercase tracking-wider rounded px-1 border';
 
 const TargetList = ({
@@ -58,7 +58,7 @@ const TargetList = ({
 				{
 					show: !t.wsl_args_template,
 					label: 'windows only',
-					className: 'text-text-muted border-border',
+					className: 'text-text-muted border-border-strong',
 					title: 'No WSL configuration — this target cannot open WSL projects'
 				}
 			];

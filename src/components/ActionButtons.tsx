@@ -49,7 +49,7 @@ const ActionButtons = ({
 					>
 						{label}
 						{hint && (
-							<kbd className='font-mono text-[10px] text-text-muted border border-border rounded px-1 py-px'>
+							<kbd className='font-mono text-[10px] text-text-muted border border-border-strong rounded px-1 py-px'>
 								{hint}
 							</kbd>
 						)}

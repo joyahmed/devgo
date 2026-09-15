@@ -13,7 +13,7 @@ import WorkspaceManager from './WorkspaceManager';
 const LAST_PANEL = 'devgo.settingsPanel';
 
 const kbd =
-	'font-mono text-[11px] px-2 py-0.5 border border-border rounded bg-bg-panel text-text-primary';
+	'font-mono text-[11px] px-2 py-0.5 border border-border-strong rounded bg-bg-panel text-text-primary';
 const heading =
 	'text-xs font-bold uppercase tracking-wider text-text-secondary mb-2';
 
@@ -206,7 +206,7 @@ const ScanningPanel = ({ onSaved, onError }: ScanningPanelProps) => {
 					case-insensitive.
 				</p>
 				<textarea
-					className='w-full h-32 px-3 py-2 bg-bg-panel border border-border rounded-md font-mono text-xs text-text-primary outline-none focus:border-accent resize-none'
+					className='w-full h-32 px-3 py-2 bg-bg-panel border border-border-strong rounded-md font-mono text-xs text-text-primary outline-none focus:border-accent resize-none'
 					placeholder={'node_modules\narchive\nvendor'}
 					value={text ?? ''}
 					onChange={e => setText(e.target.value)}

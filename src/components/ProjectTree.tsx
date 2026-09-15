@@ -28,7 +28,7 @@ const loadCollapsed = (): Set<string> => {
 };
 
 const pill =
-	'inline-block px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider rounded-full bg-bg-panel border border-border shrink-0';
+	'inline-block px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider rounded-full bg-bg-panel border border-border-strong shrink-0';
 
 const FS_TONE: Record<string, string> = {
 	WSL: 'text-accent',
