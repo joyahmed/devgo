@@ -33,10 +33,9 @@ fn decode(bytes: &[u8]) -> String {
     }
 }
 
-/// Trim whitepsace *and* stray NULs. `str::trim` leaves NUL in place - NUL is
-/// not whitespaces - whic is how a bogus "\0" entry used to survive the
+/// Trim whitespace *and* stray NULs. `str::trim` leaves NUL in place — NUL is
+/// not whitespace — which is how a bogus "\0" entry used to survive the
 /// is-empty filter and register as a second, phantom distro.
-
 fn clean(line: &str) -> &str {
     line.trim_matches(|c: char| c.is_whitespace() || c == '\0')
 }
