@@ -248,7 +248,24 @@ interface ServerInventory {
 
 /// run types the line and presses enter; pretype leaves it on the prompt;
 /// url opens the browser; local runs on this pc
-type ServerActionKind = 'run' | 'pretype' | 'url' | 'local';
+type ServerActionKind = 'run' | 'pretype' | 'url' | 'local' | 'form';
+
+/// one field of a form action. arg is emitted when the value differs from
+/// default (a bool: arg when on, arg_off when off); when hides the field
+/// until it holds; prefill is a placeholder filled from the app row
+interface ServerActionField {
+	name: string;
+	label: string | null;
+	type: 'text' | 'number' | 'choice' | 'bool';
+	required: boolean;
+	default: string | null;
+	options: string[];
+	prefill: string | null;
+	when: string | null;
+	arg: string | null;
+	arg_off: string | null;
+	hint: string | null;
+}
 
 interface ServerAction {
 	id: string;
@@ -257,6 +274,10 @@ interface ServerAction {
 	/// the line starts with sudo; the window will ask
 	root: boolean;
 	command: string;
+	/// form only: the fields, what Preview appends, the word on the button
+	fields: ServerActionField[];
+	preview: string | null;
+	submit: string | null;
 }
 
 interface ServerActions {
@@ -1223,4 +1244,23 @@ interface ToastContextType {
 
 interface ToastProviderProps {
 	children: React.ReactNode;
+}
+
+/// a form action's drawer: which server, which action, the app row it came
+/// from, and the values it opens with
+interface ActionFormRequest {
+	server: Server;
+	action: ServerAction;
+	appDir: string | null;
+	initial: Record<string, string>;
+}
+
+interface ActionFormProps {
+	server: Server;
+	action: ServerAction;
+	appDir: string | null;
+	initial: Record<string, string>;
+	/// send the composed line; preview = with the action's preview word
+	onRun: (values: Record<string, string>, preview: boolean) => Promise<void>;
+	onDone: () => void;
 }
