@@ -2085,6 +2085,16 @@ pub fn github_clone_urls(full_name: String) -> (String, String) {
     github::clone_urls(&full_name)
 }
 
+/// What the machine is: its own file system's name and whether wsl is
+/// there at all. The cached probe, so it costs a lock and a clone; the
+/// forced refresh is what re-reads it.
+#[tauri::command]
+pub fn get_runtime_info(
+    state: State<AppState>,
+) -> Result<RuntimeInfo, AppError> {
+    Ok(state.runtime_info.lock().map_err(lock_err)?.clone())
+}
+
 /// Is the VM up, and which distros are running. One process-table look
 /// and one management call that boots nothing. Asked at mount and on
 /// focus; between those the watcher's `devgo://wsl` event carries the
