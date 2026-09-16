@@ -32,7 +32,13 @@ import { useServers } from './hooks/useServers';
 import { useTargets } from './hooks/useTargets';
 import { useWorkspaces } from './hooks/useWorkspaces';
 import { lastSegment } from './paths';
-import { appForFolder, canFill, placeholders, prefillValues } from './serverApps';
+import {
+	appForFolder,
+	canFill,
+	fillLabel,
+	placeholders,
+	prefillValues
+} from './serverApps';
 import { isTypingTarget, matches, prettyKeys, shortcutFor } from './shortcuts';
 import { applyTextScale, stepTextScale } from './textSize';
 import { loadGroundAlpha } from './transparency';
@@ -785,12 +791,29 @@ const AppInner = () => {
 		].filter(Boolean);
 		return bits.join(' · ') || undefined;
 	};
+	// the declared actions under their group headings, clustered by group
+	// in the order the groups first appear: an entry declared late in the
+	// file still sits under its heading
+	const groupedEntries = (
+		acts: ServerAction[],
+		entry: (a: ServerAction) => MenuAction
+	): MenuEntry[] => {
+		const byGroup = new Map<string, ServerAction[]>();
+		for (const a of acts) {
+			const g = a.group ?? '';
+			byGroup.set(g, [...(byGroup.get(g) ?? []), a]);
+		}
+		return [...byGroup].flatMap(([g, list]) => [
+			...(g ? [{ heading: g }] : []),
+			...list.map(entry)
+		]);
+	};
 	const serverActionEntries = (s: Server): MenuEntry[] => {
 		const acts = servers.listings[s.id]?.actions?.server ?? [];
 		if (acts.length === 0) return [];
 		return [
 			'separator',
-			...acts.map(a => ({
+			...groupedEntries(acts, a => ({
 				label: a.label,
 				hint: actionHint(a, s),
 				onClick: () => fireAction(s, a, null)
@@ -804,12 +827,16 @@ const AppInner = () => {
 		const app = appForFolder(listing, f.path);
 		if (!app) return [];
 		const values = placeholders(app);
-		const acts = (listing?.actions?.app ?? []).filter(a => canFill(a.command, values));
+		// or the label: Logs · {pm2_api} names its process, and an app without
+		// an api has no such entry
+		const acts = (listing?.actions?.app ?? []).filter(
+			a => canFill(a.command, values) && canFill(a.label, values)
+		);
 		if (acts.length === 0) return [];
 		return [
 			'separator',
-			...acts.map(a => ({
-				label: a.label,
+			...groupedEntries(acts, a => ({
+				label: fillLabel(a.label, values),
 				hint: actionHint(a, s),
 				onClick: () => fireAction(s, a, f.path, app)
 			}))
@@ -828,10 +855,13 @@ const AppInner = () => {
 		{ label: 'Open terminal here', hint: 'Enter', onClick: () => openFolder(s, f) },
 		{ label: 'Look inside', onClick: () => servers.toggleDir(s.id, f.path) },
 		{
-			label: 'Make this a root',
+			// the card groups a server's folders under its top-level folders;
+			// this lifts the folder you are on to that level
+			label: 'Pin as a top-level group',
+			hint: 'beside ~ · /var/www',
 			onClick: () =>
 				addRoot(s, f.path)
-					.then(() => toast(`${f.path} is a root of ${s.name} now`, 'success'))
+					.then(() => toast(`${f.path} is a top-level group on ${s.name} now`, 'success'))
 					.catch(e => toast(showError(e)))
 		},
 		'separator',
@@ -862,11 +892,22 @@ const AppInner = () => {
 			label: 'List folders & apps',
 			onClick: () => servers.listFolders(s.id).catch(e => toast(showError(e)))
 		},
-		{ label: 'Add a root folder…', onClick: () => setRootPrompt(s) },
+		{ label: 'List another folder at top level…', onClick: () => setRootPrompt(s) },
 		...serverActionEntries(s),
 		'separator',
 		{ label: 'Copy ssh command', onClick: () => copyServerLine(s, 0) },
 		{ label: 'Copy scp prefix', onClick: () => copyServerLine(s, 1) },
+		// a LocalForward host is a tunnel: ssh -N holds it open with no shell,
+		// which is what such a row exists for. by alias only
+		...(s.tunnel && s.alias
+			? [
+					{
+						label: 'Copy tunnel command',
+						hint: `ssh -N ${s.alias}`,
+						onClick: () => copyText(`ssh -N ${s.alias}`, 'tunnel command')
+					}
+				]
+			: []),
 		'separator',
 		{ label: 'Edit…', onClick: () => setServerForm({ initial: s }) },
 		{
@@ -1551,14 +1592,16 @@ const AppInner = () => {
 				{...{
 					side: 'right' as const,
 					open: rootPrompt !== null,
-					title: rootPrompt ? `Add a root on ${rootPrompt.name}` : 'Add a root',
+					title: rootPrompt
+						? `List a folder at top level on ${rootPrompt.name}`
+						: 'List a folder at top level',
 					onClose: () => setRootPrompt(null)
 				}}
 			>
 				{rootPrompt && (
 					<NameDialog
 						{...{
-							hint: 'A folder on the server to list from: /etc, /opt, ~/some/place. Its children become rows; look inside any of them.',
+							hint: 'A folder on the server whose children become rows, beside ~ and /var/www: /etc, /opt, ~/some/place. Look inside any of them.',
 							initial: '/etc',
 							submitLabel: 'Add root',
 							onSubmit: (root: string) => addRoot(rootPrompt, root),
