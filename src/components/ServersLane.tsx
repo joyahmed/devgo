@@ -116,10 +116,10 @@ const ServerRow = ({
 	const dot = dotFor(listing);
 	return (
 		<div
-			className={`${row} py-1.5 ${
+			className={`${row} py-2.5 ${
 				isCursor
-					? 'bg-bg-selected text-text-primary'
-					: `text-text-secondary hover:bg-bg-hover/50 ${zebra(i)}`
+					? 'bg-bg-selected text-text-primary shadow-[var(--color-glow)]'
+					: `text-text-primary hover:bg-bg-hover/50 ${zebra(i)}`
 			}`}
 			onContextMenu={e => {
 				e.preventDefault();
@@ -149,9 +149,7 @@ const ServerRow = ({
 				/>
 				{/* the name is the click target, as on a project row */}
 				<div
-					className={`flex items-center gap-2 flex-1 min-w-0 font-medium font-mono cursor-pointer ${
-						isCursor ? 'text-text-primary' : ''
-					}`}
+					className='flex items-center gap-2 flex-1 min-w-0 font-medium font-mono cursor-pointer'
 					onClick={() => onSelect(server)}
 					onDoubleClick={() => onOpen(server)}
 				>
@@ -162,8 +160,8 @@ const ServerRow = ({
 						</span>
 					)}
 				</div>
-				<div className='flex items-center justify-end gap-1.5 min-w-0 shrink-0'>
-					<span className='font-mono text-11 text-text-muted truncate max-w-[18rem]'>
+				<div className='flex items-center justify-end gap-2 min-w-0 shrink-0'>
+					<span className='font-mono text-13 text-text-muted truncate max-w-[18rem]'>
 						{whoAt(server)}
 					</span>
 					{metaWords(server)
@@ -216,10 +214,10 @@ const FolderRow = ({
 		: (app?.processes.flatMap(p => p.ports).join('/') ?? '');
 	return (
 		<div
-			className={`${row} py-1 ${
+			className={`${row} py-1.5 ${
 				isCursor
-					? 'bg-bg-selected text-text-primary'
-					: 'text-text-secondary hover:bg-bg-hover/50'
+					? 'bg-bg-selected text-text-primary shadow-[var(--color-glow)]'
+					: 'text-text-primary hover:bg-bg-hover/50'
 			}`}
 			onContextMenu={e => {
 				e.preventDefault();
@@ -246,9 +244,7 @@ const FolderRow = ({
 					{busy ? '…' : open ? '▼' : '▶'}
 				</Button>
 				<span
-					className={`font-mono text-13 truncate flex-1 min-w-0 cursor-pointer ${
-						isCursor ? 'text-text-primary' : ''
-					}`}
+					className='font-mono text-13 truncate flex-1 min-w-0 cursor-pointer'
 					onClick={() => onSelect(server, folder)}
 					onDoubleClick={() => onOpen(server, folder)}
 				>

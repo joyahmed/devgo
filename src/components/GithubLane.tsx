@@ -77,10 +77,10 @@ const RepoRow = ({
 	onOpenBranches
 }: RepoRowProps) => (
 	<div
-		className={`${row} py-1.5 ${repo.archived || gone ? 'opacity-60' : ''} ${
+		className={`${row} py-2.5 ${repo.archived || gone ? 'opacity-60' : ''} ${
 			isCursor
 				? 'bg-bg-selected text-text-primary'
-				: `text-text-secondary hover:bg-bg-hover/50 ${zebra(i)}`
+				: `text-text-primary hover:bg-bg-hover/50 ${zebra(i)}`
 		}`}
 		onContextMenu={e => {
 			e.preventDefault();
@@ -92,9 +92,7 @@ const RepoRow = ({
 		<div className={`${rowIndented} border-l-border`}>
 			{/* the name is the click target, as on a project row */}
 			<div
-				className={`flex items-center gap-1.5 flex-1 min-w-0 font-medium font-mono cursor-pointer ${
-					isCursor ? 'text-text-primary' : ''
-				}`}
+				className='flex items-center gap-1.5 flex-1 min-w-0 font-medium font-mono cursor-pointer'
 				onClick={() => onSelect(repo)}
 				onDoubleClick={() => onOpen(repo)}
 			>
@@ -109,7 +107,7 @@ const RepoRow = ({
 				</span>
 				{repo.private && <Lock />}
 			</div>
-			<div className='flex items-center justify-end gap-1.5 shrink-0'>
+			<div className='flex items-center justify-end gap-2 shrink-0'>
 				{/* a repo you deleted or lost access to is a fact on screen, not
 				    a silent absence in a group you curated */}
 				{gone && (
@@ -151,7 +149,7 @@ const RepoRow = ({
 				    read refs/remotes from */}
 				{repo.default_branch && (
 					<span
-						className='truncate font-mono text-11 text-text-muted hover:text-accent cursor-pointer'
+						className='truncate font-mono text-13 text-text-muted hover:text-accent cursor-pointer'
 						title={`${repo.default_branch} — branches on GitHub`}
 						onClick={e => {
 							e.stopPropagation();
@@ -164,13 +162,13 @@ const RepoRow = ({
 					</span>
 				)}
 				{repo.stars !== null && repo.stars > 0 && (
-					<span className='text-11 text-text-muted shrink-0' title='Stars'>
+					<span className='text-13 text-text-muted shrink-0' title='Stars'>
 						★ {compactCount(repo.stars)}
 					</span>
 				)}
 				{gone ? null : job && job.status !== 'done' ? (
 					<span
-						className={`text-11 shrink-0 text-right truncate max-w-[14rem] ${
+						className={`text-13 shrink-0 text-right truncate max-w-[14rem] ${
 							job.status === 'failed' ? 'text-danger' : 'text-accent'
 						}`}
 						title={job.error ?? jobLine(job)}
@@ -179,7 +177,7 @@ const RepoRow = ({
 					</span>
 				) : (
 					<span
-						className='text-11 text-text-muted shrink-0 w-16 text-right'
+						className='text-13 text-text-muted shrink-0 w-20 text-right'
 						title={repo.updated_at}
 					>
 						{relativeTime(repo.updated_at)}

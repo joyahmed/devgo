@@ -146,7 +146,7 @@ const GitBadge = ({ info, onOpenBranches }: GitBadgeProps) => {
 				/>
 			)}
 			<span
-				className={`truncate font-mono text-11 text-text-muted ${
+				className={`truncate font-mono text-13 text-text-muted ${
 					info.remote ? 'hover:text-accent cursor-pointer' : ''
 				}`}
 				title={
@@ -214,7 +214,7 @@ const RowMeta = ({
 		{onTogglePin && (
 			<Button
 				variant='ghost'
-				className={`text-13 leading-none p-0.5 hover:scale-110 hover:bg-transparent transition-opacity ${
+				className={`text-15 leading-none p-0.5 hover:scale-110 hover:bg-transparent transition-opacity ${
 					rank?.pinned
 						? 'text-accent'
 						: 'text-text-muted/40 opacity-0 group-hover:opacity-100 focus-visible:opacity-100'
@@ -256,14 +256,14 @@ const ProjectRow = ({
 	onContextMenu
 }: ProjectRowProps) => (
 	<div
-		className={`${row} group py-1.5 ${stale ? 'opacity-60' : ''} ${
+		className={`${row} group py-2.5 ${stale ? 'opacity-60' : ''} ${
 			launching ? 'animate-launch' : ''
 		} ${
 			selected
 				? quiet
 					? 'bg-bg-selected/40 text-text-primary'
 					: 'bg-bg-selected text-text-primary shadow-[var(--color-glow)]'
-				: `text-text-secondary hover:bg-bg-hover/50 ${pinned ? '' : zebra(i)}`
+				: `text-text-primary hover:bg-bg-hover/50 ${pinned ? '' : zebra(i)}`
 		}`}
 		// select first so the menu and the keyboard agree on the row
 		onContextMenu={e => {
@@ -280,7 +280,7 @@ const ProjectRow = ({
 			    click meant for the empty middle, or a double-click near a chip,
 			    selected or launched a project. the row keeps hover and right-click */}
 			<div
-				className={`${nameCell} cursor-pointer ${selected ? 'text-text-primary' : ''}`}
+				className={`${nameCell} cursor-pointer`}
 				onClick={() => onSelect(project)}
 				onDoubleClick={() => onDoubleClick(project)}
 			>
@@ -326,7 +326,7 @@ const WorkspaceHeader = ({
 	onContextMenu
 }: WorkspaceHeaderProps) => (
 	<div
-		className={`${row} relative py-2 cursor-pointer ${
+		className={`${row} relative py-3 cursor-pointer ${
 			cursor ? 'bg-bg-selected/50' : 'hover:bg-bg-hover/50'
 		} ${dragging ? 'opacity-40' : ''}`}
 		data-ws-header={ws}
