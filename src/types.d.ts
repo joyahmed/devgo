@@ -234,7 +234,9 @@ type ThemeKey =
 	| 'accent-hover'
 	| 'danger'
 	| 'border'
-	| 'border-strong';
+	| 'border-strong'
+	// not a colour: a box-shadow, or none
+	| 'glow';
 
 interface Theme {
 	id: string;

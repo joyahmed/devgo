@@ -19,7 +19,11 @@ const KEYS: ThemeKey[] = [
 	'accent-hover',
 	'danger',
 	'border',
-	'border-strong'
+	'border-strong',
+	// neon's halo on the selected row and the focused box; the other
+	// palettes set it to none. the contrast gate reads hex values only,
+	// so it skips this key by construction
+	'glow'
 ];
 
 export const THEMES: Theme[] = [
@@ -42,7 +46,8 @@ export const THEMES: Theme[] = [
 			'accent-hover': '#67e8f9',
 			danger: '#fb7185',
 			border: '#161f33',
-			'border-strong': '#5f7fb5'
+			'border-strong': '#5f7fb5',
+			glow: '0 0 0 1px rgb(34 211 238 / 0.45), 0 0 18px rgb(34 211 238 / 0.25)'
 		}
 	},
 	{
@@ -61,7 +66,8 @@ export const THEMES: Theme[] = [
 			'accent-hover': '#16a34a',
 			danger: '#ef4444',
 			border: '#14331a',
-			'border-strong': '#2b6d37'
+			'border-strong': '#2b6d37',
+			glow: 'none'
 		}
 	},
 	{
@@ -80,7 +86,8 @@ export const THEMES: Theme[] = [
 			'accent-hover': '#81a1c1',
 			danger: '#bf616a',
 			border: '#434c5e',
-			'border-strong': '#818da5'
+			'border-strong': '#818da5',
+			glow: 'none'
 		}
 	},
 	{
@@ -99,7 +106,8 @@ export const THEMES: Theme[] = [
 			'accent-hover': '#a679f0',
 			danger: '#ff5555',
 			border: '#44475a',
-			'border-strong': '#7b7f9b'
+			'border-strong': '#7b7f9b',
+			glow: 'none'
 		}
 	},
 	{
@@ -118,7 +126,8 @@ export const THEMES: Theme[] = [
 			'accent-hover': '#2563eb',
 			danger: '#ef4444',
 			border: '#1f1f1f',
-			'border-strong': '#5d5d5d'
+			'border-strong': '#5d5d5d',
+			glow: 'none'
 		}
 	}
 ];

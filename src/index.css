@@ -14,6 +14,8 @@
 	--color-danger: #fb7185;
 	--color-border: #161f33;
 	--color-border-strong: #5f7fb5;
+	/* neon's halo (themes.ts glow); the other palettes set it to none */
+	--color-glow: 0 0 0 1px rgb(34 211 238 / 0.45), 0 0 18px rgb(34 211 238 / 0.25);
 	--font-sans: 'Segoe UI', system-ui, sans-serif;
 	--font-mono: 'Cascadia Code', 'Consolas', monospace;
 	/* one scale, five steps. seventeen sizes were in use (text-[9px] to
