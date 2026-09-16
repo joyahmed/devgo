@@ -297,6 +297,9 @@ mod tests {
             wt.wsl_args_template.as_deref(),
             Some("wsl -d {distro} bash \"{script}\"")
         );
+        // and the bare semicolon in the wsl run form is escaped
+        assert_eq!(wt.wsl_run_args_template.as_deref(), Some(WT_WSL_RUN_ARGS));
+        assert!(dir.join("targets.json.pre-wt-semicolon").exists());
         assert_eq!(s.get("vscode").unwrap().name, "VS Code");
 
         // persisted, not patched in memory
