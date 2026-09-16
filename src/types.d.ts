@@ -21,6 +21,16 @@ interface WslState {
 	distros: string[];
 }
 
+// what the machine is, from the cached probe: the name of its own file
+// system as rust spells it, and whether wsl is there at all
+interface RuntimeInfo {
+	runtime: 'windows' | 'wsl';
+	wsl_available: boolean;
+	distros: string[];
+	default_distro: string | null;
+	local_fs: string;
+}
+
 type WorkspaceStatus = 'live' | 'cached' | 'unavailable';
 
 /// Why a workspace could not be read. "distro_stopped" is not a failure — it
@@ -1117,6 +1127,27 @@ interface WslControlProps {
 	onChanged: () => void;
 	onConfirm: (message: string, action: () => void) => void;
 	onResult: (message: string, kind: ToastType) => void;
+}
+
+// a title-bar chip for one file system: its name in its hue, a light when
+// it has one, and a menu under it when it has something to act on. the
+// menu is given the way to close itself
+interface FsChipProps {
+	fs: string;
+	label?: string;
+	title: string;
+	light?: boolean;
+	disabled?: boolean;
+	menu?: (close: () => void) => React.ReactNode;
+}
+
+interface WslMenuProps extends WslControlProps {
+	close: () => void;
+}
+
+// the title bar's chips: the machine, and the wsl menu's hands
+interface FileSystemsProps extends Omit<WslMenuProps, 'close'> {
+	runtime: RuntimeInfo;
 }
 
 /// which rows a search box searches
