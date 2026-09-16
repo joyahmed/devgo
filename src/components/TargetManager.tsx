@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { isMac } from '../platform';
 import Button from './Button';
 
 const KINDS: TargetKind[] = ['editor', 'terminal', 'agent'];
@@ -13,33 +14,55 @@ const BLANK: TargetDraft = {
 	wsl_run_args_template: ''
 };
 
+// the wsl half of a target has nothing to describe on a mac; the fields
+// stay in the draft (blank) so the struct the backend gets is one shape
 const FIELDS: { key: keyof TargetDraft; placeholder: string }[] = [
 	{ key: 'name', placeholder: 'Name — e.g. Cursor' },
 	{ key: 'executable', placeholder: 'Executable — e.g. cursor' },
-	{ key: 'args_template', placeholder: 'Windows args — e.g. "{path}"' },
 	{
-		key: 'wsl_executable',
-		placeholder: 'WSL executable — blank if it speaks WSL itself'
+		key: 'args_template',
+		placeholder: isMac ? 'Args — e.g. "{path}"' : 'Windows args — e.g. "{path}"'
 	},
-	{
-		key: 'wsl_args_template',
-		placeholder: 'WSL args — blank means it cannot open WSL projects'
-	}
+	...(isMac
+		? []
+		: [
+				{
+					key: 'wsl_executable' as const,
+					placeholder: 'WSL executable — blank if it speaks WSL itself'
+				},
+				{
+					key: 'wsl_args_template' as const,
+					placeholder: 'WSL args — blank means it cannot open WSL projects'
+				}
+			])
 ];
 
 // terminals only: blank means the target cannot run dev scripts
 const RUN_FIELDS: { key: keyof TargetDraft; placeholder: string }[] = [
-	{ key: 'run_args_template', placeholder: 'Run args — {command} in a Windows project' },
 	{
-		key: 'wsl_run_args_template',
-		placeholder: 'WSL run args — {command} in a WSL project'
-	}
+		key: 'run_args_template',
+		placeholder: isMac
+			? 'Run args — {command} in the project'
+			: 'Run args — {command} in a Windows project'
+	},
+	...(isMac
+		? []
+		: [
+				{
+					key: 'wsl_run_args_template' as const,
+					placeholder: 'WSL run args — {command} in a WSL project'
+				}
+			])
 ];
 
 const PLACEHOLDERS = [
-	{ code: '{path}', note: 'the Windows path' },
-	{ code: '{distro}', note: 'and' },
-	{ code: '{linux_path}', note: 'for WSL,' },
+	{ code: '{path}', note: isMac ? 'the project path,' : 'the Windows path' },
+	...(isMac
+		? []
+		: [
+				{ code: '{distro}', note: 'and' },
+				{ code: '{linux_path}', note: 'for WSL,' }
+			]),
 	{ code: '{command}', note: 'in the run templates, and' },
 	{ code: '{script}', note: '— terminals only — the generated tmux session script' }
 ];
@@ -80,8 +103,9 @@ const TargetList = ({
 					className: 'text-text-muted border-border-strong',
 					title: 'Runs inside a distro — this target cannot open Windows projects'
 				},
+				// one side only on a mac, where the badge would label every row
 				{
-					show: agent,
+					show: agent && !isMac,
 					label: t.wsl_executable ? 'in distro' : 'windows',
 					className: 'text-text-muted border-border-strong',
 					title: 'The side this agent is installed on'
@@ -201,7 +225,9 @@ const TargetManager = ({
 	const scanLabel = scanning ? 'Scanning…' : found ? 'Scan again' : 'Scan';
 	const scanHint =
 		found === null
-			? 'Looks for installed editors, terminals and coding agents (Claude Code, Codex, OpenCode, Gemini CLI) on PATH, and for command-line editors and agents inside distros that are already running. It never starts a distro. An agent opens in your default terminal, in the project directory.'
+			? isMac
+				? 'Looks for installed editors, terminals and coding agents (Claude Code, Codex, OpenCode, Gemini CLI) on this Mac: on your login PATH, and in /Applications. An agent opens in your default terminal, in the project directory.'
+				: 'Looks for installed editors, terminals and coding agents (Claude Code, Codex, OpenCode, Gemini CLI) on PATH, and for command-line editors and agents inside distros that are already running. It never starts a distro. An agent opens in your default terminal, in the project directory.'
 			: found.length === 0
 				? 'Nothing new: everything found is already registered.'
 				: null;
