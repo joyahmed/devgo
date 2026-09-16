@@ -643,6 +643,25 @@ mod tests {
         );
     }
 
+    /// A prefs.json from before this field keeps the lane quiet, and the
+    /// switch survives a relaunch.
+    #[test]
+    fn server_details_are_hidden_until_asked() {
+        let dir = std::env::temp_dir().join("devgo-prefs-test-server-details");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("prefs.json"), r#"{"window_transparency":30}"#)
+            .unwrap();
+
+        let mut s = PreferencesStore::new(dir.clone()).unwrap();
+        assert!(!s.show_server_details(), "the name only, by default");
+        s.set_show_server_details(true).unwrap();
+
+        let again = PreferencesStore::new(dir).unwrap();
+        assert!(again.show_server_details());
+        assert_eq!(again.window_transparency(), 30, "the rest untouched");
+    }
+
     #[test]
     fn window_state_round_trips() {
         let dir = std::env::temp_dir().join("devgo-prefs-test-window");
