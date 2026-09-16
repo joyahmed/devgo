@@ -654,7 +654,11 @@ const ProjectTree = ({
 
 	const toggle = (ws: string) => setCollapsedFor(ws, !isCollapsed(ws));
 
-	if (loading) {
+	// only while there is nothing to show. loading is true for the whole of
+	// a refresh too, and this line took the place of every card for a scan
+	// that changes a row or two; with a list on screen the rows stay put
+	// and the refresh glyph spins instead
+	if (loading && projects.length === 0) {
 		return (
 			<div className='flex-1 flex items-center justify-center text-15 text-text-muted'>
 				<span className='animate-spin text-18 mr-2'>&#9696;</span>

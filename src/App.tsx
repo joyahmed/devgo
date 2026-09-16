@@ -1994,7 +1994,7 @@ const AppInner = () => {
 								onClick={handleRefresh}
 								title={`Refresh (${prettyKeys(shortcutFor('refresh'))})`}
 							>
-								<RefreshIcon />
+								<RefreshIcon spinning={loading} />
 							</Button>
 							</div>
 						</div>
