@@ -1774,6 +1774,10 @@ const AppInner = () => {
 			// by hand here since 11, so settings › shortcuts never listed it
 			if (fire('refreshAlt', handleRefresh)) return;
 
+			// a server row under the cursor: the terminal key opens it in the
+			// default terminal, the way its enter does
+			if (serverSel && fire('openTerminal', () => openServer(serverSel))) return;
+
 			if (!selected) return;
 			if (fire('openEditor', () => handleOpenEditor())) return;
 			if (fire('openTerminal', () => handleOpenTerminal())) return;
@@ -1794,7 +1798,7 @@ const AppInner = () => {
 		};
 		window.addEventListener('keydown', handler);
 		return () => window.removeEventListener('keydown', handler);
-	}, [selected, workspaces, git]);
+	}, [selected, workspaces, git, serverSel]);
 
 	return (
 		// the radius belongs to a floating window; flush with the screen it
