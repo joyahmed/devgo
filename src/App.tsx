@@ -32,6 +32,7 @@ import { useProjects } from './hooks/useProjects';
 import { useServers } from './hooks/useServers';
 import { useTargets } from './hooks/useTargets';
 import { useWorkspaces } from './hooks/useWorkspaces';
+import { useWsl } from './hooks/useWsl';
 import { lastSegment } from './paths';
 import {
 	appForFolder,
@@ -151,14 +152,10 @@ const AppInner = () => {
 		loadHotkey();
 	}, []);
 
-	// Live WSL state, refreshed on the passes the app already makes — every
-	// scan, and every stop attempt — never on a timer. `wsl -l -q --running`
-	// boots nothing, so it is free to ask.
-	const [distros, setDistros] = useState<string[]>([]);
-	const refreshDistros = () => {
-		invoke<string[]>('get_running_distros').then(setDistros).catch(() => {});
-	};
-	useEffect(refreshDistros, [workspaceStates]);
+	// the wsl chip: mount, focus and the backend's vm watcher live in the
+	// hook; the passes the app already makes re-read it too, as since 12
+	const { wsl, refreshWsl } = useWsl();
+	useEffect(refreshWsl, [workspaceStates]);
 
 	// One dialog, three destructive actions with three different sentences:
 	// the popover asks App to confirm, and App renders the question. the
@@ -1183,11 +1180,11 @@ const AppInner = () => {
 				run: () => handleOpenRemote(p)
 			});
 		}
-		if (distros.length > 0) {
+		if (wsl.distros.length > 0) {
 			commands.push({
 				id: 'wsl.shutdown',
 				title: 'Shut down all WSL',
-				subtitle: distros.join(', '),
+				subtitle: wsl.distros.join(', '),
 				keywords: ['wsl', 'stop', 'kill'],
 				run: () =>
 					setConfirmAction({
@@ -1197,7 +1194,7 @@ const AppInner = () => {
 							invoke<string>('shutdown_wsl')
 								.then(m => toast(m, 'success'))
 								.catch(e => toast(showError(e), 'error'))
-								.finally(refreshDistros)
+								.finally(refreshWsl)
 					})
 			});
 		}
@@ -1427,8 +1424,8 @@ const AppInner = () => {
 				<div className='flex items-center gap-2'>
 					<WslControl
 						{...{
-							distros,
-							onChanged: refreshDistros,
+							wsl,
+							onChanged: refreshWsl,
 							onConfirm: (message: string, run: () => void) =>
 								setConfirmAction({ message, run }),
 							onResult: toast
