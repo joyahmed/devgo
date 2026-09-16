@@ -103,8 +103,10 @@
 
 	/* the drawers: a panel arrives from the edge it belongs to. 180ms, the
 	   same as the toast; a drawer is the answer to a click. the top sheet
-	   keeps its translateX(-50%) centring through the slide, or it would
-	   jump sideways on the last frame */
+	   is centred by -translate-x-1/2, which is the `translate` property in
+	   tailwind 4 and composes with `transform`: the keyframes must not
+	   carry their own -50%, or the sheet slides at -100% and jumps to the
+	   centre on the last frame */
 	--animate-slide-left: slide-left 180ms ease-out;
 	@keyframes slide-left {
 		from {
@@ -119,11 +121,11 @@
 	--animate-slide-down: slide-down 180ms ease-out;
 	@keyframes slide-down {
 		from {
-			transform: translate(-50%, -16px);
+			transform: translateY(-16px);
 			opacity: 0;
 		}
 		to {
-			transform: translate(-50%, 0);
+			transform: none;
 			opacity: 1;
 		}
 	}
