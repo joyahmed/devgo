@@ -633,9 +633,11 @@ const ProjectTree = ({
 		setServerCursor(s.id);
 		onServerCursor?.(s);
 	};
+	// a folder row is still on its server: the footer stays with it
 	const selectFolder = (s: Server, f: RemoteFolder) => {
 		clearCursors();
 		setFolderCursor(folderKey(s, f));
+		onServerCursor?.(s);
 	};
 	const land = (r: NavRow) => {
 		if (r.kind === 'project') selectProject(r.project);
