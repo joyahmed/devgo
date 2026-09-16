@@ -1,14 +1,12 @@
-use std::os::windows::process::CommandExt;
 use std::process::Command;
 
 use serde::Serialize;
 
+use super::platform::Quiet;
 use super::platform::{paths, wsl};
 use super::scanner::distro_of;
 use crate::error::AppError;
 use crate::models::Project;
-
-const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct DevScript {
@@ -69,7 +67,7 @@ fn read_windows(path: &str) -> Option<String> {
 
 fn read_wsl(distro: &str, linux_path: &str) -> Option<String> {
     let output = Command::new("wsl")
-        .creation_flags(CREATE_NO_WINDOW)
+        .quiet()
         .env("WSL_UTF8", "1")
         .args([
             "-d",

@@ -9,15 +9,13 @@
 //! "you have no repos".
 use std::collections::{HashMap, HashSet};
 use std::fs;
-use std::os::windows::process::CommandExt;
 use std::path::PathBuf;
 use std::process::Command;
 
 use serde::{Deserialize, Serialize};
 
+use super::platform::Quiet;
 use crate::error::AppError;
-
-const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 // gh repo list caps at 1000 per call. the lane header shows the count, so
 // a cap would be visible rather than silent
@@ -162,7 +160,7 @@ pub fn is_stale(fetched_at: u64, now: u64) -> bool {
 /// auth login".
 fn gh(args: &[&str]) -> Result<String, AppError> {
     let output = Command::new("gh")
-        .creation_flags(CREATE_NO_WINDOW)
+        .quiet()
         .args(args)
         .output()
         .map_err(|_| AppError::GhUnavailable(NOT_INSTALLED.into()))?;

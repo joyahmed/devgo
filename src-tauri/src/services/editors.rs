@@ -5,15 +5,13 @@
 //! asked: an editor list is not worth booting a VM for.
 
 use std::collections::HashMap;
-use std::os::windows::process::CommandExt;
 use std::process::Command;
 
 use serde::Serialize;
 
 use super::platform::wsl;
+use super::platform::Quiet;
 use crate::models::target::{LaunchTarget, TargetKind, WT_ARGS};
-
-const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 struct WinCandidate {
     id: &'static str,
@@ -384,11 +382,7 @@ fn where_lookup(names: &[&str]) -> HashMap<String, String> {
     if names.is_empty() {
         return found;
     }
-    let Ok(out) = Command::new("where.exe")
-        .creation_flags(CREATE_NO_WINDOW)
-        .args(names)
-        .output()
-    else {
+    let Ok(out) = Command::new("where.exe").quiet().args(names).output() else {
         return found;
     };
     for line in String::from_utf8_lossy(&out.stdout).lines() {
