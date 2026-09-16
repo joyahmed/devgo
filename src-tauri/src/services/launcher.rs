@@ -1,5 +1,7 @@
 use std::process::Command;
 
+use serde::Deserialize;
+
 #[cfg(windows)]
 use super::platform::Quiet;
 use super::platform::RuntimeInfo;
@@ -7,6 +9,18 @@ use super::preferences::TmuxConfig;
 use crate::error::AppError;
 use crate::models::target::LaunchTarget;
 use crate::models::Project;
+
+// where a server's ssh line runs on this machine: the terminal's own run
+// form, a psmux session whose window runs it, or the default distro's ssh
+// through the terminal's wsl run form. the remote half, tmux on the box
+// or a plain shell, is the server's own flag and lives in the line
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ServerVia {
+    Terminal,
+    Psmux,
+    Wsl,
+}
 
 fn is_wsl(project: &Project) -> bool {
     let normalized = project.full_path.replace('\\', "/");
@@ -547,6 +561,38 @@ if ($LASTEXITCODE -ne 0) {{
     )
 }
 
+// the psmux script for a server: one session, one window, and the window
+// runs the line (psmux takes a shell command on new-session, as tmux
+// does). attach when it exists, so the next click lands on the shell
+// already open on the box instead of a second ssh. no psmux is the line
+// run plain in the -NoExit shell, the same courtesy the project script
+// pays
+#[cfg(any(windows, test))]
+fn build_psmux_command_script(
+    session: &str,
+    windows_path: &str,
+    command: &str,
+) -> String {
+    let cd = format!("Set-Location -LiteralPath {}\n", ps_quote(windows_path));
+    let session_q = ps_quote(session);
+    let exact_q = ps_quote(&format!("={session}"));
+    let command_q = ps_quote(command);
+    format!(
+        r#"{cd}if (-not (Get-Command psmux.exe -CommandType Application -ErrorAction SilentlyContinue)) {{
+    Write-Host 'DevGo: psmux is not installed, so this is a plain ssh. For a session: winget install marlocarlo.psmux'
+    {command}
+    return
+}}
+$PSNativeCommandUseErrorActionPreference = $false
+psmux.exe has-session -t {exact_q} 2>$null
+if ($LASTEXITCODE -ne 0) {{
+    psmux.exe new-session -d -s {session_q} -n 'ssh' {command_q}
+}}
+psmux.exe attach -t {exact_q}
+"#
+    )
+}
+
 /// One single-quoted PowerShell string, for the same reason as sh_quote:
 /// in double quotes $var and $( ) expand and a `"` ends the string. Single
 /// quotes hold everything but `'`, which PowerShell escapes by doubling.
@@ -596,6 +642,77 @@ pub fn run_line(
 
     let args = run_script_args(&args, project, command)?;
     Ok((exe, args))
+}
+
+// the line for a server through one of the local hosts. home is the
+// stand-in project (a server is not a folder here; the terminal's {path}
+// is the home directory). running is the live distro list, read by the
+// caller without booting anything: a stopped default distro is a refusal,
+// never a boot
+pub fn server_line(
+    target: &LaunchTarget,
+    home: &Project,
+    info: &RuntimeInfo,
+    command: &str,
+    via: ServerVia,
+    running: &[String],
+) -> Result<(String, String), AppError> {
+    match via {
+        ServerVia::Terminal => run_line(target, home, info, command),
+        ServerVia::Psmux => psmux_line(target, home, command),
+        ServerVia::Wsl => {
+            let distro = info
+                .default_distro
+                .clone()
+                .ok_or_else(|| AppError::NoWslDistro(home.name.clone()))?;
+            if !super::platform::wsl::is_running(&distro, running) {
+                return Err(AppError::WslNotRunning(distro));
+            }
+            // ~ is wsl's own spelling of the distro user's home, and the
+            // line runs under bash -lc, so it is the distro's ssh and the
+            // distro's ~/.ssh that answer
+            target
+                .resolve_run(
+                    &home.full_path,
+                    Some((&distro, "~")),
+                    &escape(command),
+                )
+                .ok_or_else(|| AppError::TargetCannotRun(target.name.clone()))
+        }
+    }
+}
+
+// the terminal's session form with the server script in the {script}
+// seam, the way a project launch goes; a terminal whose template has no
+// seam has nowhere to put a session
+#[cfg(windows)]
+fn psmux_line(
+    target: &LaunchTarget,
+    home: &Project,
+    command: &str,
+) -> Result<(String, String), AppError> {
+    let (exe, args) =
+        target.resolve(&home.full_path, None).ok_or_else(|| {
+            AppError::TargetWslOnly(target.name.clone(), home.name.clone())
+        })?;
+    if !args.contains("{script}") {
+        return Err(AppError::TargetCannotHost(target.name.clone()));
+    }
+    let session = format!("ssh-{}", sanitize_file_stem(&home.name));
+    let script = build_psmux_command_script(&session, &home.full_path, command);
+    let temp_file = std::env::temp_dir().join(format!("devgo-{session}.ps1"));
+    std::fs::write(&temp_file, &script)?;
+    Ok((exe, args.replace("{script}", &temp_file.to_string_lossy())))
+}
+
+// psmux is a windows thing; a mac's terminal is the row's own button
+#[cfg(not(windows))]
+fn psmux_line(
+    target: &LaunchTarget,
+    _home: &Project,
+    _command: &str,
+) -> Result<(String, String), AppError> {
+    Err(AppError::TargetCannotHost(target.name.clone()))
 }
 
 // a windows run template carries the command on the terminal's own line
@@ -1371,6 +1488,32 @@ mod tests {
             !bail.contains("throw") && !bail.contains("Write-Error"),
             "not installed is not an error: {bail}"
         );
+    }
+
+    // a server's session: the window is the ssh, and a second launch
+    // attaches to it rather than opening a second ssh
+    #[test]
+    fn a_psmux_session_for_a_server_runs_the_line_in_its_window() {
+        let line = "ssh -t box tmux new-session -A -s devgo";
+        let script =
+            build_psmux_command_script("ssh-box", r"C:\Users\joy", line);
+        assert!(
+            script.contains(&format!(
+                "psmux.exe new-session -d -s 'ssh-box' -n 'ssh' '{line}'"
+            )),
+            "{script}"
+        );
+        assert!(script.contains("psmux.exe has-session -t '=ssh-box'"));
+        assert!(script.ends_with("psmux.exe attach -t '=ssh-box'\n"));
+        // no psmux: the line runs plain, the tab stays
+        let check = script.find("Get-Command psmux.exe").unwrap();
+        let first_call = script.find("psmux.exe has-session").unwrap();
+        let bail = &script[check..first_call];
+        assert!(
+            bail.contains(&format!("\n    {line}\n    return\n")),
+            "{bail}"
+        );
+        assert!(!script.contains("new-window"), "one window, no layout");
     }
 
     /// The other half of the {script} contract, on the Windows side: a .ps1,

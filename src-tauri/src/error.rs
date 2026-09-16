@@ -88,6 +88,12 @@ pub enum AppError {
     #[error("{0} has no run template, so it cannot run a command")]
     TargetCannotRun(String),
 
+    #[error("{0} has no session form, so it cannot hold a psmux session")]
+    TargetCannotHost(String),
+
+    #[error("{0} is not running. DevGo never boots a distro for a terminal; start it first")]
+    WslNotRunning(String),
+
     #[error("Could not bind {0}: {1}")]
     HotkeyFailed(String, String),
 

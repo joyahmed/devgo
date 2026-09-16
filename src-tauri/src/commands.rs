@@ -921,15 +921,20 @@ pub fn has_ssh() -> bool {
     editors::is_on_path("ssh")
 }
 
-// a terminal on the server: the default terminal's run template with the
-// ssh line as the command, the dev-script path. the terminal's {path} is
-// the home directory; a server is not a folder here
+// a terminal on the server: the ssh line through a local host, the
+// terminal picked by id or the default. via says which host: the
+// terminal's run template (the dev-script path), a psmux session whose
+// window runs the line, or the default distro's own ssh. the terminal's
+// {path} is the home directory; a server is not a folder here. the line
+// comes back so the row can show it; preview reads it and spawns nothing
 #[tauri::command]
 pub fn open_server(
     id: String,
     target_id: Option<String>,
+    via: Option<launcher::ServerVia>,
+    preview: Option<bool>,
     state: State<AppState>,
-) -> Result<(), AppError> {
+) -> Result<String, AppError> {
     let server = state
         .servers_store
         .lock()
@@ -939,12 +944,25 @@ pub fn open_server(
     let stand_in = home_stand_in(&server.name);
     let info = state.runtime_info.lock().map_err(lock_err)?.clone();
     let terminal = resolve_target(&state, TargetKind::Terminal, target_id)?;
-    launcher::launch_with_command(
+    let via = via.unwrap_or(launcher::ServerVia::Terminal);
+    // the liveness read only when the wsl host asks; through the memo,
+    // and never a boot
+    let running = match via {
+        launcher::ServerVia::Wsl => wsl::running_distros_memo(),
+        _ => Vec::new(),
+    };
+    let (exe, args) = launcher::server_line(
         &terminal,
         &stand_in,
         &info,
         &server.ssh_command(),
-    )
+        via,
+        &running,
+    )?;
+    if !preview.unwrap_or(false) {
+        launcher::spawn_raw(&exe, &args)?;
+    }
+    Ok(format!("{exe} {args}"))
 }
 
 // what the menu copies: the ssh line and the scp prefix
