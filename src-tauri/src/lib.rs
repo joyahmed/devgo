@@ -381,9 +381,13 @@ pub fn run() {
                 app.handle(),
                 &main_cfg,
             )?;
-            // on macos the builder method needs macos-private-api, which
-            // this crate does not enable; the config's false stands there
-            #[cfg(not(target_os = "macos"))]
+            // one call, both platforms: a window born see-through is
+            // created transparent so what is behind it shows through the
+            // ground's own alpha. on macos this needs the macos-private-api
+            // feature (Cargo.toml) and app.macOSPrivateApi (tauri.conf.json),
+            // both now set; webview2 needs neither. the config keeps
+            // transparent:false so an opaque launch never asks for the alpha
+            // surface, and this flips it on only when the knob says so
             let builder = builder.transparent(see_through);
             builder.build()?;
 
