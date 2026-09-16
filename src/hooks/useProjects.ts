@@ -85,10 +85,14 @@ export const useProjects = () => {
 	// badges used to run on every apply, which is how one focus gain turned
 	// into three backend commands; get_git_info's own comment said "only on
 	// an explicit refresh" for ten chapters
-	const apply = (payload: ProjectsPayload, withBadges: boolean) => {
+	const paint = (payload: ProjectsPayload) => {
 		setProjects(payload.projects);
 		setWorkspaceStates(payload.workspaces);
 		setRanks(new Map(payload.ranks.map(r => [r.full_path, r])));
+	};
+
+	const apply = (payload: ProjectsPayload, withBadges: boolean) => {
+		paint(payload);
 		lastPassAt.current = Date.now();
 		const unseen = payload.projects.some(
 			p => !badgedPaths.current.has(p.full_path)
@@ -126,7 +130,9 @@ export const useProjects = () => {
 			retryTimer.current = null;
 		}
 
-		if (!workspaceStates.some(isRetryable)) {
+		// the cached paint is not a pass: the one in flight brings its own
+		// states, and every one of them reads as cached until then
+		if (inFlight.current || !workspaceStates.some(isRetryable)) {
 			retryStep.current = 0;
 			return;
 		}
@@ -168,6 +174,20 @@ export const useProjects = () => {
 	// it still exists. Runs exactly once — re-running it after a rescan would
 	// steal the selection the user just made.
 	useEffect(() => {
+		// cache first: the last known list is on screen in one read, no
+		// read_dir, no wsl.exe, no git, and the live pass replaces it a
+		// moment later. no badges on it either, the pass brings those. an
+		// empty cache (first run) keeps the spinner, the honest state then
+		invoke<ProjectsPayload>('get_cached_projects')
+			.then(cached => {
+				if (cached.projects.length === 0) return;
+				paint(cached);
+				setLoading(false);
+				requestAnimationFrame(() => {
+					invoke('mark_startup', { stage: 'first-list' }).catch(() => {});
+				});
+			})
+			.catch(() => {});
 		runPass(false, true)
 			.then(payload =>
 				invoke<LastProject | null>('get_last_project')
