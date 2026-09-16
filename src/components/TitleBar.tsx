@@ -24,8 +24,19 @@ const TitleBar = ({ children }: TitleBarProps) => {
 				className='flex flex-1 items-center gap-2 cursor-grab'
 				onMouseDown={() => appWindow.startDragging()}
 			>
-				<span className='text-18 text-accent pointer-events-none'>
-					&#10022;
+				{/* an svg, not the ✦ text glyph (U+2726): the symbol font renders
+				    it a hair on windows and tiny on a mac, so the mark shrank next
+				    to DevGo. a 16 px path is the same size on both */}
+				<span className='text-accent pointer-events-none flex items-center'>
+					<svg
+						width='16'
+						height='16'
+						viewBox='0 0 24 24'
+						fill='currentColor'
+						aria-hidden='true'
+					>
+						<path d='M12 1.5 L14.4 9.6 L22.5 12 L14.4 14.4 L12 22.5 L9.6 14.4 L1.5 12 L9.6 9.6 Z' />
+					</svg>
 				</span>
 				{/* no tagline: a title bar is not a place for a subtitle */}
 				<span className='text-18 font-bold text-text-primary pointer-events-none'>
