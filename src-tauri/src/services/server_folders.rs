@@ -41,6 +41,25 @@ pub struct ServerListing {
     // what ssh said when it did not
     #[serde(default)]
     pub error: Option<String>,
+    // the apps on the box, from ~/scripts/devgo-inventory.sh on the same
+    // ssh as the listing; None when the box has no such script
+    #[serde(default)]
+    pub inventory: Option<super::server_apps::Inventory>,
+    // the actions the server declares, from devgo-actions.json beside it
+    #[serde(default)]
+    pub actions: Option<super::server_apps::Actions>,
+    // the script or the file was there but did not parse; shown on the row
+    #[serde(default)]
+    pub inventory_error: Option<String>,
+}
+
+// one run of the listing ssh, in its parts
+#[derive(Debug, Default)]
+pub struct Listed {
+    pub folders: Vec<RemoteFolder>,
+    pub inventory: Option<super::server_apps::Inventory>,
+    pub actions: Option<super::server_apps::Actions>,
+    pub inventory_error: Option<String>,
 }
 
 // one ls -d over every root's children. the 2>/dev/null is for the remote
@@ -215,14 +234,49 @@ fn ssh(server: &Server, remote: &str) -> Result<String, String> {
     Ok(String::from_utf8_lossy(&out.stdout).into_owned())
 }
 
-// the roots' children. echo ~ first so a ~ root can be attributed
-pub fn list(server: &Server) -> Result<Vec<RemoteFolder>, String> {
+// the roots' children, and on the same ssh the inventory and the actions.
+// echo ~ first so a ~ root can be attributed
+pub fn list(server: &Server) -> Result<Listed, String> {
+    use super::server_apps::{append_unlisted, combined_command, split};
     let roots = effective_roots(server);
-    let text = ssh(server, &format!("echo ~; {}", listing_command(&roots)))?;
-    let mut lines = text.lines();
+    let listing = format!("echo ~; {}", listing_command(&roots));
+    let text = ssh(server, &combined_command(&listing))?;
+    let parts = split(&text);
+    let mut lines = parts.listing.lines();
     let home = lines.next().map(|l| l.trim().to_string());
     let rest: String = lines.collect::<Vec<_>>().join("\n");
-    Ok(parse_listing(&rest, &roots, home.as_deref()))
+    let mut folders = parse_listing(&rest, &roots, home.as_deref());
+    // the two json parts: absent, parsed, or an error carried, the first
+    // that failed
+    let mut inventory_error = None;
+    let inventory = parts.inventory.and_then(|r| match r {
+        Ok(i) => Some(i),
+        Err(e) => {
+            inventory_error = Some(e);
+            None
+        }
+    });
+    let actions = parts.actions.and_then(|r| match r {
+        Ok(a) => Some(a),
+        Err(e) => {
+            inventory_error.get_or_insert(e);
+            None
+        }
+    });
+    if let Some(i) = &inventory {
+        append_unlisted(&mut folders, i);
+    }
+    Ok(Listed {
+        folders,
+        inventory,
+        actions,
+        inventory_error,
+    })
+}
+
+// one remote line whose output nobody reads: the send-keys door
+pub fn run_remote(server: &Server, line: &str) -> Result<(), String> {
+    ssh(server, line).map(|_| ())
 }
 
 // the children of one folder: the drill-down. same ssh, same rules; the
