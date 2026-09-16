@@ -50,6 +50,15 @@ pub enum ScanOutcome {
     Unavailable(UnavailableReason),
 }
 
+// the file system of a path on this machine's own disk: the word the rows
+// and the title bar show for it. wsl and network are unc kinds, windows only
+#[cfg(windows)]
+pub const LOCAL_FS: &str = "Windows";
+#[cfg(target_os = "macos")]
+pub const LOCAL_FS: &str = "Mac";
+#[cfg(not(any(windows, target_os = "macos")))]
+pub const LOCAL_FS: &str = "Linux";
+
 fn detect_file_system(workspace: &str) -> &str {
     let normalized = super::platform::paths::normalize(workspace);
     if normalized.starts_with("//wsl.localhost/")
@@ -60,7 +69,7 @@ fn detect_file_system(workspace: &str) -> &str {
         // a UNC path that isn't WSL is a network share, slow for dev tooling
         "Network"
     } else {
-        "Windows"
+        LOCAL_FS
     }
 }
 
