@@ -58,8 +58,10 @@ const AboutPanel = () => {
 				</div>
 			</HelpSection>
 
-			{/* no licence line for devgo itself: the repository carries none, and
-			    inventing one here would be a legal statement nobody made */}
+			<HelpSection title='Licence'>
+				<p>MIT. Copyright Joy Ahmed. The LICENSE file in the repository is the text.</p>
+			</HelpSection>
+
 			<HelpSection title='Third-party'>
 				<p>
 					GitHub CLI (<Code>gh</Code>): MIT, by GitHub. Not bundled: DevGo
