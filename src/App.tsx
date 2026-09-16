@@ -1205,10 +1205,16 @@ const AppInner = () => {
 				keywords: ['ssh', 'server', 'machines'],
 				run: () => openSettings('servers')
 			},
+			// the subtitle names the host only when the lane may; the host stays
+			// a keyword either way, so typing it still finds the row
 			...servers.servers.map(s => ({
 				id: `server.open.${s.id}`,
 				title: `Server: open ${s.name}`,
-				subtitle: `ssh ${s.alias ?? `${s.user ? `${s.user}@` : ''}${s.host}`}`,
+				subtitle: s.alias
+					? `ssh ${s.alias}`
+					: servers.showDetails
+						? `ssh ${s.user ? `${s.user}@` : ''}${s.host}`
+						: 'over ssh',
 				keywords: ['server', 'ssh', 'connect', s.name.toLowerCase(), s.host],
 				run: () => openServer(s)
 			})),
