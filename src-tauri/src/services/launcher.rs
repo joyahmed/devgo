@@ -164,22 +164,63 @@ pub fn launch_target(
     // the template decides, not the kind: a terminal whose args ignore
     // {script} used to get a devgo-*.sh in %TEMP% that nothing ever read.
     // the filesystem decides which script: bash driving tmux in the distro,
-    // or powershell driving psmux, same windows from the same config. until
-    // psmux the windows side was the `_` arm, and a windows project opened
-    // one bare tab while the same launch on a wsl project opened three
+    // or the platform's own for a local project (powershell driving psmux
+    // on windows, bash driving native tmux on a mac), same windows from the
+    // same config. until psmux the windows side was the `_` arm, and a
+    // windows project opened one bare tab while the same launch on a wsl
+    // project opened three
     let args = match (&wsl, args.contains("{script}")) {
         (Some((distro, linux_path)), true) => {
             let script = write_tmux_script(project, distro, linux_path, tmux)?;
             args.replace("{script}", &script)
         }
         (None, true) => {
-            let script = write_psmux_script(project, tmux)?;
+            let script = write_local_script(project, tmux)?;
             args.replace("{script}", &script)
         }
         _ => args,
     };
 
     spawn_raw(&exe, &args)
+}
+
+// the session script for a local project: psmux on windows. one cfg seam,
+// at the function, so launch_target reads the same on both platforms
+#[cfg(windows)]
+fn write_local_script(
+    project: &Project,
+    tmux: &TmuxConfig,
+) -> Result<String, AppError> {
+    write_psmux_script(project, tmux)
+}
+
+// the session script for a local project on a mac: native tmux, driven by
+// the same bash the wsl side runs inside a distro. written as
+// devgo-{session}.command, the extension terminal.app runs when handed a
+// file, and made executable, because terminal refuses one that is not.
+// the path comes back as-is; the template double-quotes it
+#[cfg(not(windows))]
+fn write_local_script(
+    project: &Project,
+    tmux: &TmuxConfig,
+) -> Result<String, AppError> {
+    let session = tmux_session_name(project);
+    let script = build_mac_script(&session, &project.full_path, tmux);
+    write_command_file(&format!("devgo-{session}.command"), &script)
+}
+
+// a .command file in the temp directory, executable; both mac scripts go
+// through here so the mode bits are set in one place
+#[cfg(not(windows))]
+fn write_command_file(name: &str, script: &str) -> Result<String, AppError> {
+    use std::os::unix::fs::PermissionsExt;
+    let temp_file = std::env::temp_dir().join(name);
+    std::fs::write(&temp_file, script)?;
+    std::fs::set_permissions(
+        &temp_file,
+        std::fs::Permissions::from_mode(0o755),
+    )?;
+    Ok(temp_file.to_string_lossy().into_owned())
 }
 
 /// Write the tmux session script for a WSL project and return its Linux path.
@@ -210,6 +251,7 @@ fn write_tmux_script(
 /// The Windows twin of write_tmux_script: same session name, same filename
 /// discipline, and no path conversion, because the shell reading it is the
 /// one that wrote it. The template double-quotes the path it gets back.
+#[cfg(windows)]
 fn write_psmux_script(
     project: &Project,
     tmux: &TmuxConfig,
@@ -360,13 +402,59 @@ fn sh_quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', r"'\''"))
 }
 
+// the first lines of every .command file. terminal runs the file directly,
+// not through the rc files, so it starts with the same bare PATH the app
+// has, and tmux lives in /opt/homebrew/bin. the -x guard lets an intel mac
+// (homebrew in /usr/local, appended) and a mac with no homebrew pass
+// through silently. #!/bin/bash, not env bash: env would search the very
+// PATH this fixes
+#[cfg(any(not(windows), test))]
+const MAC_PREAMBLE: &str = r#"#!/bin/bash
+[ -x /opt/homebrew/bin/brew ] && eval "$(/opt/homebrew/bin/brew shellenv)"
+export PATH="$PATH:/usr/local/bin"
+"#;
+
+// the tmux session script for a local project on a mac: the body is
+// build_tmux_script's output unchanged, shebang aside, because tmux is
+// native here and bash is bash. what the mac adds is what terminal.app
+// takes away: the PATH, and one line plus a plain shell when tmux is not
+// installed, the courtesy psmux's script extends on windows. cd inside
+// the bail so the plain shell is in the project. not a flag on
+// build_tmux_script: its output is pinned byte for byte by the wsl tests,
+// and a shared function with a mac bool would be the drift this seam
+// exists to prevent
+#[cfg(any(not(windows), test))]
+fn build_mac_script(session: &str, path: &str, tmux: &TmuxConfig) -> String {
+    let body = build_tmux_script(session, path, tmux);
+    let body = body.strip_prefix("#!/usr/bin/env bash\n").unwrap_or(&body);
+
+    let bail = if tmux.enabled {
+        format!(
+            r#"if ! command -v tmux >/dev/null 2>&1; then
+    echo 'DevGo: tmux is not installed, so this is a plain shell. For named windows: brew install tmux'
+    cd {} || exit 1
+    exec "${{SHELL:-bash}}" -l
+fi
+"#,
+            sh_quote(path)
+        )
+    } else {
+        String::new()
+    };
+
+    format!("{MAC_PREAMBLE}{bail}{body}")
+}
+
 /// The PowerShell twin of build_tmux_script, line for line where the
 /// shells allow it. psmux speaks tmux's commands and returns tmux's exit
 /// codes, so every rule above holds here for the same reasons: reconcile
 /// per window, `=` on every target but the one being created, nothing
 /// killed or renamed. The reasons are repeated beside each line rather
 /// than pointed at, because whoever edits one script will not have the
-/// other open.
+/// other open. Built on a Mac too under test, as the Mac script is on
+/// Windows: a script is a string, and each platform proving the other's
+/// shape is free.
+#[cfg(any(windows, test))]
 fn build_psmux_script(
     session: &str,
     windows_path: &str,
@@ -446,6 +534,7 @@ if ($LASTEXITCODE -ne 0) {{
 /// quotes hold everything but `'`, which PowerShell escapes by doubling.
 /// A backslash needs nothing done to it, the escape character is the
 /// backtick, so G:\dev is G:\dev.
+#[cfg(any(windows, test))]
 fn ps_quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', "''"))
 }
@@ -570,6 +659,13 @@ mod tests {
     fn shell_dump_env(marker: &std::path::Path) -> String {
         format!("-c \"env > '{}'\"", marker.display())
     }
+
+    // the extension of the local session script: powershell on windows, a
+    // terminal.app .command on a mac
+    #[cfg(windows)]
+    const LOCAL_SCRIPT_EXT: &str = "ps1";
+    #[cfg(not(windows))]
+    const LOCAL_SCRIPT_EXT: &str = "command";
 
     // a local path spelled the way this platform spells one
     #[cfg(windows)]
@@ -1342,8 +1438,10 @@ mod tests {
     #[test]
     fn a_windows_terminal_template_without_the_placeholder_writes_no_script() {
         let project = local_project("orphan-check", "work");
-        let script_path = std::env::temp_dir()
-            .join(format!("devgo-{}.ps1", tmux_session_name(&project)));
+        let script_path = std::env::temp_dir().join(format!(
+            "devgo-{}.{LOCAL_SCRIPT_EXT}",
+            tmux_session_name(&project)
+        ));
         let _ = std::fs::remove_file(&script_path);
         let plain = LaunchTarget {
             id: "plain".into(),
@@ -1459,5 +1557,166 @@ mod tests {
             "template did not survive into the process: {written:?}"
         );
         let _ = std::fs::remove_file(&marker);
+    }
+
+    // the mac: the wsl script, made local. the pure tests run on both
+    // platforms; the ones that spawn are unix-only, they hand sh a .command
+
+    // a path with a space and an apostrophe: a directory a mac user can
+    // make in the finder without thinking, and sh quoting is not cmd quoting
+    const HOSTILE_DIR: &str = "My Projects/it's here";
+
+    // the cheap way to write the mac script is a flag on build_tmux_script,
+    // at which point the two drift the first time someone edits one arm.
+    // so the wsl output stays byte-identical, the mac body is exactly that
+    // output minus its shebang, and only the mac output mentions homebrew
+    #[test]
+    fn the_mac_script_is_the_wsl_script_with_a_preamble() {
+        let tmux = tmux_with(&["code", "agents"]);
+        let wsl = build_tmux_script("app-deadbeef", "/Users/joy/app", &tmux);
+        let mac = build_mac_script("app-deadbeef", "/Users/joy/app", &tmux);
+
+        assert!(wsl.starts_with("#!/usr/bin/env bash\n"), "{wsl}");
+        assert!(
+            !wsl.contains("brew") && !wsl.contains("/opt/homebrew"),
+            "no mac lines leaked into the wsl script: {wsl}"
+        );
+
+        assert!(mac.starts_with(MAC_PREAMBLE), "{mac}");
+        assert!(mac.starts_with("#!/bin/bash\n"), "not env bash: {mac}");
+        assert!(mac.contains(r#"eval "$(/opt/homebrew/bin/brew shellenv)""#));
+        assert!(mac.contains("/usr/local/bin"), "an intel mac too: {mac}");
+
+        let body = wsl.strip_prefix("#!/usr/bin/env bash\n").unwrap();
+        assert!(
+            mac.ends_with(body),
+            "the mac body is the wsl script verbatim:\n{mac}\n---\n{wsl}"
+        );
+    }
+
+    // the script must not die on tmux: command not found; it cds into the
+    // project and hands over a plain login shell with one line saying how
+    // to get the windows, and checks after the preamble, because that is
+    // where /opt/homebrew/bin enters PATH
+    #[test]
+    fn a_mac_without_tmux_gets_a_plain_shell_and_the_install_command() {
+        let script = build_mac_script(
+            "app-deadbeef",
+            "/Users/joy/app",
+            &tmux_with(&["code"]),
+        );
+
+        let preamble = script.find("brew shellenv").expect("PATH first");
+        let check = script
+            .find("if ! command -v tmux")
+            .expect("then looked for");
+        let first_call =
+            script.find("tmux has-session").expect("then talked to");
+        assert!(preamble < check && check < first_call, "{script}");
+
+        let bail = &script[check..first_call];
+        assert!(bail.contains("brew install tmux"), "{bail}");
+        assert!(bail.contains("cd '/Users/joy/app' || exit 1"), "{bail}");
+        assert!(bail.contains(r#"exec "${SHELL:-bash}" -l"#), "{bail}");
+        assert_eq!(script.matches("DevGo: tmux is not installed").count(), 1);
+
+        // off means no tmux, so there is no tmux to look for and nothing to
+        // say about it; the body is already the plain-shell script
+        let off = TmuxConfig {
+            enabled: false,
+            window_names: vec!["code".into()],
+        };
+        let script = build_mac_script("app-deadbeef", "/Users/joy/app", &off);
+        assert!(!script.contains("tmux"), "{script}");
+        assert!(script.contains("cd '/Users/joy/app' || exit 1"), "{script}");
+        assert!(script.starts_with(MAC_PREAMBLE), "{script}");
+    }
+
+    // a directory with a space and an apostrophe reaches bash as one word,
+    // through sh_quote: single quotes, the apostrophe closed, escaped and
+    // reopened. every occurrence of the path is the quoted form
+    #[test]
+    fn a_mac_script_quotes_a_hostile_path_as_one_word() {
+        let path = format!("/Users/joy/{HOSTILE_DIR}");
+        let quoted = r#"'/Users/joy/My Projects/it'\''s here'"#;
+
+        let session =
+            build_mac_script("app-deadbeef", &path, &tmux_with(&["code"]));
+        assert!(session.contains(&format!("cd {quoted} || exit 1")));
+        assert!(session.contains(&format!("-c {quoted}")), "{session}");
+        assert_eq!(
+            session.matches("My Projects").count(),
+            session.matches(quoted).count(),
+            "the path appears only inside its quotes: {session}"
+        );
+    }
+
+    // the mac twin of the psmux placeholder test: a local project gets a
+    // .command, the tmux script with the project's own path and no
+    // conversion, that is executable, and the template is handed its path
+    #[cfg(not(windows))]
+    #[test]
+    fn the_script_placeholder_is_substituted_for_a_local_project_on_a_mac() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let marker =
+            std::env::temp_dir().join("devgo-mac-placeholder-proof.txt");
+        let _ = std::fs::remove_file(&marker);
+
+        let echoes = LaunchTarget {
+            id: "echo-script".into(),
+            name: "Echo Script".into(),
+            kind: TargetKind::Terminal,
+            executable: SHELL.into(),
+            args_template: shell_echo_to("{script}", &marker),
+            wsl_executable: None,
+            wsl_args_template: None,
+            run_args_template: None,
+            wsl_run_args_template: None,
+        };
+
+        let project = local_project("placeholder", "work");
+        let expected = std::env::temp_dir()
+            .join(format!("devgo-{}.command", tmux_session_name(&project)));
+        let _ = std::fs::remove_file(&expected);
+
+        launch_target(
+            &echoes,
+            &project,
+            &no_distro(),
+            &tmux_with(&["code", "git"]),
+        )
+        .unwrap();
+
+        let on_disk = std::fs::read_to_string(&expected)
+            .unwrap_or_else(|_| panic!("no script at {}", expected.display()));
+        assert!(on_disk.starts_with(MAC_PREAMBLE), "{on_disk}");
+        assert!(on_disk.contains("tmux new-session -d -s "), "{on_disk}");
+        assert!(on_disk.contains("-n 'code'"), "{on_disk}");
+        assert!(
+            on_disk.contains("-c '/Users/joy/work/placeholder'"),
+            "the project's own path, unconverted: {on_disk}"
+        );
+        let mode = std::fs::metadata(&expected).unwrap().permissions().mode();
+        assert_eq!(
+            mode & 0o111,
+            0o111,
+            "terminal.app refuses a file it cannot execute: {mode:o}"
+        );
+
+        let written_len = || std::fs::metadata(&marker).map_or(0, |m| m.len());
+        for _ in 0..40 {
+            if written_len() > 0 {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        let written =
+            std::fs::read_to_string(&marker).expect("target never ran");
+        assert!(!written.contains("{script}"), "{written:?}");
+        assert!(written.contains(".command"), "{written:?}");
+        assert!(!written.contains(".sh") && !written.contains(".ps1"));
+        let _ = std::fs::remove_file(&marker);
+        let _ = std::fs::remove_file(&expected);
     }
 }
