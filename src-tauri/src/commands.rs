@@ -2127,8 +2127,17 @@ pub fn get_window_transparency(state: State<AppState>) -> Result<u8, AppError> {
         .window_transparency())
 }
 
-// the window is the preview: every change is applied and persisted by
-// this one call, which hands back the clamped value for the slider
+// whether this window was born see-through (lib.rs setup). a knob moved
+// above 0 on a window born opaque is stored but shows only at the next
+// launch; the appearance panel says so instead of looking broken
+#[tauri::command]
+pub fn window_launched_transparent() -> bool {
+    crate::launched_transparent()
+}
+
+// the window is the preview when it was born see-through: every change
+// is applied and persisted by this one call, which hands back the
+// clamped value for the stepper
 #[tauri::command]
 pub fn set_window_transparency(
     percent: u8,
