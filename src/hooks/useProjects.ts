@@ -32,6 +32,10 @@ export const useProjects = () => {
 	const [ranks, setRanks] = useState<Map<string, ProjectRank>>(new Map());
 	const [git, setGit] = useState<Map<string, GitInfo>>(new Map());
 	const [tech, setTech] = useState<Map<string, ProjectTech>>(new Map());
+	// projects with a live tmux / psmux session: read with the badges and
+	// on the same focus cooldown, one tmux ls per running distro and one
+	// psmux list-sessions, never more often
+	const [sessions, setSessions] = useState<Set<string>>(new Set());
 	const [query, setQuery] = useState('');
 	const [selected, setSelected] = useState<Project | null>(null);
 	const [loading, setLoading] = useState(true);
@@ -64,7 +68,19 @@ export const useProjects = () => {
 				setTech(new Map(infos.map(i => [i.full_path, i])));
 			})
 			.catch(() => {});
+		invoke<string[]>('get_live_sessions', { projects: list })
+			.then(paths => setSessions(new Set(paths)))
+			.catch(() => {});
 	};
+
+	// after a kill: the set is known to have changed before the next pass
+	const forgetSession = (fullPath: string) =>
+		setSessions(prev => {
+			if (!prev.has(fullPath)) return prev;
+			const next = new Set(prev);
+			next.delete(fullPath);
+			return next;
+		});
 
 	// badges used to run on every apply, which is how one focus gain turned
 	// into three backend commands; get_git_info's own comment said "only on
@@ -245,6 +261,8 @@ export const useProjects = () => {
 		ranks,
 		git,
 		tech,
+		sessions,
+		forgetSession,
 		filtered,
 		pinnedProjects,
 		query,
