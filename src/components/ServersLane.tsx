@@ -49,12 +49,13 @@ const hostLine = (l: ServerListing) => {
 };
 
 // what the inventory knows about a folder that is an app: the processes
-// with their restarts, the site, the deployed commit
+// with their restarts, the site, the deployed commit. a container has no
+// pm2 name, so its docker name stands in
 const appTitle = (app: ServerApp, path: string) =>
 	[
 		...app.processes.map(
 			p =>
-				`${p.pm2 ?? '?'} ${p.status ?? ''}${p.restarts ? ` · ${p.restarts} restarts` : ''}`
+				`${p.pm2 ?? p.docker ?? '?'} ${p.status ?? ''}${p.restarts ? ` · ${p.restarts} restarts` : ''}`
 		),
 		app.site ? `site ${app.site.file}${app.site.ssl ? ' · https' : ''}` : null,
 		app.git?.head
