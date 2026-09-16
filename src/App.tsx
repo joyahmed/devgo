@@ -734,6 +734,14 @@ const AppInner = () => {
 				disabled: !p || (selectionIsWsl && !t.wsl_args_template),
 				run: () => handleOpenEditor(t.id)
 			})),
+			...targets.agents.map(t => ({
+				id: `open.agent.${t.id}`,
+				title: `Open in ${t.name}`,
+				subtitle: p ? `${p.name}, in your terminal` : 'Select a project first',
+				keywords: ['agent', 'ai', 'claude', 'codex', t.name.toLowerCase()],
+				disabled: !p || (selectionIsWsl ? !t.wsl_executable : !t.executable),
+				run: () => handleOpenAgent(t.id)
+			})),
 			...targets.terminals.map(t => ({
 				id: `open.terminal.${t.id}`,
 				title: `Open terminal: ${t.name}`,
@@ -993,6 +1001,12 @@ const AppInner = () => {
 				onClick: () => launchTerminal(p)
 			},
 			{ label: 'Open both', hint: hint('openBoth'), onClick: () => handleLaunch(p) },
+			...targets.agents.map(t => ({
+				label: `Open in ${t.name}`,
+				hint: t.id === targets.defaults.agent ? hint('openAgent') : undefined,
+				disabled: p.file_system === 'WSL' ? !t.wsl_executable : !t.executable,
+				onClick: () => openAgent(p, t.id).catch(e => toast(showError(e)))
+			})),
 			'separator',
 			{
 				label: 'Reveal in Explorer',
