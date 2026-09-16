@@ -329,6 +329,8 @@ const ProjectTree = ({
 	onServerOpen,
 	onServerContextMenu,
 	onServersAddMenu,
+	onFolderOpen,
+	onFolderContextMenu,
 	showHints,
 	launchingPath,
 	ref
@@ -338,12 +340,16 @@ const ProjectTree = ({
 	// reachable by arrow. beside the selection, and any change of the
 	// selection drops it, so the two are never lit at once
 	const [repoCursor, setRepoCursor] = useState<string | null>(null);
-	// and a server row, the same arrangement
+	// and a server row, the same arrangement; a folder under an expanded
+	// server by `${id}:${path}`
 	const [serverCursor, setServerCursor] = useState<string | null>(null);
+	const [folderCursor, setFolderCursor] = useState<string | null>(null);
 	useEffect(() => {
 		setRepoCursor(null);
 		setServerCursor(null);
+		setFolderCursor(null);
 	}, [selected]);
+	const folderKey = (s: Server, f: RemoteFolder) => `${s.id}:${f.path}`;
 	const searching = query.trim().length > 0;
 	const isCollapsed = (ws: string) => !searching && collapsed.has(ws);
 
@@ -466,42 +472,66 @@ const ProjectTree = ({
 	for (const repo of github?.isOpen ? github.visible : []) {
 		rows.push({ kind: 'repo', repo });
 	}
-	// and the servers last, when that card is open
+	// and the servers last, when that card is open, each expanded server's
+	// folders right under it, the order the eye reads
 	for (const server of servers?.isOpen ? servers.servers : []) {
 		rows.push({ kind: 'server', server });
+		if (!servers?.expanded.has(server.id)) continue;
+		for (const folder of servers.listings[server.id]?.folders ?? []) {
+			rows.push({ kind: 'folder', server, folder });
+		}
 	}
 
 	const selectProject = (p: Project) => {
 		setRepoCursor(null);
 		setServerCursor(null);
+		setFolderCursor(null);
 		onSelect(p);
 	};
 	const selectRepo = (r: GithubRepo) => {
 		setServerCursor(null);
+		setFolderCursor(null);
 		setRepoCursor(r.full_name);
 	};
 	const selectServer = (s: Server) => {
 		setRepoCursor(null);
+		setFolderCursor(null);
 		setServerCursor(s.id);
+	};
+	const selectFolder = (s: Server, f: RemoteFolder) => {
+		setRepoCursor(null);
+		setServerCursor(null);
+		setFolderCursor(folderKey(s, f));
 	};
 	const land = (row: NavRow) => {
 		if (row.kind === 'project') selectProject(row.project);
 		else if (row.kind === 'repo') selectRepo(row.repo);
-		else selectServer(row.server);
+		else if (row.kind === 'server') selectServer(row.server);
+		else selectFolder(row.server, row.folder);
 	};
 
 	// from the github box the arrows walk the github rows and nothing
 	// else, the way the project box's arrows have always started at the
-	// projects; the walk is narrowed, the cursor is the same
+	// projects; from the servers box, the servers and their folders. the
+	// walk is narrowed, the cursor is the same
+	const LANE_KINDS: Record<SearchLane, NavRow['kind'][]> = {
+		projects: ['project', 'repo', 'server', 'folder'],
+		github: ['repo'],
+		servers: ['server', 'folder']
+	};
 	const navigate = (dir: 1 | -1, lane: SearchLane = 'projects') => {
-		const walk = lane === 'github' ? rows.filter(r => r.kind === 'repo') : rows;
+		const walk = rows.filter(r => LANE_KINDS[lane].includes(r.kind));
 		const idx = repoCursor
 			? walk.findIndex(r => r.kind === 'repo' && r.repo.full_name === repoCursor)
 			: serverCursor
 				? walk.findIndex(r => r.kind === 'server' && r.server.id === serverCursor)
-				: walk.findIndex(
-						r => r.kind === 'project' && r.project.full_path === selected?.full_path
-					);
+				: folderCursor
+					? walk.findIndex(
+							r => r.kind === 'folder' && folderKey(r.server, r.folder) === folderCursor
+						)
+					: walk.findIndex(
+							r => r.kind === 'project' && r.project.full_path === selected?.full_path
+						);
 		const next = idx === -1 ? walk[0] : walk[idx + dir];
 		if (next) land(next);
 	};
@@ -512,15 +542,20 @@ const ProjectTree = ({
 		onRepoOpen?.(repo);
 		return true;
 	};
-	// enter on a server row: a terminal on it
-	const openServer = () => {
-		const server = servers?.servers.find(s => s.id === serverCursor);
-		if (!server) return false;
-		onServerOpen?.(server);
+	// enter on a server row: a terminal on it; on a folder, a terminal there
+	const openServerRow = () => {
+		const row = rows.find(
+			r =>
+				(r.kind === 'server' && r.server.id === serverCursor) ||
+				(r.kind === 'folder' && folderKey(r.server, r.folder) === folderCursor)
+		);
+		if (!row) return false;
+		if (row.kind === 'server') onServerOpen?.(row.server);
+		else if (row.kind === 'folder') onFolderOpen?.(row.server, row.folder);
 		return true;
 	};
 
-	useImperativeHandle(ref, () => ({ navigate, openRepo }));
+	useImperativeHandle(ref, () => ({ navigate, openRepo, openServerRow }));
 
 	// Takes the state wanted rather than toggling: → always expands and ←
 	// always collapses, and only Ctrl+Space computes the flip, at its call site.
@@ -559,8 +594,8 @@ const ProjectTree = ({
 		// keys are off since there is nothing to collapse
 		const keys: Record<string, () => void> = repoCursor
 			? { ...walk, Enter: () => openRepo() }
-			: serverCursor
-				? { ...walk, Enter: () => openServer() }
+			: serverCursor || folderCursor
+				? { ...walk, Enter: () => openServerRow() }
 				: {
 					...walk,
 					ArrowRight: () => ws && setCollapsedFor(ws, false),
@@ -603,12 +638,14 @@ const ProjectTree = ({
 		rows,
 		repoCursor,
 		serverCursor,
+		folderCursor,
 		collapsed,
 		navigate,
 		onLaunch,
 		onTogglePin,
 		onRepoOpen,
 		onServerOpen,
+		onFolderOpen,
 		workspaceOrder,
 		onReorder
 	]);
@@ -654,7 +691,14 @@ const ProjectTree = ({
 				onOpen: (s: Server) => onServerOpen?.(s),
 				onContextMenu: (s: Server, x: number, y: number) =>
 					onServerContextMenu?.(s, x, y),
-				onAddMenu: (x: number, y: number) => onServersAddMenu?.(x, y)
+				onAddMenu: (x: number, y: number) => onServersAddMenu?.(x, y),
+				folderCursor,
+				onSelectFolder: selectFolder,
+				onOpenFolder: (s: Server, f: RemoteFolder) => onFolderOpen?.(s, f),
+				onFolderContextMenu: (s: Server, f: RemoteFolder, x: number, y: number) =>
+					onFolderContextMenu?.(s, f, x, y),
+				onArrow: (dir: 1 | -1) => navigate(dir, 'servers'),
+				onEnter: () => openServerRow()
 			}}
 		/>
 	) : null;
@@ -719,7 +763,8 @@ const ProjectTree = ({
 	const cursorLit = rows.some(
 		r =>
 			(r.kind === 'repo' && r.repo.full_name === repoCursor) ||
-			(r.kind === 'server' && r.server.id === serverCursor)
+			(r.kind === 'server' && r.server.id === serverCursor) ||
+			(r.kind === 'folder' && folderKey(r.server, r.folder) === folderCursor)
 	);
 	const rowProps = (project: Project) => ({
 		project,
