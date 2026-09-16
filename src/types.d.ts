@@ -445,6 +445,7 @@ type ShortcutId =
 	| 'quit'
 	| 'addWorkspace'
 	| 'removeWorkspace'
+	| 'revealWorkspace'
 	| 'moveWorkspaceUp'
 	| 'moveWorkspaceDown'
 	| 'openEditor'
