@@ -31,6 +31,7 @@ import { useWorkspaces } from './hooks/useWorkspaces';
 import { lastSegment } from './paths';
 import { isTypingTarget, matches, prettyKeys, shortcutFor } from './shortcuts';
 import { applyTextScale, stepTextScale } from './textSize';
+import { loadGroundAlpha } from './transparency';
 
 // Settings pulls in WorkspaceManager and the shortcut table, none of which the
 // launcher needs to start. The split used to sit on WorkspaceManager; now that
@@ -1637,9 +1638,10 @@ const AppInner = () => {
 
 const App = () => {
 	// The window is created hidden (tauri.conf.json) and shown once React has
-	// painted, so a cold start never flashes a white rectangle.
+	// painted, so a cold start never flashes a white rectangle; the ground's
+	// alpha is read first, so a see-through install never flashes opaque
 	useEffect(() => {
-		getCurrentWindow().show();
+		loadGroundAlpha().finally(() => getCurrentWindow().show());
 	}, []);
 
 	return (
