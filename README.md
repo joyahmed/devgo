@@ -60,3 +60,35 @@ Some actions are **forms**: *New nginx site…* asks for the app, the domain, th
 Everything lives as JSON in the app-data folder (`%APPDATA%\app.zetta.devgo` on Windows, `~/Library/Application Support/app.zetta.devgo` on a Mac). A file that cannot be parsed is backed up as `.bak`, never overwritten. Help › *Reveal in Explorer* opens the folder.
 
 Closing the window hides it; the summon hotkey or the tray icon brings it back, and Quit lives in the tray menu and `Ctrl+Q`. DevGo keeps one instance: launching it again shows the window you already have.
+
+## Keyboard
+
+Every binding is declared once in `src/shortcuts.ts`; the handler, the footer hints and Settings › Shortcuts all read that table. On a Mac, `Ctrl` reads `Cmd` and `Alt` reads `Opt`. The main ones:
+
+| Keys | Does |
+|---|---|
+| `Ctrl+Shift+P` | Command palette (runs anything DevGo can do) |
+| `Ctrl+K` / `Ctrl+G` | Focus search / focus GitHub search |
+| `Ctrl+L` | Clear search |
+| `F5` (or `Ctrl+R`) | Refresh projects |
+| `↑` `↓` `Home` `End` | Move the selection |
+| `→` `←` | Expand / collapse a workspace |
+| `Ctrl+Space` | Toggle a workspace |
+| `Enter` | Open the selected project |
+| `Ctrl+Enter` | Open in editor |
+| `Shift+Enter` | Open terminal |
+| `Alt+Enter` | Open both |
+| `Ctrl+Alt+Enter` | Open in agent |
+| `Ctrl+S` | Pin / unpin |
+| `Ctrl+Shift+D` | Run dev script… |
+| `Ctrl+Shift+G` | Open remote in browser |
+| `Ctrl+Shift+E` | Reveal in Explorer (Finder) |
+| `Ctrl+Shift+C` | Copy Windows path (copy path on a Mac) |
+| `Ctrl+Shift+W` | Copy WSL path (Windows only) |
+| `Ctrl+N` / `Delete` | Add / remove a workspace |
+| `Alt+↑` `Alt+↓` | Move a workspace up / down |
+| `Ctrl+Alt+E` | Reveal the workspace in Explorer (Finder) |
+| `Ctrl+,` | Settings |
+| `Ctrl+=` `Ctrl+-` `Ctrl+0` | Text bigger / smaller / 100 % |
+| `Ctrl+Q` | Quit |
+| `Ctrl+Alt+Space` | Summon (global, rebindable) |
