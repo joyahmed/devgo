@@ -422,6 +422,7 @@ const ProjectTree = ({
 	onServerOpen,
 	onServerContextMenu,
 	onServersAddMenu,
+	onServersHeadingContextMenu,
 	onFolderOpen,
 	onFolderContextMenu,
 	onRootContextMenu,
@@ -859,6 +860,8 @@ const ProjectTree = ({
 				onContextMenu: (s: Server, x: number, y: number) =>
 					onServerContextMenu?.(s, x, y),
 				onAddMenu: (x: number, y: number) => onServersAddMenu?.(x, y),
+				onHeadingContextMenu: (x: number, y: number) =>
+					onServersHeadingContextMenu?.(x, y),
 				searchInHeading: serversSearchInHeading,
 				folderCursor,
 				onSelectFolder: selectFolder,

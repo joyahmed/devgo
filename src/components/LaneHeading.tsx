@@ -10,11 +10,19 @@ const LaneHeading = ({
 	line,
 	open,
 	onToggle,
+	onContextMenu,
 	children
 }: LaneHeadingProps) => (
 	<div
 		className={`${laneHeader} shrink-0 ${onToggle ? 'cursor-pointer hover:bg-bg-hover/30' : ''}`}
 		onClick={onToggle}
+		onContextMenu={
+			onContextMenu &&
+			(e => {
+				e.preventDefault();
+				onContextMenu(e.clientX, e.clientY);
+			})
+		}
 		title={onToggle ? (open ? 'Collapse' : 'Expand') : undefined}
 	>
 		{/* leading-none: the glyph's line box is taller than the label's,

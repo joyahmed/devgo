@@ -312,6 +312,7 @@ const ServersLane = ({
 	onOpen,
 	onContextMenu,
 	onAddMenu,
+	onHeadingContextMenu,
 	searchInHeading = true,
 	folderCursor,
 	onSelectFolder,
@@ -471,7 +472,8 @@ const ServersLane = ({
 					tone: 'text-emerald-300',
 					line: countLine,
 					open: isOpen,
-					onToggle: toggleOpen
+					onToggle: toggleOpen,
+					onContextMenu: onHeadingContextMenu
 				}}
 			>
 				{/* the lane's own box and its add, when the command row has no

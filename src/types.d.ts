@@ -709,6 +709,8 @@ interface LaneHeadingProps {
 	/// whole heading
 	open?: boolean;
 	onToggle?: () => void;
+	/// a right-click on the heading: the lane's own menu at (x, y)
+	onContextMenu?: (x: number, y: number) => void;
 	children?: React.ReactNode;
 }
 
@@ -1041,6 +1043,8 @@ interface ServersLaneProps {
 	onContextMenu: (server: Server, x: number, y: number) => void;
 	/// the heading's +: add a server, or import ~/.ssh/config
 	onAddMenu: (x: number, y: number) => void;
+	/// a right-click on the heading: the details switch and the adds
+	onHeadingContextMenu: (x: number, y: number) => void;
 	/// the box and the + in the heading, or in the command row over the
 	/// lane on a wide window
 	searchInHeading?: boolean;
@@ -1280,6 +1284,7 @@ interface ProjectTreeProps {
 	onServerOpen?: (server: Server) => void;
 	onServerContextMenu?: (server: Server, x: number, y: number) => void;
 	onServersAddMenu?: (x: number, y: number) => void;
+	onServersHeadingContextMenu?: (x: number, y: number) => void;
 	/// a folder on a server: Enter is a terminal there
 	onFolderOpen?: (server: Server, folder: RemoteFolder) => void;
 	onFolderContextMenu?: (

@@ -800,6 +800,11 @@ const AppInner = () => {
 		x: number;
 		y: number;
 	} | null>(null);
+	// the lane heading's own menu: the details switch, then the adds
+	const [serversHeadingMenu, setServersHeadingMenu] = useState<{
+		x: number;
+		y: number;
+	} | null>(null);
 	const [serverForm, setServerForm] = useState<{ initial?: Server } | null>(
 		null
 	);
@@ -1930,6 +1935,16 @@ const AppInner = () => {
 					}}
 				/>
 			)}
+			{serversHeadingMenu && (
+				<ContextMenu
+					{...{
+						x: serversHeadingMenu.x,
+						y: serversHeadingMenu.y,
+						items: [...detailsEntries, ...serversAddItems],
+						onClose: () => setServersHeadingMenu(null)
+					}}
+				/>
+			)}
 
 			<Drawer
 				{...{
@@ -2389,6 +2404,8 @@ const AppInner = () => {
 									setServerMenu({ server: s, x, y }),
 								onServersAddMenu: (x: number, y: number) =>
 									setServersAddMenu({ x, y }),
+								onServersHeadingContextMenu: (x: number, y: number) =>
+									setServersHeadingMenu({ x, y }),
 								onFolderOpen: openFolder,
 								onFolderContextMenu: (
 									s: Server,
