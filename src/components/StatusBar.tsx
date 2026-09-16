@@ -15,7 +15,7 @@ const TargetGroup = ({
 	onPick,
 	pulse
 }: TargetGroupProps) => (
-	<div className='flex items-center gap-1.5 shrink-0'>
+	<div className='flex items-center gap-2 shrink-0'>
 		<span className='text-11 text-text-muted shrink-0'>
 			{label}
 		</span>
@@ -76,13 +76,15 @@ const StatusBar = ({
 	onBoth,
 	onManageTargets,
 	onOpenPalette,
+	summonHotkey,
+	onOpenShortcuts,
 	onOpenHelp,
 	reattach = false,
 	pulse = null
 }: StatusBarProps) => {
 	const groups = [
 		{
-			label: 'Edit',
+			label: 'Editor',
 			items: editors,
 			defaultId: defaults.editor,
 			shortcut: prettyKeys(shortcutFor('openEditor')),
@@ -112,6 +114,43 @@ const StatusBar = ({
 			: [])
 	];
 	const both = prettyKeys(shortcutFor('openBoth'));
+	// the frequent keys: the buttons are the hints for the launch verbs,
+	// not for move, open, pin and search, which have no button anywhere.
+	// hidden under 1400, where the footer has no room and the palette
+	// still lists them
+	const hints = [
+		{
+			keys: `${prettyKeys(shortcutFor('moveUp'))}${prettyKeys(shortcutFor('moveDown'))}`,
+			label: 'Move'
+		},
+		{ keys: prettyKeys(shortcutFor('openSelected')), label: 'Open' },
+		{ keys: prettyKeys(shortcutFor('togglePin')), label: 'Pin' },
+		{ keys: prettyKeys(shortcutFor('focusSearch')), label: 'Search' }
+	];
+	// the right end: the palette's door, the summon hotkey (shown nowhere
+	// else, and the door into the whole app), every shortcut, help. a
+	// door has a click; the hotkey is a fact
+	const tail = [
+		{
+			label: 'Commands',
+			title: 'Open the command palette',
+			onClick: onOpenPalette,
+			chip: <Kbd>{prettyKeys(shortcutFor('commandPalette'))}</Kbd>
+		},
+		{ label: 'Summon', chip: <Kbd>{prettyKeys(summonHotkey)}</Kbd> },
+		{
+			label: 'Shortcuts',
+			title: 'View all keyboard shortcuts',
+			onClick: onOpenShortcuts,
+			chip: <span className='text-11 leading-none'>&#9000;</span>
+		},
+		{
+			label: 'Help',
+			title: 'Help',
+			onClick: onOpenHelp,
+			chip: <span className='text-11 leading-none font-semibold'>?</span>
+		}
+	];
 
 	return (
 		<footer className='flex flex-wrap items-center gap-x-6 gap-y-1.5 min-h-12 py-1.5 px-4 ground-chrome border-t border-border shrink-0 text-11 select-none'>
@@ -126,9 +165,9 @@ const StatusBar = ({
 				className={`shrink-0 ${pulse === 'both' ? 'animate-pulse-once' : ''}`}
 				disabled={!hasSelection}
 				onClick={onBoth}
-				title={`Open Both — ${both}`}
+				title={`Open both — ${both}`}
 			>
-				<span className='text-11 leading-none'>Open Both</span>
+				<span className='text-11 leading-none'>Open both</span>
 				<Kbd>{both}</Kbd>
 			</Button>
 			<Button
@@ -139,27 +178,40 @@ const StatusBar = ({
 			>
 				Manage…
 			</Button>
-			{/* the palette's only visible door, and help beside it; without
-			    them the discovery surfaces are themselves undiscoverable */}
+			{/* the key chips, a rule, then the doors; without them the
+			    discovery surfaces are themselves undiscoverable */}
 			<div className='flex items-center gap-4 shrink-0 ml-auto'>
-				<Button
-					variant='ghost'
-					className='gap-1.5 text-11 shrink-0 hover:bg-transparent hover:text-accent'
-					title='Open the command palette'
-					onClick={onOpenPalette}
-				>
-					<Kbd>{prettyKeys(shortcutFor('commandPalette'))}</Kbd>
-					<span className='text-text-secondary leading-none'>Commands</span>
-				</Button>
-				<Button
-					variant='ghost'
-					className='gap-1.5 text-11 shrink-0 hover:bg-transparent hover:text-accent'
-					title='Help'
-					onClick={onOpenHelp}
-				>
-					<span className='text-11 leading-none font-semibold'>?</span>
-					<span className='text-text-secondary leading-none'>Help</span>
-				</Button>
+				<span className='hidden min-[1400px]:flex items-center gap-3 text-text-secondary'>
+					{hints.map(h => (
+						<span key={h.label} className='inline-flex items-center gap-1.5 shrink-0'>
+							<Kbd>{h.keys}</Kbd>
+							<span className='leading-none'>{h.label}</span>
+						</span>
+					))}
+				</span>
+				<span
+					className='hidden min-[1400px]:block w-px h-5 bg-border-strong shrink-0'
+					aria-hidden='true'
+				/>
+				{tail.map(t =>
+					t.onClick ? (
+						<Button
+							key={t.label}
+							variant='ghost'
+							className='gap-1.5 text-11 shrink-0 hover:bg-transparent hover:text-accent'
+							title={t.title}
+							onClick={t.onClick}
+						>
+							{t.chip}
+							<span className='text-text-secondary leading-none'>{t.label}</span>
+						</Button>
+					) : (
+						<span key={t.label} className='inline-flex items-center gap-1.5 shrink-0'>
+							{t.chip}
+							<span className='text-text-secondary leading-none'>{t.label}</span>
+						</span>
+					)
+				)}
 			</div>
 		</footer>
 	);

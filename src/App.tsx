@@ -2409,6 +2409,8 @@ const AppInner = () => {
 					onBoth: handleOpenBoth,
 					onManageTargets: () => openSettings('targets'),
 					onOpenPalette: () => setPaletteOpen(true),
+					summonHotkey,
+					onOpenShortcuts: () => openSettings('shortcuts'),
 					onOpenHelp: () => openSettings('help'),
 					reattach: selectedLive && tmuxOn,
 					pulse: launching?.kind ?? null
