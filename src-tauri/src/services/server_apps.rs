@@ -653,14 +653,21 @@ mod tests {
             parse_inventory(r#"{"apps":[{"name":"x","dir":"/var/www/x"}]}"#)
                 .unwrap();
         assert_eq!(bare.apps[0].kind, "");
-        // a docker process reports null where a pm2 one has a number
-        let docker = parse_inventory(
-            r#"{"apps":[{"name":"x","dir":"/x","processes":[{"docker":"x-web","pid":null,"status":"online","restarts":null,"uptime":null,"memory_mb":null,"ports":[3005]}]}]}"#,
-        )
-        .unwrap();
-        assert_eq!(docker.apps[0].processes[0].restarts, 0);
-        assert_eq!(docker.apps[0].processes[0].ports, [3005]);
         assert!(parse_inventory("not json").is_err());
+    }
+
+    // the exact process the script emits for a docker container on the
+    // box: pm2, pid, restarts, uptime, node and memory_mb all null
+    #[test]
+    fn a_docker_container_with_null_counters_parses() {
+        let text = r#"{"apps":[{"name":"zetta-hms","dir":"/var/www/zetta-hms","processes":[{"pm2": null, "docker": "zetta-hms", "pid": null, "status": "online", "restarts": null, "uptime": null, "cwd": "/var/www/zetta-hms", "node": null, "ports": [3005], "memory_mb": null}]}]}"#;
+        let inv = parse_inventory(text).unwrap();
+        let p = &inv.apps[0].processes[0];
+        assert_eq!(p.docker.as_deref(), Some("zetta-hms"));
+        assert_eq!(p.pm2, None);
+        assert_eq!(p.restarts, None);
+        assert_eq!(p.memory_mb, None);
+        assert_eq!(p.ports, vec![3005]);
     }
 
     #[test]
