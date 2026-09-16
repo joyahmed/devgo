@@ -1413,6 +1413,34 @@ pub fn get_summon_hotkey(state: State<AppState>) -> Result<String, AppError> {
     Ok(state.pref_store.lock().map_err(lock_err)?.summon_hotkey())
 }
 
+#[tauri::command]
+pub fn get_window_transparency(state: State<AppState>) -> Result<u8, AppError> {
+    Ok(state
+        .pref_store
+        .lock()
+        .map_err(lock_err)?
+        .window_transparency())
+}
+
+// the window is the preview: every change is applied and persisted by
+// this one call, which hands back the clamped value for the slider
+#[tauri::command]
+pub fn set_window_transparency(
+    percent: u8,
+    window: tauri::WebviewWindow,
+    state: State<AppState>,
+) -> Result<u8, AppError> {
+    let stored = {
+        let mut prefs = state.pref_store.lock().map_err(lock_err)?;
+        prefs
+            .set_window_transparency(percent)
+            .map_err(AppError::Lock)?;
+        prefs.window_transparency()
+    };
+    crate::apply_transparency(&window, stored);
+    Ok(stored)
+}
+
 /// Quit for real.
 ///
 /// Closing the window only hides it — that is the point of a tray launcher — but

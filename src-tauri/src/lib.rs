@@ -435,6 +435,8 @@ pub fn run() {
             commands::quit_app,
             commands::toggle_pin,
             commands::get_summon_hotkey,
+            commands::get_window_transparency,
+            commands::set_window_transparency,
             commands::set_summon_hotkey,
             commands::get_git_info,
             commands::get_project_tech,
