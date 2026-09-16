@@ -92,3 +92,29 @@ Every binding is declared once in `src/shortcuts.ts`; the handler, the footer hi
 | `Ctrl+=` `Ctrl+-` `Ctrl+0` | Text bigger / smaller / 100 % |
 | `Ctrl+Q` | Quit |
 | `Ctrl+Alt+Space` | Summon (global, rebindable) |
+
+## Install
+
+Builds are unsigned on both platforms. Download from [Releases](https://github.com/joyahmed/devgo/releases).
+
+**Windows**: `DevGo_<version>_x64-setup.exe` installs per user into `%LOCALAPPDATA%\DevGo`, no admin. SmartScreen will say the publisher is unknown: *More info* › *Run anyway*. WebView2 is already on Windows 10 and 11; the installer fetches it if it is missing.
+
+**macOS**: `DevGo_<version>_aarch64.dmg`. Drag `DevGo.app` to Applications. On macOS 15+ open it once, then System Settings › Privacy & Security › *Open Anyway*; older, right-click › Open; if it says "is damaged": `xattr -cr /Applications/DevGo.app`. Copied straight out of the build tree it needs none of that on the machine that built it.
+
+Optional, for the lanes that want them: `gh` (GitHub), `ssh` (Servers), `psmux` on Windows or `tmux` in the distro and on the Mac.
+
+**From source**: Rust stable and bun.
+
+```
+bun install
+bun tauri dev      # dev build with hot reload
+bun tauri build    # release; the bundles land in src-tauri/target/release/bundle/
+```
+
+`bun run build` runs the contrast gate, `tsc` and Vite; `cargo test` in `src-tauri` runs the Rust tests.
+
+## Platform notes
+
+- **WSL never boots on launch.** Reading a WSL workspace whose distro is off would start the VM, so DevGo does not: it shows the cached list and marks it. Only Refresh and opening a project are allowed to start a distro, because you asked. Runtime detection (which distros exist, whether `wsl.exe` is there) runs on the first launch and on Refresh, never on every start.
+- **The Mac's PATH.** An app launched from the Dock inherits `launchd`'s four directories, not your shell's PATH. DevGo asks your login shell for its PATH once and hands it to every child, so `code`, `tmux`, `gh` and the nvm node are found where your terminal finds them.
+- **Nothing runs on the UI thread that can block**: `gh`, `git`, `ssh` and the scan are spawned quietly (no console window on Windows) and reported when they return.
