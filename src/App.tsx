@@ -721,8 +721,46 @@ const AppInner = () => {
 		else await servers.add(draft);
 		toast(draft.id ? `Saved ${draft.name}` : `Added ${draft.name}`, 'success');
 	};
+	const openFolder = (s: Server, f: RemoteFolder) =>
+		invoke('open_server_folder', { id: s.id, path: f.path }).catch(e =>
+			toast(showError(e))
+		);
+	const openFolderIn = (s: Server, f: RemoteFolder, editor: string) =>
+		invoke('open_server_folder_in', { id: s.id, path: f.path, editor }).catch(
+			e => toast(showError(e))
+		);
+	const [folderMenu, setFolderMenu] = useState<FolderMenu | null>(null);
+	// a remote editor entry is offered when that editor is a detected target
+	const hasEditor = (id: string) => targets.editors.some(t => t.id === id);
+	const buildFolderMenu = (s: Server, f: RemoteFolder): MenuEntry[] => [
+		{ label: 'Open terminal here', hint: 'Enter', onClick: () => openFolder(s, f) },
+		'separator',
+		{
+			label: 'Open in VS Code (Remote-SSH)',
+			disabled: !hasEditor('vscode'),
+			onClick: () => openFolderIn(s, f, 'vscode')
+		},
+		{
+			label: 'Open in Zed (remote)',
+			disabled: !hasEditor('zed'),
+			onClick: () => openFolderIn(s, f, 'zed')
+		},
+		'separator',
+		{ label: 'Copy path', onClick: () => copyText(f.path, 'path') },
+		{
+			label: 'Copy scp path',
+			onClick: () =>
+				invoke<[string, string]>('server_commands', { id: s.id })
+					.then(([, scp]) => copyText(`${scp}${f.path}`, 'scp path'))
+					.catch(e => toast(showError(e)))
+		}
+	];
 	const buildServerMenu = (s: Server): MenuEntry[] => [
 		{ label: 'Open terminal', hint: 'Enter', onClick: () => openServer(s) },
+		{
+			label: 'List folders',
+			onClick: () => servers.listFolders(s.id).catch(e => toast(showError(e)))
+		},
 		'separator',
 		{ label: 'Copy ssh command', onClick: () => copyServerLine(s, 0) },
 		{ label: 'Copy scp prefix', onClick: () => copyServerLine(s, 1) },
@@ -1384,6 +1422,17 @@ const AppInner = () => {
 				/>
 			)}
 
+			{folderMenu && (
+				<ContextMenu
+					{...{
+						x: folderMenu.x,
+						y: folderMenu.y,
+						items: buildFolderMenu(folderMenu.server, folderMenu.folder),
+						onClose: () => setFolderMenu(null)
+					}}
+				/>
+			)}
+
 			{serversAddMenu && (
 				<ContextMenu
 					{...{
@@ -1770,6 +1819,25 @@ const AppInner = () => {
 								}}
 							/>
 						)}
+						{/* the servers' add beside the other adds (joy: "the +ADD should
+						    go in the same line where other Adds go as Add Server") */}
+						{servers.hasSsh && (
+							<Button
+								variant='ghost'
+								className='gap-1 px-2 shrink-0'
+								title='Add a server, or import ~/.ssh/config'
+								onClick={e => {
+									const r = e.currentTarget.getBoundingClientRect();
+									setServersAddMenu({ x: r.left, y: r.bottom + 4 });
+								}}
+							>
+								<span className='text-18 leading-none'>+</span>
+								<span className='text-13 font-semibold leading-none'>
+									Add server
+								</span>
+								<span className='text-11 leading-none opacity-70'>▾</span>
+							</Button>
+						)}
 						</div>
 						<ProjectTree
 							{...{
@@ -1816,6 +1884,13 @@ const AppInner = () => {
 									setServerMenu({ server: s, x, y }),
 								onServersAddMenu: (x: number, y: number) =>
 									setServersAddMenu({ x, y }),
+								onFolderOpen: openFolder,
+								onFolderContextMenu: (
+									s: Server,
+									f: RemoteFolder,
+									x: number,
+									y: number
+								) => setFolderMenu({ server: s, folder: f, x, y }),
 								showHints,
 								launchingPath: launching?.path ?? null
 							}}
