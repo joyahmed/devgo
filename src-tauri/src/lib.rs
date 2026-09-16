@@ -492,6 +492,7 @@ pub fn run() {
             commands::list_server_folders,
             commands::open_server_folder,
             commands::open_server_folder_in,
+            commands::run_server_action,
             commands::list_server_dir,
             commands::add_server_root,
             commands::open_agent,

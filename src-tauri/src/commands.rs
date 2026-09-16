@@ -876,26 +876,196 @@ pub async fn list_server_folders(
     let state = app.state::<AppState>();
     let mut cache = state.servers_cache.lock().map_err(lock_err)?;
     // a re-list keeps the drill-downs made so far; a failure keeps the last
-    // good folders too, marks the box down and carries the reason
+    // good folders, inventory and actions too, marks the box down and
+    // carries the reason
     let previous = cache.all().remove(&id).unwrap_or_default();
     let listing = match result {
-        Ok(folders) => ServerListing {
-            folders,
+        Ok(listed) => ServerListing {
+            folders: listed.folders,
             subdirs: previous.subdirs,
             listed_at: now,
             up: true,
             error: None,
+            inventory: listed.inventory,
+            actions: listed.actions,
+            inventory_error: listed.inventory_error,
         },
         Err(err) => ServerListing {
-            folders: previous.folders,
-            subdirs: previous.subdirs,
             listed_at: now,
             up: false,
             error: Some(err),
+            ..previous
         },
     };
     cache.store(&id, listing.clone())?;
     Ok(listing)
+}
+
+// what run_server_action did, so the toast can say it
+#[derive(Debug, Clone, Serialize)]
+#[serde(tag = "kind", rename_all = "lowercase")]
+pub enum ActionOutcome {
+    // typed into a tmux window and run; the terminal is attached to it
+    Ran { window: String },
+    // typed, not run; enter is the user's
+    Typed { window: String },
+    // no tmux on that row: the line is handed back for the clipboard
+    Copied { line: String },
+    Opened { url: String },
+    // a local line, in a terminal on this pc
+    Local { line: String },
+}
+
+// the terminal on the server, the row's ordinary launch line
+fn attach_terminal(state: &AppState, server: &Server) -> Result<(), AppError> {
+    let home = std::env::var("USERPROFILE").unwrap_or_else(|_| "C:\\".into());
+    let stand_in = Project::new(
+        server.name.clone(),
+        home,
+        String::new(),
+        "Windows".into(),
+    );
+    let info = state.runtime_info.lock().map_err(lock_err)?.clone();
+    let terminal = resolve_target(state, TargetKind::Terminal, None)?;
+    launcher::launch_with_command(
+        &terminal,
+        &stand_in,
+        &info,
+        &server.ssh_command(),
+    )
+}
+
+// one of the actions the server declares: the server's own when app_dir is
+// None, an app's, filled from the inventory, otherwise. the line reaches
+// the box as one argv element of a direct ssh, never through the terminal's
+// run template; the terminal then attaches with the row's ordinary launch
+// line and lands on the window just made. sudo asks there
+#[tauri::command]
+pub async fn run_server_action(
+    id: String,
+    action_id: String,
+    app_dir: Option<String>,
+    app: tauri::AppHandle,
+) -> Result<ActionOutcome, AppError> {
+    use crate::services::server_apps::{
+        check_local, fill, placeholders, typed_command, ActionKind,
+    };
+    let (server, action, line) = {
+        let h = app.state::<AppState>();
+        let server = h
+            .servers_store
+            .lock()
+            .map_err(lock_err)?
+            .get(&id)
+            .ok_or_else(|| AppError::ServerNotFound(id.clone()))?;
+        let listing = h
+            .servers_cache
+            .lock()
+            .map_err(lock_err)?
+            .all()
+            .remove(&id)
+            .unwrap_or_default();
+        let actions = listing.actions.as_ref().ok_or_else(|| {
+            AppError::ActionRefused(format!(
+                "{} declares no actions. Refresh to list them",
+                server.name
+            ))
+        })?;
+        let (action, line) = match app_dir.as_deref() {
+            None => {
+                let a = actions
+                    .server
+                    .iter()
+                    .find(|a| a.id == action_id)
+                    .ok_or_else(|| {
+                        AppError::ActionNotFound(action_id.clone())
+                    })?;
+                (a.clone(), a.command.clone())
+            }
+            Some(dir) => {
+                let a =
+                    actions.app.iter().find(|a| a.id == action_id).ok_or_else(
+                        || AppError::ActionNotFound(action_id.clone()),
+                    )?;
+                let dir = dir.trim_end_matches('/');
+                let entry = listing
+                    .inventory
+                    .as_ref()
+                    .and_then(|i| {
+                        i.apps
+                            .iter()
+                            .find(|x| x.dir.trim_end_matches('/') == dir)
+                    })
+                    .ok_or_else(|| {
+                        AppError::ActionRefused(format!(
+                            "{dir} is not an app in the inventory"
+                        ))
+                    })?;
+                let line = fill(&a.command, &placeholders(entry)).ok_or_else(
+                    || {
+                        AppError::ActionRefused(format!(
+                            "{} has nothing to fill {} with",
+                            entry.name, a.label
+                        ))
+                    },
+                )?;
+                (a.clone(), line)
+            }
+        };
+        (server, action, line)
+    };
+
+    match action.kind {
+        ActionKind::Url => {
+            open_in_browser(&line)?;
+            Ok(ActionOutcome::Opened { url: line })
+        }
+        ActionKind::Local => {
+            check_local(&line).map_err(AppError::ActionRefused)?;
+            let h = app.state::<AppState>();
+            let home =
+                std::env::var("USERPROFILE").unwrap_or_else(|_| "C:\\".into());
+            let stand_in = Project::new(
+                server.name.clone(),
+                home,
+                String::new(),
+                "Windows".into(),
+            );
+            let info = h.runtime_info.lock().map_err(lock_err)?.clone();
+            let terminal = resolve_target(&h, TargetKind::Terminal, None)?;
+            launcher::launch_with_command(&terminal, &stand_in, &info, &line)?;
+            Ok(ActionOutcome::Local { line })
+        }
+        ActionKind::Run | ActionKind::Pretype => {
+            let press_enter = action.kind == ActionKind::Run;
+            if !server.tmux {
+                // no window to type into: the frontend copies the line and
+                // opens the terminal plain
+                return Ok(ActionOutcome::Copied { line });
+            }
+            let session = server
+                .session
+                .clone()
+                .filter(|s| !s.is_empty())
+                .unwrap_or_else(|| "devgo".into());
+            let window = server_folders::session_slug(&action.id);
+            let remote = typed_command(&session, &window, &line, press_enter);
+            let sv = server.clone();
+            tauri::async_runtime::spawn_blocking(move || {
+                server_folders::run_remote(&sv, &remote)
+            })
+            .await
+            .map_err(lock_err)?
+            .map_err(AppError::LaunchFailed)?;
+            attach_terminal(&app.state::<AppState>(), &server)?;
+            let name = format!("{session}:{window}");
+            Ok(if press_enter {
+                ActionOutcome::Ran { window: name }
+            } else {
+                ActionOutcome::Typed { window: name }
+            })
+        }
+    }
 }
 
 // the children of one folder: the drill-down, one ssh on the click, cached

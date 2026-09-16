@@ -64,6 +64,14 @@ pub enum AppError {
     #[error("{0}")]
     RootRefused(String),
 
+    /// An action that cannot run: no contract, nothing to fill a word
+    /// with, a local line with a shell character. Phrased for the toast.
+    #[error("{0}")]
+    ActionRefused(String),
+
+    #[error("No such action: {0}")]
+    ActionNotFound(String),
+
     #[error(
         "{0} is the only one of its kind — add another before removing it"
     )]
