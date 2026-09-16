@@ -196,6 +196,27 @@ interface Server {
 	roots: string[];
 }
 
+/// where a server's ssh line runs on this machine, beside the terminal
+/// targets: a psmux session whose window runs it, or the default distro's
+/// own ssh. rust's ServerVia; the terminal itself is the absent case
+type ServerVia = 'psmux' | 'wsl';
+
+/// one button in a footer group: a launch target, or a server host that
+/// is not one. blocked is the reason it is disabled, shown as the title
+interface TargetChoice {
+	id: string;
+	name: string;
+	title?: string;
+	blocked?: string;
+}
+
+/// a server row's local hosts: every terminal target by id, then psmux
+/// and wsl through the default one
+interface ServerHost extends TargetChoice {
+	targetId?: string;
+	via?: ServerVia;
+}
+
 /// a folder on a server, from one ls -d over the roots
 interface RemoteFolder {
 	name: string;
@@ -576,6 +597,12 @@ interface StatusBarProps {
 	/// the selection has a live session and the multiplexer is on: the
 	/// terminal group reads Reattach, which is what the script does
 	reattach?: boolean;
+	/// a server row under the cursor: the terminal group becomes its hosts,
+	/// the tmux chip follows, and the editor group and open both step aside
+	server?: Server | null;
+	serverHosts?: ServerHost[];
+	onServerHost?: (host: ServerHost) => void;
+	onServerTmux?: (server: Server, on: boolean) => void;
 }
 
 interface TitleBarProps {
@@ -1284,6 +1311,8 @@ interface ProjectTreeProps {
 	servers?: ServersState;
 	/// Enter / double-click on a server row: a terminal on it
 	onServerOpen?: (server: Server) => void;
+	/// the server under the cursor, or none: the footer follows it
+	onServerCursor?: (server: Server | null) => void;
 	onServerContextMenu?: (server: Server, x: number, y: number) => void;
 	onServersAddMenu?: (x: number, y: number) => void;
 	onServersHeadingContextMenu?: (x: number, y: number) => void;
