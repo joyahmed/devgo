@@ -64,7 +64,8 @@ const AboutPanel = () => {
 					GitHub CLI (<Code>gh</Code>): MIT, by GitHub. Not bundled: DevGo
 					runs the copy you installed, and it holds your login.{' '}
 					{isMac ? 'tmux: by its authors' : 'psmux: by its author'}, not
-					bundled. Tauri, React and Tailwind under their own licences.
+					bundled. JetBrains Mono, bundled, under the SIL Open Font Licence. Tauri,
+					React and Tailwind under their own licences.
 				</p>
 			</HelpSection>
 		</div>
