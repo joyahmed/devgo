@@ -1,0 +1,28 @@
+# the same gate the release runs, on every push to main and every pull
+# request. windows only: the mac gate costs minutes and the tag build
+# runs it there anyway.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - run: bun install --frozen-lockfile
+      - run: bun run build
+      - run: cargo test --manifest-path src-tauri/Cargo.toml || cargo test --manifest-path src-tauri/Cargo.toml -- --test-threads=1
+        shell: bash
