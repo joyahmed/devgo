@@ -48,6 +48,11 @@ const Onboarding = ({ onAdd, onAddMany, onError }: OnboardingProps) => {
 						Scan for projects
 					</Button>
 				</div>
+				{/* said before the github rows look empty, not after */}
+				<p className='text-13 text-text-muted mb-4'>
+					GitHub repos need the GitHub CLI, logged in: see Help, the ? in the
+					title bar.
+				</p>
 
 				{showScan && (
 					<div className='mt-6'>

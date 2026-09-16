@@ -727,6 +727,20 @@ const AppInner = () => {
 				run: () => openSettings('shortcuts')
 			},
 			{
+				id: 'help',
+				title: 'Help',
+				subtitle: 'What DevGo is and the rules it lives by',
+				keywords: ['docs', 'how', 'manual'],
+				run: () => openSettings('help')
+			},
+			{
+				id: 'about',
+				title: 'About DevGo',
+				subtitle: 'Version, source, third-party',
+				keywords: ['version', 'licence'],
+				run: () => openSettings('about')
+			},
+			{
 				id: 'settings.github',
 				title: 'Settings: GitHub',
 				keywords: ['gh', 'orgs', 'repos'],
@@ -1064,6 +1078,14 @@ const AppInner = () => {
 					{/* the wsl chip stays up here, not in the row: it has to work
 					    when the table shows no wsl workspace, which is exactly when a
 					    distro wedges */}
+					<Button
+						variant='ghost'
+						className='w-7 h-7 text-15 font-semibold'
+						onClick={() => openSettings('help')}
+						title='Help'
+					>
+						?
+					</Button>
 					<Button
 						variant='ghost'
 						onClick={() => openSettings()}
@@ -1605,6 +1627,7 @@ const AppInner = () => {
 					onBoth: handleOpenBoth,
 					onManageTargets: () => openSettings('targets'),
 					onOpenPalette: () => setPaletteOpen(true),
+					onOpenHelp: () => openSettings('help'),
 					pulse: launching?.kind ?? null
 				}}
 			/>

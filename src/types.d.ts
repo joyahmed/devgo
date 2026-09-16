@@ -380,6 +380,7 @@ interface StatusBarProps {
 	onManageTargets: () => void;
 	onOpenPalette: () => void;
 	pulse?: LaunchKind | null;
+	onOpenHelp: () => void;
 }
 
 interface TitleBarProps {

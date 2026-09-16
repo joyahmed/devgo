@@ -63,6 +63,7 @@ const StatusBar = ({
 	onBoth,
 	onManageTargets,
 	onOpenPalette,
+	onOpenHelp,
 	pulse = null
 }: StatusBarProps) => {
 	const groups = [
@@ -113,17 +114,28 @@ const StatusBar = ({
 					Manage…
 				</Button>
 			</div>
-			{/* the palette's only visible door; without it the discovery
-			    surface is itself undiscoverable */}
-			<Button
-				variant='ghost'
-				className='gap-1.5 text-11 shrink-0 hover:bg-transparent hover:text-accent'
-				title='Open the command palette'
-				onClick={onOpenPalette}
-			>
-				<Kbd>{prettyKeys(shortcutFor('commandPalette'))}</Kbd>
-				<span className='text-text-secondary leading-none'>Commands</span>
-			</Button>
+			{/* the palette's only visible door, and help beside it; without
+			    them the discovery surfaces are themselves undiscoverable */}
+			<div className='flex items-center gap-4 shrink-0'>
+				<Button
+					variant='ghost'
+					className='gap-1.5 text-11 shrink-0 hover:bg-transparent hover:text-accent'
+					title='Open the command palette'
+					onClick={onOpenPalette}
+				>
+					<Kbd>{prettyKeys(shortcutFor('commandPalette'))}</Kbd>
+					<span className='text-text-secondary leading-none'>Commands</span>
+				</Button>
+				<Button
+					variant='ghost'
+					className='gap-1.5 text-11 shrink-0 hover:bg-transparent hover:text-accent'
+					title='Help'
+					onClick={onOpenHelp}
+				>
+					<span className='text-11 leading-none font-semibold'>?</span>
+					<span className='text-text-secondary leading-none'>Help</span>
+				</Button>
+			</div>
 		</footer>
 	);
 };
