@@ -67,6 +67,7 @@ const orNull = (v: string) => v.trim() || null;
 const ServerForm = ({ initial, onSubmit, onDone }: ServerFormProps) => {
 	const [draft, setDraft] = useState<Draft>(() => fromServer(initial));
 	const [tmux, setTmux] = useState(initial?.tmux ?? true);
+	const [roots, setRoots] = useState((initial?.roots ?? []).join('\n'));
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 
@@ -92,7 +93,11 @@ const ServerForm = ({ initial, onSubmit, onDone }: ServerFormProps) => {
 				tmux,
 				session: orNull(draft.session),
 				tunnel: initial?.tunnel ?? false,
-				source: initial?.source ?? 'manual'
+				source: initial?.source ?? 'manual',
+				roots: roots
+					.split('\n')
+					.map(r => r.trim())
+					.filter(Boolean)
 			});
 			onDone();
 		} catch (e) {
@@ -146,6 +151,18 @@ const ServerForm = ({ initial, onSubmit, onDone }: ServerFormProps) => {
 						onChange={e => set('session')(e.target.value)}
 						placeholder='devgo'
 						disabled={!tmux}
+					/>
+				</div>
+				<div className='col-span-2'>
+					<span className={label}>
+						Folders to list, one root per line (empty = ~, ~/projects, /var/www,
+						/srv)
+					</span>
+					<textarea
+						className={`${field} h-20 resize-none`}
+						value={roots}
+						onChange={e => setRoots(e.target.value)}
+						placeholder={'~/projects\n/var/www'}
 					/>
 				</div>
 			</div>
