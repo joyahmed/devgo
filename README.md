@@ -121,9 +121,9 @@ Every binding is declared once in `src/shortcuts.ts`; the handler, the footer hi
 
 Builds are unsigned on both platforms. Download from [Releases](https://github.com/joyahmed/devgo/releases); each one is built by GitHub Actions from a `v*` tag (`.github/workflows/release.yml`), so the installer on the page is the tag's tree, nothing more.
 
-**Windows**: `DevGo_<version>_x64-setup.exe` installs per user into `%LOCALAPPDATA%\DevGo`, no admin. SmartScreen will say the publisher is unknown: *More info* › *Run anyway*. WebView2 is already on Windows 10 and 11; the installer fetches it if it is missing.
+**Windows**: `DevGo_<version>_x64-setup.exe` (3 MB) installs per user into `%LOCALAPPDATA%\DevGo`, no admin. SmartScreen will say the publisher is unknown: *More info* › *Run anyway*. WebView2 is already on Windows 10 and 11; the installer fetches it if it is missing.
 
-**macOS**: `DevGo_<version>_aarch64.dmg`. Drag `DevGo.app` to Applications. On macOS 15+ open it once, then System Settings › Privacy & Security › *Open Anyway*; older, right-click › Open; if it says "is damaged": `xattr -cr /Applications/DevGo.app`. Copied straight out of the build tree it needs none of that on the machine that built it.
+**macOS**: `DevGo_<version>_aarch64.dmg` (3.7 MB). Drag `DevGo.app` to Applications. On macOS 15+ open it once, then System Settings › Privacy & Security › *Open Anyway*; older, right-click › Open; if it says "is damaged": `xattr -cr /Applications/DevGo.app`. Copied straight out of the build tree it needs none of that on the machine that built it.
 
 Optional, for the lanes that want them: `gh` (GitHub), `ssh` (Servers), `psmux` on Windows or `tmux` in the distro and on the Mac.
 
