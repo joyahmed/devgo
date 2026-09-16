@@ -911,21 +911,36 @@ const AppInner = () => {
 		await servers.reload();
 		await servers.listFolders(s.id);
 	};
+	const removeRoot = async (s: Server, root: string) => {
+		await invoke('remove_server_root', { id: s.id, root });
+		await servers.reload();
+		await servers.listFolders(s.id);
+	};
+	const unpinEntry = (s: Server, root: string, label: string): MenuEntry => ({
+		label,
+		hint: 'its folders stay on the server',
+		onClick: () =>
+			removeRoot(s, root)
+				.then(() => toast(`${root} is no longer a top-level group on ${s.name}`, 'info'))
+				.catch(e => toast(showError(e)))
+	});
 	// a remote editor entry is offered when that editor is a detected target
 	const hasEditor = (id: string) => targets.editors.some(t => t.id === id);
 	const buildFolderMenu = (s: Server, f: RemoteFolder): MenuEntry[] => [
 		{ label: 'Open terminal here', hint: 'Enter', onClick: () => openFolder(s, f) },
 		{ label: 'Look inside', onClick: () => servers.toggleDir(s.id, f.path) },
-		{
-			// the card groups a server's folders under its top-level folders;
-			// this lifts the folder you are on to that level
-			label: 'Pin as a top-level group',
-			hint: 'beside ~ · /var/www',
-			onClick: () =>
-				addRoot(s, f.path)
-					.then(() => toast(`${f.path} is a top-level group on ${s.name} now`, 'success'))
-					.catch(e => toast(showError(e)))
-		},
+		s.roots.includes(f.path)
+			? unpinEntry(s, f.path, 'Unpin from top level')
+			: {
+					// the card groups a server's folders under its top-level
+					// folders; this lifts the folder you are on to that level
+					label: 'Pin as a top-level group',
+					hint: 'beside ~ · /var/www',
+					onClick: () =>
+						addRoot(s, f.path)
+							.then(() => toast(`${f.path} is a top-level group on ${s.name} now`, 'success'))
+							.catch(e => toast(showError(e)))
+				},
 		'separator',
 		{
 			label: 'Open in VS Code (Remote-SSH)',
@@ -947,6 +962,15 @@ const AppInner = () => {
 					.then(([, scp]) => copyText(`${scp}${f.path}`, 'scp path'))
 					.catch(e => toast(showError(e)))
 		}
+	];
+	// the heading is the row that owns the pin, so the unpin lives here. the
+	// four defaults can go too: the store writes them out first
+	const [rootMenu, setRootMenu] = useState<RootMenu | null>(null);
+	const buildRootMenu = (s: Server, root: string): MenuEntry[] => [
+		unpinEntry(s, root, `Unpin ${root} from top level`),
+		{ label: 'List another folder at top level…', onClick: () => setRootPrompt(s) },
+		'separator',
+		{ label: 'Copy path', onClick: () => copyText(root, 'path') }
 	];
 	const buildServerMenu = (s: Server): MenuEntry[] => [
 		{ label: 'Open terminal', hint: 'Enter', onClick: () => openServer(s) },
@@ -1682,6 +1706,16 @@ const AppInner = () => {
 					}}
 				/>
 			)}
+			{rootMenu && (
+				<ContextMenu
+					{...{
+						x: rootMenu.x,
+						y: rootMenu.y,
+						items: buildRootMenu(rootMenu.server, rootMenu.root),
+						onClose: () => setRootMenu(null)
+					}}
+				/>
+			)}
 
 			<Drawer
 				{...{
@@ -2192,6 +2226,8 @@ const AppInner = () => {
 									x: number,
 									y: number
 								) => setFolderMenu({ server: s, folder: f, x, y }),
+								onRootContextMenu: (s: Server, root: string, x: number, y: number) =>
+									setRootMenu({ server: s, root, x, y }),
 								showHints,
 								launchingPath: launching?.path ?? null
 							}}
