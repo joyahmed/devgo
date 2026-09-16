@@ -1,5 +1,6 @@
 import Button from './Button';
-import { card, col } from './rowStyles';
+import LaneHeading from './LaneHeading';
+import { card, laneBody, row, rowFlat, rowIndented, zebra } from './rowStyles';
 import SearchBox from './SearchBox';
 import { isEtc } from '../etcCuration';
 import { appStatus } from '../serverApps';
@@ -9,7 +10,7 @@ const whoAt = (s: Server) => (s.user ? `${s.user}@${s.host}` : s.host);
 
 const DEFAULT_ROOTS = ['~', '~/projects', '/var/www', '/srv'];
 
-// the words in the meta cell: the port when it is not 22, tunnel when the
+// the words after the host: the port when it is not 22, tunnel when the
 // config forwards one, tmux when enter lands in a session
 const metaWords = (s: Server) => [
 	{
@@ -92,14 +93,17 @@ const dotFor = (l?: ServerListing) =>
 					title: `Unreachable ${ago(l.listed_at)}${l.error ? ` — ${l.error}` : ''}`
 				};
 
-// a server in the same four columns a project uses: where it reaches in
-// the workspace column, the name where the location goes, SSH as its
-// file system, and the meta cell on the right. the expander before the
-// name is the ask: the first open lists the box's folders over one ssh;
-// after that the cache paints and ↻ re-asks
+// the folder rows' indent: under the server's name, one step in per level
+const folderPad = (depth: number) => 64 + depth * 16;
+
+// one row per server: expander, dot, the name as the click target, and
+// user@host with its words right-anchored. the expander before the name
+// is the ask: the first open lists the box's folders over one ssh; after
+// that the cache paints and ↻ re-asks
 const ServerRow = ({
 	server,
 	isCursor,
+	i,
 	listing,
 	busy,
 	expanded,
@@ -112,10 +116,10 @@ const ServerRow = ({
 	const dot = dotFor(listing);
 	return (
 		<div
-			className={`${col} px-3 py-1.5 select-none transition-colors ${
+			className={`${row} py-1.5 ${
 				isCursor
 					? 'bg-bg-selected text-text-primary'
-					: 'text-text-secondary hover:bg-bg-hover/50'
+					: `text-text-secondary hover:bg-bg-hover/50 ${zebra(i)}`
 			}`}
 			onContextMenu={e => {
 				e.preventDefault();
@@ -124,7 +128,7 @@ const ServerRow = ({
 			}}
 			title={server.alias ? `ssh ${server.alias}` : `ssh ${whoAt(server)}`}
 		>
-			<div className='flex items-center gap-2 min-w-0'>
+			<div className={rowIndented}>
 				<Button
 					variant='ghost'
 					className={`text-11 leading-none w-4 p-0 hover:bg-transparent shrink-0 ${
@@ -143,68 +147,68 @@ const ServerRow = ({
 					title={dot.title}
 					aria-hidden='true'
 				/>
-				<span className='truncate font-mono text-13 text-text-muted'>
-					{whoAt(server)}
-				</span>
-			</div>
-			{/* the name is the click target, as on a project row */}
-			<div
-				className={`flex items-center gap-2 min-w-0 font-medium font-mono cursor-pointer ${
-					isCursor ? 'text-text-primary' : ''
-				}`}
-				onClick={() => onSelect(server)}
-				onDoubleClick={() => onOpen(server)}
-			>
-				<span className='truncate'>{server.name}</span>
-				{server.alias && server.alias !== server.name && (
-					<span className='text-11 text-text-muted shrink-0'>
-						{server.alias}
-					</span>
-				)}
-			</div>
-			<div className='text-emerald-300'>SSH</div>
-			<div className='flex items-center justify-end gap-1.5 min-w-0'>
-				{metaWords(server)
-					.filter(w => w.show)
-					.map(w => (
-						<span
-							key={w.key}
-							className='font-mono text-11 text-text-muted shrink-0'
-							title={w.title}
-						>
-							{w.text}
-						</span>
-					))}
-				<Button
-					variant='ghost'
-					className='text-13 leading-none p-0.5 hover:bg-transparent hover:text-accent disabled:cursor-wait'
-					title="List the server's folders again (one ssh)"
-					disabled={busy}
-					onClick={e => {
-						e.stopPropagation();
-						onRefresh(server);
-					}}
+				{/* the name is the click target, as on a project row */}
+				<div
+					className={`flex items-center gap-2 flex-1 min-w-0 font-medium font-mono cursor-pointer ${
+						isCursor ? 'text-text-primary' : ''
+					}`}
+					onClick={() => onSelect(server)}
+					onDoubleClick={() => onOpen(server)}
 				>
-					↻
-				</Button>
+					<span className='truncate'>{server.name}</span>
+					{server.alias && server.alias !== server.name && (
+						<span className='text-11 text-text-muted shrink-0'>
+							{server.alias}
+						</span>
+					)}
+				</div>
+				<div className='flex items-center justify-end gap-1.5 min-w-0 shrink-0'>
+					<span className='font-mono text-11 text-text-muted truncate max-w-[18rem]'>
+						{whoAt(server)}
+					</span>
+					{metaWords(server)
+						.filter(w => w.show)
+						.map(w => (
+							<span
+								key={w.key}
+								className='font-mono text-11 text-text-muted shrink-0'
+								title={w.title}
+							>
+								{w.text}
+							</span>
+						))}
+					<Button
+						variant='ghost'
+						className='text-13 leading-none p-0.5 hover:bg-transparent hover:text-accent disabled:cursor-wait'
+						title="List the server's folders again (one ssh)"
+						disabled={busy}
+						onClick={e => {
+							e.stopPropagation();
+							onRefresh(server);
+						}}
+					>
+						↻
+					</Button>
+				</div>
 			</div>
 		</div>
 	);
 };
 
-// a folder under its server: the root where the workspace goes, the name
-// as the click target one step in per level, and before it the expander
-// that is the ask: the first open lists what is inside over one ssh
+// a folder under its server: the name as the click target one step in
+// per level, and before it the expander that is the ask: the first open
+// lists what is inside over one ssh. after the name, what the inventory
+// knows: the domain, a dot for its processes, the ports
 const FolderRow = ({
 	server,
-	row,
+	row: r,
 	isCursor,
 	onToggle,
 	onSelect,
 	onOpen,
 	onContextMenu
 }: FolderRowProps) => {
-	const { folder, depth, open, busy, inside, app } = row;
+	const { folder, depth, open, busy, inside, app } = r;
 	// a bare deploy dir with no process and no site shows nothing new
 	const known = !!app && (!!app.site || app.processes.length > 0);
 	const ports = app?.site
@@ -212,7 +216,7 @@ const FolderRow = ({
 		: (app?.processes.flatMap(p => p.ports).join('/') ?? '');
 	return (
 		<div
-			className={`${col} px-3 py-1 ml-6 select-none transition-colors ${
+			className={`${row} py-1 ${
 				isCursor
 					? 'bg-bg-selected text-text-primary'
 					: 'text-text-secondary hover:bg-bg-hover/50'
@@ -224,12 +228,9 @@ const FolderRow = ({
 			}}
 			title={app ? appTitle(app, folder.path) : folder.path}
 		>
-			<div className='truncate font-mono text-11 text-text-muted pl-10'>
-				{depth === 0 ? folder.root : ''}
-			</div>
 			<div
-				className='flex items-center gap-2 min-w-0'
-				style={{ paddingLeft: depth * 16 }}
+				className='w-full flex items-center gap-2 pr-4'
+				style={{ paddingLeft: folderPad(depth) }}
 			>
 				<Button
 					variant='ghost'
@@ -245,7 +246,7 @@ const FolderRow = ({
 					{busy ? '…' : open ? '▼' : '▶'}
 				</Button>
 				<span
-					className={`font-mono text-13 truncate cursor-pointer ${
+					className={`font-mono text-13 truncate flex-1 min-w-0 cursor-pointer ${
 						isCursor ? 'text-text-primary' : ''
 					}`}
 					onClick={() => onSelect(server, folder)}
@@ -258,24 +259,20 @@ const FolderRow = ({
 						no folders inside
 					</span>
 				)}
-			</div>
-			{/* what the inventory knows: the domain, a dot for its processes,
-			    the ports */}
-			<div className='flex items-center gap-2 min-w-0'>
 				{known && app && (
 					<>
-						<span
-							className={`size-[7px] rounded-full shrink-0 ${APP_DOT[appStatus(app)]}`}
-							aria-hidden='true'
-						/>
 						{app.site?.domains[0] && (
 							<span
-								className='font-mono text-11 text-text-muted truncate'
+								className='font-mono text-11 text-text-muted truncate max-w-[16rem]'
 								title={app.site.domains.join(', ')}
 							>
 								{app.site.domains[0]}
 							</span>
 						)}
+						<span
+							className={`size-[7px] rounded-full shrink-0 ${APP_DOT[appStatus(app)]}`}
+							aria-hidden='true'
+						/>
 						{ports && (
 							<span className='font-mono text-11 text-text-muted shrink-0'>
 								{ports}
@@ -283,18 +280,20 @@ const FolderRow = ({
 						)}
 					</>
 				)}
-			</div>
-			<div className='text-right text-11 text-text-muted font-mono'>
-				{open && inside ? inside : ''}
+				{open && inside ? (
+					<span className='font-mono text-11 text-text-muted shrink-0'>
+						{inside}
+					</span>
+				) : null}
 			</div>
 		</div>
 	);
 };
 
-// the machines you ssh into, as one more card in the table: a header that
-// collapses like a workspace's, one row per server, and under an expanded
-// server its folders grouped by root. nothing here touches the network on
-// its own; the expander and ↻ are the asks
+// the machines you ssh into, as a lane beside the others: a card with the
+// same sticky heading, one row per server, and under an expanded server
+// its folders grouped by root. nothing here touches the network on its
+// own; the expander and ↻ are the asks
 const ServersLane = ({
 	servers,
 	cursor,
@@ -302,6 +301,7 @@ const ServersLane = ({
 	onOpen,
 	onContextMenu,
 	onAddMenu,
+	searchInHeading = true,
 	folderCursor,
 	onSelectFolder,
 	onOpenFolder,
@@ -331,10 +331,8 @@ const ServersLane = ({
 	const countLine =
 		all.length === 0
 			? 'none yet'
-			: `${all.length} ${all.length === 1 ? 'machine' : 'machines'}`;
+			: `${visible.length} ${visible.length === 1 ? 'machine' : 'machines'}`;
 
-	// what sits under an open server: the reason it is down, an empty
-	// note, the busy word, or the root groups, each a heading that folds
 	// under /etc the curated view says how many it left out, and the row is
 	// the request to see them; opened, it is the way back
 	const showAllRow = (
@@ -348,8 +346,8 @@ const ServersLane = ({
 		if (!hidden && !lifted) return null;
 		return (
 			<div
-				className='ml-6 px-3 py-1 text-11 text-text-muted cursor-pointer hover:text-accent select-none'
-				style={{ paddingLeft: 52 + depth * 16 }}
+				className='pr-4 py-1 text-11 text-text-muted cursor-pointer hover:text-accent select-none'
+				style={{ paddingLeft: folderPad(depth) + 24 }}
 				title='/etc is curated to developer folders; the rest is one click away'
 				onClick={() => toggleShowAll(s.id, parent)}
 			>
@@ -360,33 +358,33 @@ const ServersLane = ({
 		);
 	};
 
+	// what sits under an open server: the reason it is down, an empty
+	// note, the busy word, or the root groups, each a heading that folds
 	const under = (s: Server, groups: VisibleRoot[]) => {
 		const l = listings[s.id];
 		const roots = s.roots.length ? s.roots : DEFAULT_ROOTS;
+		const note = 'pl-14 pr-4 py-1 text-11 truncate';
 		return (
 			<div>
 				{l && !l.up && l.error && (
-					<div
-						className='ml-6 px-3 py-1 text-11 text-danger truncate'
-						title={l.error}
-					>
+					<div className={`${note} text-danger`} title={l.error}>
 						{l.error}
 					</div>
 				)}
 				{l && l.up && l.folders.length === 0 && (
-					<div className='ml-6 px-3 py-1 text-11 text-text-muted'>
+					<div className={`${note} text-text-muted`}>
 						Nothing under {roots.join(', ')}. Edit the roots in Settings ›
 						Servers.
 					</div>
 				)}
 				{!l && listing.has(s.id) && (
-					<div className='ml-6 px-3 py-1 text-11 text-text-muted'>Listing…</div>
+					<div className={`${note} text-text-muted`}>Listing…</div>
 				)}
 				{/* the apps come from a script on the box. a box without it still
 				    lists its folders; say what would give it apps, once, quietly */}
 				{l && l.up && !l.inventory && !l.inventory_error && (
 					<div
-						className='ml-6 px-3 py-1 text-11 text-text-muted truncate'
+						className={`${note} text-text-muted`}
 						title='joyahmed/server › scripts/install.sh puts it in ~/scripts'
 					>
 						No inventory on this box.{' '}
@@ -395,21 +393,18 @@ const ServersLane = ({
 					</div>
 				)}
 				{l?.inventory_error && (
-					<div
-						className='ml-6 px-3 py-1 text-11 text-danger truncate'
-						title={l.inventory_error}
-					>
+					<div className={`${note} text-danger`} title={l.inventory_error}>
 						{l.inventory_error}
 					</div>
 				)}
 				{groups.map(({ root, folded, count, hidden, rows }) => (
 					<div key={root}>
-						{/* a root heading is the same kind of thing as a group
-						    heading in the github card: one step under the rows,
-						    and it folds like one */}
+						{/* a root heading is the same kind of thing as a group heading
+						    in the github lane: one step under the rows, and it folds
+						    like one */}
 						<div
-							className={`${col} px-3 py-1 ml-6 select-none cursor-pointer hover:bg-bg-hover/50`}
-							title={`${root}. Click to ${folded ? 'show' : 'hide'}`}
+							className={`${row} py-1.5 cursor-pointer hover:bg-bg-hover/40`}
+							title={`${count} under ${root}. Click to ${folded ? 'show' : 'hide'}`}
 							onClick={() => toggleRoot(s.id, root)}
 							onContextMenu={e => {
 								e.preventDefault();
@@ -417,7 +412,7 @@ const ServersLane = ({
 								onRootContextMenu(s, root, e.clientX, e.clientY);
 							}}
 						>
-							<div className='flex items-center gap-2 min-w-0 pl-6'>
+							<div className='w-full flex items-center gap-2 pl-10 pr-4'>
 								<span
 									className={`text-11 shrink-0 ${folded ? 'text-text-muted' : 'text-accent'}`}
 								>
@@ -426,20 +421,19 @@ const ServersLane = ({
 								<span className='truncate font-mono text-13 font-semibold text-text-primary'>
 									{root}
 								</span>
-							</div>
-							<div />
-							<div />
-							<div className='text-right text-13 text-text-muted font-mono'>
-								{count}
+								<span className='flex-1' />
+								<span className='font-mono text-11 text-text-muted shrink-0 w-8 text-right'>
+									{count}
+								</span>
 							</div>
 						</div>
-						{rows.map(row => (
-							<div key={`${s.id}:${row.folder.path}`}>
+						{rows.map(r => (
+							<div key={`${s.id}:${r.folder.path}`}>
 								<FolderRow
 									{...{
 										server: s,
-										row,
-										isCursor: folderCursor === `${s.id}:${row.folder.path}`,
+										row: r,
+										isCursor: folderCursor === `${s.id}:${r.folder.path}`,
 										onToggle: (sv: Server, f: RemoteFolder) =>
 											toggleDir(sv.id, f.path),
 										onSelect: onSelectFolder,
@@ -447,7 +441,7 @@ const ServersLane = ({
 										onContextMenu: onFolderContextMenu
 									}}
 								/>
-								{showAllRow(s, row.folder.path, row.hidden, row.depth + 1)}
+								{showAllRow(s, r.folder.path, r.hidden, r.depth + 1)}
 							</div>
 						))}
 						{!folded && showAllRow(s, root, hidden, 0)}
@@ -459,26 +453,22 @@ const ServersLane = ({
 
 	return (
 		<div className={`${card} border-t-emerald-400/50 border-l-emerald-400/50`}>
-			<div
-				className={`${col} px-3 py-2 cursor-pointer hover:bg-bg-hover/50 select-none`}
-				onClick={toggleOpen}
-				title={isOpen ? 'Collapse' : 'Expand'}
+			<LaneHeading
+				{...{
+					label: 'Servers',
+					tone: 'text-emerald-300',
+					line: countLine,
+					open: isOpen,
+					onToggle: toggleOpen
+				}}
 			>
-				<div className='flex items-center gap-2 text-text-secondary min-w-0'>
-					<span
-						className={`text-13 shrink-0 ${isOpen ? 'text-accent' : 'text-text-muted'}`}
+				{/* the lane's own box and its add, when the command row has no
+				    column for them: a server, or a folder on one */}
+				{searchInHeading && all.length > 0 && (
+					<div
+						className='w-[min(280px,45%)]'
+						onClick={e => e.stopPropagation()}
 					>
-						{isOpen ? '▼' : '▶'}
-					</span>
-					<span className='truncate font-semibold text-text-primary'>
-						Servers
-					</span>
-				</div>
-				<div className='text-text-muted truncate'>{countLine}</div>
-				{/* the card's own box: a server, or a folder on one. it folds into
-				    the heading the way the github box did before its own line */}
-				<div onClick={e => e.stopPropagation()}>
-					{all.length > 0 && (
 						<SearchBox
 							{...{
 								value: query,
@@ -487,16 +477,15 @@ const ServersLane = ({
 								onEnter,
 								placeholder: 'Search servers & folders…',
 								lane: 'servers' as const,
-								className: '-my-1 [&_input]:py-1 [&_input]:text-13'
+								className: '-my-1.5 [&_input]:py-1 [&_input]:text-13'
 							}}
 						/>
-					)}
-				</div>
-				<div className='flex justify-end'>
-					{/* the door to a row: add one by hand, or import the config */}
+					</div>
+				)}
+				{searchInHeading && (
 					<Button
 						variant='ghost'
-						className='text-11 px-1.5 py-0.5'
+						className='text-11 px-1.5 py-0.5 -my-1'
 						title='Add a server, or import ~/.ssh/config'
 						onClick={e => {
 							e.stopPropagation();
@@ -506,32 +495,33 @@ const ServersLane = ({
 					>
 						+ Add
 					</Button>
-				</div>
-			</div>
+				)}
+			</LaneHeading>
 
 			<div
-				className='grid transition-[grid-template-rows] duration-150 ease-out'
+				className='grid transition-[grid-template-rows] duration-150 ease-out min-[1400px]:flex-1 min-[1400px]:min-h-0'
 				style={{ gridTemplateRows: isOpen ? '1fr' : '0fr' }}
 			>
-				<div className='overflow-hidden ml-6'>
-					{all.length === 0 && (
-						<div className='px-3 py-2 text-15 text-text-muted'>
-							No servers yet. Add one, or import{' '}
-							<span className='font-mono'>~/.ssh/config</span>.
-						</div>
-					)}
-					{q && visible.length === 0 && (
-						<div className='px-3 py-2 text-15 text-text-muted'>
-							Nothing matches <span className='font-mono'>{query.trim()}</span>.
-						</div>
-					)}
-					{visible.map(({ server, groups, open }) => {
-						return (
+				<div className='overflow-hidden min-h-0 min-[1400px]:h-full flex flex-col'>
+					<div className={`${laneBody} min-[1400px]:h-full`}>
+						{all.length === 0 && (
+							<div className={`${rowFlat} py-3 text-13 text-text-muted`}>
+								No servers yet. Add one, or import{' '}
+								<span className='font-mono'>~/.ssh/config</span>.
+							</div>
+						)}
+						{q && visible.length === 0 && (
+							<div className={`${rowFlat} py-3 text-13 text-text-muted`}>
+								Nothing matches <span className='font-mono'>{q}</span>.
+							</div>
+						)}
+						{visible.map(({ server, groups, open }, i) => (
 							<div key={server.id}>
 								<ServerRow
 									{...{
 										server,
 										isCursor: cursor === server.id,
+										i,
 										listing: listings[server.id],
 										busy: listing.has(server.id),
 										expanded: open,
@@ -544,8 +534,8 @@ const ServersLane = ({
 								/>
 								{open && under(server, groups)}
 							</div>
-						);
-					})}
+						))}
+					</div>
 				</div>
 			</div>
 		</div>
