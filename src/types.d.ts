@@ -491,6 +491,13 @@ interface Shortcut {
 	/// Canonical form: modifiers in Ctrl→Alt→Shift order, then the key.
 	keys: string;
 	label: string;
+	/// what the same action is called on a mac, where the windows word is
+	/// wrong: explorer is finder there, and a windows path is simply the
+	/// path. read through labelFor, never directly, so every menu agrees
+	macLabel?: string;
+	/// meaningless on a mac: there is no second filesystem to have a path
+	/// in. the menus and the settings panel drop it there (isAvailable)
+	windowsOnly?: boolean;
 	group: ShortcutGroup;
 	/// Requires a selected project to do anything.
 	needsSelection?: boolean;
