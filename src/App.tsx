@@ -2408,7 +2408,6 @@ const AppInner = () => {
 					onTerminal: handleOpenTerminal,
 					onAgent: handleOpenAgent,
 					onBoth: handleOpenBoth,
-					onManageTargets: () => openSettings('targets'),
 					onOpenPalette: () => setPaletteOpen(true),
 					summonHotkey,
 					onOpenShortcuts: () => openSettings('shortcuts'),

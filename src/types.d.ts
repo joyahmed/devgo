@@ -567,7 +567,6 @@ interface StatusBarProps {
 	onAgent: (targetId?: string) => void;
 	onTerminal: (targetId?: string) => void;
 	onBoth: () => void;
-	onManageTargets: () => void;
 	onOpenPalette: () => void;
 	pulse?: LaunchKind | null;
 	/// the one shortcut shown nowhere else, and the door into the app

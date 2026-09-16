@@ -74,7 +74,6 @@ const StatusBar = ({
 	onTerminal,
 	onAgent,
 	onBoth,
-	onManageTargets,
 	onOpenPalette,
 	summonHotkey,
 	onOpenShortcuts,
@@ -169,14 +168,6 @@ const StatusBar = ({
 			>
 				<span className='text-11 leading-none'>Open both</span>
 				<Kbd>{both}</Kbd>
-			</Button>
-			<Button
-				variant='ghost'
-				className='text-11 px-2 shrink-0'
-				onClick={onManageTargets}
-				title='Add, remove or scan for editors and terminals'
-			>
-				Manage…
 			</Button>
 			{/* the key chips, a rule, then the doors; without them the
 			    discovery surfaces are themselves undiscoverable */}
