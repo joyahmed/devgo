@@ -17,6 +17,8 @@ use crate::services::groups::{self, GithubGroup};
 use crate::services::launcher;
 use crate::services::platform::{wsl, RuntimeInfo};
 use crate::services::scanner::{ScanOutcome, UnavailableReason};
+use crate::services::servers::{Server, ServersStore};
+use crate::services::ssh_config;
 use crate::services::GithubStore;
 use crate::services::PreferencesStore;
 use crate::services::ProjectCacheStore;
@@ -127,6 +129,7 @@ pub struct AppState {
     /// Branch lists fetched from GitHub this session, by owner/name. In
     /// memory only, like git_cache, and for the same reason.
     pub github_branches: Mutex<HashMap<String, Vec<String>>>,
+    pub servers_store: Mutex<ServersStore>,
 }
 
 #[tauri::command]
@@ -722,6 +725,120 @@ pub async fn get_live_sessions(projects: Vec<Project>) -> Vec<String> {
 pub fn kill_session(project: Project) -> Result<(), AppError> {
     let running = running_for(std::slice::from_ref(&project));
     crate::services::sessions::kill(&project, &running)
+}
+
+// servers: the rows, the edits, the import, and the one launch. nothing
+// here touches the network; the terminal does, when it runs ssh
+
+#[tauri::command]
+pub fn get_servers(state: State<AppState>) -> Result<Vec<Server>, AppError> {
+    Ok(state.servers_store.lock().map_err(lock_err)?.list())
+}
+
+#[tauri::command]
+pub fn add_server(
+    server: Server,
+    state: State<AppState>,
+) -> Result<Server, AppError> {
+    state.servers_store.lock().map_err(lock_err)?.add(server)
+}
+
+#[tauri::command]
+pub fn update_server(
+    server: Server,
+    state: State<AppState>,
+) -> Result<(), AppError> {
+    state.servers_store.lock().map_err(lock_err)?.update(server)
+}
+
+#[tauri::command]
+pub fn remove_server(
+    id: String,
+    state: State<AppState>,
+) -> Result<(), AppError> {
+    state.servers_store.lock().map_err(lock_err)?.remove(&id)
+}
+
+// read ~/.ssh/config and merge its hosts in by alias. an explicit ask
+// from settings, the palette or the card, never on launch; the file is
+// never written. returns (added, updated)
+#[tauri::command]
+pub fn import_ssh_config(
+    state: State<AppState>,
+) -> Result<(usize, usize), AppError> {
+    let path = ssh_config::default_path().ok_or_else(|| {
+        AppError::LaunchFailed(
+            "no home directory to find ~/.ssh/config in".into(),
+        )
+    })?;
+    let text = std::fs::read_to_string(&path).map_err(|e| {
+        AppError::LaunchFailed(format!(
+            "could not read {}: {e}",
+            path.display()
+        ))
+    })?;
+    let imported = ssh_config::parse(&text);
+    state
+        .servers_store
+        .lock()
+        .map_err(lock_err)?
+        .upsert_from_config(imported)
+}
+
+// the card exists only when there is an ssh client to run
+#[tauri::command]
+pub fn has_ssh() -> bool {
+    editors::is_on_path("ssh")
+}
+
+// a terminal on the server: the default terminal's run template with the
+// ssh line as the command, the dev-script path. the terminal's {path} is
+// the home directory; a server is not a folder here
+#[tauri::command]
+pub fn open_server(
+    id: String,
+    target_id: Option<String>,
+    state: State<AppState>,
+) -> Result<(), AppError> {
+    let server = state
+        .servers_store
+        .lock()
+        .map_err(lock_err)?
+        .get(&id)
+        .ok_or_else(|| AppError::TargetNotFound(id.clone()))?;
+    let home = std::env::var("USERPROFILE").unwrap_or_else(|_| "C:\\".into());
+    let stand_in = Project::new(
+        server.name.clone(),
+        home,
+        String::new(),
+        "Windows".into(),
+    );
+    let info = state.runtime_info.lock().map_err(lock_err)?.clone();
+    let terminal = resolve_target(&state, TargetKind::Terminal, target_id)?;
+    launcher::launch_with_command(
+        &terminal,
+        &stand_in,
+        &info,
+        &server.ssh_command(),
+    )
+}
+
+// what the menu copies: the ssh line and the scp prefix
+#[tauri::command]
+pub fn server_commands(
+    id: String,
+    state: State<AppState>,
+) -> Result<(String, String), AppError> {
+    let server = state
+        .servers_store
+        .lock()
+        .map_err(lock_err)?
+        .get(&id)
+        .ok_or_else(|| AppError::TargetNotFound(id.clone()))?;
+    Ok((
+        format!("ssh {}", server.ssh_target().join(" ")),
+        server.scp_prefix(),
+    ))
 }
 
 #[tauri::command]

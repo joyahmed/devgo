@@ -303,6 +303,10 @@ pub fn run() {
             let github_store = services::GithubStore::new(app_data_dir.clone())
                 .expect("failed to initialize github store");
 
+            let servers_store =
+                services::servers::ServersStore::new(app_data_dir.clone())
+                    .expect("failed to initialize servers store");
+
             commands::mark_startup("stores".into());
             let store = WorkspaceStore::new(app_data_dir)
                 .expect("failed to initialize workspace store");
@@ -325,6 +329,7 @@ pub fn run() {
                 github_branches: std::sync::Mutex::new(
                     std::collections::HashMap::new(),
                 ),
+                servers_store: std::sync::Mutex::new(servers_store),
             });
 
             // geometry goes on before the webview calls show(), so the first
@@ -470,6 +475,14 @@ pub fn run() {
             commands::reveal_app_data_dir,
             commands::get_remote_branches,
             commands::get_live_sessions,
+            commands::get_servers,
+            commands::add_server,
+            commands::update_server,
+            commands::remove_server,
+            commands::import_ssh_config,
+            commands::has_ssh,
+            commands::open_server,
+            commands::server_commands,
             commands::open_agent,
             commands::kill_session,
             commands::get_github_branches,
