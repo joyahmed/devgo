@@ -1098,7 +1098,7 @@ interface FsCellProps {
 }
 
 interface WslControlProps {
-	distros: string[];
+	wsl: WslState;
 	/// Called after every stop attempt, success or not — the caller re-reads.
 	onChanged: () => void;
 	onConfirm: (message: string, action: () => void) => void;

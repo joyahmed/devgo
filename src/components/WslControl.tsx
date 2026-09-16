@@ -7,14 +7,20 @@ const STOP_ONE = (d: string) =>
 const STOP_ALL =
 	'Shut down all of WSL? This stops every distro and the virtual machine itself — including Docker Desktop if it uses the WSL2 backend. Use this when stopping a single distro did not clear the problem.';
 
-/// Live WSL state, and the two ways to stop it.
+/// The WSL light, and the two ways to switch it off.
+///
+/// The dot is the light: lit while the VM's process exists, hollow when it
+/// does not — the rows' 7 px dot, so it reads as a live session and a
+/// reachable server do. The label beside it is the detail: how many
+/// distros, or *starting* for the beat between the VM appearing and its
+/// distro registering.
 ///
 /// Stopping one distro comes first; shutting everything down sits below a
 /// separator as the escalation. That ordering is not just tidiness — it is the
 /// real troubleshooting order, because `--terminate` leaves the VM up and will
 /// not always clear a wedged VM, which is when `--shutdown` earns its keep.
 const WslControl = ({
-	distros,
+	wsl,
 	onChanged,
 	onConfirm,
 	onResult
@@ -56,21 +62,35 @@ const WslControl = ({
 			});
 	};
 
+	const { up, distros } = wsl;
+	// the menu needs names to act on; a vm that is up with none listed yet
+	// has nothing to stop by name (shut down all is still in the palette)
 	const running = distros.length > 0;
+	const label = running ? `${distros.length} running` : up ? 'starting' : 'stopped';
+	const title = running
+		? `WSL running: ${distros.join(', ')}`
+		: up
+			? 'The WSL VM is up; no distro has registered yet'
+			: 'WSL is not running';
 
 	return (
 		<div className='relative' ref={ref}>
 			<Button
 				variant='badge'
-				title={
-					running
-						? `WSL running: ${distros.join(', ')}`
-						: 'No WSL distro is running'
-				}
+				className='gap-1.5'
+				title={title}
 				onClick={() => setOpen(v => !v)}
 				disabled={!running}
 			>
-				WSL · {running ? `${distros.length} running` : 'stopped'}
+				<span
+					className={`size-[7px] rounded-full shrink-0 ${
+						up
+							? 'bg-emerald-400 shadow-[0_0_6px_#34d399]'
+							: 'border border-text-muted'
+					}`}
+					aria-hidden='true'
+				/>
+				WSL · {label}
 			</Button>
 
 			{open && (
