@@ -1070,6 +1070,8 @@ interface ServerRowProps {
 	/// an ask in flight
 	busy: boolean;
 	expanded: boolean;
+	/// user@host and the port after the name, or the name alone
+	showDetails: boolean;
 	onToggle: (server: Server) => void;
 	onRefresh: (server: Server) => void;
 	onSelect: (server: Server) => void;

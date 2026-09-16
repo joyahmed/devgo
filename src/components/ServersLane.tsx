@@ -5,17 +5,28 @@ import SearchBox from './SearchBox';
 import { isEtc } from '../etcCuration';
 import { appStatus } from '../serverApps';
 
-// where the row reaches: user@host, or the host alone
+// where the row reaches: user@host, or the host alone. printed only
+// when the details switch is on
 const whoAt = (s: Server) => (s.user ? `${s.user}@${s.host}` : s.host);
+
+// the tooltip: the ssh line by alias, or by host when the row may say
+// it; otherwise the name is all the row gives away
+const rowTitle = (s: Server, details: boolean) =>
+	s.alias
+		? `ssh ${s.alias}`
+		: details
+			? `ssh ${whoAt(s)}`
+			: `Open a terminal on ${s.name}`;
 
 const DEFAULT_ROOTS = ['~', '~/projects', '/var/www', '/srv'];
 
-// the words after the host: the port when it is not 22, tunnel when the
-// config forwards one, tmux when enter lands in a session
-const metaWords = (s: Server) => [
+// the words after the host: the port when it is not 22 and the details
+// switch is on, tunnel when the config forwards one, tmux when enter
+// lands in a session
+const metaWords = (s: Server, details: boolean) => [
 	{
 		key: 'port',
-		show: s.port !== null && s.port !== 22,
+		show: details && s.port !== null && s.port !== 22,
 		text: `:${s.port}`,
 		title: 'Port'
 	},
@@ -97,9 +108,10 @@ const dotFor = (l?: ServerListing) =>
 const folderPad = (depth: number) => 64 + depth * 16;
 
 // one row per server: expander, dot, the name as the click target, and
-// user@host with its words right-anchored. the expander before the name
-// is the ask: the first open lists the box's folders over one ssh; after
-// that the cache paints and ↻ re-asks
+// its words right-anchored, user@host among them only when the details
+// switch is on. the expander before the name is the ask: the first open
+// lists the box's folders over one ssh; after that the cache paints and
+// ↻ re-asks
 const ServerRow = ({
 	server,
 	isCursor,
@@ -107,6 +119,7 @@ const ServerRow = ({
 	listing,
 	busy,
 	expanded,
+	showDetails,
 	onToggle,
 	onRefresh,
 	onSelect,
@@ -126,7 +139,7 @@ const ServerRow = ({
 				onSelect(server);
 				onContextMenu(server, e.clientX, e.clientY);
 			}}
-			title={server.alias ? `ssh ${server.alias}` : `ssh ${whoAt(server)}`}
+			title={rowTitle(server, showDetails)}
 		>
 			<div className={`${rowIndented} border-l-border`}>
 				<Button
@@ -161,10 +174,12 @@ const ServerRow = ({
 					)}
 				</div>
 				<div className='flex items-center justify-end gap-2 min-w-0 shrink-0'>
-					<span className='font-mono text-13 text-text-muted truncate max-w-[18rem]'>
-						{whoAt(server)}
-					</span>
-					{metaWords(server)
+					{showDetails && (
+						<span className='font-mono text-13 text-text-muted truncate max-w-[18rem]'>
+							{whoAt(server)}
+						</span>
+					)}
+					{metaWords(server, showDetails)
 						.filter(w => w.show)
 						.map(w => (
 							<span
@@ -320,7 +335,8 @@ const ServersLane = ({
 		toggleShowAll,
 		query,
 		setQuery,
-		visible
+		visible,
+		showDetails
 	} = servers;
 
 	const q = query.trim();
@@ -521,6 +537,7 @@ const ServersLane = ({
 										listing: listings[server.id],
 										busy: listing.has(server.id),
 										expanded: open,
+										showDetails,
 										onToggle: (s: Server) => toggleExpanded(s.id),
 										onRefresh: (s: Server) => listFolders(s.id).catch(() => {}),
 										onSelect,
