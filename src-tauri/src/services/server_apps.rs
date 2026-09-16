@@ -78,7 +78,8 @@ pub struct Process {
     pub pid: Option<u64>,
     #[serde(default)]
     pub status: Option<String>,
-    #[serde(default)]
+    // a docker-run process reports null here; null is nothing to count
+    #[serde(default, deserialize_with = "null_as_zero")]
     pub restarts: u64,
     #[serde(default)]
     pub uptime: Option<u64>,
@@ -88,8 +89,14 @@ pub struct Process {
     pub node: Option<String>,
     #[serde(default)]
     pub ports: Vec<u16>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_zero")]
     pub memory_mb: u64,
+}
+
+fn null_as_zero<'de, D: serde::Deserializer<'de>>(
+    d: D,
+) -> Result<u64, D::Error> {
+    Ok(Option::<u64>::deserialize(d)?.unwrap_or_default())
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
@@ -465,6 +472,13 @@ mod tests {
             parse_inventory(r#"{"apps":[{"name":"x","dir":"/var/www/x"}]}"#)
                 .unwrap();
         assert_eq!(bare.apps[0].kind, "");
+        // a docker process reports null where a pm2 one has a number
+        let docker = parse_inventory(
+            r#"{"apps":[{"name":"x","dir":"/x","processes":[{"docker":"x-web","pid":null,"status":"online","restarts":null,"uptime":null,"memory_mb":null,"ports":[3005]}]}]}"#,
+        )
+        .unwrap();
+        assert_eq!(docker.apps[0].processes[0].restarts, 0);
+        assert_eq!(docker.apps[0].processes[0].ports, [3005]);
         assert!(parse_inventory("not json").is_err());
     }
 
