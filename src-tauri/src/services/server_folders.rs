@@ -30,6 +30,10 @@ pub struct RemoteFolder {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ServerListing {
     pub folders: Vec<RemoteFolder>,
+    // children of folders drilled into, by absolute path; one ls each, on
+    // the click, cached like the roots
+    #[serde(default)]
+    pub subdirs: HashMap<String, Vec<RemoteFolder>>,
     // unix seconds of the last ask; 0 = never
     pub listed_at: u64,
     // the last ask reached the box
@@ -179,11 +183,10 @@ pub fn zed_remote_url(server: &Server, path: &str) -> String {
     }
 }
 
-// run the listing: the folders, or what ssh printed. ssh is spawned
-// directly, not through a shell, so the * reaches the remote shell
+// one ssh with a remote command: stdout, or what ssh printed. ssh is
+// spawned directly, not through a shell, so a * reaches the remote shell
 // untouched, which is what expands it
-pub fn list(server: &Server) -> Result<Vec<RemoteFolder>, String> {
-    let roots = effective_roots(server);
+fn ssh(server: &Server, remote: &str) -> Result<String, String> {
     let mut cmd = Command::new("ssh");
     cmd.creation_flags(CREATE_NO_WINDOW).args([
         "-o",
@@ -196,8 +199,7 @@ pub fn list(server: &Server) -> Result<Vec<RemoteFolder>, String> {
     for a in server.ssh_target() {
         cmd.arg(a.trim_matches('"'));
     }
-    // echo ~ first so a ~ root can be attributed
-    cmd.arg(format!("echo ~; {}", listing_command(&roots)));
+    cmd.arg(remote);
     let out = cmd.output().map_err(|e| format!("ssh: {e}"))?;
     // ssh exits 255 for its own failures; any other code is the remote
     // command's, and ls -d exits 2 when one root is missing on that box
@@ -210,11 +212,33 @@ pub fn list(server: &Server) -> Result<Vec<RemoteFolder>, String> {
             err
         });
     }
-    let text = String::from_utf8_lossy(&out.stdout);
+    Ok(String::from_utf8_lossy(&out.stdout).into_owned())
+}
+
+// the roots' children. echo ~ first so a ~ root can be attributed
+pub fn list(server: &Server) -> Result<Vec<RemoteFolder>, String> {
+    let roots = effective_roots(server);
+    let text = ssh(server, &format!("echo ~; {}", listing_command(&roots)))?;
     let mut lines = text.lines();
     let home = lines.next().map(|l| l.trim().to_string());
     let rest: String = lines.collect::<Vec<_>>().join("\n");
     Ok(parse_listing(&rest, &roots, home.as_deref()))
+}
+
+// the children of one folder: the drill-down. same ssh, same rules; the
+// path is single-quoted for the remote shell (nothing local sees this
+// line), so a space in a folder name survives
+pub fn dir_command(path: &str) -> String {
+    let p = path.trim_end_matches('/').replace('\'', "'\\''");
+    format!("ls -d '{p}'/*/ 2>/dev/null")
+}
+
+pub fn list_dir(
+    server: &Server,
+    path: &str,
+) -> Result<Vec<RemoteFolder>, String> {
+    let out = ssh(server, &dir_command(path))?;
+    Ok(parse_listing(&out, &[path.to_string()], None))
 }
 
 // one listing per server id, on disk
@@ -311,6 +335,26 @@ mod tests {
     }
 
     #[test]
+    fn a_drill_down_quotes_the_path_for_the_remote_shell() {
+        assert_eq!(
+            dir_command("/etc/nginx/"),
+            "ls -d '/etc/nginx'/*/ 2>/dev/null"
+        );
+        assert_eq!(
+            dir_command("/srv/it's here"),
+            "ls -d '/srv/it'\\''s here'/*/ 2>/dev/null"
+        );
+        let kids = parse_listing(
+            "/etc/nginx/sites-available/\n/etc/nginx/conf.d/\n",
+            &["/etc/nginx".into()],
+            None,
+        );
+        let names: Vec<_> = kids.iter().map(|k| k.name.as_str()).collect();
+        assert_eq!(names, ["sites-available", "conf.d"]);
+        assert!(kids.iter().all(|k| k.root == "/etc/nginx"));
+    }
+
+    #[test]
     fn defaults_apply_only_when_the_row_says_nothing() {
         let mut s = zetta();
         assert_eq!(
@@ -367,10 +411,9 @@ mod tests {
         c.store(
             "zetta",
             ServerListing {
-                folders: vec![],
                 listed_at: 5,
                 up: true,
-                error: None,
+                ..Default::default()
             },
         )
         .unwrap();
