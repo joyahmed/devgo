@@ -15,10 +15,11 @@ const VARIANT: Record<ButtonVariant, string> = {
 	pill: 'px-6 py-2.5 text-13 border border-border-strong rounded-full bg-bg-panel text-text-secondary hover:not-disabled:bg-bg-hover hover:not-disabled:text-text-primary hover:not-disabled:border-accent',
 	// A sidebar item; the selected one says so with aria-current="page".
 	tab: 'justify-start px-3 py-1.5 text-15 font-medium rounded-control bg-transparent border-none text-text-secondary hover:bg-bg-hover/50 hover:text-text-primary aria-[current=page]:bg-bg-selected aria-[current=page]:text-text-primary',
-	// A title-bar status pill you can click. Disabled means "nothing to act on",
-	// and the muted colour says so; the base opacity dims it further.
+	// A title-bar status pill you can click. Its hue is the caller's, the
+	// file system's; disabled means "nothing to act on", and the muted
+	// colour says so; the base opacity dims it further.
 	badge:
-		'px-2.5 py-0.5 text-11 font-semibold rounded-full bg-bg-panel border border-border-strong text-accent hover:not-disabled:border-accent disabled:text-text-muted',
+		'px-2.5 py-0.5 text-11 font-semibold rounded-full bg-bg-panel border border-border-strong hover:not-disabled:border-accent disabled:text-text-muted',
 	// A choice among several; the chosen one says so with aria-pressed.
 	card: 'flex-col items-stretch w-full p-3 text-left border border-border-strong bg-transparent text-text-primary hover:border-text-muted aria-[pressed=true]:border-accent aria-[pressed=true]:bg-bg-hover/40',
 	// A launch target on the row; the default says so with aria-current.

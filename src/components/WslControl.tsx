@@ -77,7 +77,7 @@ const WslControl = ({
 		<div className='relative' ref={ref}>
 			<Button
 				variant='badge'
-				className='gap-1.5'
+				className='gap-1.5 text-accent'
 				title={title}
 				onClick={() => setOpen(v => !v)}
 				disabled={!running}
