@@ -43,8 +43,12 @@ const loadOpen = (): boolean | null => {
 // reads the cache on mount (a file, no network), listens for the refresh
 // thread to finish, and owns the one rule about when a refresh may start
 // on its own: the lane's first open in a session, when the cache is
-// stale. everything else that fetches is a button or a palette command
-export const useGithub = (git: Map<string, GitInfo>): GithubState => {
+// stale. everything else that fetches is a button or a palette command.
+// projects and git are the two things the local mark is made of
+export const useGithub = (
+	projects: Project[],
+	git: Map<string, GitInfo>
+): GithubState => {
 	// the github rows' own box: the project box never sees this
 	const [query, setQuery] = useState('');
 	const [payload, setPayload] = useState<GithubPayload | null>(null);
@@ -103,10 +107,12 @@ export const useGithub = (git: Map<string, GitInfo>): GithubState => {
 		return () => window.clearTimeout(t);
 	}, []);
 
-	// the local map is computed from the git cache on the rust side, so it
-	// is as current as the last badge pass: re-read after each one. the
-	// map is a new one when a pass lands, and the first run is the mount
-	useEffect(reload, [git]);
+	// the local map is rust's, over the projects listed and the remotes
+	// the badge pass read: re-read when either lands. a pass paints a new
+	// list whether or not it badged, so a deleted clone loses its mark on
+	// the next pass of any kind; a clone that just landed gains it when
+	// its badge arrives. the first run is the mount
+	useEffect(reload, [projects, git]);
 
 	const hasCache = (payload?.cache.fetched_at ?? 0) > 0;
 	const isOpen = open ?? hasCache;

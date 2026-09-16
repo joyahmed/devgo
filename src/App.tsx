@@ -127,9 +127,10 @@ const AppInner = () => {
 		openBoth
 	} = useLaunchActions(selected, refresh);
 	// the github group. reads its cache on mount and re-reads after every
-	// badge pass (git is the dependency) so the local marks track the disk.
-	// its box is its own; the project query never reaches it
-	const github = useGithub(git);
+	// pass (the list and the badges are its dependencies) so the local
+	// marks track the disk. its box is its own; the project query never
+	// reaches it
+	const github = useGithub(projects, git);
 	// the machines you ssh into: its own file, no network
 	const servers = useServers();
 	// one registry: a second useTargets in Settings would leave the row stale
