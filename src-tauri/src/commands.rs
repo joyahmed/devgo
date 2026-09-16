@@ -1221,6 +1221,22 @@ pub fn add_server_root(
     store.update(server)
 }
 
+// the pin's inverse, from the heading's menu. before it the only way
+// back was the edit form's roots box
+#[tauri::command]
+pub fn remove_server_root(
+    id: String,
+    root: String,
+    state: State<AppState>,
+) -> Result<(), AppError> {
+    let mut store = state.servers_store.lock().map_err(lock_err)?;
+    let mut server = store
+        .get(&id)
+        .ok_or_else(|| AppError::ServerNotFound(id.clone()))?;
+    server.roots = server_folders::without_root(&server, &root);
+    store.update(server)
+}
+
 // a terminal in a remote folder: a tmux session named after the folder
 #[tauri::command]
 pub fn open_server_folder(
