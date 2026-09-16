@@ -124,6 +124,17 @@ pub fn effective_roots(server: &Server) -> Vec<String> {
     }
 }
 
+// the pin's inverse. an empty list means the defaults, so they are
+// written out first and the one taken away; otherwise the removal would
+// be a no-op on an empty list and the group would stay
+pub fn without_root(server: &Server, root: &str) -> Vec<String> {
+    let root = root.trim().trim_end_matches('/');
+    effective_roots(server)
+        .into_iter()
+        .filter(|r| r != root)
+        .collect()
+}
+
 // /var/www/erp -> erp. tmux forbids . and : in a session name
 pub fn session_slug(path: &str) -> String {
     let last = path.trim_end_matches('/').rsplit('/').next().unwrap_or("");
@@ -415,6 +426,24 @@ mod tests {
         );
         s.roots = vec!["/srv".into(), " ".into()];
         assert_eq!(effective_roots(&s), ["/srv"]);
+    }
+
+    // a never-edited server unpins one of the defaults: the other three
+    // are written out, so the list does not read as "the defaults" again
+    #[test]
+    fn unpinning_a_default_keeps_the_other_defaults() {
+        let s = zetta();
+        assert_eq!(without_root(&s, "~/projects"), ["~", "/var/www", "/srv"]);
+    }
+
+    #[test]
+    fn unpinning_trims_the_way_pinning_did() {
+        let mut s = zetta();
+        s.roots = vec!["/etc/nginx".into(), "/opt".into()];
+        assert_eq!(without_root(&s, " /etc/nginx/ "), ["/opt"]);
+        // unpinning the last one leaves an empty list: the defaults again
+        s.roots = vec!["/opt".into()];
+        assert!(without_root(&s, "/opt").is_empty());
     }
 
     #[test]
