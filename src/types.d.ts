@@ -822,9 +822,30 @@ interface ServersLaneProps {
 interface ServerRowProps {
 	server: Server;
 	isCursor: boolean;
+	/// the last listing, if any: the dot and the folders
+	listing?: ServerListing;
+	/// an ask in flight
+	busy: boolean;
+	expanded: boolean;
+	onToggle: (server: Server) => void;
+	onRefresh: (server: Server) => void;
 	onSelect: (server: Server) => void;
 	onOpen: (server: Server) => void;
 	onContextMenu: (server: Server, x: number, y: number) => void;
+}
+
+interface FolderRowProps {
+	server: Server;
+	folder: RemoteFolder;
+	isCursor: boolean;
+	onSelect: (server: Server, folder: RemoteFolder) => void;
+	onOpen: (server: Server, folder: RemoteFolder) => void;
+	onContextMenu: (
+		server: Server,
+		folder: RemoteFolder,
+		x: number,
+		y: number
+	) => void;
 }
 
 interface ServerFormProps {
