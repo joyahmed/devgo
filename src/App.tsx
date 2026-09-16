@@ -1205,6 +1205,73 @@ const AppInner = () => {
 				keywords: ['order', 'frecency', 'activity', 'name'],
 				run: toggleSort
 			},
+			// the workspace actions the keys have; the palette promised every
+			// action and offered only settings › workspaces
+			{
+				id: 'addWorkspace',
+				title: 'Add workspace…',
+				subtitle: 'Pick a folder that holds projects',
+				hint: hint('addWorkspace'),
+				keywords: ['workspace', 'folder', 'new'],
+				run: pickWorkspaceFolder
+			},
+			{
+				id: 'refreshWorkspace',
+				title: p
+					? `Refresh workspace ${lastSegment(p.workspace)}`
+					: 'Refresh workspace',
+				subtitle: p
+					? 'This one only, boots its distro if stopped'
+					: 'Select a project first',
+				keywords: ['workspace', 'rescan', 'one'],
+				disabled: !p,
+				run: () => p && handleRefreshWorkspace(p.workspace)
+			},
+			{
+				id: 'revealWorkspace',
+				title: p
+					? `Reveal workspace ${lastSegment(p.workspace)} in Explorer`
+					: 'Reveal workspace in Explorer',
+				subtitle: p?.workspace ?? 'Select a project first',
+				hint: hint('revealWorkspace'),
+				keywords: ['workspace', 'folder', 'explorer'],
+				disabled: !p,
+				run: () => p && revealWorkspace(p.workspace)
+			},
+			...([-1, 1] as const).map(dir => ({
+				id: dir < 0 ? 'moveWorkspaceUp' : 'moveWorkspaceDown',
+				title: `Move workspace${p ? ` ${lastSegment(p.workspace)}` : ''} ${dir < 0 ? 'up' : 'down'}`,
+				hint: hint(dir < 0 ? 'moveWorkspaceUp' : 'moveWorkspaceDown'),
+				keywords: ['workspace', 'order', 'reorder'],
+				disabled: !p,
+				run: () => {
+					if (!p) return;
+					const i = workspaces.indexOf(p.workspace);
+					moveWorkspaceBeside(p.workspace, workspaces[i + dir], dir > 0);
+				}
+			})),
+			{
+				id: 'removeWorkspace',
+				title: p
+					? `Remove workspace ${lastSegment(p.workspace)}`
+					: 'Remove workspace',
+				subtitle: p ? 'Asks first; the folder is untouched' : 'Select a project first',
+				hint: hint('removeWorkspace'),
+				keywords: ['workspace', 'delete', 'forget'],
+				disabled: !p,
+				run: handleRemoveShortcut
+			},
+			{
+				id: 'runScript',
+				title: 'Run dev script…',
+				hint: hint('runScript'),
+				subtitle: p ? `${p.name}, reads its package.json` : 'Select a project first',
+				keywords: ['npm', 'bun', 'pnpm', 'script', 'dev', 'start'],
+				disabled: !p,
+				// the palette has closed and there is no click to anchor to, so
+				// the script menu takes the row menu's fallback spot
+				run: () => p && openScripts(p, 240, 200)
+			},
 			proj('openEditor', 'Open in editor', ['code', 'edit'], launchEditor),
 			proj('openTerminal', 'Open terminal', ['term', 'shell', 'wt'], launchTerminal),
 			proj('openBoth', 'Open both', ['launch'], handleLaunch),
@@ -1246,6 +1313,7 @@ const AppInner = () => {
 			commands.push({
 				id: 'openRemote',
 				title: 'Open remote in browser',
+				hint: hint('openRemote'),
 				subtitle: p.name,
 				keywords: ['git', 'github', 'url'],
 				run: () => handleOpenRemote(p)
