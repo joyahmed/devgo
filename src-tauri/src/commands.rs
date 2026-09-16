@@ -1932,6 +1932,29 @@ pub fn set_github_live_search(
         .map_err(AppError::Lock)
 }
 
+#[tauri::command]
+pub fn get_show_server_details(
+    state: State<AppState>,
+) -> Result<bool, AppError> {
+    Ok(state
+        .pref_store
+        .lock()
+        .map_err(lock_err)?
+        .show_server_details())
+}
+
+// settings and the row menu flip the same flag; the stored value comes
+// back so both show what the file says
+#[tauri::command]
+pub fn set_show_server_details(
+    on: bool,
+    state: State<AppState>,
+) -> Result<bool, AppError> {
+    let mut prefs = state.pref_store.lock().map_err(lock_err)?;
+    prefs.set_show_server_details(on).map_err(AppError::Lock)?;
+    Ok(prefs.show_server_details())
+}
+
 /// What one live search answers: the hits, and the generation the
 /// frontend stamped on the request so it can drop an answer to a query
 /// it has since moved past.

@@ -200,6 +200,11 @@ pub struct Preferences {
     /// opaque, applies no effect at all: no acrylic, no compositing cost.
     #[serde(default)]
     pub window_transparency: u8,
+    /// Whether a server row prints user@host and the port. Off, the
+    /// default, the lane shows the name only: a screenshot of the window
+    /// is not a list of where you ssh. `serde(default)`, as above.
+    #[serde(default)]
+    pub show_server_details: bool,
 }
 
 // bare names, not globs: a cheap comparison on the listing the scan already has
@@ -383,6 +388,15 @@ impl PreferencesStore {
         percent: u8,
     ) -> Result<(), String> {
         self.prefs.window_transparency = clamp_transparency(percent);
+        self.save()
+    }
+
+    pub fn show_server_details(&self) -> bool {
+        self.prefs.show_server_details
+    }
+
+    pub fn set_show_server_details(&mut self, on: bool) -> Result<(), String> {
+        self.prefs.show_server_details = on;
         self.save()
     }
 

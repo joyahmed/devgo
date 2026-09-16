@@ -598,6 +598,8 @@ pub fn run() {
             commands::get_github_groups,
             commands::edit_github_groups,
             commands::set_github_live_search,
+            commands::get_show_server_details,
+            commands::set_show_server_details,
             commands::search_github,
             commands::reveal_in_explorer,
             commands::get_wsl_path,
