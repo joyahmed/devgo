@@ -20,12 +20,68 @@ pub struct WslState {
     pub distros: Vec<String>,
 }
 
+// two seconds is under the time a distro takes to boot and register, so
+// the light lands as the terminal's prompt does, and coarse enough that
+// the snapshot is noise on the cpu graph
+#[cfg(windows)]
+const TICK: std::time::Duration = std::time::Duration::from_secs(2);
+
+// the vm's process appears a beat before the distro is listed as running,
+// so after an up the names are asked once a second until one arrives or
+// this many asks are spent; the chip says starting until then
+#[cfg(windows)]
+const NAME_RETRIES: u32 = 5;
+
 /// The state read fresh: the process table now, the memo'd list.
 pub fn current() -> WslState {
     WslState {
         up: vm_is_up(),
         distros: super::wsl::running_distros_memo(),
     }
+}
+
+/// Start the watcher thread. One per process, from `setup()`.
+#[cfg(windows)]
+pub fn start(app: tauri::AppHandle) {
+    use tauri::Emitter;
+    std::thread::Builder::new()
+        .name("wsl-watch".into())
+        .spawn(move || {
+            // the first look is the baseline, not an event: the window asks
+            // get_wsl_state at mount, and a second wsl.exe from here would
+            // say the same thing. transitions only
+            let mut last = vm_is_up();
+            loop {
+                std::thread::sleep(TICK);
+                let up = vm_is_up();
+                if up == last {
+                    continue;
+                }
+                // the memo is from before the transition either way
+                super::wsl::forget_running();
+                let distros = if up { names_after_boot() } else { Vec::new() };
+                let _ = app.emit("devgo://wsl", WslState { up, distros });
+                last = up;
+            }
+        })
+        .expect("spawn wsl-watch thread");
+}
+
+/// No VM to watch; nothing to start.
+#[cfg(not(windows))]
+pub fn start(_app: tauri::AppHandle) {}
+
+// the names, asked until the first one registers
+#[cfg(windows)]
+fn names_after_boot() -> Vec<String> {
+    for attempt in 0..NAME_RETRIES {
+        let names = super::wsl::refresh_running();
+        if !names.is_empty() || attempt + 1 == NAME_RETRIES {
+            return names;
+        }
+        std::thread::sleep(std::time::Duration::from_secs(1));
+    }
+    Vec::new()
 }
 
 /// Is `vmmemWSL` in the process table.
