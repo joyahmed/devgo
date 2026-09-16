@@ -6,15 +6,16 @@ import { useEffect, useRef, useState } from 'react';
 // soon as its thread starts, so sequencing is this hook's job, and it
 // starts the next queued job when devgo://clone-done arrives for the
 // current one. a refusal (destination exists, distro stopped) fails that
-// job at once and the queue moves on; nothing is retried on its own
-export const useClone = (onCloned: (dest: string) => void): CloneState => {
+// job at once and the queue moves on; nothing is retried on its own.
+// every ending, the refusals too, reaches onDone
+export const useClone = (onDone: (done: CloneDone) => void): CloneState => {
 	const [jobs, setJobs] = useState<Map<string, CloneJob>>(new Map());
 	// refs, so the listeners below see the live queue without resubscribing
 	const queue = useRef<CloneJob[]>([]);
 	const running = useRef<string | null>(null);
-	const onClonedRef = useRef(onCloned);
+	const onDoneRef = useRef(onDone);
 	useEffect(() => {
-		onClonedRef.current = onCloned;
+		onDoneRef.current = onDone;
 	});
 
 	const update = (full_name: string, patch: Partial<CloneJob>) => {
@@ -39,7 +40,14 @@ export const useClone = (onCloned: (dest: string) => void): CloneState => {
 		})
 			.then(started => update(job.full_name, { dest: started.dest }))
 			.catch(e => {
-				update(job.full_name, { status: 'failed', error: String(e) });
+				const error = String(e);
+				update(job.full_name, { status: 'failed', error });
+				onDoneRef.current({
+					full_name: job.full_name,
+					ok: false,
+					dest: job.workspace,
+					error
+				});
 				running.current = null;
 				startNext();
 			});
@@ -80,7 +88,7 @@ export const useClone = (onCloned: (dest: string) => void): CloneState => {
 				error: payload.error,
 				percent: payload.ok ? 100 : null
 			});
-			if (payload.ok) onClonedRef.current(payload.dest);
+			onDoneRef.current(payload);
 			if (running.current === payload.full_name) {
 				running.current = null;
 				startNext();

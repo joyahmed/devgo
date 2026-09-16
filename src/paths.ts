@@ -8,3 +8,7 @@ export const normalizePath = (path: string) =>
 // the last path segment, either separator, trailing slashes ignored
 export const lastSegment = (path: string) =>
 	path.replace(/[\\/]+$/, '').split(/[\\/]/).pop() ?? path;
+
+// the folder a path sits in, either separator
+export const parentOf = (path: string) =>
+	path.replace(/[\\/]+$/, '').replace(/[\\/][^\\/]*$/, '') || path;

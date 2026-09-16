@@ -36,7 +36,7 @@ import { useTargets } from './hooks/useTargets';
 import { useWorkspaces } from './hooks/useWorkspaces';
 import { useRuntime } from './hooks/useRuntime';
 import { useWsl } from './hooks/useWsl';
-import { lastSegment } from './paths';
+import { lastSegment, parentOf } from './paths';
 import { isMac } from './platform';
 import {
 	appForFolder,
@@ -530,9 +530,18 @@ const AppInner = () => {
 	const [repoMenu, setRepoMenu] = useState<RepoMenu | null>(null);
 
 	// clones: the queue lives in the hook. a finished one rescans so the new
-	// project row appears, and that pass is what marks its github row local
-	const clone = useClone((dest: string) => {
-		toast(`Cloned into ${dest}`, 'success');
+	// project row appears, and that pass is what marks its github row local.
+	// the toast names the repo and where it went, and a failed one says why
+	const clone = useClone((done: CloneDone) => {
+		const name = done.full_name.split('/').pop() ?? done.full_name;
+		if (!done.ok) return toast(`Clone of ${name} failed: ${done.error}`, 'error');
+		toast(`Cloned ${name} into ${lastSegment(parentOf(done.dest))}`, 'success', {
+			label: 'Open',
+			onClick: () =>
+				invoke('reveal_in_explorer', { path: done.dest }).catch(e =>
+					toast(showError(e))
+				)
+		});
 		refresh().catch(() => {});
 	});
 	const [clonePicker, setClonePicker] = useState<ClonePickerRequest | null>(
