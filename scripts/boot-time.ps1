@@ -27,8 +27,17 @@ if (-not (Test-Path $Exe)) { throw "no exe at $Exe" }
 if (Get-Process devgo -ErrorAction SilentlyContinue) { throw 'a DevGo is running; stop it first' }
 
 # the lock is what a kill leaves and a quit removes: the runs start from
-# the state asked for, not from whatever the last one left
-if (-not $Stale) { Remove-Item $lock -ErrorAction SilentlyContinue }
+# the state asked for, not from whatever the last one left. a kill cannot
+# be faked, so a stale series starts with one that is not counted
+if ($Stale) {
+	$p = Start-Process -FilePath $Exe -PassThru
+	while (-not $p.HasExited -and $p.MainWindowTitle -eq '') { Start-Sleep -Milliseconds 100; $p.Refresh() }
+	Start-Sleep -Seconds 1
+	if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force }
+	Start-Sleep -Seconds 1
+} else {
+	Remove-Item $lock -ErrorAction SilentlyContinue
+}
 
 $visible = @()
 $first = @()
