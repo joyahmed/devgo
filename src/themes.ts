@@ -26,20 +26,23 @@ export const THEMES: Theme[] = [
 	{
 		id: 'neon',
 		name: 'DevGo Neon',
+		// redone (joy: "neon theme is dead"): it was tailwind blue-500 on
+		// slate, the palette that shipped before anyone chose one. a
+		// near-black blue ground, electric cyan, ink with a cold cast
 		colors: {
-			'bg-primary': '#080c12',
-			'bg-secondary': '#0c121c',
-			'bg-panel': '#0e1420',
-			'bg-hover': '#1a2744',
-			'bg-selected': '#1e3a5f',
-			'text-primary': '#ffffff',
-			'text-secondary': '#a0a0a0',
-			'text-muted': '#767e8d',
-			accent: '#3b82f6',
-			'accent-hover': '#2563eb',
-			danger: '#ef4444',
-			border: '#1e293b',
-			'border-strong': '#48638e'
+			'bg-primary': '#05070d',
+			'bg-secondary': '#090e19',
+			'bg-panel': '#0c1322',
+			'bg-hover': '#131f38',
+			'bg-selected': '#0f2f57',
+			'text-primary': '#f4f8ff',
+			'text-secondary': '#b9c6de',
+			'text-muted': '#8f9dba',
+			accent: '#22d3ee',
+			'accent-hover': '#67e8f9',
+			danger: '#fb7185',
+			border: '#161f33',
+			'border-strong': '#5f7fb5'
 		}
 	},
 	{

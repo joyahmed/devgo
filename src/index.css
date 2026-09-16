@@ -1,19 +1,19 @@
 @import 'tailwindcss';
 
 @theme {
-	--color-bg-primary: #080c12;
-	--color-bg-secondary: #0c121c;
-	--color-bg-panel: #0e1420;
-	--color-bg-hover: #1a2744;
-	--color-bg-selected: #1e3a5f;
-	--color-text-primary: #ffffff;
-	--color-text-secondary: #a0a0a0;
-	--color-text-muted: #767e8d;
-	--color-accent: #3b82f6;
-	--color-accent-hover: #2563eb;
-	--color-danger: #ef4444;
-	--color-border: #1e293b;
-	--color-border-strong: #48638e;
+	--color-bg-primary: #05070d;
+	--color-bg-secondary: #090e19;
+	--color-bg-panel: #0c1322;
+	--color-bg-hover: #131f38;
+	--color-bg-selected: #0f2f57;
+	--color-text-primary: #f4f8ff;
+	--color-text-secondary: #b9c6de;
+	--color-text-muted: #8f9dba;
+	--color-accent: #22d3ee;
+	--color-accent-hover: #67e8f9;
+	--color-danger: #fb7185;
+	--color-border: #161f33;
+	--color-border-strong: #5f7fb5;
 	--font-sans: 'Segoe UI', system-ui, sans-serif;
 	--font-mono: 'Cascadia Code', 'Consolas', monospace;
 	/* one scale, five steps. seventeen sizes were in use (text-[9px] to
