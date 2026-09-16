@@ -495,12 +495,10 @@ const AppInner = () => {
 	const [repoMenu, setRepoMenu] = useState<RepoMenu | null>(null);
 
 	// clones: the queue lives in the hook. a finished one rescans so the new
-	// project row appears, and re-reads the github payload so its row gains
-	// the local mark
+	// project row appears, and that pass is what marks its github row local
 	const clone = useClone((dest: string) => {
 		toast(`Cloned into ${dest}`, 'success');
 		refresh().catch(() => {});
-		github.reload();
 	});
 	const [clonePicker, setClonePicker] = useState<ClonePickerRequest | null>(
 		null
