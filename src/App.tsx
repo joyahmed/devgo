@@ -17,6 +17,7 @@ import Onboarding from './components/Onboarding';
 import ProjectTree from './components/ProjectTree';
 import ScanPicker from './components/ScanPicker';
 import SearchBox from './components/SearchBox';
+import ServerForm from './components/ServerForm';
 import StatusBar from './components/StatusBar';
 import TitleBar from './components/TitleBar';
 import WslControl from './components/WslControl';
@@ -26,6 +27,7 @@ import { useGithub } from './hooks/useGithub';
 import { useLaunchActions } from './hooks/useLaunchActions';
 import { useMaximized } from './hooks/useMaximized';
 import { useProjects } from './hooks/useProjects';
+import { useServers } from './hooks/useServers';
 import { useTargets } from './hooks/useTargets';
 import { useWorkspaces } from './hooks/useWorkspaces';
 import { lastSegment } from './paths';
@@ -116,6 +118,8 @@ const AppInner = () => {
 	// badge pass (git is the dependency) so the local marks track the disk.
 	// its box is its own; the project query never reaches it
 	const github = useGithub(git);
+	// the machines you ssh into: its own file, no network
+	const servers = useServers();
 	// one registry: a second useTargets in Settings would leave the row stale
 	// after an add until the next mount
 	const targets = useTargets();
@@ -681,6 +685,66 @@ const AppInner = () => {
 		}
 	};
 
+	// servers: the row menu, the card's + menu, and the add/edit form
+	const [serverMenu, setServerMenu] = useState<ServerMenu | null>(null);
+	const [serversAddMenu, setServersAddMenu] = useState<{
+		x: number;
+		y: number;
+	} | null>(null);
+	const [serverForm, setServerForm] = useState<{ initial?: Server } | null>(
+		null
+	);
+	const openServer = (s: Server) =>
+		invoke('open_server', { id: s.id, targetId: null }).catch(e =>
+			toast(showError(e))
+		);
+	const importSsh = () =>
+		servers
+			.importSshConfig()
+			.then(({ added, updated }) =>
+				toast(
+					added + updated === 0
+						? 'Nothing new in ~/.ssh/config'
+						: `Imported ${added} new, ${updated} updated from ~/.ssh/config`,
+					'success'
+				)
+			)
+			.catch(e => toast(showError(e)));
+	const copyServerLine = (s: Server, which: 0 | 1) =>
+		invoke<[string, string]>('server_commands', { id: s.id })
+			.then(lines =>
+				copyText(lines[which], which === 0 ? 'ssh command' : 'scp prefix')
+			)
+			.catch(e => toast(showError(e)));
+	const saveServer = async (draft: ServerDraft) => {
+		if (draft.id) await servers.update(draft as Server);
+		else await servers.add(draft);
+		toast(draft.id ? `Saved ${draft.name}` : `Added ${draft.name}`, 'success');
+	};
+	const buildServerMenu = (s: Server): MenuEntry[] => [
+		{ label: 'Open terminal', hint: 'Enter', onClick: () => openServer(s) },
+		'separator',
+		{ label: 'Copy ssh command', onClick: () => copyServerLine(s, 0) },
+		{ label: 'Copy scp prefix', onClick: () => copyServerLine(s, 1) },
+		'separator',
+		{ label: 'Edit…', onClick: () => setServerForm({ initial: s }) },
+		{
+			label: 'Remove',
+			danger: true,
+			onClick: () =>
+				setConfirmAction({
+					title: 'Remove server',
+					confirmLabel: 'Remove',
+					message: `Remove ${s.name} from the list? Your ssh config and keys are untouched.`,
+					run: () => servers.remove(s.id).catch(e => toast(showError(e)))
+				})
+		}
+	];
+	const serversAddItems: MenuEntry[] = [
+		{ label: 'Add a server…', onClick: () => setServerForm({}) },
+		{ label: 'Import from ~/.ssh/config', onClick: importSsh }
+	];
+
 	// every run is a handler that already exists; the palette only finds them
 	const [paletteOpen, setPaletteOpen] = useState(false);
 	const buildCommands = (): PaletteCommand[] => {
@@ -827,6 +891,34 @@ const AppInner = () => {
 				keywords: ['gh', 'me', 'browser'],
 				disabled: !github.status?.login,
 				run: () => openUrl(`https://github.com/${github.status?.login ?? ''}`)
+			},
+			{
+				id: 'settings.servers',
+				title: 'Settings: Servers',
+				keywords: ['ssh', 'server', 'machines'],
+				run: () => openSettings('servers')
+			},
+			...servers.servers.map(s => ({
+				id: `server.open.${s.id}`,
+				title: `Server: open ${s.name}`,
+				subtitle: `ssh ${s.alias ?? `${s.user ? `${s.user}@` : ''}${s.host}`}`,
+				keywords: ['server', 'ssh', 'connect', s.name.toLowerCase(), s.host],
+				run: () => openServer(s)
+			})),
+			{
+				id: 'servers.import',
+				title: 'Servers: import from ~/.ssh/config',
+				subtitle: 'Every Host block becomes a row; the file is never written',
+				keywords: ['ssh', 'config', 'import', 'server'],
+				disabled: !servers.hasSsh,
+				run: importSsh
+			},
+			{
+				id: 'servers.add',
+				title: 'Servers: add a server…',
+				keywords: ['ssh', 'server', 'add', 'host'],
+				disabled: !servers.hasSsh,
+				run: () => setServerForm({})
 			},
 			{
 				id: 'sort',
@@ -1200,7 +1292,11 @@ const AppInner = () => {
 						targets,
 						github,
 						showHints,
-						onToggleHints: toggleHints
+						onToggleHints: toggleHints,
+						servers,
+						onAddServer: () => setServerForm({}),
+						onEditServer: (s: Server) => setServerForm({ initial: s }),
+						onImportSsh: importSsh
 					}}
 				/>
 			</Suspense>
@@ -1276,6 +1372,50 @@ const AppInner = () => {
 					}}
 				/>
 			)}
+
+			{serverMenu && (
+				<ContextMenu
+					{...{
+						x: serverMenu.x,
+						y: serverMenu.y,
+						items: buildServerMenu(serverMenu.server),
+						onClose: () => setServerMenu(null)
+					}}
+				/>
+			)}
+
+			{serversAddMenu && (
+				<ContextMenu
+					{...{
+						x: serversAddMenu.x,
+						y: serversAddMenu.y,
+						items: serversAddItems,
+						onClose: () => setServersAddMenu(null)
+					}}
+				/>
+			)}
+
+			<Drawer
+				{...{
+					side: 'right' as const,
+					open: serverForm !== null,
+					title: serverForm?.initial
+						? `Edit ${serverForm.initial.name}`
+						: 'Add a server',
+					onClose: () => setServerForm(null),
+					width: 'w-[min(640px,92vw)]'
+				}}
+			>
+				{serverForm && (
+					<ServerForm
+						{...{
+							initial: serverForm.initial,
+							onSubmit: saveServer,
+							onDone: () => setServerForm(null)
+						}}
+					/>
+				)}
+			</Drawer>
 
 			{groupMenu && (
 				<ContextMenu
@@ -1670,6 +1810,12 @@ const AppInner = () => {
 								cloneJobs: clone.jobs,
 								onGroupContextMenu: (name: string, x: number, y: number) =>
 									setGroupHeaderMenu({ name, x, y }),
+								servers,
+								onServerOpen: openServer,
+								onServerContextMenu: (s: Server, x: number, y: number) =>
+									setServerMenu({ server: s, x, y }),
+								onServersAddMenu: (x: number, y: number) =>
+									setServersAddMenu({ x, y }),
 								showHints,
 								launchingPath: launching?.path ?? null
 							}}
