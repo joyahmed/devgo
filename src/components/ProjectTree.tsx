@@ -4,7 +4,7 @@ import { isTypingTarget, matches, shortcutFor } from '../shortcuts';
 import Button from './Button';
 import GithubLane from './GithubLane';
 import ServersLane from './ServersLane';
-import { card, col } from './rowStyles';
+import { card, col, fsEdge, fsTone } from './rowStyles';
 
 const COLUMNS = [
 	{ label: 'Workspace', className: '' },
@@ -30,26 +30,12 @@ const loadCollapsed = (): Set<string> => {
 const pill =
 	'inline-block px-2 py-0.5 text-11 font-semibold rounded-full bg-bg-panel border border-border-strong shrink-0';
 
-const FS_TONE: Record<string, string> = {
-	WSL: 'text-accent',
-	Network: 'text-amber-400'
-};
-
-// the card's two leading edges in the file system's hue, the one FsCell
-// uses: the group says what it is at a glance, and selection stays the
-// row's ground and its name
-const EDGE: Record<string, string> = {
-	WSL: 'border-t-accent/50 border-l-accent/50',
-	Network: 'border-t-amber-400/50 border-l-amber-400/50',
-	Windows: 'border-t-text-muted/40 border-l-text-muted/40'
-};
-
 const NETWORK_WARNING =
 	'On a network share — file access and dev tooling are slow here. Consider a local drive or a WSL-native path.';
 
 const FsCell = ({ fs, className = '' }: FsCellProps) => (
 	<div
-		className={`${FS_TONE[fs] ?? 'text-text-muted'} ${className}`.trim()}
+		className={`${fsTone(fs)} ${className}`.trim()}
 		title={fs === 'Network' ? NETWORK_WARNING : undefined}
 	>
 		{fs}
@@ -827,7 +813,7 @@ const ProjectTree = ({
 					const isStale = wsState?.status === 'cached';
 
 					return (
-						<div key={ws} className={`${card} ${EDGE[fs] ?? EDGE.Windows}`}>
+						<div key={ws} className={`${card} ${fsEdge(fs)}`}>
 							{/* the header is the handle, open or collapsed, and the only
 							    thing that accepts a drop */}
 							<div

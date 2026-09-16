@@ -24,3 +24,24 @@ export const pickTone = (added: boolean, on: boolean) =>
 		: on
 			? 'border-accent cursor-pointer'
 			: 'border-border cursor-pointer hover:border-border-strong';
+
+// a file system's hue, the one the rows' cell, the card's edges and the
+// title bar's chips share: wsl in the accent, a share in amber, the
+// machine's own disk muted, whatever it is called
+const FS_TONE: Record<string, string> = {
+	WSL: 'text-accent',
+	Network: 'text-amber-400'
+};
+
+export const fsTone = (fs: string) => FS_TONE[fs] ?? 'text-text-muted';
+
+// the card's two leading edges in the file system's hue, the one fsTone
+// uses: the group says what it is at a glance, and selection stays the
+// row's ground and its name
+const EDGE: Record<string, string> = {
+	WSL: 'border-t-accent/50 border-l-accent/50',
+	Network: 'border-t-amber-400/50 border-l-amber-400/50'
+};
+
+export const fsEdge = (fs: string) =>
+	EDGE[fs] ?? 'border-t-text-muted/40 border-l-text-muted/40';
