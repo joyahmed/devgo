@@ -56,11 +56,18 @@ fn spawn_raw(exe: &str, args: &str) -> Result<(), AppError> {
 
     let mut cmd = Command::new("cmd");
     cmd.quiet().shell_line(format!("/c {exe} {args}"));
-    // a launcher is nobody's child. devgo started from inside a claude code
-    // session inherits that session's markers, and every editor, terminal
-    // and agent it opens inherits them too: a claude launched that way said
-    // its transcript saving was off. scrub the markers so what devgo opens
-    // is a fresh top-level thing, whatever started devgo
+    scrub_agent_env(&mut cmd);
+    cmd.spawn()
+        .map_err(|e| AppError::LaunchFailed(format!("{exe}: {e}")))?;
+    Ok(())
+}
+
+// a launcher is nobody's child. devgo started from inside a claude code
+// session inherits that session's markers, and every editor, terminal
+// and agent it opens inherits them too: a claude launched that way said
+// its transcript saving was off. scrub the markers so what devgo opens
+// is a fresh top-level thing, whatever started devgo
+fn scrub_agent_env(cmd: &mut Command) {
     for (key, _) in std::env::vars_os() {
         let name = key.to_string_lossy();
         if name.starts_with("CLAUDE_CODE_")
@@ -70,9 +77,6 @@ fn spawn_raw(exe: &str, args: &str) -> Result<(), AppError> {
             cmd.env_remove(&key);
         }
     }
-    cmd.spawn()
-        .map_err(|e| AppError::LaunchFailed(format!("{exe}: {e}")))?;
-    Ok(())
 }
 
 /// Launch a project into any registered target.
