@@ -25,10 +25,13 @@ const ClonePicker = ({
 	onDone,
 	mode = 'clone',
 	groups = [],
+	initialGroup,
 	onGroup
 }: ClonePickerProps) => {
 	const grouping = mode === 'group';
-	const [groupName, setGroupName] = useState(groups[0]?.name ?? '');
+	const [groupName, setGroupName] = useState(
+		initialGroup ?? groups[0]?.name ?? ''
+	);
 	const [error, setError] = useState<string | null>(null);
 	const [query, setQuery] = useState('');
 	const [picked, setPicked] = useState<Set<string>>(
