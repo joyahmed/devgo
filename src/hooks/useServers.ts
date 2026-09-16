@@ -1,5 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { useEffect, useState } from 'react';
+import { curate } from '../etcCuration';
+import { appForFolder } from '../serverApps';
 
 // whether the card is open, remembered like the github one
 const OPEN_KEY = 'devgo.serversOpen';
@@ -97,6 +99,16 @@ export const useServers = (): ServersState => {
 	const [loadingDirs, setLoadingDirs] = useState<Set<string>>(new Set());
 	// root groups folded shut, remembered
 	const [foldedRoots, setFoldedRoots] = useState<Set<string>>(loadFolded);
+	// parents whose curated view was opened up to all, `${id}:${path}`: a
+	// session choice, not remembered, so the default stays clean
+	const [showAllIn, setShowAllIn] = useState<Set<string>>(new Set());
+	const toggleShowAll = (id: string, path: string) => {
+		const key = `${id}:${path}`;
+		const next = new Set(showAllIn);
+		if (next.has(key)) next.delete(key);
+		else next.add(key);
+		setShowAllIn(next);
+	};
 
 	const listDir = async (id: string, path: string) => {
 		const key = `${id}:${path}`;
@@ -164,12 +176,14 @@ export const useServers = (): ServersState => {
 	const visible = servers.flatMap((server): VisibleServer[] => {
 		const listing = listings[server.id];
 		const all = listing?.folders ?? [];
-		const hits = q
-			? all.filter(
-					f =>
-						f.name.toLowerCase().includes(q) || f.path.toLowerCase().includes(q)
-				)
-			: all;
+		// an app's domain is a name too
+		const hit = (f: RemoteFolder) =>
+			f.name.toLowerCase().includes(q) ||
+			f.path.toLowerCase().includes(q) ||
+			!!appForFolder(listing, f.path)?.site?.domains.some(d =>
+				d.toLowerCase().includes(q)
+			);
+		const hits = q ? all.filter(hit) : all;
 		const matches =
 			!q ||
 			[server.name, server.alias ?? '', server.host, server.user ?? ''].some(
@@ -180,19 +194,30 @@ export const useServers = (): ServersState => {
 		const none: VisibleRoot[] = [];
 		if (!open) return [{ server, open, groups: none }];
 
+		// /etc shows its developer folders until asked, and a search lifts
+		// the curation (a hit is a hit)
+		const shown = (parent: string, list: RemoteFolder[]) =>
+			curate(
+				parent,
+				list,
+				showAllIn.has(`${server.id}:${parent}`) || q.length > 0
+			);
 		const walk = (folder: RemoteFolder, depth: number): VisibleFolder[] => {
 			const key = `${server.id}:${folder.path}`;
 			const kids = listing?.subdirs?.[folder.path];
 			const isOpen = openDirs.has(key);
+			const [kept, hidden] = shown(folder.path, kids ?? []);
 			const row: VisibleFolder = {
 				folder,
 				depth,
 				open: isOpen,
 				busy: loadingDirs.has(key),
-				inside: kids?.length
+				inside: kids?.length,
+				app: appForFolder(listing, folder.path),
+				hidden: isOpen && kids ? hidden : undefined
 			};
 			return isOpen && kids
-				? [row, ...kids.flatMap(k => walk(k, depth + 1))]
+				? [row, ...kept.flatMap(k => walk(k, depth + 1))]
 				: [row];
 		};
 		const order = server.roots.length ? server.roots : DEFAULT_ROOTS;
@@ -209,11 +234,13 @@ export const useServers = (): ServersState => {
 			.sort(([a], [b]) => rank(a) - rank(b))
 			.map(([root, folders]) => {
 				const folded = foldedRoots.has(`${server.id}:${root}`);
+				const [kept, hidden] = shown(root, folders);
 				return {
 					root,
 					folded,
 					count: folders.length,
-					rows: folded ? [] : folders.flatMap(f => walk(f, 0))
+					hidden: folded ? 0 : hidden,
+					rows: folded ? [] : kept.flatMap(f => walk(f, 0))
 				};
 			});
 		return [{ server, open, groups }];
@@ -273,6 +300,8 @@ export const useServers = (): ServersState => {
 		listDir,
 		foldedRoots,
 		toggleRoot,
+		showAllIn,
+		toggleShowAll,
 		visible
 	};
 };
