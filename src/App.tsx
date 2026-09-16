@@ -35,6 +35,7 @@ import { useWorkspaces } from './hooks/useWorkspaces';
 import { useRuntime } from './hooks/useRuntime';
 import { useWsl } from './hooks/useWsl';
 import { lastSegment } from './paths';
+import { isMac } from './platform';
 import {
 	appForFolder,
 	canFill,
@@ -42,7 +43,13 @@ import {
 	placeholders,
 	prefillValues
 } from './serverApps';
-import { isTypingTarget, matches, prettyKeys, shortcutFor } from './shortcuts';
+import {
+	isTypingTarget,
+	labelFor,
+	matches,
+	prettyKeys,
+	shortcutFor
+} from './shortcuts';
 import { applyTextScale, stepTextScale } from './textSize';
 import { loadGroundAlpha } from './transparency';
 
@@ -747,7 +754,8 @@ const AppInner = () => {
 		}
 	};
 
-	const copyWindowsPath = (p: Project) => copyText(p.full_path, 'Windows path');
+	const copyWindowsPath = (p: Project) =>
+		copyText(p.full_path, isMac ? 'path' : 'Windows path');
 
 	const copyWslPath = async (p: Project) => {
 		try {
@@ -1290,12 +1298,15 @@ const AppInner = () => {
 			},
 			proj(
 				'revealExplorer',
-				'Reveal in Explorer',
-				['folder', 'files'],
+				labelFor('revealExplorer'),
+				['folder', 'files', 'explorer', 'finder'],
 				revealInExplorer
 			),
-			proj('copyWinPath', 'Copy Windows path', ['path', 'clipboard'], copyWindowsPath),
-			proj('copyWslPath', 'Copy WSL path', ['path', 'linux'], copyWslPath),
+			proj('copyWinPath', labelFor('copyWinPath'), ['path', 'clipboard'], copyWindowsPath),
+			// a mac has no second filesystem to have a path in
+			...(isMac
+				? []
+				: [proj('copyWslPath', labelFor('copyWslPath'), ['path', 'linux'], copyWslPath)]),
 			proj(
 				'togglePin',
 				p && ranks.get(p.full_path)?.pinned ? 'Unpin project' : 'Pin project',
@@ -1403,7 +1414,7 @@ const AppInner = () => {
 				onClick: handleRefresh
 			},
 			{
-				label: 'Reveal in Explorer',
+				label: labelFor('revealExplorer'),
 				hint: prettyKeys(shortcutFor('revealWorkspace')),
 				onClick: () => revealWorkspace(ws)
 			},
@@ -1461,7 +1472,9 @@ const AppInner = () => {
 					hint: missing
 						? p.file_system === 'WSL'
 							? 'no WSL form'
-							: 'not found on Windows'
+							: isMac
+								? 'not found on this Mac'
+								: 'not found on Windows'
 						: t.id === targets.defaults.agent
 							? hint('openAgent')
 							: undefined,
@@ -1476,20 +1489,24 @@ const AppInner = () => {
 				: []),
 			'separator',
 			{
-				label: 'Reveal in Explorer',
+				label: labelFor('revealExplorer'),
 				hint: hint('revealExplorer'),
 				onClick: () => revealInExplorer(p)
 			},
 			{
-				label: 'Copy Windows path',
+				label: labelFor('copyWinPath'),
 				hint: hint('copyWinPath'),
 				onClick: () => copyWindowsPath(p)
 			},
-			{
-				label: 'Copy WSL path',
-				hint: hint('copyWslPath'),
-				onClick: () => copyWslPath(p)
-			},
+			...(isMac
+				? []
+				: [
+						{
+							label: labelFor('copyWslPath'),
+							hint: hint('copyWslPath'),
+							onClick: () => copyWslPath(p)
+						} as MenuEntry
+					]),
 			...(remote
 				? [
 						{
@@ -1590,7 +1607,7 @@ const AppInner = () => {
 				return;
 			if (fire('revealExplorer', () => revealInExplorer(selected))) return;
 			if (fire('copyWinPath', () => copyWindowsPath(selected))) return;
-			if (fire('copyWslPath', () => copyWslPath(selected))) return;
+			if (!isMac && fire('copyWslPath', () => copyWslPath(selected))) return;
 			if (fire('runScript', () => openScripts(selected, 240, 200))) return;
 			if (
 				fire('openRemote', () => {
@@ -1635,7 +1652,7 @@ const AppInner = () => {
 					<Button
 						variant='ghost'
 						onClick={() => openSettings()}
-						title='Settings (Ctrl+,)'
+						title={`Settings (${prettyKeys(shortcutFor('settings'))})`}
 					>
 						<svg
 							width='16'
