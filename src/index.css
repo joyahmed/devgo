@@ -37,6 +37,9 @@
 	--color-bg-panel: #0c1322;
 	--color-bg-hover: #131f38;
 	--color-bg-selected: #0f2f57;
+	/* the surface a control sits on: a chip filled with bg-panel inside a
+	   button filled with bg-panel was invisible at 1.00:1 */
+	--color-bg-raised: #243c66;
 	--color-text-primary: #f4f8ff;
 	--color-text-secondary: #b9c6de;
 	--color-text-muted: #8f9dba;
@@ -148,7 +151,7 @@ body,
 }
 
 /* one knob, every surface. --ground-alpha is 1 until the transparency
-   setting says otherwise. the five surface tokens are derived here from
+   setting says otherwise. the six surface tokens are derived here from
    the theme's solid values (--solid-bg-*, which applyTheme sets) mixed
    with the knob, so every bg-bg-* utility, and every /50 modifier on one,
    follows the slider; text, icons, borders and the accent stay solid, the
@@ -162,6 +165,7 @@ body,
 	--solid-bg-panel: #0c1322;
 	--solid-bg-hover: #131f38;
 	--solid-bg-selected: #0f2f57;
+	--solid-bg-raised: #243c66;
 	--color-bg-primary: color-mix(
 		in srgb,
 		var(--solid-bg-primary) calc(var(--ground-alpha) * 100%),
@@ -185,6 +189,11 @@ body,
 	--color-bg-selected: color-mix(
 		in srgb,
 		var(--solid-bg-selected) calc(var(--ground-alpha) * 100%),
+		transparent
+	);
+	--color-bg-raised: color-mix(
+		in srgb,
+		var(--solid-bg-raised) calc(var(--ground-alpha) * 100%),
 		transparent
 	);
 }

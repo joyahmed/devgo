@@ -394,6 +394,7 @@ type ThemeKey =
 	| 'bg-panel'
 	| 'bg-hover'
 	| 'bg-selected'
+	| 'bg-raised'
 	| 'text-primary'
 	| 'text-secondary'
 	| 'text-muted'
