@@ -246,6 +246,7 @@ const ProjectRow = ({
 	rank,
 	git,
 	tech,
+	live,
 	onSelect,
 	onDoubleClick,
 	onTogglePin,
@@ -285,7 +286,7 @@ const ProjectRow = ({
 		</div>
 		<FsCell fs={project.file_system} />
 		<RowMeta
-			{...{ project, showHints, rank, git, tech, onTogglePin, onOpenBranches }}
+			{...{ project, showHints, rank, git, tech, live, onTogglePin, onOpenBranches }}
 		/>
 	</div>
 );

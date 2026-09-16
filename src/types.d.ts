@@ -880,6 +880,7 @@ interface ProjectRowProps {
 	rank?: ProjectRank;
 	git?: GitInfo;
 	tech?: ProjectTech;
+	live?: boolean;
 	onSelect: (p: Project) => void;
 	onDoubleClick: (p: Project) => void;
 	onTogglePin?: (p: Project) => void;
