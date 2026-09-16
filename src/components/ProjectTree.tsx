@@ -698,8 +698,14 @@ const ProjectTree = ({
 					const wsState = stateFor(ws);
 					const isStale = wsState?.status === 'cached';
 
+					// a hairline and a breath over every workspace but the first
+					// (joy: "we may put divider for workspaces"): the header alone
+					// did not close the group above it once the rows went quiet
 					return (
-						<div key={ws}>
+						<div
+							key={ws}
+							className='[&+&]:border-t [&+&]:border-border [&+&]:mt-1 [&+&]:pt-1'
+						>
 							{/* the header is the handle, open or collapsed, and the only
 							    thing that accepts a drop */}
 							<div
