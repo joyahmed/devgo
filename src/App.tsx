@@ -103,6 +103,7 @@ const AppInner = () => {
 		selected,
 		setSelected,
 		refresh,
+		refreshWorkspace,
 		loading,
 		workspaceStates,
 		ranks,
@@ -343,6 +344,41 @@ const AppInner = () => {
 	// A forced refresh is the one path allowed to start a stopped WSL distro.
 	const handleRefresh = () => {
 		refresh(true).catch(e => toast(showError(e)));
+	};
+
+	// one workspace, the ask names it: the toast says what it found, or
+	// that the cached list is what stays on screen
+	const handleRefreshWorkspace = (ws: string) => {
+		refreshWorkspace(ws)
+			.then(payload => {
+				const st = payload.workspaces[0];
+				const live = st?.status === 'live';
+				toast(
+					live
+						? `${lastSegment(ws)}: ${st.count} project${st.count === 1 ? '' : 's'}`
+						: `${lastSegment(ws)} is unavailable, showing the cached list`,
+					live ? 'success' : 'info'
+				);
+			})
+			.catch(e => toast(showError(e)));
+	};
+
+	// move ws to sit before or after target in the store's order, the way
+	// the tree's drag and alt+arrows do through onReorder
+	const moveWorkspaceBeside = (
+		ws: string,
+		target: string | undefined,
+		after: boolean
+	) => {
+		if (!target || ws === target) return;
+		const without = workspaces.filter(w => w !== ws);
+		const at = without.indexOf(target);
+		if (at < 0) return;
+		without.splice(after ? at + 1 : at, 0, ws);
+		reorderWorkspaces(without).catch(e => {
+			toast(showError(e));
+			refreshWorkspaces();
+		});
 	};
 
 	// Report workspaces we could not read, but stay quiet about a stopped distro
@@ -1242,30 +1278,55 @@ const AppInner = () => {
 
 	// acts on the row that was right-clicked, never on indexOf(selected
 	// .workspace): that indirection is what made Delete fall through when the
-	// lookup missed
-	const buildWorkspaceMenu = (ws: string): MenuEntry[] => [
-		{
-			label: 'Refresh this workspace',
-			hint: prettyKeys(shortcutFor('refresh')),
-			onClick: handleRefresh
-		},
-		{
-			label: 'Reveal in Explorer',
-			hint: prettyKeys(shortcutFor('revealWorkspace')),
-			onClick: () => revealWorkspace(ws)
-		},
-		'separator',
-		{
-			label: `Remove ${lastSegment(ws)}`,
-			hint: prettyKeys(shortcutFor('removeWorkspace')),
-			danger: true,
-			onClick: () => {
-				const idx = workspaces.indexOf(ws);
-				if (idx >= 0) setRemoveIndex(idx);
-				else toast(`${lastSegment(ws)} is no longer in the list`, 'error');
+	// lookup missed.
+	// "refresh this workspace" used to call the global f5 under a label that
+	// said otherwise; it is per-workspace now. move up / down mirror the
+	// github group heading: two headings that look alike offer alike
+	const buildWorkspaceMenu = (ws: string): MenuEntry[] => {
+		const i = workspaces.indexOf(ws);
+		const wsl = ws.replace(/\\/g, '/').startsWith('//wsl');
+		return [
+			{
+				label: 'Refresh this workspace',
+				hint: wsl ? 'boots its distro if stopped' : undefined,
+				onClick: () => handleRefreshWorkspace(ws)
+			},
+			{
+				label: 'Refresh projects',
+				hint: prettyKeys(shortcutFor('refresh')),
+				onClick: handleRefresh
+			},
+			{
+				label: 'Reveal in Explorer',
+				hint: prettyKeys(shortcutFor('revealWorkspace')),
+				onClick: () => revealWorkspace(ws)
+			},
+			'separator',
+			{
+				label: 'Move up',
+				hint: prettyKeys(shortcutFor('moveWorkspaceUp')),
+				disabled: i <= 0,
+				onClick: () => moveWorkspaceBeside(ws, workspaces[i - 1], false)
+			},
+			{
+				label: 'Move down',
+				hint: prettyKeys(shortcutFor('moveWorkspaceDown')),
+				disabled: i < 0 || i >= workspaces.length - 1,
+				onClick: () => moveWorkspaceBeside(ws, workspaces[i + 1], true)
+			},
+			'separator',
+			{
+				label: `Remove ${lastSegment(ws)}`,
+				hint: prettyKeys(shortcutFor('removeWorkspace')),
+				danger: true,
+				onClick: () => {
+					const idx = workspaces.indexOf(ws);
+					if (idx >= 0) setRemoveIndex(idx);
+					else toast(`${lastSegment(ws)} is no longer in the list`, 'error');
+				}
 			}
-		}
-	];
+		];
+	};
 
 	const buildMenu = (p: Project): MenuEntry[] => {
 		const hint = (id: ShortcutId) => prettyKeys(shortcutFor(id));
