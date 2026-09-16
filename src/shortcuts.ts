@@ -117,6 +117,14 @@ export const SHORTCUTS: Shortcut[] = [
 		group: 'Workspace',
 		needsSelection: true
 	},
+	// ctrl+shift+e reveals the project; its workspace is one modifier over
+	{
+		id: 'revealWorkspace',
+		keys: 'Ctrl+Alt+E',
+		label: 'Reveal workspace in Explorer',
+		group: 'Workspace',
+		needsSelection: true
+	},
 	{
 		id: 'moveWorkspaceUp',
 		keys: 'Alt+ArrowUp',
