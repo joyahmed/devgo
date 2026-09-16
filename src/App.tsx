@@ -17,6 +17,7 @@ import NameDialog from './components/NameDialog';
 import Onboarding from './components/Onboarding';
 import ProjectTree from './components/ProjectTree';
 import RefreshIcon from './components/RefreshIcon';
+import { laneGrid, MID_QUERY, WIDE_QUERY } from './components/rowStyles';
 import ScanPicker from './components/ScanPicker';
 import SearchBox from './components/SearchBox';
 import ServerForm from './components/ServerForm';
@@ -28,6 +29,7 @@ import { useClone } from './hooks/useClone';
 import { useGithub } from './hooks/useGithub';
 import { useLaunchActions } from './hooks/useLaunchActions';
 import { useMaximized } from './hooks/useMaximized';
+import { useMediaQuery } from './hooks/useMediaQuery';
 import { useProjects } from './hooks/useProjects';
 import { useServers } from './hooks/useServers';
 import { useTargets } from './hooks/useTargets';
@@ -170,6 +172,28 @@ const AppInner = () => {
 	const { runtime, refreshRuntime } = useRuntime();
 	useEffect(refreshRuntime, [workspaceStates]);
 
+	// the command row mirrors the lanes' grid so each search sits over what
+	// it searches (joy: "find a project search should be taking width of
+	// wsl and windows, and github search can go on top on the same level").
+	// how many filesystem lanes there are decides the project box's span;
+	// a mac has one, and hard-wiring two is what wrapped the servers box
+	// onto a second line there
+	const wide = useMediaQuery(WIDE_QUERY);
+	const mid = useMediaQuery(MID_QUERY);
+	const fsLanes =
+		(projects.some(p => p.file_system === 'WSL') ? 1 : 0) +
+		(projects.some(p => p.file_system !== 'WSL') ? 1 : 0);
+	const laneCount =
+		fsLanes + (github.available ? 1 : 0) + (servers.hasSsh ? 1 : 0);
+	// every lane has a column of its own in the row on a wide window, and
+	// from 1400 when there are at most three lanes. four lanes between 1400
+	// and 1899 fold to two rows of two, and then only the project box is in
+	// the row; the github and servers boxes stay in their lane headings,
+	// next to what they search
+	const lanesInRow = wide || (mid && laneCount <= 3);
+	const githubSearchInRow = github.available && laneCount >= 2 && lanesInRow;
+	const serversSearchInRow = servers.hasSsh && laneCount >= 2 && lanesInRow;
+
 	// One dialog, three destructive actions with three different sentences:
 	// the popover asks App to confirm, and App renders the question. the
 	// title and the verb are the action's; the wsl ones were the only ones
@@ -291,6 +315,10 @@ const AppInner = () => {
 		const first = github.visible[0];
 		if (first) handleOpenRepo(first);
 	};
+	// the servers box, the same arrangement over its lane
+	const handleServersArrow = (dir: 1 | -1) =>
+		treeRef.current?.navigate(dir, 'servers');
+	const handleServersEnter = () => treeRef.current?.openServerRow();
 
 	// useLaunchActions refreshes projects only; the workspace list is a second
 	// view of the same state and goes stale without this
@@ -1257,8 +1285,9 @@ const AppInner = () => {
 				disabled: !p,
 				run: () => {
 					if (!p) return;
-					const i = workspaces.indexOf(p.workspace);
-					moveWorkspaceBeside(p.workspace, workspaces[i + dir], dir > 0);
+					const siblings = laneSiblings(p.workspace);
+					const i = siblings.indexOf(p.workspace);
+					moveWorkspaceBeside(p.workspace, siblings[i + dir], dir > 0);
 				}
 			})),
 			{
@@ -1399,9 +1428,17 @@ const AppInner = () => {
 	// "refresh this workspace" used to call the global f5 under a label that
 	// said otherwise; it is per-workspace now. move up / down mirror the
 	// github group heading: two headings that look alike offer alike
+	// move up / down walk the lane's siblings, not the store's flat list:
+	// a workspace moves among the ones it sits with, and the other lane's
+	// order is untouched
+	const wsLane = (ws: string) =>
+		ws.replace(/\\/g, '/').startsWith('//wsl') ? 'WSL' : 'local';
+	const laneSiblings = (ws: string) =>
+		workspaces.filter(w => wsLane(w) === wsLane(ws));
 	const buildWorkspaceMenu = (ws: string): MenuEntry[] => {
-		const i = workspaces.indexOf(ws);
-		const wsl = ws.replace(/\\/g, '/').startsWith('//wsl');
+		const siblings = laneSiblings(ws);
+		const i = siblings.indexOf(ws);
+		const wsl = wsLane(ws) === 'WSL';
 		return [
 			{
 				label: 'Refresh this workspace',
@@ -1423,13 +1460,13 @@ const AppInner = () => {
 				label: 'Move up',
 				hint: prettyKeys(shortcutFor('moveWorkspaceUp')),
 				disabled: i <= 0,
-				onClick: () => moveWorkspaceBeside(ws, workspaces[i - 1], false)
+				onClick: () => moveWorkspaceBeside(ws, siblings[i - 1], false)
 			},
 			{
 				label: 'Move down',
 				hint: prettyKeys(shortcutFor('moveWorkspaceDown')),
-				disabled: i < 0 || i >= workspaces.length - 1,
-				onClick: () => moveWorkspaceBeside(ws, workspaces[i + 1], true)
+				disabled: i < 0 || i >= siblings.length - 1,
+				onClick: () => moveWorkspaceBeside(ws, siblings[i + 1], true)
 			},
 			'separator',
 			{
@@ -2139,7 +2176,9 @@ const AppInner = () => {
 				}}
 			/>
 
-			<div className='flex-1 flex flex-col w-full px-6 py-5 gap-4 overflow-hidden'>
+			{/* no horizontal padding here: the lanes and the command row carry
+			    their own, and a pinned row's ground reaches both edges */}
+			<div className='flex-1 flex flex-col w-full pt-5 gap-3 overflow-hidden'>
 				{workspaces.length === 0 && !loading ? (
 					<Onboarding
 						{...{
@@ -2150,118 +2189,135 @@ const AppInner = () => {
 					/>
 				) : (
 					<>
-						{/* the command row: the project box spans the table it searches
-						    (it capped at 1100px; a heading spans what it heads), the sort
-						    beside it, then the two controls that change what the list
-						    holds, which lived in the title bar; this is the list's row.
-						    the github box sits level with it at a fixed share, so the
-						    project box is the wider one at every width, with the github
-						    rows' own three controls beside it. the box shares its line
-						    with sort, + workspace and refresh and gives up width for
-						    them; under 12rem it keeps its width and the three go under
-						    it as one line (a narrow window left it a 127px slot) */}
-						<div className='w-full shrink-0 flex items-start gap-4'>
-						<div className='flex-1 min-w-0 flex flex-wrap items-center gap-3'>
-							<SearchBox
-								{...{
-									ref: searchRef,
-									value: query,
-									onChange: setQuery,
-									onEnter: handleSearchEnter,
-									onArrow: handleArrow,
-									enterHint:
-										selected || filtered.length > 0 ? '⏎ Enter' : undefined,
-									className: 'flex-1 min-w-[12rem]'
-								}}
-							/>
-							<div className='flex items-center gap-3 shrink-0'>
+						{/* the command row: the lanes' own grid, so the project box
+						    spans the filesystem lanes it searches, with the sort and
+						    the two controls that change what the list holds beside it,
+						    and on a wide window the github box over the github lane
+						    and the servers box over the servers lane. the box shares
+						    its line with sort, + workspace and refresh and gives up
+						    width for them; under 12rem the three go under it */}
+						<div
+							className={`w-full shrink-0 ${laneGrid(laneCount)} gap-3 px-3 items-start`}
+						>
 							<div
-								className='flex items-center gap-1 shrink-0'
-								role='group'
-								title='Sort order'
+								className={`flex flex-wrap items-center gap-3 min-w-0 ${
+									laneCount >= 3 && fsLanes >= 2 ? 'min-[1400px]:col-span-2' : ''
+								}`}
 							>
-								{SORT_MODES.map(m => (
-									<Button
-										key={m.mode}
-										variant='target'
-										aria-current={sortMode === m.mode ? 'true' : undefined}
-										onClick={() => setSort(m.mode)}
+								<SearchBox
+									{...{
+										ref: searchRef,
+										value: query,
+										onChange: setQuery,
+										onEnter: handleSearchEnter,
+										onArrow: handleArrow,
+										enterHint:
+											selected || filtered.length > 0 ? '⏎ Enter' : undefined,
+										className: 'flex-1 min-w-[12rem]'
+									}}
+								/>
+								<div className='flex items-center gap-3 shrink-0'>
+									<div
+										className='flex items-center gap-1 shrink-0'
+										role='group'
+										title='Sort order'
 									>
-										{m.label}
+										{SORT_MODES.map(m => (
+											<Button
+												key={m.mode}
+												variant='target'
+												aria-current={sortMode === m.mode ? 'true' : undefined}
+												onClick={() => setSort(m.mode)}
+											>
+												{m.label}
+											</Button>
+										))}
+									</div>
+									<Button
+										variant='ghost'
+										className='gap-1 px-2 shrink-0'
+										onClick={e => {
+											const r = e.currentTarget.getBoundingClientRect();
+											setAddMenu({ x: r.left, y: r.bottom + 4 });
+										}}
+										title={`Add workspace (${prettyKeys(shortcutFor('addWorkspace'))})`}
+									>
+										<span className='text-18 leading-none'>+</span>
+										<span className='text-13 font-semibold leading-none'>
+											Workspace
+										</span>
+										<span className='text-11 leading-none opacity-70'>▾</span>
 									</Button>
-								))}
+									<Button
+										variant='ghost'
+										className='w-7 h-7 shrink-0'
+										onClick={handleRefresh}
+										title={`Refresh (${prettyKeys(shortcutFor('refresh'))})`}
+									>
+										<RefreshIcon spinning={loading} />
+									</Button>
+								</div>
 							</div>
-							<Button
-								variant='ghost'
-								className='gap-1 px-2 shrink-0'
-								onClick={e => {
-									const r = e.currentTarget.getBoundingClientRect();
-									setAddMenu({ x: r.left, y: r.bottom + 4 });
-								}}
-								title={`Add workspace (${prettyKeys(shortcutFor('addWorkspace'))})`}
-							>
-								<span className='text-18 leading-none'>+</span>
-								<span className='text-13 font-semibold leading-none'>
-									Workspace
-								</span>
-								<span className='text-11 leading-none opacity-70'>▾</span>
-							</Button>
-							<Button
-								variant='ghost'
-								className='w-7 h-7 shrink-0'
-								onClick={handleRefresh}
-								title={`Refresh (${prettyKeys(shortcutFor('refresh'))})`}
-							>
-								<RefreshIcon spinning={loading} />
-							</Button>
-							</div>
-						</div>
-						{github.available && (
-							<SearchBox
-								{...{
-									ref: githubSearchRef,
-									value: github.query,
-									onChange: github.setQuery,
-									onEnter: handleGithubEnter,
-									onArrow: handleGithubArrow,
-									placeholder: 'Search GitHub repos…',
-									lane: 'github' as const,
-									enterHint: hasRepos ? '⏎ Enter' : undefined,
-									className: 'w-[clamp(200px,24%,400px)] shrink-0'
-								}}
-							/>
-						)}
-						{/* the buttons on the boxes' line: h-10 is a box's height, so they
-						    stay centred on it when the project cell wraps to two lines */}
-						<div className='h-10 flex items-center gap-4 shrink-0'>
-						{github.available && (
-							<GithubControls
-								{...{
-									github,
-									onAddMenu: (x: number, y: number) => setGithubAddMenu({ x, y })
-								}}
-							/>
-						)}
-						{/* the servers' add beside the other adds (joy: "the +ADD should
-						    go in the same line where other Adds go as Add Server") */}
-						{servers.hasSsh && (
-							<Button
-								variant='ghost'
-								className='gap-1 px-2 shrink-0'
-								title='Add a server, or import ~/.ssh/config'
-								onClick={e => {
-									const r = e.currentTarget.getBoundingClientRect();
-									setServersAddMenu({ x: r.left, y: r.bottom + 4 });
-								}}
-							>
-								<span className='text-18 leading-none'>+</span>
-								<span className='text-13 font-semibold leading-none'>
-									Add server
-								</span>
-								<span className='text-11 leading-none opacity-70'>▾</span>
-							</Button>
-						)}
-						</div>
+							{githubSearchInRow && (
+								<div className='flex items-center gap-3 min-w-0'>
+									<SearchBox
+										{...{
+											ref: githubSearchRef,
+											value: github.query,
+											onChange: github.setQuery,
+											onEnter: handleGithubEnter,
+											onArrow: handleGithubArrow,
+											placeholder: 'Search GitHub repos…',
+											lane: 'github' as const,
+											enterHint: hasRepos ? '⏎ Enter' : undefined,
+											className: 'flex-1 min-w-0'
+										}}
+									/>
+									{/* the lane's controls on the box's line, in the row form:
+									    recents · + Add repo ▾ · ↻, the same three the heading
+									    carries on a narrow window */}
+									<GithubControls
+										{...{
+											github,
+											labelled: true,
+											onAddMenu: (x: number, y: number) => setGithubAddMenu({ x, y })
+										}}
+									/>
+								</div>
+							)}
+							{/* the servers lane's own box and its add, on the line where
+							    the other adds are (joy: "the +ADD should go in the same
+							    line where other Adds go as Add Server") */}
+							{serversSearchInRow && (
+								<div className='flex items-center gap-3 min-w-0'>
+									<SearchBox
+										{...{
+											value: servers.query,
+											onChange: servers.setQuery,
+											onEnter: handleServersEnter,
+											onArrow: handleServersArrow,
+											placeholder: 'Search servers & folders…',
+											lane: 'servers' as const,
+											className: 'flex-1 min-w-0'
+										}}
+									/>
+									<Button
+										variant='ghost'
+										className='gap-1 px-2 shrink-0'
+										title='Add a server, or import ~/.ssh/config'
+										onClick={e => {
+											const r = e.currentTarget.getBoundingClientRect();
+											setServersAddMenu({ x: r.left, y: r.bottom + 4 });
+										}}
+									>
+										<span className='text-18 leading-none'>+</span>
+										<span className='text-13 font-semibold leading-none'>
+											Add server
+										</span>
+										<span className='text-11 leading-none opacity-70'>▾</span>
+									</Button>
+								</div>
+							)}
 						</div>
 						<ProjectTree
 							{...{
@@ -2318,7 +2374,12 @@ const AppInner = () => {
 								onRootContextMenu: (s: Server, root: string, x: number, y: number) =>
 									setRootMenu({ server: s, root, x, y }),
 								showHints,
-								launchingPath: launching?.path ?? null
+								launchingPath: launching?.path ?? null,
+								localFs: runtime.local_fs,
+								onGithubAddMenu: (x: number, y: number) => setGithubAddMenu({ x, y }),
+								githubSearchRef,
+								githubSearchInHeading: !githubSearchInRow,
+								serversSearchInHeading: !serversSearchInRow
 							}}
 						/>
 					</>
