@@ -21,14 +21,18 @@ fn local_fs() -> &'static str {
 
 // a mac has one filesystem and no wsl: the answer is a constant, and
 // nothing here spawns wsl. not "ask list_distros and let it come back
-// empty": that is a spawn per detection for a binary that cannot exist
+// empty": that is a spawn per detection for a binary that cannot exist.
+// the runtime stays Windows (nothing reads it beyond wsl_available; 64
+// left the enum at Windows/Wsl and a MacOs variant would be dead), so
+// what a mac says is wsl_available false and local_fs Mac
 #[cfg(target_os = "macos")]
 pub fn detect_runtime() -> RuntimeInfo {
     RuntimeInfo {
-        runtime: Runtime::MacOs,
+        runtime: Runtime::Windows,
         wsl_available: false,
         distros: vec![],
         default_distro: None,
+        local_fs: LOCAL_FS,
     }
 }
 
@@ -86,15 +90,15 @@ mod tests {
 }
 
 #[cfg(all(test, target_os = "macos"))]
-mod tests {
+mod mac_tests {
     use super::*;
 
     #[test]
-    fn a_mac_has_no_second_filesystem() {
+    fn a_mac_has_no_second_filesystem_and_no_wsl() {
         let info = detect_runtime();
-        assert!(matches!(info.runtime, Runtime::MacOs));
         assert!(!info.wsl_available);
         assert!(info.distros.is_empty());
         assert_eq!(info.default_distro, None);
+        assert_eq!(info.local_fs, "Mac");
     }
 }

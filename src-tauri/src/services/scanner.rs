@@ -399,6 +399,9 @@ mod tests {
 
     #[test]
     fn classifies_filesystem_kinds() {
+        // the local word is the one thing that differs per platform
+        assert_eq!(detect_file_system("/plain/local/path"), LOCAL_FS);
+        #[cfg(windows)]
         assert_eq!(detect_file_system(r"G:\01_tauri"), "Windows");
         assert_eq!(
             detect_file_system(r"\\wsl.localhost\Ubuntu-26.04\home"),
