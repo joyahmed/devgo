@@ -36,6 +36,26 @@ export const SHORTCUTS: Shortcut[] = [
 	{ id: 'textReset', keys: 'Ctrl+0', label: 'Text size 100%', group: 'Global' },
 	{ id: 'quit', keys: 'Ctrl+Q', label: 'Quit DevGo', group: 'Global' },
 
+	// bound by the tree, not the handler: they are here so the footer's
+	// chips and Settings › Shortcuts can read them
+	{
+		id: 'moveUp',
+		keys: 'ArrowUp',
+		label: 'Move selection up',
+		group: 'Navigation'
+	},
+	{
+		id: 'moveDown',
+		keys: 'ArrowDown',
+		label: 'Move selection down',
+		group: 'Navigation'
+	},
+	{
+		id: 'openSelected',
+		keys: 'Enter',
+		label: 'Open selected project',
+		group: 'Navigation'
+	},
 	{
 		id: 'expand',
 		keys: 'ArrowRight',

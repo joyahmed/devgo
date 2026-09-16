@@ -477,6 +477,9 @@ type ShortcutId =
 	| 'copyWinPath'
 	| 'copyWslPath'
 	| 'togglePin'
+	| 'moveUp'
+	| 'moveDown'
+	| 'openSelected'
 	| 'runScript'
 	| 'openRemote'
 	| 'expand'
@@ -567,6 +570,9 @@ interface StatusBarProps {
 	onManageTargets: () => void;
 	onOpenPalette: () => void;
 	pulse?: LaunchKind | null;
+	/// the one shortcut shown nowhere else, and the door into the app
+	summonHotkey: string;
+	onOpenShortcuts: () => void;
 	onOpenHelp: () => void;
 	/// the selection has a live session and the multiplexer is on: the
 	/// terminal group reads Reattach, which is what the script does
