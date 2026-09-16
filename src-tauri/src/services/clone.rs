@@ -100,6 +100,11 @@ pub struct Plan {
     pub url: String,
 }
 
+// the platform's own separator, so the path devgo shows is the one
+// explorer or finder would. a unc wsl workspace keeps the backslash on
+// windows because that is where unc paths exist
+const SEP: char = std::path::MAIN_SEPARATOR;
+
 pub fn plan(
     workspace: &str,
     repo_full_name: &str,
@@ -107,7 +112,7 @@ pub fn plan(
     protocol: Protocol,
 ) -> Plan {
     let ws = workspace.trim_end_matches(['\\', '/']);
-    let dest = format!("{ws}\\{name}");
+    let dest = format!("{ws}{SEP}{name}");
     let distro = distro_of(workspace);
     let git_dest = match &distro {
         Some(d) => windows_to_wsl_path(&dest, d),
@@ -277,6 +282,9 @@ mod tests {
         );
     }
 
+    // a drive and a \\wsl.localhost unc exist only on windows, and the join
+    // is the platform's separator, so these two run only there
+    #[cfg(windows)]
     #[test]
     fn a_windows_workspace_clones_with_windows_git() {
         let p = plan(r"G:\01_tauri\", "joyahmed/devgo", "devgo", Protocol::Ssh);
@@ -285,6 +293,21 @@ mod tests {
         assert_eq!(p.git_dest, r"G:\01_tauri\devgo");
     }
 
+    #[cfg(not(windows))]
+    #[test]
+    fn a_local_workspace_clones_with_the_local_git() {
+        let p = plan(
+            "/Users/joy/Projects/",
+            "joyahmed/devgo",
+            "devgo",
+            Protocol::Ssh,
+        );
+        assert_eq!(p.dest, "/Users/joy/Projects/devgo");
+        assert_eq!(p.distro, None);
+        assert_eq!(p.git_dest, "/Users/joy/Projects/devgo");
+    }
+
+    #[cfg(windows)]
     #[test]
     fn a_wsl_workspace_clones_inside_the_distro_at_the_linux_path() {
         let p = plan(
