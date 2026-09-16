@@ -461,6 +461,11 @@ pub fn run() {
                     }
                 })
                 .build(app)?;
+            // the wsl light: a thread that watches the process table for
+            // the vm and tells the window on every change. it never runs
+            // wsl.exe on its own clock, so it is not the timer the core
+            // rule forbids
+            services::platform::wsl_watch::start(app.handle().clone());
             commands::mark_startup("setup-end".into());
 
             Ok(())
