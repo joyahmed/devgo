@@ -107,6 +107,19 @@ const SECTIONS: { title: string; body: React.ReactNode }[] = [
 		)
 	},
 	{
+		title: 'Servers',
+		body: (
+			<p>
+				The Servers card lists the machines you SSH into. Import{' '}
+				<Code>~/.ssh/config</Code> (every <Code>Host</Code> becomes a row; the
+				file is never written) or add one by hand. Enter opens a terminal on
+				it in a tmux session that survives, the same promise a WSL project
+				gets. DevGo launches by alias so your config's key and options apply,
+				and stores no password: an alias, a host, a key <em>path</em>.
+			</p>
+		)
+	},
+	{
 		title: 'Keyboard',
 		body: (
 			<p>
