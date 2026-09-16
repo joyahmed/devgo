@@ -3,7 +3,7 @@ const base =
 
 const VARIANT: Record<ButtonVariant, string> = {
 	primary:
-		'px-5 py-2.5 text-13 border border-accent bg-accent text-text-primary hover:bg-accent-hover',
+		'px-5 py-2.5 text-13 border border-accent bg-accent text-bg-primary hover:bg-accent-hover',
 	secondary:
 		'px-5 py-2 text-13 border border-border-strong bg-bg-panel text-text-secondary hover:bg-bg-hover hover:text-text-primary',
 	danger:

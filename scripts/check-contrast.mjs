@@ -24,7 +24,10 @@ const RULES = [
 	{ token: 'text-secondary', on: ['bg-primary', 'bg-secondary', 'bg-panel'], min: 4.5 },
 	{ token: 'text-primary', on: ['bg-primary', 'bg-secondary', 'bg-panel'], min: 4.5 },
 	{ token: 'border-strong', on: ['bg-primary', 'bg-secondary', 'bg-panel'], min: 3 },
-	{ token: 'accent', on: ['bg-primary', 'bg-secondary'], min: 3 }
+	{ token: 'accent', on: ['bg-primary', 'bg-secondary'], min: 3 },
+	// the filled button carries the ground as ink: white on electric cyan
+	// was 1.8:1, and on the old blue 3.7:1, never checked
+	{ token: 'bg-primary', on: ['accent'], min: 4.5 }
 ];
 
 // parsed, not imported: themes.ts is TypeScript and this runs with no build
