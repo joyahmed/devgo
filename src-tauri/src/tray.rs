@@ -1,4 +1,5 @@
 use tauri::menu::{Menu, MenuBuilder, MenuItemBuilder};
+use tauri::tray::{MouseButton, MouseButtonState, TrayIcon, TrayIconEvent};
 use tauri::{AppHandle, Manager, Wry};
 
 use crate::commands::{launch_project_default, AppState};
@@ -7,6 +8,16 @@ use crate::services::{frecency, preferences, single_instance};
 
 pub const TRAY_ID: &str = "main";
 const MAX_RECENTS: usize = 7;
+
+// what a left click on the icon does. on windows a tray icon is a button:
+// left click brings the window up, right click is the menu. on a mac the
+// same icon is a menu-bar item, and one that does nothing on a left click
+// reads as broken: every item up there drops its menu on any click, so
+// devgo's does too (show devgo is its first line)
+#[cfg(target_os = "macos")]
+pub(crate) const MENU_ON_LEFT_CLICK: bool = true;
+#[cfg(not(target_os = "macos"))]
+pub(crate) const MENU_ON_LEFT_CLICK: bool = false;
 const LAUNCH_PREFIX: &str = "launch:";
 
 // read from the cache, never a scan, so the menu boots nothing
@@ -88,6 +99,24 @@ fn show_window(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.show();
         let _ = window.set_focus();
+    }
+}
+
+// a click on the icon itself, as opposed to a menu line. left-up shows
+// the window, unless the platform gives that click to the menu: tray-icon
+// still emits Click on a mac when it pops the menu, and showing the
+// window underneath as well would be two things for one click
+pub(crate) fn handle_icon_event(tray: &TrayIcon, event: TrayIconEvent) {
+    if MENU_ON_LEFT_CLICK {
+        return;
+    }
+    if let TrayIconEvent::Click {
+        button: MouseButton::Left,
+        button_state: MouseButtonState::Up,
+        ..
+    } = event
+    {
+        show_window(tray.app_handle());
     }
 }
 

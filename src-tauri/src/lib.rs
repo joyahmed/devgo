@@ -10,9 +10,7 @@ use services::platform::detection;
 use services::preferences::{MonitorRect, WindowState};
 use services::single_instance;
 use services::workspace::WorkspaceStore;
-use tauri::tray::{
-    MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent,
-};
+use tauri::tray::TrayIconBuilder;
 use tauri::Manager;
 
 /// The taskbar button's identity and icon, which tauri leaves half done.
@@ -452,27 +450,17 @@ pub fn run() {
             let menu = tray::build_menu(app.handle())?;
 
             commands::mark_startup("window+hotkey".into());
+            // what a left click does is the platform's call (tray.rs): the
+            // window on windows, the menu on a mac. the icon is the coloured
+            // app icon on both, not a template image macos would flatten
             let _tray = TrayIconBuilder::with_id(tray::TRAY_ID)
                 .icon(app.default_window_icon().unwrap().clone())
                 .menu(&menu)
-                .show_menu_on_left_click(false)
+                .show_menu_on_left_click(tray::MENU_ON_LEFT_CLICK)
                 .on_menu_event(|app, event| {
                     tray::handle_event(app, event.id.as_ref())
                 })
-                .on_tray_icon_event(|tray, event| {
-                    if let TrayIconEvent::Click {
-                        button: MouseButton::Left,
-                        button_state: MouseButtonState::Up,
-                        ..
-                    } = event
-                    {
-                        let app = tray.app_handle();
-                        if let Some(window) = app.get_webview_window("main") {
-                            let _ = window.show();
-                            let _ = window.set_focus();
-                        }
-                    }
-                })
+                .on_tray_icon_event(tray::handle_icon_event)
                 .build(app)?;
             // the wsl light: a thread that watches the process table for
             // the vm and tells the window on every change. it never runs
