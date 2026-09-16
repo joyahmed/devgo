@@ -1,13 +1,11 @@
-use std::os::windows::process::CommandExt;
 use std::process::Command;
 
+use super::platform::Quiet;
 use super::platform::RuntimeInfo;
 use super::preferences::TmuxConfig;
 use crate::error::AppError;
 use crate::models::target::LaunchTarget;
 use crate::models::Project;
-
-const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 fn is_wsl(project: &Project) -> bool {
     let normalized = project.full_path.replace('\\', "/");
@@ -44,8 +42,9 @@ fn distro_from_project(
 ///
 /// `Command::args` re-quotes anything containing spaces, which turns
 /// `--folder-uri vscode-remote://…` into a single quoted argument and breaks
-/// it. `raw_arg` hands the string to Windows verbatim, so the target's own
-/// `args_template` is the only thing deciding how it is split.
+/// it. `shell_line` (`raw_arg` on Windows, `platform::Quiet`) hands the
+/// string to Windows verbatim, so the target's own `args_template` is the
+/// only thing deciding how it is split.
 fn spawn_raw(exe: &str, args: &str) -> Result<(), AppError> {
     // the process spawned below is cmd.exe, which always exists, so a
     // missing editor "launched" fine: a console flashed, Ok came back, and a
@@ -56,8 +55,7 @@ fn spawn_raw(exe: &str, args: &str) -> Result<(), AppError> {
     }
 
     let mut cmd = Command::new("cmd");
-    cmd.creation_flags(CREATE_NO_WINDOW)
-        .raw_arg(format!("/c {exe} {args}"));
+    cmd.quiet().shell_line(format!("/c {exe} {args}"));
     // a launcher is nobody's child. devgo started from inside a claude code
     // session inherits that session's markers, and every editor, terminal
     // and agent it opens inherits them too: a claude launched that way said
