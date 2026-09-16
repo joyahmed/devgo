@@ -126,6 +126,14 @@ pub const WT_ARGS: &str =
 /// from a template the user wrote, and migrate only the first.
 pub const WT_ARGS_PRE_PSMUX: &str = "-d \"{path}\"";
 
+/// The run template wt opens a command with: a dev script, an agent, a
+/// server. The command IS the tab, no cmd /k around it, so it runs in the
+/// default profile's own appearance and follows wt's closeOnExit when it
+/// ends. WT_RUN_ARGS_PRE is the cmd /k form every earlier install carries;
+/// the store rewrites it once, with a backup.
+pub const WT_RUN_ARGS: &str = "-d \"{path}\" {command}";
+pub const WT_RUN_ARGS_PRE: &str = "-d \"{path}\" cmd /k {command}";
+
 /// The registry every install starts with.
 ///
 /// VS Code and Windows Terminal only, because those are the two DevGo already
@@ -157,9 +165,7 @@ pub fn defaults() -> Vec<LaunchTarget> {
             args_template: WT_ARGS.into(),
             wsl_executable: None,
             wsl_args_template: Some("wsl -d {distro} bash \"{script}\"".into()),
-            // cmd /k keeps the window open, so a failing script leaves its
-            // error on screen
-            run_args_template: Some("-d \"{path}\" cmd /k {command}".into()),
+            run_args_template: Some(WT_RUN_ARGS.into()),
             wsl_run_args_template: Some(
                 "wsl -d {distro} --cd \"{linux_path}\" -e bash -lc \"{command}; exec bash\"".into(),
             ),
@@ -243,7 +249,7 @@ mod tests {
         assert!(wsl_args.contains("{script}"), "{wsl_args}");
         // the run form is a command in a tab and stays what it was
         let (_, run) = wt.resolve_run(r"G:\dev\app", None, "bun dev").unwrap();
-        assert_eq!(run, r#"-d "G:\dev\app" cmd /k bun dev"#);
+        assert_eq!(run, r#"-d "G:\dev\app" bun dev"#);
     }
 
     /// Refusing is the point: launching a Windows-only editor at a WSL project
@@ -292,7 +298,7 @@ mod tests {
         let (exe, args) =
             wt.resolve_run(r"G:\dev\app", None, "bun run dev").unwrap();
         assert_eq!(exe, "wt");
-        assert_eq!(args, r#"-d "G:\dev\app" cmd /k bun run dev"#);
+        assert_eq!(args, r#"-d "G:\dev\app" bun run dev"#);
 
         let (_, args) = wt
             .resolve_run("x", Some(("Ubuntu", "/home/joy/app")), "bun run dev")

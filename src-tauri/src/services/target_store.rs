@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use crate::error::AppError;
 use crate::models::target::{
     defaults, LaunchTarget, TargetKind, WT_ARGS, WT_ARGS_PRE_PSMUX,
+    WT_RUN_ARGS, WT_RUN_ARGS_PRE,
 };
 
 /// Editors and terminals, persisted together.
@@ -41,6 +42,7 @@ impl TargetStore {
 
         let mut store = Self { targets, file_path };
         store.adopt_psmux_template()?;
+        store.adopt_run_template()?;
         Ok(store)
     }
 
@@ -64,6 +66,24 @@ impl TargetStore {
             fs::copy(&self.file_path, backup)?;
         }
         self.targets[pos].args_template = WT_ARGS.to_string();
+        self.save()
+    }
+
+    /// wt ran commands under cmd /k; the command is the tab now. The same
+    /// shape as the psmux adoption: only the exact old default is rewritten,
+    /// a customised template is left alone, a backup is written first.
+    fn adopt_run_template(&mut self) -> Result<(), AppError> {
+        let Some(pos) = self.targets.iter().position(|t| {
+            t.id == "wt"
+                && t.run_args_template.as_deref() == Some(WT_RUN_ARGS_PRE)
+        }) else {
+            return Ok(());
+        };
+        if self.file_path.exists() {
+            let backup = format!("{}.pre-pwsh-run", self.file_path.display());
+            fs::copy(&self.file_path, backup)?;
+        }
+        self.targets[pos].run_args_template = Some(WT_RUN_ARGS.to_string());
         self.save()
     }
 
@@ -248,11 +268,9 @@ mod tests {
         let s = TargetStore::new(dir.clone()).unwrap();
         let wt = s.get("wt").unwrap();
         assert_eq!(wt.args_template, WT_ARGS);
-        // everything that was not the one field stays what it was
-        assert_eq!(
-            wt.run_args_template.as_deref(),
-            Some("-d \"{path}\" cmd /k {command}")
-        );
+        // the same load adopts the run template too (the tab is the
+        // command); the wsl form stays what it was
+        assert_eq!(wt.run_args_template.as_deref(), Some(WT_RUN_ARGS));
         assert_eq!(
             wt.wsl_args_template.as_deref(),
             Some("wsl -d {distro} bash \"{script}\"")
@@ -286,11 +304,21 @@ mod tests {
 
         let s = TargetStore::new(dir.clone()).unwrap();
         assert_eq!(s.get("wt").unwrap().args_template, custom);
-        assert!(!dir.join("targets.json.pre-psmux").exists());
+        assert!(
+            !dir.join("targets.json.pre-psmux").exists(),
+            "the session template did not change, so no psmux backup"
+        );
+        // the fixture's run template is the exact old default, so that one
+        // is adopted with its own backup while the customised session
+        // template is left alone: two migrations, two questions
         assert_eq!(
-            fs::read_to_string(dir.join("targets.json")).unwrap(),
+            s.get("wt").unwrap().run_args_template.as_deref(),
+            Some(WT_RUN_ARGS)
+        );
+        assert_eq!(
+            fs::read_to_string(dir.join("targets.json.pre-pwsh-run")).unwrap(),
             original,
-            "an untouched store is not rewritten"
+            "the pre-migration file is kept verbatim"
         );
     }
 
