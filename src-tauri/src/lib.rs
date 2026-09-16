@@ -223,7 +223,17 @@ pub fn apply_transparency(window: &tauri::WebviewWindow, percent: u8) {
     }
 }
 
+// when the process started, set first thing in run and read by the
+// startup marks; OnceLock so it is set exactly once
+static STARTED: std::sync::OnceLock<std::time::Instant> =
+    std::sync::OnceLock::new();
+
+pub fn started() -> std::time::Instant {
+    *STARTED.get_or_init(std::time::Instant::now)
+}
+
 pub fn run() {
+    started();
     let context: tauri::Context<tauri::Wry> = tauri::generate_context!();
 
     // before the builder: the main window is created inside run
@@ -234,6 +244,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .setup(move |app| {
+            commands::mark_startup("setup-start".into());
             let app_data_dir = app
                 .path()
                 .app_data_dir()
@@ -280,6 +291,7 @@ pub fn run() {
                 }
             };
 
+            commands::mark_startup("prefs+runtime".into());
             let cache_store =
                 services::ProjectCacheStore::new(app_data_dir.clone())
                     .expect("failed to initialize project cache store");
@@ -290,6 +302,7 @@ pub fn run() {
             let github_store = services::GithubStore::new(app_data_dir.clone())
                 .expect("failed to initialize github store");
 
+            commands::mark_startup("stores".into());
             let store = WorkspaceStore::new(app_data_dir)
                 .expect("failed to initialize workspace store");
 
@@ -381,6 +394,7 @@ pub fn run() {
             // recents come from the cache; rebuilt on every project fetch
             let menu = tray::build_menu(app.handle())?;
 
+            commands::mark_startup("window+hotkey".into());
             let _tray = TrayIconBuilder::with_id(tray::TRAY_ID)
                 .icon(app.default_window_icon().unwrap().clone())
                 .menu(&menu)
@@ -403,6 +417,7 @@ pub fn run() {
                     }
                 })
                 .build(app)?;
+            commands::mark_startup("setup-end".into());
 
             Ok(())
         })
@@ -432,6 +447,8 @@ pub fn run() {
             commands::reorder_workspaces,
             commands::get_projects,
             commands::refresh_projects,
+            commands::startup_ms,
+            commands::mark_startup,
             commands::quit_app,
             commands::toggle_pin,
             commands::get_summon_hotkey,

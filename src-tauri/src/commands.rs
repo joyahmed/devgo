@@ -27,6 +27,46 @@ fn lock_err<E: std::fmt::Display>(e: E) -> AppError {
     AppError::Lock(e.to_string())
 }
 
+/// Milliseconds since the process started: the startup budget's clock.
+#[tauri::command]
+pub fn startup_ms() -> u64 {
+    crate::started().elapsed().as_millis() as u64
+}
+
+/// Append `<stage>,<ms>` to `%LOCALAPPDATA%\DevGo\startup.log`, only when
+/// `DEVGO_STARTUP_LOG=1`: the measuring script sets it, a user never does.
+/// No writes at startup is a feature; this one is opt in.
+#[tauri::command]
+pub fn mark_startup(stage: String) -> u64 {
+    let ms = startup_ms();
+    if let Some(path) = startup_log_path() {
+        if let Some(dir) = path.parent() {
+            let _ = std::fs::create_dir_all(dir);
+        }
+        if let Ok(mut f) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)
+        {
+            use std::io::Write;
+            let _ = writeln!(f, "{stage},{ms}");
+        }
+    }
+    ms
+}
+
+fn startup_log_path() -> Option<std::path::PathBuf> {
+    if std::env::var("DEVGO_STARTUP_LOG").as_deref() != Ok("1") {
+        return None;
+    }
+    let local = std::env::var("LOCALAPPDATA").ok()?;
+    Some(
+        std::path::Path::new(&local)
+            .join("DevGo")
+            .join("startup.log"),
+    )
+}
+
 /// How a workspace's projects were obtained on this pass.
 #[derive(Serialize)]
 #[serde(rename_all = "snake_case")]
