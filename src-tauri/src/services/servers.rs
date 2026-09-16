@@ -80,19 +80,18 @@ impl Server {
     }
 
     // the whole line the terminal runs. with tmux, attach or create the
-    // named session, and a login shell when the box has no tmux. $SHELL is
-    // the remote one: nothing between wt and ssh reads a dollar, and a
-    // backslash reached the box as a literal
+    // named session. no quotes and no shell operators on purpose: the line
+    // is typed into whatever local shell a terminal target uses, and a
+    // quoting that is right for one is wrong for the next. ssh joins the
+    // trailing words itself. a box without tmux prints tmux's own error and
+    // the tab stays open; the row's switch is the plain shell
     pub fn ssh_command(&self) -> String {
         let target = self.ssh_target().join(" ");
         if !self.tmux {
             return format!("ssh {target}");
         }
         let session = present(&self.session).unwrap_or("devgo");
-        format!(
-            "ssh -t {target} \"command -v tmux >/dev/null 2>&1 && \
-             tmux new-session -A -s {session} || exec $SHELL -l\""
-        )
+        format!("ssh -t {target} tmux new-session -A -s {session}")
     }
 
     // what goes in front of a path for scp
@@ -247,10 +246,11 @@ mod tests {
     fn an_alias_is_launched_as_the_alias_and_nothing_else() {
         assert_eq!(zetta().ssh_target(), ["zetta"]);
         let line = zetta().ssh_command();
-        assert!(line.starts_with("ssh -t zetta \""), "{line}");
-        assert!(line.contains("tmux new-session -A -s devgo"), "{line}");
-        assert!(line.contains("|| exec $SHELL -l"), "{line}");
-        assert!(!line.contains("\\"), "a backslash reaches the box: {line}");
+        assert_eq!(line, "ssh -t zetta tmux new-session -A -s devgo");
+        assert!(
+            !line.contains('"') && !line.contains('\''),
+            "no quotes: the line is shell agnostic"
+        );
     }
 
     #[test]
