@@ -4,7 +4,11 @@ import { useEffect, useState } from 'react';
 import { relativeTime } from '../github';
 import { prettyKeys, SHORTCUTS } from '../shortcuts';
 import { applyTextScale, savedTextScale, stepTextScale, TEXT_STEPS } from '../textSize';
-import { MAX_TRANSPARENCY, setTransparency } from '../transparency';
+import {
+	MAX_TRANSPARENCY,
+	launchedTransparent,
+	setTransparency
+} from '../transparency';
 import { savedThemeId, setTheme, THEMES } from '../themes';
 import Button from './Button';
 import AboutPanel from './AboutPanel';
@@ -626,19 +630,25 @@ const AppearancePanel = ({ showHints, onToggleHints }: AppearancePanelProps) => 
 	const [current, setCurrent] = useState(savedThemeId());
 	const [scale, setScale] = useState(savedTextScale());
 	const [transparency, setTransparencyShown] = useState<number | null>(null);
+	// born see-through or not is decided at creation and cannot change on
+	// a live window: the knob previews live only on a window born
+	// see-through, otherwise it is stored for the next launch
+	const [born, setBorn] = useState<boolean | null>(null);
 	useEffect(() => {
 		invoke<number>('get_window_transparency')
 			.then(setTransparencyShown)
 			.catch(() => setTransparencyShown(0));
+		launchedTransparent().then(setBorn);
 	}, []);
-	// the thumb follows the pointer at once; the stored value, clamped,
+	// the number follows the step at once; the stored value, clamped,
 	// comes back and settles it
 	const previewTransparency = (percent: number) => {
 		setTransparencyShown(percent);
-		setTransparency(percent)
+		setTransparency(percent, born === true)
 			.then(setTransparencyShown)
 			.catch(() => {});
 	};
+	const knob = transparency ?? 0;
 	// ctrl+= / ctrl+- while this panel is open must move the number too
 	useEffect(() => {
 		const sync = () => setScale(savedTextScale());
@@ -703,6 +713,19 @@ const AppearancePanel = ({ showHints, onToggleHints }: AppearancePanelProps) => 
 				<TransparencyStep
 					{...{ value: transparency, onChange: previewTransparency }}
 				/>
+				{born === false && knob > 0 && (
+					<p className='text-13 text-text-muted mt-2'>
+						Saved. DevGo opened opaque this time, so the window goes
+						see-through on the next launch — a see-through window holds
+						about 30 MB more, and an opaque one is not asked to.
+					</p>
+				)}
+				{born === true && knob === 0 && (
+					<p className='text-13 text-text-muted mt-2'>
+						Opaque. The memory a see-through window holds is given back on
+						the next launch.
+					</p>
+				)}
 			</div>
 			<div>
 				<h4 className={heading}>Hint words</h4>
