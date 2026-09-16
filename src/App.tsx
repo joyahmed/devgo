@@ -31,6 +31,7 @@ import { useServers } from './hooks/useServers';
 import { useTargets } from './hooks/useTargets';
 import { useWorkspaces } from './hooks/useWorkspaces';
 import { lastSegment } from './paths';
+import { appForFolder, canFill, placeholders } from './serverApps';
 import { isTypingTarget, matches, prettyKeys, shortcutFor } from './shortcuts';
 import { applyTextScale, stepTextScale } from './textSize';
 import { loadGroundAlpha } from './transparency';
@@ -730,6 +731,69 @@ const AppInner = () => {
 			e => toast(showError(e))
 		);
 	const [folderMenu, setFolderMenu] = useState<FolderMenu | null>(null);
+	// one of the actions the server declares. rust types the line into a
+	// tmux window and attaches the terminal to it; with no tmux on the row
+	// the line comes back for the clipboard and the terminal opens plain.
+	// the toast says which of those happened
+	const runServerAction = (s: Server, action: ServerAction, appDir: string | null) =>
+		invoke<ActionOutcome>('run_server_action', {
+			id: s.id,
+			actionId: action.id,
+			appDir
+		})
+			.then(async out => {
+				if (out.kind === 'ran') toast(`Running in ${out.window} on ${s.name}`, 'success');
+				else if (out.kind === 'typed')
+					toast(`Typed into ${out.window} on ${s.name}. Enter runs it`, 'success');
+				else if (out.kind === 'copied') {
+					await copyText(out.line, 'line');
+					await invoke('open_server', { id: s.id, targetId: null });
+					toast(`${s.name} has no tmux. The line is copied; paste it in the terminal`, 'success');
+				} else if (out.kind === 'local')
+					toast(`${action.label}: running on this PC`, 'success');
+			})
+			.catch(e => toast(showError(e)));
+	// the hint beside an action: what kind of door it is
+	const actionHint = (a: ServerAction, s: Server) => {
+		const bits = [
+			a.root ? 'sudo' : null,
+			a.kind === 'pretype' ? (s.tmux ? 'types' : 'copies') : null,
+			a.kind === 'run' && !s.tmux ? 'copies' : null,
+			a.kind === 'url' ? '↗' : null,
+			a.kind === 'local' ? 'this PC' : null
+		].filter(Boolean);
+		return bits.join(' · ') || undefined;
+	};
+	const serverActionEntries = (s: Server): MenuEntry[] => {
+		const acts = servers.listings[s.id]?.actions?.server ?? [];
+		if (acts.length === 0) return [];
+		return [
+			'separator',
+			...acts.map(a => ({
+				label: a.label,
+				hint: actionHint(a, s),
+				onClick: () => runServerAction(s, a, null)
+			}))
+		];
+	};
+	// hidden, not disabled, when the row cannot fill the line: the
+	// contract's own rule
+	const appActionEntries = (s: Server, f: RemoteFolder): MenuEntry[] => {
+		const listing = servers.listings[s.id];
+		const app = appForFolder(listing, f.path);
+		if (!app) return [];
+		const values = placeholders(app);
+		const acts = (listing?.actions?.app ?? []).filter(a => canFill(a.command, values));
+		if (acts.length === 0) return [];
+		return [
+			'separator',
+			...acts.map(a => ({
+				label: a.label,
+				hint: actionHint(a, s),
+				onClick: () => runServerAction(s, a, f.path)
+			}))
+		];
+	};
 	// the name box for a root typed by hand, on this server
 	const [rootPrompt, setRootPrompt] = useState<Server | null>(null);
 	const addRoot = async (s: Server, root: string) => {
@@ -760,6 +824,7 @@ const AppInner = () => {
 			disabled: !hasEditor('zed'),
 			onClick: () => openFolderIn(s, f, 'zed')
 		},
+		...appActionEntries(s, f),
 		'separator',
 		{ label: 'Copy path', onClick: () => copyText(f.path, 'path') },
 		{
@@ -773,10 +838,11 @@ const AppInner = () => {
 	const buildServerMenu = (s: Server): MenuEntry[] => [
 		{ label: 'Open terminal', hint: 'Enter', onClick: () => openServer(s) },
 		{
-			label: 'List folders',
+			label: 'List folders & apps',
 			onClick: () => servers.listFolders(s.id).catch(e => toast(showError(e)))
 		},
 		{ label: 'Add a root folder…', onClick: () => setRootPrompt(s) },
+		...serverActionEntries(s),
 		'separator',
 		{ label: 'Copy ssh command', onClick: () => copyServerLine(s, 0) },
 		{ label: 'Copy scp prefix', onClick: () => copyServerLine(s, 1) },
@@ -959,6 +1025,17 @@ const AppInner = () => {
 				keywords: ['server', 'ssh', 'connect', s.name.toLowerCase(), s.host],
 				run: () => openServer(s)
 			})),
+			// the server-level actions a box declares, not the per-app ones:
+			// twenty apps by seventeen actions is a menu, not a palette
+			...servers.servers.flatMap(s =>
+				(servers.listings[s.id]?.actions?.server ?? []).map(a => ({
+					id: `server.action.${s.id}.${a.id}`,
+					title: `Server: ${s.name} › ${a.label}`,
+					subtitle: a.command,
+					keywords: ['server', s.name.toLowerCase(), a.id, ...a.id.split('-')],
+					run: () => runServerAction(s, a, null)
+				}))
+			),
 			{
 				id: 'servers.import',
 				title: 'Servers: import from ~/.ssh/config',
