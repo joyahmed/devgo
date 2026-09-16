@@ -155,8 +155,8 @@ const ServerForm = ({ initial, onSubmit, onDone }: ServerFormProps) => {
 				</div>
 				<div className='col-span-2'>
 					<span className={label}>
-						Folders to list, one root per line (empty = ~, ~/projects, /var/www,
-						/srv)
+						Top-level folders to list, one per line (empty = ~, ~/projects,
+						/var/www, /srv)
 					</span>
 					<textarea
 						className={`${field} h-20 resize-none`}
