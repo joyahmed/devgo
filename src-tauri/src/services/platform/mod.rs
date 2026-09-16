@@ -22,7 +22,13 @@ use std::process::Command;
 pub trait Quiet {
     // no console window for the child. on windows a spawned console
     // program otherwise flashes a black window over the app; elsewhere
-    // there is no such window and this is a no-op
+    // there is no such window, and instead the child gets the login-shell
+    // PATH. same seam, opposite direction: on windows the app inherits the
+    // user's environment and must hide a window; on a mac it inherits
+    // launchd's bare PATH and must be handed the user's. done here because
+    // every spawn in the crate already calls this: a first cut wired only
+    // the launcher and the editor probe, and gh, git, ssh and tmux were
+    // still spawned with no /opt/homebrew/bin in reach
     fn quiet(&mut self) -> &mut Self;
 
     // one argument handed to the os verbatim. arg re-quotes anything with
@@ -42,6 +48,10 @@ impl Quiet for Command {
             const CREATE_NO_WINDOW: u32 = 0x0800_0000;
             self.creation_flags(CREATE_NO_WINDOW);
         }
+        #[cfg(not(windows))]
+        {
+            login_path::with_login_path(self);
+        }
         self
     }
 
@@ -55,5 +65,23 @@ impl Quiet for Command {
         {
             self.arg(line)
         }
+    }
+}
+
+#[cfg(all(test, not(windows)))]
+mod tests {
+    use super::*;
+
+    // the seam every spawn already passes through: gh, git, ssh and tmux
+    // never call with_login_path themselves, they call quiet(), and that
+    // is where a dock-launched devgo hands them the PATH with homebrew in it
+    #[test]
+    fn quiet_hands_a_child_the_login_path() {
+        let out = Command::new("/bin/sh")
+            .quiet()
+            .args(["-c", "printf %s \"$PATH\""])
+            .output()
+            .unwrap();
+        assert_eq!(String::from_utf8_lossy(&out.stdout), login_path());
     }
 }
