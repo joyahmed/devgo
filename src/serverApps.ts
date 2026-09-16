@@ -35,7 +35,10 @@ export const placeholders = (app: ServerApp): Record<string, string | null> => {
 		web_port: site?.web_port != null ? String(site.web_port) : null,
 		api_port: site?.api_port != null ? String(site.api_port) : null,
 		db: app.database?.name ?? null,
-		repo: app.git?.repo ?? null
+		repo: app.git?.repo ?? null,
+		// the form's shape button for this app, mirroring the rust side
+		site_type:
+			app.kind === 'mono' ? 'turbo' : app.kind === 'node' ? 'node' : 'next'
 	};
 };
 
@@ -58,4 +61,31 @@ export const canFill = (
 export const appStatus = (app: ServerApp): 'online' | 'trouble' | 'none' => {
 	if (app.processes.length === 0) return 'none';
 	return app.processes.every(p => p.status === 'online') ? 'online' : 'trouble';
+};
+
+// the values a form opens with: each field's prefill placeholder filled
+// from the app (its default when the app lacks it)
+export const prefillValues = (
+	action: ServerAction,
+	app: ServerApp | undefined
+): Record<string, string> => {
+	const values = app ? placeholders(app) : {};
+	const out: Record<string, string> = {};
+	for (const f of action.fields) {
+		const key = f.prefill?.replace(/^\{|\}$/g, '');
+		out[f.name] = (key && values[key]) || f.default || '';
+	}
+	return out;
+};
+
+// a when clause, type=turbo, against the current values
+export const whenHolds = (
+	when: string | null,
+	values: Record<string, string>
+) => {
+	if (!when) return true;
+	const [k, v] = when.split('=');
+	return v === undefined
+		? values[k.trim()] === 'true'
+		: values[k.trim()] === v.trim();
 };
