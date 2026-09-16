@@ -13,6 +13,7 @@ pub mod preferences;
 pub mod project_cache;
 pub mod scanner;
 pub mod scripts;
+pub mod sessions;
 pub mod single_instance;
 pub mod target_store;
 pub mod workspace;
