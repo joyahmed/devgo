@@ -489,7 +489,7 @@ mod tests {
     use super::*;
 
     const SAMPLE: &str = r#"[
-      {"defaultBranchRef":{"name":"main"},"isArchived":false,"isPrivate":true,"name":"devgo-app-private","owner":{"id":"x","login":"joyahmed"},"updatedAt":"2026-09-11T18:48:35Z","url":"https://github.com/joyahmed/devgo-app-private"},
+      {"defaultBranchRef":{"name":"main"},"isArchived":false,"isPrivate":true,"name":"notes","owner":{"id":"x","login":"joyahmed"},"updatedAt":"2026-09-11T18:48:35Z","url":"https://github.com/joyahmed/notes"},
       {"defaultBranchRef":{"name":"master"},"isArchived":true,"isPrivate":false,"name":"old-thing","owner":{"id":"y","login":"joyahmed007"},"updatedAt":"2021-01-01T00:00:00Z","url":"https://github.com/joyahmed007/old-thing"},
       {"defaultBranchRef":null,"isArchived":false,"isPrivate":true,"name":"empty","owner":{"id":"x","login":"joyahmed"},"updatedAt":"2026-01-01T00:00:00Z","url":"https://github.com/joyahmed/empty"}
     ]"#;
@@ -498,7 +498,7 @@ mod tests {
     fn parses_user_and_org_repos() {
         let repos = parse_repos(SAMPLE).unwrap();
         assert_eq!(repos.len(), 3);
-        assert_eq!(repos[0].full_name, "joyahmed/devgo-app-private");
+        assert_eq!(repos[0].full_name, "joyahmed/notes");
         assert_eq!(repos[0].owner, "joyahmed");
         assert!(repos[0].private);
         assert!(!repos[0].archived);
@@ -525,28 +525,20 @@ mod tests {
 
     #[test]
     fn local_match_ignores_case_suffix_and_trailing_slash() {
-        let gh = repo_key("https://github.com/joyahmed/devgo-app-private");
-        assert_eq!(
-            gh,
-            repo_key("https://github.com/JoyAhmed/DevGo-App-Private/")
-        );
-        assert_eq!(
-            gh,
-            repo_key("https://github.com/joyahmed/devgo-app-private.git")
-        );
-        assert_ne!(gh, repo_key("https://github.com/joyahmed/devgo-app"));
+        let gh = repo_key("https://github.com/joyahmed/devgo");
+        assert_eq!(gh, repo_key("https://github.com/JoyAhmed/DevGo/"));
+        assert_eq!(gh, repo_key("https://github.com/joyahmed/devgo.git"));
+        assert_ne!(gh, repo_key("https://github.com/joyahmed/devgo-cli"));
     }
 
     #[test]
     fn local_match_sees_through_remote_to_url() {
         use crate::services::git::remote_to_url;
         let from_ssh =
-            remote_to_url("git@github.com:joyahmed/devgo-app-private.git")
-                .unwrap();
+            remote_to_url("git@github.com:joyahmed/devgo.git").unwrap();
         let from_https =
-            remote_to_url("https://github.com/joyahmed/devgo-app-private.git")
-                .unwrap();
-        let gh = repo_key("https://github.com/joyahmed/devgo-app-private");
+            remote_to_url("https://github.com/joyahmed/devgo.git").unwrap();
+        let gh = repo_key("https://github.com/joyahmed/devgo");
         assert_eq!(repo_key(&from_ssh), gh);
         assert_eq!(repo_key(&from_https), gh);
     }
@@ -555,24 +547,18 @@ mod tests {
     fn local_matches_pair_rows_with_disk_projects() {
         let repos = parse_repos(SAMPLE).unwrap();
         let remotes = [
-            (
-                r"G:\01_tauri\devgo-app-private",
-                "https://github.com/JoyAhmed/devgo-app-private/",
-            ),
+            (r"G:\01_tauri\notes", "https://github.com/JoyAhmed/notes/"),
             (r"G:\misc\unrelated", "https://gitlab.com/x/y"),
         ];
         let local =
             local_matches(&repos, remotes.iter().map(|(p, r)| (*p, *r)));
         assert_eq!(local.len(), 1);
-        assert_eq!(
-            local["joyahmed/devgo-app-private"],
-            r"G:\01_tauri\devgo-app-private"
-        );
+        assert_eq!(local["joyahmed/notes"], r"G:\01_tauri\notes");
     }
 
     #[test]
     fn a_deleted_clone_leaves_the_local_mark_with_the_list() {
-        let here = r"G:\01_tauri\devgo-app-private";
+        let here = r"G:\01_tauri\notes";
         let gone = r"G:\01_tauri\devgo-scratch";
         let info = |path: &str, remote: &str| GitInfo {
             full_path: path.to_string(),
@@ -586,7 +572,7 @@ mod tests {
         let git: HashMap<String, GitInfo> = [
             (
                 here.to_string(),
-                info(here, "https://github.com/joyahmed/devgo-app-private"),
+                info(here, "https://github.com/joyahmed/notes"),
             ),
             (
                 gone.to_string(),
@@ -597,21 +583,18 @@ mod tests {
         .collect();
         // the list no longer has the second: its folder was deleted
         let listed = [Project::new(
-            "devgo-app-private".into(),
+            "notes".into(),
             here.into(),
             r"G:\01_tauri".into(),
             "Windows".into(),
         )];
 
         let remotes: Vec<_> = current_remotes(&listed, &git).collect();
-        assert_eq!(
-            remotes,
-            vec![(here, "https://github.com/joyahmed/devgo-app-private")]
-        );
+        assert_eq!(remotes, vec![(here, "https://github.com/joyahmed/notes")]);
 
         let repos = parse_repos(SAMPLE).unwrap();
         let local = local_matches(&repos, current_remotes(&listed, &git));
-        assert!(local.contains_key("joyahmed/devgo-app-private"));
+        assert!(local.contains_key("joyahmed/notes"));
         assert!(!local.contains_key("joyahmed/empty"), "clone is back");
     }
 
@@ -755,8 +738,8 @@ mod tests {
 
     #[test]
     fn clone_urls_come_from_the_full_name() {
-        let (ssh, https) = clone_urls("joyahmed/devgo-app-private");
-        assert_eq!(ssh, "git@github.com:joyahmed/devgo-app-private.git");
-        assert_eq!(https, "https://github.com/joyahmed/devgo-app-private.git");
+        let (ssh, https) = clone_urls("joyahmed/devgo");
+        assert_eq!(ssh, "git@github.com:joyahmed/devgo.git");
+        assert_eq!(https, "https://github.com/joyahmed/devgo.git");
     }
 }

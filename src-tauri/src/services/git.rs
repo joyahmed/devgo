@@ -355,9 +355,8 @@ mod tests {
     #[test]
     fn normalizes_ssh_remotes_to_browsable_urls() {
         assert_eq!(
-            remote_to_url("git@github.com:joyahmed/devgo-app-private.git")
-                .as_deref(),
-            Some("https://github.com/joyahmed/devgo-app-private")
+            remote_to_url("git@github.com:joyahmed/devgo.git").as_deref(),
+            Some("https://github.com/joyahmed/devgo")
         );
         assert_eq!(
             remote_to_url("ssh://git@gitlab.com/group/repo.git").as_deref(),
