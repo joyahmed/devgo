@@ -14,7 +14,10 @@ use crate::services::git;
 use crate::services::github::{self, GhStatus, GithubCache};
 use crate::services::groups::{self, GithubGroup};
 use crate::services::launcher;
-use crate::services::platform::{wsl, wsl_watch, Quiet, RuntimeInfo};
+#[cfg(windows)]
+use crate::services::platform::Quiet;
+use crate::services::platform::{wsl, wsl_watch, RuntimeInfo};
+use crate::services::scanner::LOCAL_FS;
 use crate::services::scanner::{ScanOutcome, UnavailableReason};
 use crate::services::server_folders::{
     self, ListingCache, RemoteFolder, ServerListing,
@@ -31,13 +34,106 @@ fn lock_err<E: std::fmt::Display>(e: E) -> AppError {
     AppError::Lock(e.to_string())
 }
 
+// the os underneath, in one place. every door this file opens to the
+// desktop (the browser, the file manager, the user's home, the startup
+// log) is a windows shape and a mac shape, decided here once per concern.
+// not a cfg! at each call site: four stand-in servers read USERPROFILE,
+// and a fifth would have been the one that forgot the mac
+
+// the local side's name in a sentence: "install it on windows"
+#[cfg(target_os = "macos")]
+const LOCAL_OS: &str = "macOS";
+#[cfg(not(target_os = "macos"))]
+const LOCAL_OS: &str = "Windows";
+
+// the user's home: where a terminal opens when the thing launched is a
+// server rather than a folder
+#[cfg(windows)]
+fn home_dir() -> String {
+    std::env::var("USERPROFILE").unwrap_or_else(|_| "C:\\".into())
+}
+#[cfg(not(windows))]
+fn home_dir() -> String {
+    std::env::var("HOME").unwrap_or_else(|_| "/".into())
+}
+
+// a server launch opens a terminal at home: the project shape the
+// launcher takes, with the local word so it lands where a scanned one does
+fn home_stand_in(name: &str) -> Project {
+    Project::new(name.to_string(), home_dir(), String::new(), LOCAL_FS.into())
+}
+
+// %LOCALAPPDATA%\DevGo on windows, ~/Library/Logs/DevGo on a mac (where
+// console.app looks); None when the environment does not say
+#[cfg(windows)]
+fn startup_log_dir() -> Option<std::path::PathBuf> {
+    let local = std::env::var("LOCALAPPDATA").ok()?;
+    Some(std::path::Path::new(&local).join("DevGo"))
+}
+#[cfg(not(windows))]
+fn startup_log_dir() -> Option<std::path::PathBuf> {
+    let home = std::env::var("HOME").ok()?;
+    Some(
+        std::path::Path::new(&home)
+            .join("Library")
+            .join("Logs")
+            .join("DevGo"),
+    )
+}
+
+/// Hand an https:// url to the default browser, and nothing else. On
+/// Windows `start` is a cmd builtin, so it needs a shell; the empty "" is
+/// the window title argument, which start would otherwise steal the URL
+/// for. On a Mac `open` is a program and takes the URL as it is.
+fn open_in_browser(url: &str) -> Result<(), AppError> {
+    if !url.starts_with("https://") {
+        return Err(AppError::BadUrl(url.to_string()));
+    }
+    #[cfg(windows)]
+    let spawned = std::process::Command::new("cmd")
+        .quiet()
+        .args(["/c", "start", "", url])
+        .spawn();
+    #[cfg(not(windows))]
+    let spawned = std::process::Command::new("open").arg(url).spawn();
+    spawned.map_err(|e| AppError::LaunchFailed(format!("{url}: {e}")))?;
+    Ok(())
+}
+
+/// Show a path in the file manager: Explorer on Windows, Finder on a Mac.
+/// `select` is Finder's -R, open the parent with the item highlighted,
+/// which is what reveal means there; Explorer has no such switch a UNC
+/// path survives, so on Windows both shapes open the folder itself. Not
+/// awaited: explorer.exe exits 1 even on success, so only a failure to
+/// launch the file manager at all is an error.
+fn reveal_path(path: &str, select: bool) -> Result<(), AppError> {
+    #[cfg(windows)]
+    let (program, spawned) = {
+        let _ = select;
+        (
+            "explorer",
+            std::process::Command::new("explorer").arg(path).spawn(),
+        )
+    };
+    #[cfg(not(windows))]
+    let (program, spawned) = {
+        let mut cmd = std::process::Command::new("open");
+        if select {
+            cmd.arg("-R");
+        }
+        ("open", cmd.arg(path).spawn())
+    };
+    spawned.map_err(|e| AppError::LaunchFailed(format!("{program}: {e}")))?;
+    Ok(())
+}
+
 /// Milliseconds since the process started: the startup budget's clock.
 #[tauri::command]
 pub fn startup_ms() -> u64 {
     crate::started().elapsed().as_millis() as u64
 }
 
-/// Append `<stage>,<ms>` to `%LOCALAPPDATA%\DevGo\startup.log`, only when
+/// Append `<stage>,<ms>` to `startup.log` (`startup_log_dir`), only when
 /// `DEVGO_STARTUP_LOG=1`: the measuring script sets it, a user never does.
 /// No writes at startup is a feature; this one is opt in.
 #[tauri::command]
@@ -63,12 +159,7 @@ fn startup_log_path() -> Option<std::path::PathBuf> {
     if std::env::var("DEVGO_STARTUP_LOG").as_deref() != Ok("1") {
         return None;
     }
-    let local = std::env::var("LOCALAPPDATA").ok()?;
-    Some(
-        std::path::Path::new(&local)
-            .join("DevGo")
-            .join("startup.log"),
-    )
+    Some(startup_log_dir()?.join("startup.log"))
 }
 
 /// How a workspace's projects were obtained on this pass.
@@ -717,9 +808,9 @@ pub fn open_agent(
     .filter(|c| !c.is_empty())
     .ok_or_else(|| {
         let (side, fix) = if on_wsl {
-            ("WSL", "Install it in the distro")
+            ("WSL".to_string(), "Install it in the distro".to_string())
         } else {
-            ("Windows", "Install it on Windows")
+            (LOCAL_OS.to_string(), format!("Install it on {LOCAL_OS}"))
         };
         AppError::LaunchFailed(format!(
             "{} is not installed on the {side} side. {fix} and scan again in Settings",
@@ -845,13 +936,7 @@ pub fn open_server(
         .map_err(lock_err)?
         .get(&id)
         .ok_or_else(|| AppError::ServerNotFound(id.clone()))?;
-    let home = std::env::var("USERPROFILE").unwrap_or_else(|_| "C:\\".into());
-    let stand_in = Project::new(
-        server.name.clone(),
-        home,
-        String::new(),
-        "Windows".into(),
-    );
+    let stand_in = home_stand_in(&server.name);
     let info = state.runtime_info.lock().map_err(lock_err)?.clone();
     let terminal = resolve_target(&state, TargetKind::Terminal, target_id)?;
     launcher::launch_with_command(
@@ -952,13 +1037,7 @@ pub enum ActionOutcome {
 
 // the terminal on the server, the row's ordinary launch line
 fn attach_terminal(state: &AppState, server: &Server) -> Result<(), AppError> {
-    let home = std::env::var("USERPROFILE").unwrap_or_else(|_| "C:\\".into());
-    let stand_in = Project::new(
-        server.name.clone(),
-        home,
-        String::new(),
-        "Windows".into(),
-    );
+    let stand_in = home_stand_in(&server.name);
     let info = state.runtime_info.lock().map_err(lock_err)?.clone();
     let terminal = resolve_target(state, TargetKind::Terminal, None)?;
     launcher::launch_with_command(
@@ -1073,14 +1152,7 @@ pub async fn run_server_action(
         ActionKind::Local => {
             check_local(&line).map_err(AppError::ActionRefused)?;
             let h = app.state::<AppState>();
-            let home =
-                std::env::var("USERPROFILE").unwrap_or_else(|_| "C:\\".into());
-            let stand_in = Project::new(
-                server.name.clone(),
-                home,
-                String::new(),
-                "Windows".into(),
-            );
+            let stand_in = home_stand_in(&server.name);
             let info = h.runtime_info.lock().map_err(lock_err)?.clone();
             let terminal = resolve_target(&h, TargetKind::Terminal, None)?;
             launcher::launch_with_command(&terminal, &stand_in, &info, &line)?;
@@ -1250,13 +1322,7 @@ pub fn open_server_folder(
         .map_err(lock_err)?
         .get(&id)
         .ok_or_else(|| AppError::ServerNotFound(id.clone()))?;
-    let home = std::env::var("USERPROFILE").unwrap_or_else(|_| "C:\\".into());
-    let stand_in = Project::new(
-        server.name.clone(),
-        home,
-        String::new(),
-        "Windows".into(),
-    );
+    let stand_in = home_stand_in(&server.name);
     let info = state.runtime_info.lock().map_err(lock_err)?.clone();
     let terminal = resolve_target(&state, TargetKind::Terminal, None)?;
     let line = server_folders::folder_terminal_command(&server, &path);
@@ -1285,16 +1351,9 @@ pub fn open_server_folder_in(
         "zed" => ("zed", server_folders::zed_remote_url(&server, &path)),
         other => return Err(AppError::TargetNotFound(other.to_string())),
     };
-    if !editors::is_on_path(exe) {
-        return Err(AppError::TargetNotInstalled(exe.to_string()));
-    }
-    // through cmd: code is code.cmd on windows
-    std::process::Command::new("cmd")
-        .quiet()
-        .shell_line(format!("/c {exe} {args}"))
-        .spawn()
-        .map_err(|e| AppError::LaunchFailed(format!("{exe}: {e}")))?;
-    Ok(())
+    // the launcher's own door: the platform shell, the template's quoting
+    // kept, and a missing code comes back as TargetNotInstalled
+    launcher::spawn_raw(exe, &args)
 }
 
 #[tauri::command]
@@ -1527,16 +1586,13 @@ pub fn reset_cache(
     Ok(())
 }
 
-/// Open the folder in Explorer. Works for WSL projects too: the UNC path is
-/// what Explorer wants. Boots the distro, but the user asked for that.
+/// Open the folder in the file manager: Explorer, or Finder with the
+/// folder selected in its parent. The command keeps its name; the frontend
+/// relabels the button, not the door. Works for WSL projects too: the UNC
+/// path is what Explorer wants. Boots the distro, but the user asked.
 #[tauri::command]
 pub fn reveal_in_explorer(path: String) -> Result<(), AppError> {
-    // explorer.exe exits 1 even on success, so don't wait on it
-    std::process::Command::new("explorer")
-        .arg(&path)
-        .spawn()
-        .map_err(|e| AppError::LaunchFailed(format!("explorer: {e}")))?;
-    Ok(())
+    reveal_path(&path, true)
 }
 
 /// The path as WSL sees it. The Windows path is just full_path, which the
@@ -1684,15 +1740,11 @@ pub fn get_app_data_dir(state: State<AppState>) -> String {
         .unwrap_or_default()
 }
 
-/// The same folder, in Explorer.
+/// The same folder, in the file manager.
 #[tauri::command]
 pub fn reveal_app_data_dir(state: State<AppState>) -> Result<(), AppError> {
     let dir = get_app_data_dir(state);
-    std::process::Command::new("explorer")
-        .arg(&dir)
-        .spawn()
-        .map_err(|e| AppError::LaunchFailed(format!("explorer: {e}")))?;
-    Ok(())
+    reveal_path(&dir, false)
 }
 
 /// Open a repo in the browser: the repo root, or one branch of it.
@@ -1725,22 +1777,6 @@ pub fn open_remote(
         None => root,
     };
     open_in_browser(&url)
-}
-
-/// Hand an https:// url to the default browser, and nothing else.
-///
-/// `start` is a cmd builtin, so it needs a shell. The empty "" is the window
-/// title argument, which start would otherwise steal the URL for.
-fn open_in_browser(url: &str) -> Result<(), AppError> {
-    if !url.starts_with("https://") {
-        return Err(AppError::BadUrl(url.to_string()));
-    }
-    std::process::Command::new("cmd")
-        .quiet()
-        .args(["/c", "start", "", url])
-        .spawn()
-        .map_err(|e| AppError::LaunchFailed(format!("{url}: {e}")))?;
-    Ok(())
 }
 
 // ── GitHub ──────────────────────────────────────────────────────────────
