@@ -584,6 +584,36 @@ pub fn run() {
             commands::get_last_project,
             commands::set_last_project,
         ])
-        .run(context)
-        .expect("error while running tauri application");
+        .build(context)
+        .expect("error while building tauri application")
+        .run(on_run_event);
+}
+
+// the app-level events, the ones not about a window. three ways out and
+// they all end in Exit: the tray's quit and the window's quit_app call
+// app.exit(0); on a mac cmd+q is the app menu's quit (tauri installs the
+// default menu there without a line of ours), a native terminate that tao
+// reports as Exit straight away, never through tray.rs. so the lock is
+// released here, the one point every path reaches; a lock left behind
+// costs the next launch a stale-lock probe. nothing handles ExitRequested,
+// so nothing can swallow it: close already hides, and cmd+q must mean quit.
+// reopen is the dock icon clicked while the app runs: with close-hides
+// there is no window to click, so this is how a mac user gets devgo back
+fn on_run_event(app: &tauri::AppHandle, event: tauri::RunEvent) {
+    match event {
+        #[cfg(target_os = "macos")]
+        tauri::RunEvent::Reopen { .. } => {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.show();
+                let _ = window.unminimize();
+                let _ = window.set_focus();
+            }
+        }
+        tauri::RunEvent::Exit => {
+            if let Some(state) = app.try_state::<AppState>() {
+                single_instance::release_lock(&state.lock_path);
+            }
+        }
+        _ => {}
+    }
 }
