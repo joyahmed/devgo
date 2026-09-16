@@ -1,4 +1,5 @@
 import { createContext, useContext, useState } from 'react';
+import Button from './Button';
 
 const ToastContext = createContext<ToastContextType>({
 	toasts: [],
@@ -16,12 +17,18 @@ const VARIANT: Record<ToastType, string> = {
 const ToastProvider = ({ children }: ToastProviderProps) => {
 	const [toasts, setToasts] = useState<Toast[]>([]);
 
-	const toast = (message: string, type: ToastType = 'error') => {
+	const dismiss = (id: number) =>
+		setToasts(prev => prev.filter(t => t.id !== id));
+
+	// one with an action stays twice as long: there is something to click
+	const toast = (
+		message: string,
+		type: ToastType = 'error',
+		action?: ToastAction
+	) => {
 		const id = ++toastId;
-		setToasts(prev => [...prev, { id, message, type }]);
-		setTimeout(() => {
-			setToasts(prev => prev.filter(t => t.id !== id));
-		}, 4000);
+		setToasts(prev => [...prev, { id, message, type, action }]);
+		setTimeout(() => dismiss(id), action ? 8000 : 4000);
 	};
 
 	return (
@@ -31,9 +38,21 @@ const ToastProvider = ({ children }: ToastProviderProps) => {
 				{toasts.map(t => (
 					<div
 						key={t.id}
-						className={`px-4 py-3 bg-bg-secondary border rounded-panel text-15 shadow-surface animate-fade-in ${VARIANT[t.type]}`}
+						className={`flex items-center gap-3 px-4 py-3 bg-bg-secondary border rounded-panel text-15 shadow-surface animate-fade-in ${VARIANT[t.type]}`}
 					>
-						{t.message}
+						<span>{t.message}</span>
+						{t.action && (
+							<Button
+								variant='ghost'
+								className='text-13 text-accent shrink-0'
+								onClick={() => {
+									t.action?.onClick();
+									dismiss(t.id);
+								}}
+							>
+								{t.action.label}
+							</Button>
+						)}
 					</div>
 				))}
 			</div>

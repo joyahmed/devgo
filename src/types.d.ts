@@ -1408,15 +1408,22 @@ interface TargetGroupProps {
 
 type ToastType = 'error' | 'success' | 'info';
 
+/// a button on the toast: one word, one click, the toast goes
+interface ToastAction {
+	label: string;
+	onClick: () => void;
+}
+
 interface Toast {
 	id: number;
 	message: string;
 	type: ToastType;
+	action?: ToastAction;
 }
 
 interface ToastContextType {
 	toasts: Toast[];
-	toast: (message: string, type?: ToastType) => void;
+	toast: (message: string, type?: ToastType, action?: ToastAction) => void;
 }
 
 interface ToastProviderProps {
