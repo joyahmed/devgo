@@ -664,6 +664,16 @@ interface GithubLaneProps {
 	jobs?: Map<string, CloneJob>;
 	/// right-click on a group heading: rename, move, delete
 	onGroupContextMenu?: (name: string, x: number, y: number) => void;
+	/// the + menu when the controls sit in the heading
+	onAddMenu?: (x: number, y: number) => void;
+	/// where the lane's box lives: in the heading on a narrow window, in
+	/// the command row over the lane on a wide one. a css hidden cannot
+	/// move a focused input, so the lane mounts it or does not
+	searchInHeading?: boolean;
+	searchRef?: React.Ref<HTMLInputElement>;
+	/// from the heading's box the arrows walk the github rows alone
+	onArrow?: (dir: 1 | -1) => void;
+	onEnter?: () => void;
 }
 
 /// recents, + Add repo, refresh: beside the github box on the search line
@@ -676,6 +686,22 @@ interface GithubControlsProps {
 	github: GithubState;
 	/// the + menu: clone repos / add repo by name / group repos, at (x, y)
 	onAddMenu: (x: number, y: number) => void;
+	/// the row form: + Add repo ▾ as a button in the + Workspace shape; the
+	/// heading keeps the bare glyphs, a heading being a line of text
+	labelled?: boolean;
+}
+
+/// a lane's sticky heading: the caps label in the lane's hue, the count
+/// line, and whatever sits at its right end
+interface LaneHeadingProps {
+	label: string;
+	tone: string;
+	line: string;
+	/// a collapsing lane: the arrow before the label, the click on the
+	/// whole heading
+	open?: boolean;
+	onToggle?: () => void;
+	children?: React.ReactNode;
 }
 
 interface RepoRowProps {
@@ -684,8 +710,10 @@ interface RepoRowProps {
 	localPath?: string;
 	/// a clone in flight or just finished, shown in the time's slot
 	job?: CloneJob;
-	/// under a group heading: one indent deeper
-	nested?: boolean;
+	/// the user: their own repos drop the owner/ prefix
+	login: string | null;
+	/// the row's place under its heading, for the zebra
+	i: number;
 	/// a group member the cache no longer carries
 	gone?: boolean;
 	onSelect: (repo: GithubRepo) => void;
@@ -1001,6 +1029,9 @@ interface ServersLaneProps {
 	onContextMenu: (server: Server, x: number, y: number) => void;
 	/// the heading's +: add a server, or import ~/.ssh/config
 	onAddMenu: (x: number, y: number) => void;
+	/// the box and the + in the heading, or in the command row over the
+	/// lane on a wide window
+	searchInHeading?: boolean;
 	/// a folder under an expanded server: the cursor by `${id}:${path}`
 	folderCursor: string | null;
 	onSelectFolder: (server: Server, folder: RemoteFolder) => void;
@@ -1020,6 +1051,8 @@ interface ServersLaneProps {
 interface ServerRowProps {
 	server: Server;
 	isCursor: boolean;
+	/// the row's place in the lane, for the zebra
+	i: number;
 	/// the last listing, if any: the dot and the folders
 	listing?: ServerListing;
 	/// an ask in flight
@@ -1184,6 +1217,7 @@ interface ProjectTreeHandle {
 /// one row the arrows can land on, in the order the tree renders them
 type NavRow =
 	| { kind: 'project'; project: Project }
+	| { kind: 'ws'; ws: string }
 	| { kind: 'repo'; repo: GithubRepo }
 	| { kind: 'server'; server: Server }
 	| { kind: 'folder'; server: Server; folder: RemoteFolder };
@@ -1244,7 +1278,42 @@ interface ProjectTreeProps {
 	showHints?: boolean;
 	/// the project that was just launched; its row plays the launch motion
 	launchingPath?: string | null;
+	/// what the machine calls its own disk: the local lane's label
+	localFs?: string;
+	/// the github lane's box and + when the command row does not hold them
+	onGithubAddMenu?: (x: number, y: number) => void;
+	githubSearchRef?: React.Ref<HTMLInputElement>;
+	githubSearchInHeading?: boolean;
+	serversSearchInHeading?: boolean;
 	ref?: React.Ref<ProjectTreeHandle>;
+}
+
+/// one filesystem lane: its workspaces in the store's order
+interface WorkspaceLaneProps {
+	label: string;
+	tone: string;
+	edge: string;
+	entries: [string, Project[]][];
+	children: React.ReactNode;
+}
+
+interface WorkspaceHeaderProps {
+	ws: string;
+	count: number;
+	fs: string;
+	state?: WorkspaceState;
+	open: boolean;
+	/// the keyboard cursor is on this header
+	cursor: boolean;
+	dragging: boolean;
+	/// the insertion line while a drag hovers this header
+	drop?: 'before' | 'after';
+	onPointerDown: (e: React.PointerEvent<HTMLDivElement>) => void;
+	onPointerMove: (e: React.PointerEvent<HTMLDivElement>) => void;
+	onPointerUp: (e: React.PointerEvent<HTMLDivElement>) => void;
+	onPointerCancel: (e: React.PointerEvent<HTMLDivElement>) => void;
+	onClick: () => void;
+	onContextMenu: (x: number, y: number) => void;
 }
 
 interface GitBadgeProps {
@@ -1277,6 +1346,10 @@ interface RowMetaProps {
 interface ProjectRowProps {
 	project: Project;
 	selected: boolean;
+	/// the row's place under its heading, for the zebra; a pinned row has
+	/// none and names its workspace instead
+	i?: number;
+	pinned?: boolean;
 	/// Served from cache — the row dims to say so.
 	stale?: boolean;
 	/// a github row has the cursor: the selection stays, dimmed, so the
