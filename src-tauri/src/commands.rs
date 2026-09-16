@@ -1,6 +1,5 @@
 use serde::Serialize;
 use std::collections::HashMap;
-use std::os::windows::process::CommandExt;
 use std::sync::Mutex;
 use tauri::{Manager, State};
 
@@ -15,7 +14,7 @@ use crate::services::git;
 use crate::services::github::{self, GhStatus, GithubCache};
 use crate::services::groups::{self, GithubGroup};
 use crate::services::launcher;
-use crate::services::platform::{wsl, RuntimeInfo};
+use crate::services::platform::{wsl, Quiet, RuntimeInfo};
 use crate::services::scanner::{ScanOutcome, UnavailableReason};
 use crate::services::server_folders::{
     self, ListingCache, RemoteFolder, ServerListing,
@@ -1240,8 +1239,8 @@ pub fn open_server_folder_in(
     }
     // through cmd: code is code.cmd on windows
     std::process::Command::new("cmd")
-        .creation_flags(0x08000000)
-        .raw_arg(format!("/c {exe} {args}"))
+        .quiet()
+        .shell_line(format!("/c {exe} {args}"))
         .spawn()
         .map_err(|e| AppError::LaunchFailed(format!("{exe}: {e}")))?;
     Ok(())
@@ -1686,7 +1685,7 @@ fn open_in_browser(url: &str) -> Result<(), AppError> {
         return Err(AppError::BadUrl(url.to_string()));
     }
     std::process::Command::new("cmd")
-        .creation_flags(0x08000000)
+        .quiet()
         .args(["/c", "start", "", url])
         .spawn()
         .map_err(|e| AppError::LaunchFailed(format!("{url}: {e}")))?;
