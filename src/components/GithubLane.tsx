@@ -50,6 +50,19 @@ const emptyLine = (status: GhStatus | null): string =>
 			? 'Install the GitHub CLI, log in with gh auth login, then refresh.'
 			: 'Log in with gh auth login, then refresh.';
 
+// the heading's word on the queue: the row's own line is scrolled away
+// in a lane of hundreds. nothing while nothing runs
+const jobsLine = (jobs?: Map<string, CloneJob>): string | null => {
+	if (!jobs) return null;
+	const all = [...jobs.values()];
+	const running = all.find(j => j.status === 'running');
+	if (!running) return null;
+	const queued = all.filter(j => j.status === 'queued').length;
+	const name = running.full_name.split('/').pop() ?? running.full_name;
+	const pct = running.percent !== null ? ` · ${running.percent} %` : '…';
+	return `Cloning ${name}${pct}${queued > 0 ? ` · ${queued} queued` : ''}`;
+};
+
 // the one moment the row has something more current to say than the
 // time: a clone in flight takes the time's slot
 const jobLine = (job: CloneJob): string =>
@@ -228,6 +241,7 @@ const GithubLane = ({
 	const login = payload?.cache.login ?? status?.login ?? null;
 	const total = payload?.cache.repos.length ?? 0;
 	const local = payload?.local ?? {};
+	const cloning = jobsLine(jobs);
 	// the ungrouped tail: the footer line speaks for it
 	const tail = sections?.[sections.length - 1];
 	// the sections on screen: the tail only while recents is on
@@ -288,6 +302,14 @@ const GithubLane = ({
 					onToggle: toggleOpen
 				}}
 			>
+				{cloning && (
+					<span
+						className='text-11 text-accent truncate'
+						title='A clone in progress; the queue after it'
+					>
+						{cloning}
+					</span>
+				)}
 				{login && (
 					<span
 						className='text-11 text-text-muted font-mono shrink-0'
