@@ -1011,7 +1011,24 @@ const AppInner = () => {
 		'separator',
 		{ label: 'Copy path', onClick: () => copyText(root, 'path') }
 	];
+	// the same flag settings holds: user@host and the port on every row,
+	// or the name alone. first, under its own heading, on the row and on
+	// the lane's heading
+	const detailsEntries: MenuEntry[] = [
+		{ heading: 'Lane' },
+		{
+			label: servers.showDetails
+				? 'Hide connection details'
+				: 'Show connection details',
+			onClick: () =>
+				servers
+					.setShowDetails(!servers.showDetails)
+					.catch(e => toast(showError(e)))
+		},
+		'separator'
+	];
 	const buildServerMenu = (s: Server): MenuEntry[] => [
+		...detailsEntries,
 		{ label: 'Open terminal', hint: 'Enter', onClick: () => openServer(s) },
 		{
 			label: 'List folders & apps',
