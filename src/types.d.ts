@@ -633,6 +633,11 @@ interface GithubLaneProps {
 }
 
 /// recents, + Add repo, refresh: beside the github box on the search line
+interface RefreshIconProps {
+	spinning?: boolean;
+	size?: number;
+}
+
 interface GithubControlsProps {
 	github: GithubState;
 	/// the + menu: clone repos / add repo by name / group repos, at (x, y)

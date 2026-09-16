@@ -1,21 +1,5 @@
 import Button from './Button';
-
-const Refresh = ({ spinning }: { spinning: boolean }) => (
-	<svg
-		width='13'
-		height='13'
-		viewBox='0 0 24 24'
-		fill='none'
-		stroke='currentColor'
-		strokeWidth='2'
-		strokeLinecap='round'
-		strokeLinejoin='round'
-		className={spinning ? 'animate-spin' : ''}
-	>
-		<path d='M21 12a9 9 0 1 1-2.64-6.36' />
-		<polyline points='21 3 21 9 15 9' />
-	</svg>
-);
+import RefreshIcon from './RefreshIcon';
 
 // the github rows' three controls, on the search line beside their box
 // (Joy: "we could put them on the same line of the search, and the +
@@ -72,7 +56,7 @@ const GithubControls = ({ github, onAddMenu }: GithubControlsProps) => {
 					disabled={github.refreshing}
 					onClick={github.refresh}
 				>
-					<Refresh spinning={github.refreshing} />
+					<RefreshIcon {...{ spinning: github.refreshing, size: 13 }} />
 				</Button>
 			)}
 		</>

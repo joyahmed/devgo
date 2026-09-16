@@ -16,6 +16,7 @@ import GithubControls from './components/GithubControls';
 import NameDialog from './components/NameDialog';
 import Onboarding from './components/Onboarding';
 import ProjectTree from './components/ProjectTree';
+import RefreshIcon from './components/RefreshIcon';
 import ScanPicker from './components/ScanPicker';
 import SearchBox from './components/SearchBox';
 import ServerForm from './components/ServerForm';
@@ -1993,19 +1994,7 @@ const AppInner = () => {
 								onClick={handleRefresh}
 								title={`Refresh (${prettyKeys(shortcutFor('refresh'))})`}
 							>
-								<svg
-									width='15'
-									height='15'
-									viewBox='0 0 24 24'
-									fill='none'
-									stroke='currentColor'
-									strokeWidth='2'
-									strokeLinecap='round'
-									strokeLinejoin='round'
-								>
-									<path d='M21 12a9 9 0 1 1-2.64-6.36' />
-									<polyline points='21 3 21 9 15 9' />
-								</svg>
+								<RefreshIcon />
 							</Button>
 							</div>
 						</div>
