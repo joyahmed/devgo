@@ -1,11 +1,9 @@
-# Tauri + React + Typescript
+# DevGo
 
-This template should help get you started developing with Tauri, React and Typescript in Vite.
+A launcher for a developer's projects. Point it at the folders that hold them, on every filesystem the machine can see, and it lists every project, finds one in a few keystrokes, and opens it in the editor, terminal or agent you already use. It is not an editor, a terminal or a git client. It opens the door and gets out of the way.
 
-## Recommended IDE Setup
+On this Windows machine that means the local drives and the WSL distros. On a Mac it means the local disk. Beside those, the GitHub account you are logged into and the servers in your ssh config get a lane of their own.
 
-- [VS Code](https://code.visualstudio.com/) + [Tauri](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode) + [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer)
+<!-- screenshots: docs/screenshots/{windows,mac} -->
 
-## macOS
-
-`bun run tauri build` gives `src-tauri/target/release/bundle/macos/devgo.app` and a `.dmg` beside it. The app is unsigned: on macOS 15+ open it once, then System Settings › Privacy & Security › *Open Anyway*; older, right-click › Open; if it says "is damaged": `xattr -cr /Applications/devgo.app`. Copied straight out of the build tree it needs none of that on the machine that built it.
+Tauri 2, Rust on the back, React 19 and Tailwind on the front, bun for the scripts.
