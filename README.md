@@ -145,6 +145,14 @@ bun tauri build    # release; the bundles land in src-tauri/target/release/bundl
 - **The Mac's PATH.** An app launched from the Dock inherits `launchd`'s four directories, not your shell's PATH. DevGo asks your login shell for its PATH once and hands it to every child, so `code`, `tmux`, `gh` and the nvm node are found where your terminal finds them.
 - **Nothing runs on the UI thread that can block**: `gh`, `git`, `ssh` and the scan are spawned quietly (no console window on Windows) and reported when they return.
 
+## 🗺️ Next
+
+- **Set up this box.** The app will carry the `server/` scripts and install them on a server from its menu, so a box's apps and actions need no copy by hand.
+- **Linux.** The crate builds for it; a tested Linux build once it has been run there.
+- **More server actions** in the example set, as people ask for them.
+
+Issues are welcome.
+
 ## 📄 Licence
 
 MIT — see [LICENSE](LICENSE).
