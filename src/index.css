@@ -46,6 +46,10 @@
 	--color-accent: #22d3ee;
 	--color-accent-hover: #67e8f9;
 	--color-danger: #fb7185;
+	/* the red as a fill: the remove buttons. derived below like the six
+	   surfaces, so it follows the knob; danger itself stays solid, it is
+	   ink and an edge too */
+	--color-danger-bg: #fb7185;
 	--color-border: #161f33;
 	--color-border-strong: #5f7fb5;
 	/* neon's halo (themes.ts glow); the other palettes set it to none */
@@ -159,7 +163,8 @@ body,
    follows the slider; text, icons, borders and the accent stay solid, the
    themes' hexes the contrast gate keeps measuring. a knob that only
    reached the ground did almost nothing: the cards covered it at their
-   own alpha */
+   own alpha. the danger fill is the seventh: a remove button that stayed
+   opaque on a see-through window was the one solid block on it */
 :root {
 	--ground-alpha: 1;
 	--solid-bg-primary: #05070d;
@@ -168,6 +173,7 @@ body,
 	--solid-bg-hover: #131f38;
 	--solid-bg-selected: #0f2f57;
 	--solid-bg-raised: #243c66;
+	--solid-danger-bg: #fb7185;
 	--color-bg-primary: color-mix(
 		in srgb,
 		var(--solid-bg-primary) calc(var(--ground-alpha) * 100%),
@@ -196,6 +202,11 @@ body,
 	--color-bg-raised: color-mix(
 		in srgb,
 		var(--solid-bg-raised) calc(var(--ground-alpha) * 100%),
+		transparent
+	);
+	--color-danger-bg: color-mix(
+		in srgb,
+		var(--solid-danger-bg) calc(var(--ground-alpha) * 100%),
 		transparent
 	);
 }

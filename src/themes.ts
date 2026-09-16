@@ -164,6 +164,8 @@ export const applyTheme = (id: string) => {
 		const name = key.startsWith('bg-') ? `--solid-${key}` : `--color-${key}`;
 		root.style.setProperty(name, theme.colors[key]);
 	}
+	// the red as a fill is derived the same way, from the palette's danger
+	root.style.setProperty('--solid-danger-bg', theme.colors.danger);
 };
 
 // the variables are live: the whole window recolours as they change

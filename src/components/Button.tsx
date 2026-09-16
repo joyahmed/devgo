@@ -9,7 +9,7 @@ const VARIANT: Record<ButtonVariant, string> = {
 	secondary:
 		'px-5 py-2 text-13 border border-border-strong bg-bg-panel text-text-secondary hover:not-disabled:bg-bg-hover hover:not-disabled:text-text-primary disabled:border-border disabled:text-text-muted',
 	danger:
-		'px-5 py-2 text-13 border border-danger bg-danger text-white hover:not-disabled:bg-danger/80 disabled:bg-bg-panel disabled:border-border disabled:text-text-muted',
+		'px-5 py-2 text-13 border border-danger bg-danger-bg text-white hover:not-disabled:bg-danger-bg/80 disabled:bg-bg-panel disabled:border-border disabled:text-text-muted',
 	// no size of its own: a ghost is a glyph or a word inside something that
 	// already has one, and a size here won every text-11 a caller passed
 	ghost:
