@@ -137,9 +137,24 @@ fn scan_flat(path: &str, ignore: &[String]) -> ScanOutcome {
 
     let fs_type = detect_file_system(path).to_string();
 
+    // a partial listing is not a scan. opening read_dir is one request and
+    // every entry after it is another; over \wsl.localhost (9p, the
+    // request that cold-boots the distro) an entry can fail while the
+    // server is still coming up. entry.ok()? dropped it and returned the
+    // rest as Scanned, a shorter list the cache then held as the truth on
+    // every stopped-distro pass. an entry error is a failed pass: the last
+    // complete list stays and the header says cached, not a smaller number
+    let entries: Vec<std::fs::DirEntry> =
+        match entries.collect::<Result<_, _>>() {
+            Ok(entries) => entries,
+            Err(_) => {
+                return ScanOutcome::Unavailable(UnavailableReason::NotMounted)
+            }
+        };
+
     let mut projects: Vec<Project> = entries
+        .into_iter()
         .filter_map(|entry| {
-            let entry = entry.ok()?;
             let file_type = entry.file_type().ok()?;
             if file_type.is_dir() {
                 let name = entry.file_name().to_string_lossy().to_string();
