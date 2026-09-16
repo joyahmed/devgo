@@ -2,6 +2,22 @@ import { prettyKeys, shortcutFor } from '../shortcuts';
 import Button from './Button';
 import Kbd from './Kbd';
 
+// the same fact TargetManager shows as a badge, before the click. an
+// agent is a command on one side or the other; an editor or a terminal
+// is blocked on wsl only when it has no wsl form
+const choiceOf = (t: LaunchTarget, isWsl: boolean): TargetChoice => ({
+	id: t.id,
+	name: t.name,
+	blocked:
+		t.kind === 'agent'
+			? (isWsl ? !t.wsl_executable : !t.executable)
+				? `${t.name} is not installed on this project's side`
+				: undefined
+			: isWsl && !t.wsl_args_template
+				? `${t.name} has no WSL configuration, so it cannot open this project`
+				: undefined
+});
+
 // every target visible, none behind a chevron. a split button was built
 // first and rejected on sight: a launcher has three to six targets, and
 // hiding four behind a dropdown saves space the row already has
@@ -9,7 +25,6 @@ const TargetGroup = ({
 	label,
 	items,
 	defaultId,
-	isWsl,
 	hasSelection,
 	shortcut,
 	onPick,
@@ -20,30 +35,17 @@ const TargetGroup = ({
 			{label}
 		</span>
 		{items.map(t => {
-			// the same fact TargetManager shows as a badge, before the click. an
-			// agent is a command on one side or the other; an editor or a
-			// terminal is blocked on wsl only when it has no wsl form
-			const blocked =
-				t.kind === 'agent'
-					? isWsl
-						? !t.wsl_executable
-						: !t.executable
-					: isWsl && !t.wsl_args_template;
 			const isDefault = t.id === defaultId;
-			const title = blocked
-				? t.kind === 'agent'
-					? `${t.name} is not installed on this project's side`
-					: `${t.name} has no WSL configuration, so it cannot open this project`
-				: isDefault
-					? `${t.name} — ${shortcut}`
-					: t.name;
+			const title =
+				t.blocked ??
+				(isDefault ? `${t.title ?? t.name} — ${shortcut}` : (t.title ?? t.name));
 			return (
 				<Button
 					key={t.id}
 					variant='target'
 					className={`shrink-0 ${isDefault && pulse ? 'animate-pulse-once' : ''}`}
 					aria-current={isDefault ? 'true' : undefined}
-					disabled={!hasSelection || blocked}
+					disabled={!hasSelection || Boolean(t.blocked)}
 					// the default launches with no id, so the Rust fallback chain
 					// stays the one place that decides what default means
 					onClick={() => onPick(isDefault ? undefined : t.id)}
@@ -79,39 +81,63 @@ const StatusBar = ({
 	onOpenShortcuts,
 	onOpenHelp,
 	reattach = false,
-	pulse = null
+	pulse = null,
+	server = null,
+	serverHosts = [],
+	onServerHost,
+	onServerTmux
 }: StatusBarProps) => {
-	const groups = [
-		{
-			label: 'Editor',
-			items: editors,
-			defaultId: defaults.editor,
-			shortcut: prettyKeys(shortcutFor('openEditor')),
-			onPick: onEditor,
-			pulse: pulse === 'editor'
-		},
-		{
-			label: reattach ? 'Reattach' : 'Terminal',
-			items: terminals,
-			defaultId: defaults.terminal,
-			shortcut: prettyKeys(shortcutFor('openTerminal')),
-			onPick: onTerminal,
-			pulse: pulse === 'terminal'
-		},
-		// the footer must not grow an empty group
-		...(agents.length > 0
-			? [
-					{
-						label: 'Agent',
-						items: agents,
-						defaultId: defaults.agent,
-						shortcut: prettyKeys(shortcutFor('openAgent')),
-						onPick: onAgent,
-						pulse: pulse === 'agent'
-					}
-				]
-			: [])
-	];
+	const choices = (list: LaunchTarget[]) =>
+		list.map(t => choiceOf(t, selectionIsWsl));
+	const terminalKey = prettyKeys(shortcutFor('openTerminal'));
+	// a server row: one group, its local hosts, and the terminal key opens
+	// the default one. the remote half is the chip beside it
+	const groups = server
+		? [
+				{
+					label: 'Terminal',
+					items: serverHosts,
+					defaultId: defaults.terminal,
+					shortcut: terminalKey,
+					onPick: (id?: string) =>
+						onServerHost?.(
+							serverHosts.find(h => h.id === (id ?? defaults.terminal)) ??
+								serverHosts[0]
+						),
+					pulse: pulse === 'terminal'
+				}
+			]
+		: [
+				{
+					label: 'Editor',
+					items: choices(editors),
+					defaultId: defaults.editor,
+					shortcut: prettyKeys(shortcutFor('openEditor')),
+					onPick: onEditor,
+					pulse: pulse === 'editor'
+				},
+				{
+					label: reattach ? 'Reattach' : 'Terminal',
+					items: choices(terminals),
+					defaultId: defaults.terminal,
+					shortcut: terminalKey,
+					onPick: onTerminal,
+					pulse: pulse === 'terminal'
+				},
+				// the footer must not grow an empty group
+				...(agents.length > 0
+					? [
+							{
+								label: 'Agent',
+								items: choices(agents),
+								defaultId: defaults.agent,
+								shortcut: prettyKeys(shortcutFor('openAgent')),
+								onPick: onAgent,
+								pulse: pulse === 'agent'
+							}
+						]
+					: [])
+			];
 	const both = prettyKeys(shortcutFor('openBoth'));
 	// the frequent keys: the buttons are the hints for the launch verbs,
 	// not for move, open, pin and search, which have no button anywhere.
@@ -156,19 +182,40 @@ const StatusBar = ({
 			{groups.map(g => (
 				<TargetGroup
 					key={g.label}
-					{...{ ...g, isWsl: selectionIsWsl, hasSelection }}
+					{...{ ...g, hasSelection: server ? true : hasSelection }}
 				/>
 			))}
-			<Button
-				variant='target'
-				className={`shrink-0 ${pulse === 'both' ? 'animate-pulse-once' : ''}`}
-				disabled={!hasSelection}
-				onClick={onBoth}
-				title={`Open both — ${both}`}
-			>
-				<span className='text-11 leading-none'>Open both</span>
-				<Kbd>{both}</Kbd>
-			</Button>
+			{server ? (
+				// the remote half: a tmux session on the box, or its plain login
+				// shell. the server's own flag, so it holds across launches
+				<Button
+					variant='target'
+					className='shrink-0'
+					aria-pressed={server.tmux}
+					onClick={() => onServerTmux?.(server, !server.tmux)}
+					title={
+						server.tmux
+							? `Attaches a tmux session on ${server.name}. Click for a plain login shell`
+							: `A plain login shell on ${server.name}. Click to attach a tmux session there`
+					}
+				>
+					<span className='text-11 leading-none'>tmux on the box</span>
+					<span className='text-11 leading-none text-text-muted'>
+						{server.tmux ? 'on' : 'off'}
+					</span>
+				</Button>
+			) : (
+				<Button
+					variant='target'
+					className={`shrink-0 ${pulse === 'both' ? 'animate-pulse-once' : ''}`}
+					disabled={!hasSelection}
+					onClick={onBoth}
+					title={`Open both — ${both}`}
+				>
+					<span className='text-11 leading-none'>Open both</span>
+					<Kbd>{both}</Kbd>
+				</Button>
+			)}
 			{/* the key chips, a rule, then the doors; without them the
 			    discovery surfaces are themselves undiscoverable */}
 			<div className='flex items-center gap-4 shrink-0 ml-auto'>

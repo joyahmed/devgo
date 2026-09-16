@@ -1422,10 +1422,9 @@ interface ProjectRowProps {
 
 interface TargetGroupProps {
 	label: string;
-	items: LaunchTarget[];
+	/// blocked ones are disabled with their reason, not hidden
+	items: TargetChoice[];
 	defaultId?: string;
-	/// a target with no WSL form is disabled for a WSL selection, not hidden
-	isWsl: boolean;
 	hasSelection: boolean;
 	shortcut: string;
 	onPick: (id?: string) => void;
