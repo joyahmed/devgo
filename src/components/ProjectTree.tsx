@@ -64,8 +64,14 @@ const REASON_LABEL: Record<UnavailableReason, string> = {
 
 const StatusPill = ({ state }: StatusPillProps) => {
 	if (!state || state.status === 'live') return null;
-	const label = state.reason ? REASON_LABEL[state.reason] : 'unavailable';
 	const cached = state.status === 'cached';
+	// the cache first paint has no reason: the scan is still out, the
+	// workspace is not unavailable
+	const label = state.reason
+		? REASON_LABEL[state.reason]
+		: cached
+			? 'scanning'
+			: 'unavailable';
 	return (
 		<span
 			className={`${pill} ${cached ? 'text-text-muted' : 'text-danger'}`}
