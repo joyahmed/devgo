@@ -99,6 +99,10 @@ pub enum AppError {
     #[error("The order sent does not match the stored list ({0} sent, {1} stored). Refresh and try again")]
     WorkspaceOrderMismatch(usize, usize),
 
+    // a refresh asked for one workspace the store no longer lists
+    #[error("{0} is no longer in the list")]
+    WorkspaceNotFound(String),
+
     #[error("{0} overlaps the workspace {1}. Nested workspaces scan the same folders twice, so remove one before adding the other")]
     WorkspaceOverlaps(String, String),
 }

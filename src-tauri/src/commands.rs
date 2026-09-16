@@ -182,14 +182,33 @@ pub fn reorder_workspaces(
 /// 2. Nothing here may start a WSL distro unless `allow_boot` is set, which only
 ///    an explicit user refresh does. Reading a \\wsl.localhost\ path cold-boots
 ///    the VM, so a stopped distro is served from cache instead.
+///
+/// `only` narrows the pass to one workspace: that one is read live and
+/// stored, and the payload holds its projects alone for the frontend to
+/// merge over the list it has.
 fn collect_projects(
     state: &AppState,
     allow_boot: bool,
+    only: Option<&str>,
 ) -> Result<ProjectsPayload, AppError> {
-    let workspaces = state.workspace_store.lock().map_err(lock_err)?.list();
+    let all = state.workspace_store.lock().map_err(lock_err)?.list();
 
     let mut cache = state.cache_store.lock().map_err(lock_err)?;
-    cache.retain(&workspaces)?;
+    // pruned against the whole store, never the narrowed list, or one
+    // refresh would evict every other workspace's cache
+    cache.retain(&all)?;
+
+    let workspaces: Vec<String> = match only {
+        Some(one) => {
+            let found: Vec<String> =
+                all.iter().filter(|w| w.as_str() == one).cloned().collect();
+            if found.is_empty() {
+                return Err(AppError::WorkspaceNotFound(one.to_string()));
+            }
+            found
+        }
+        None => all,
+    };
 
     // One wsl.exe call for the whole pass, not one per workspace. Skipped
     // entirely when no workspace is WSL-native.
@@ -378,7 +397,7 @@ pub async fn get_projects(
     app: tauri::AppHandle,
 ) -> Result<ProjectsPayload, AppError> {
     let payload =
-        off_main(&app, |state| collect_projects(state, false)).await?;
+        off_main(&app, |state| collect_projects(state, false, None)).await?;
     crate::tray::refresh(&app);
     Ok(payload)
 }
@@ -401,7 +420,7 @@ pub async fn refresh_projects(
                 .set_cached_runtime(fresh)
                 .map_err(AppError::Lock)?;
         }
-        collect_projects(state, force)
+        collect_projects(state, force, None)
     })
     .await?;
     crate::tray::refresh(&app);
