@@ -995,6 +995,27 @@ const ServersPanel = ({
 					))}
 				</div>
 			</div>
+
+			<div>
+				<h4 className={heading}>Show connection details in the lane</h4>
+				<p className='text-13 text-text-muted mb-2'>
+					Off, a server row is its name. On, the row also prints user@host
+					and the port, as the row menu's <em>Show connection details</em>{' '}
+					does.
+				</p>
+				<div className='flex items-center gap-2'>
+					{HINT_MODES.map(m => (
+						<Button
+							key={m.label}
+							variant='target'
+							aria-current={servers.showDetails === m.value ? 'true' : undefined}
+							onClick={() => attempt(servers.setShowDetails(m.value))}
+						>
+							{m.label}
+						</Button>
+					))}
+				</div>
+			</div>
 		</div>
 	);
 };
