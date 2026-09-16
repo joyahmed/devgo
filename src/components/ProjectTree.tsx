@@ -3,15 +3,20 @@ import { lastSegment } from '../paths';
 import { isTypingTarget, matches, shortcutFor } from '../shortcuts';
 import Button from './Button';
 import GithubLane from './GithubLane';
+import LaneHeading from './LaneHeading';
 import ServersLane from './ServersLane';
-import { card, col, fsEdge, fsTone } from './rowStyles';
-
-const COLUMNS = [
-	{ label: 'Workspace', className: '' },
-	{ label: 'Location', className: '' },
-	{ label: 'File System', className: '' },
-	{ label: 'Count', className: 'text-right' }
-];
+import {
+	card,
+	fsEdge,
+	fsTone,
+	laneBody,
+	laneGrid,
+	nameCell,
+	row,
+	rowFlat,
+	rowIndented,
+	zebra
+} from './rowStyles';
 
 // the collapse set is the user's, saved; search is a view on top of it
 const COLLAPSED_KEY = 'devgo.collapsed';
@@ -228,10 +233,14 @@ const RowMeta = ({
 );
 
 /// One project row — the same element whether it sits in the Pinned strip or
-/// under its workspace header; only the dimming differs.
+/// under its workspace header; a pinned row names its workspace, a row
+/// under a heading inherits it. no workspace and no file-system cell on
+/// a row under its heading: the heading states both, once
 const ProjectRow = ({
 	project,
 	selected,
+	i = 0,
+	pinned,
 	stale,
 	quiet,
 	showHints,
@@ -247,14 +256,14 @@ const ProjectRow = ({
 	onContextMenu
 }: ProjectRowProps) => (
 	<div
-		className={`${col} group px-3 py-1.5 select-none transition-colors ${
-			stale ? 'opacity-60' : ''
-		} ${launching ? 'animate-launch' : ''} ${
+		className={`${row} group py-1.5 ${stale ? 'opacity-60' : ''} ${
+			launching ? 'animate-launch' : ''
+		} ${
 			selected
 				? quiet
 					? 'bg-bg-selected/40 text-text-primary'
 					: 'bg-bg-selected text-text-primary shadow-[var(--color-glow)]'
-				: 'text-text-secondary hover:bg-bg-hover/50'
+				: `text-text-secondary hover:bg-bg-hover/50 ${pinned ? '' : zebra(i)}`
 		}`}
 		// select first so the menu and the keyboard agree on the row
 		onContextMenu={e => {
@@ -263,26 +272,124 @@ const ProjectRow = ({
 			onContextMenu?.(project, e.clientX, e.clientY);
 		}}
 	>
-		<div className='truncate text-text-muted' title={project.workspace}>
-			{lastSegment(project.workspace)}
-		</div>
-		{/* the name is the click target, not the row (joy: "the whole line
-		    being clickable makes it a bit inconvenient"): on a 2400px row a
-		    click meant for the empty middle, or a double-click near a chip,
-		    selected or launched a project. the row keeps hover and right-click */}
 		<div
-			className={`font-medium font-mono truncate cursor-pointer ${selected ? 'text-text-primary' : ''}`}
-			onClick={() => onSelect(project)}
-			onDoubleClick={() => onDoubleClick(project)}
+			className={`${rowIndented} ${pinned ? 'border-l-accent/60' : 'border-l-border'}`}
 		>
-			{project.name}
+			{/* the name is the click target, not the row (joy: "the whole line
+			    being clickable makes it a bit inconvenient"): on a wide row a
+			    click meant for the empty middle, or a double-click near a chip,
+			    selected or launched a project. the row keeps hover and right-click */}
+			<div
+				className={`${nameCell} cursor-pointer ${selected ? 'text-text-primary' : ''}`}
+				onClick={() => onSelect(project)}
+				onDoubleClick={() => onDoubleClick(project)}
+			>
+				{project.name}
+			</div>
+			{/* a pinned row floats above the lanes, so unlike a row under its
+			    heading it has to name its own home: a suffix, not a column */}
+			{pinned && (
+				<>
+					<span
+						className='text-text-muted text-13 truncate shrink-0'
+						title={project.workspace}
+					>
+						{lastSegment(project.workspace)}
+					</span>
+					<FsCell {...{ fs: project.file_system, className: 'text-13 shrink-0' }} />
+				</>
+			)}
+			<RowMeta
+				{...{ project, showHints, rank, git, tech, live, onTogglePin, onOpenBranches }}
+			/>
 		</div>
-		<FsCell fs={project.file_system} />
-		<RowMeta
-			{...{ project, showHints, rank, git, tech, live, onTogglePin, onOpenBranches }}
-		/>
 	</div>
 );
+
+/// the workspace header: the handle, open or collapsed, and the only
+/// thing that accepts a drop. one flex line: arrow, name, state, the
+/// path, the warning when it is a share, the count
+const WorkspaceHeader = ({
+	ws,
+	count,
+	fs,
+	state,
+	open,
+	cursor,
+	dragging,
+	drop,
+	onPointerDown,
+	onPointerMove,
+	onPointerUp,
+	onPointerCancel,
+	onClick,
+	onContextMenu
+}: WorkspaceHeaderProps) => (
+	<div
+		className={`${row} relative py-2 cursor-pointer ${
+			cursor ? 'bg-bg-selected/50' : 'hover:bg-bg-hover/50'
+		} ${dragging ? 'opacity-40' : ''}`}
+		data-ws-header={ws}
+		{...{ onPointerDown, onPointerMove, onPointerUp, onPointerCancel, onClick }}
+		onContextMenu={e => {
+			e.preventDefault();
+			onContextMenu(e.clientX, e.clientY);
+		}}
+		title={ws}
+	>
+		{drop && (
+			<div
+				className={`absolute left-4 right-4 h-0.5 bg-accent rounded-control pointer-events-none ${drop === 'after' ? 'bottom-0' : 'top-0'}`}
+			/>
+		)}
+		<div className={rowFlat}>
+			<div className='flex items-center gap-2 text-text-primary min-w-0'>
+				<span
+					className={`text-11 shrink-0 ${open ? 'text-accent' : 'text-text-muted'}`}
+				>
+					{open ? '▼' : '▶'}
+				</span>
+				{/* one step under the rows: a workspace header is a label for
+				    the rows, not a row */}
+				<span className='truncate text-13 font-semibold text-text-primary'>
+					{lastSegment(ws)}
+				</span>
+				<StatusPill {...{ state }} />
+			</div>
+			{/* text-primary, not muted (joy: "paths are too dimmed"): at 11px a
+			    grey two steps down reads as disabled. the hierarchy against the
+			    bold name comes from weight and size */}
+			<div className='text-text-primary truncate min-w-0 flex-1 text-11' title={ws}>
+				{ws}
+			</div>
+			{/* the lane heading already says which file system; only a share
+			    still has something to add, its warning */}
+			{fs === 'Network' && (
+				<FsCell {...{ fs, className: 'font-medium shrink-0 text-11' }} />
+			)}
+			<div className='text-11 text-text-muted font-mono shrink-0 w-8 text-right'>
+				{count}
+			</div>
+		</div>
+	</div>
+);
+
+/// a filesystem lane: the card, its sticky heading with the counts, and
+/// its workspaces scrolling under it
+const WorkspaceLane = ({ label, tone, edge, entries, children }: WorkspaceLaneProps) => {
+	const projects = entries.reduce((n, [, ps]) => n + ps.length, 0);
+	const line = `${entries.length} ${entries.length === 1 ? 'workspace' : 'workspaces'} · ${projects} ${projects === 1 ? 'project' : 'projects'}`;
+	return (
+		<div className={`${card} ${edge}`}>
+			<LaneHeading {...{ label, tone, line }} />
+			<div className={laneBody}>{children}</div>
+		</div>
+	);
+};
+
+/// which lane a workspace lives in. two, not three: a share is a local
+/// path with a warning, so it sits on the local side and keeps its cell
+const laneOf = (fs: string) => (fs === 'WSL' ? 'WSL' : 'local');
 
 const ProjectTree = ({
 	projects,
@@ -320,9 +427,18 @@ const ProjectTree = ({
 	onRootContextMenu,
 	showHints,
 	launchingPath,
+	localFs,
+	onGithubAddMenu,
+	githubSearchRef,
+	githubSearchInHeading = true,
+	serversSearchInHeading = true,
 	ref
 }: ProjectTreeProps) => {
 	const [collapsed, setCollapsed] = useState<Set<string>>(loadCollapsed);
+	// a workspace header under the cursor: kept beside selected (still a
+	// project, for launching) so a collapsed workspace is reachable by
+	// arrow without inventing a fake selection
+	const [wsCursor, setWsCursor] = useState<string | null>(null);
 	// a repo row under the cursor: not a Project, so never selected, but
 	// reachable by arrow. beside the selection, and any change of the
 	// selection drops it, so the two are never lit at once
@@ -331,11 +447,13 @@ const ProjectTree = ({
 	// server by `${id}:${path}`
 	const [serverCursor, setServerCursor] = useState<string | null>(null);
 	const [folderCursor, setFolderCursor] = useState<string | null>(null);
-	useEffect(() => {
+	const clearCursors = () => {
+		setWsCursor(null);
 		setRepoCursor(null);
 		setServerCursor(null);
 		setFolderCursor(null);
-	}, [selected]);
+	};
+	useEffect(clearCursors, [selected]);
 	const folderKey = (s: Server, f: RemoteFolder) => `${s.id}:${f.path}`;
 	const searching = query.trim().length > 0;
 	const isCollapsed = (ws: string) => !searching && collapsed.has(ws);
@@ -356,8 +474,24 @@ const ProjectTree = ({
 	const at = (ws: string) => rank.get(ws) ?? Number.MAX_SAFE_INTEGER;
 	const entries = [...grouped].sort(([a], [b]) => at(a) - at(b));
 
+	// the workspaces by lane, wsl then local, the order the lanes render:
+	// the keyboard walks the same sequence the eye does, down the first
+	// lane and then down the second
+	const lanes: Record<'WSL' | 'local', [string, Project[]][]> = {
+		WSL: [],
+		local: []
+	};
+	for (const entry of entries) {
+		lanes[laneOf(entry[1][0]?.file_system ?? 'Windows')].push(entry);
+	}
+	const laneOfWs = (ws: string) =>
+		laneOf(grouped.get(ws)?.[0]?.file_system ?? 'Windows');
+	const laneOrder = [...lanes.WSL, ...lanes.local];
+
 	// move ws to sit before or after target and hand back the whole order:
-	// the store can check a permutation, it cannot check a move
+	// the store can check a permutation, it cannot check a move. both live
+	// in one lane, so the other lane's order is untouched even though the
+	// store holds one flat list
 	const moveWorkspace = (ws: string, target: string, after: boolean) => {
 		if (!onReorder || ws === target) return;
 		const without = (workspaceOrder ?? []).filter(w => w !== ws);
@@ -382,14 +516,18 @@ const ProjectTree = ({
 	// follows it with a click, which toggles the workspace; eat that one
 	const swallowClick = useRef(false);
 
-	const dropTargetAt = (x: number, y: number) => {
+	// only a header in the same lane is a target: a wsl path in the local
+	// lane is a category error, refused rather than let "work"
+	const dropTargetAt = (x: number, y: number, from: string) => {
 		const el = document
 			.elementFromPoint(x, y)
 			?.closest<HTMLElement>('[data-ws-header]');
 		if (!el) return null;
+		const ws = el.dataset.wsHeader ?? '';
+		if (ws === from || laneOfWs(ws) !== laneOfWs(from)) return null;
 		const r = el.getBoundingClientRect();
 		// which half of the row decides before or after, so the line is honest
-		return { ws: el.dataset.wsHeader ?? '', after: y > r.top + r.height / 2 };
+		return { ws, after: y > r.top + r.height / 2 };
 	};
 
 	const headerPointerDown = (
@@ -410,8 +548,7 @@ const ProjectTree = ({
 			// keeps the moves coming after the pointer leaves the header
 			e.currentTarget.setPointerCapture(e.pointerId);
 		}
-		const t = dropTargetAt(e.clientX, e.clientY);
-		const next = t && t.ws !== d.ws ? t : null;
+		const next = dropTargetAt(e.clientX, e.clientY, d.ws);
 		setDrop(prev =>
 			prev?.ws === next?.ws && prev?.after === next?.after ? prev : next
 		);
@@ -426,19 +563,22 @@ const ProjectTree = ({
 		}
 		swallowClick.current = true;
 		if (commit) {
-			const t = dropTargetAt(e.clientX, e.clientY);
-			if (t && t.ws !== d.ws) moveWorkspace(d.ws, t.ws, t.after);
+			const t = dropTargetAt(e.clientX, e.clientY, d.ws);
+			if (t) moveWorkspace(d.ws, t.ws, t.after);
 		}
 		setDragging(null);
 		setDrop(null);
 	};
 
-	// the keyboard twin of dragging the header: the selected project's
-	// workspace moves one place in the rendered order
+	// the keyboard twin of dragging the header: the workspace moves one
+	// place among its lane's siblings, and the cursor follows it
 	const nudge = (ws: string, dir: 1 | -1) => {
-		const i = entries.findIndex(([w]) => w === ws);
-		const target = entries[i + dir];
-		if (i >= 0 && target) moveWorkspace(ws, target[0], dir === 1);
+		const lane = lanes[laneOfWs(ws)];
+		const i = lane.findIndex(([w]) => w === ws);
+		const target = lane[i + dir];
+		if (i < 0 || !target) return;
+		setWsCursor(ws);
+		moveWorkspace(ws, target[0], dir === 1);
 	};
 
 	// Pinned rows come first for keyboard navigation, and are then skipped in
@@ -446,54 +586,58 @@ const ProjectTree = ({
 	const pinned = pinnedProjects ?? [];
 	const pinnedPaths = new Set(pinned.map(p => p.full_path));
 
-	const visible: Project[] = [...pinned];
-	for (const [ws, wsProjects] of entries) {
+	// the navigable sequence in the order the rows render: the pinned
+	// projects, then each header with its projects when open. headers are
+	// rows so the keyboard can land on a collapsed workspace and open it;
+	// without that a collapsed workspace is a dead end only the mouse
+	// reaches. then the github rows when that lane is open, and the
+	// servers last, each expanded server's folders right under it
+	const rows: NavRow[] = pinned.map(project => ({ kind: 'project', project }));
+	for (const [ws, wsProjects] of laneOrder) {
+		rows.push({ kind: 'ws', ws });
 		if (!isCollapsed(ws)) {
-			visible.push(...wsProjects.filter(p => !pinnedPaths.has(p.full_path)));
+			for (const project of wsProjects) {
+				if (!pinnedPaths.has(project.full_path)) rows.push({ kind: 'project', project });
+			}
 		}
 	}
-
-	// the navigable sequence in the order the rows render: the projects
-	// above, then the github rows when that group is open
-	const rows: NavRow[] = visible.map(project => ({ kind: 'project', project }));
 	for (const repo of github?.isOpen ? github.visible : []) {
 		rows.push({ kind: 'repo', repo });
 	}
-	// and the servers last, when that card is open, each expanded server's
-	// folders right under it, the order the eye reads
 	for (const { server, groups } of servers?.isOpen ? servers.visible : []) {
 		rows.push({ kind: 'server', server });
 		for (const { rows: under } of groups) {
 			for (const { folder } of under) rows.push({ kind: 'folder', server, folder });
 		}
 	}
+	const visible = rows.flatMap(r => (r.kind === 'project' ? [r.project] : []));
 
 	const selectProject = (p: Project) => {
-		setRepoCursor(null);
-		setServerCursor(null);
-		setFolderCursor(null);
+		clearCursors();
 		onSelect(p);
 	};
+	const selectWs = (ws: string) => {
+		clearCursors();
+		setWsCursor(ws);
+	};
 	const selectRepo = (r: GithubRepo) => {
-		setServerCursor(null);
-		setFolderCursor(null);
+		clearCursors();
 		setRepoCursor(r.full_name);
 	};
 	const selectServer = (s: Server) => {
-		setRepoCursor(null);
-		setFolderCursor(null);
+		clearCursors();
 		setServerCursor(s.id);
 	};
 	const selectFolder = (s: Server, f: RemoteFolder) => {
-		setRepoCursor(null);
-		setServerCursor(null);
+		clearCursors();
 		setFolderCursor(folderKey(s, f));
 	};
-	const land = (row: NavRow) => {
-		if (row.kind === 'project') selectProject(row.project);
-		else if (row.kind === 'repo') selectRepo(row.repo);
-		else if (row.kind === 'server') selectServer(row.server);
-		else selectFolder(row.server, row.folder);
+	const land = (r: NavRow) => {
+		if (r.kind === 'project') selectProject(r.project);
+		else if (r.kind === 'ws') selectWs(r.ws);
+		else if (r.kind === 'repo') selectRepo(r.repo);
+		else if (r.kind === 'server') selectServer(r.server);
+		else selectFolder(r.server, r.folder);
 	};
 
 	// from the github box the arrows walk the github rows and nothing
@@ -501,24 +645,36 @@ const ProjectTree = ({
 	// projects; from the servers box, the servers and their folders. the
 	// walk is narrowed, the cursor is the same
 	const LANE_KINDS: Record<SearchLane, NavRow['kind'][]> = {
-		projects: ['project', 'repo', 'server', 'folder'],
+		projects: ['project', 'ws', 'repo', 'server', 'folder'],
 		github: ['repo'],
 		servers: ['server', 'folder']
 	};
+	const cursorIndex = (walk: NavRow[]) =>
+		wsCursor
+			? walk.findIndex(r => r.kind === 'ws' && r.ws === wsCursor)
+			: repoCursor
+				? walk.findIndex(r => r.kind === 'repo' && r.repo.full_name === repoCursor)
+				: serverCursor
+					? walk.findIndex(r => r.kind === 'server' && r.server.id === serverCursor)
+					: folderCursor
+						? walk.findIndex(
+								r => r.kind === 'folder' && folderKey(r.server, r.folder) === folderCursor
+							)
+						: walk.findIndex(
+								r => r.kind === 'project' && r.project.full_path === selected?.full_path
+							);
 	const navigate = (dir: 1 | -1, lane: SearchLane = 'projects') => {
 		const walk = rows.filter(r => LANE_KINDS[lane].includes(r.kind));
-		const idx = repoCursor
-			? walk.findIndex(r => r.kind === 'repo' && r.repo.full_name === repoCursor)
-			: serverCursor
-				? walk.findIndex(r => r.kind === 'server' && r.server.id === serverCursor)
-				: folderCursor
-					? walk.findIndex(
-							r => r.kind === 'folder' && folderKey(r.server, r.folder) === folderCursor
-						)
-					: walk.findIndex(
-							r => r.kind === 'project' && r.project.full_path === selected?.full_path
-						);
-		const next = idx === -1 ? walk[0] : walk[idx + dir];
+		const idx = cursorIndex(walk);
+		// nothing under the cursor yet: the first project, or the first
+		// header when every workspace is collapsed, which is exactly when
+		// the keyboard needs a header to open
+		const next =
+			idx === -1
+				? dir === 1
+					? (walk.find(r => r.kind === 'project') ?? walk[0])
+					: walk[walk.length - 1]
+				: walk[idx + dir];
 		if (next) land(next);
 	};
 
@@ -530,14 +686,14 @@ const ProjectTree = ({
 	};
 	// enter on a server row: a terminal on it; on a folder, a terminal there
 	const openServerRow = () => {
-		const row = rows.find(
+		const r = rows.find(
 			r =>
 				(r.kind === 'server' && r.server.id === serverCursor) ||
 				(r.kind === 'folder' && folderKey(r.server, r.folder) === folderCursor)
 		);
-		if (!row) return false;
-		if (row.kind === 'server') onServerOpen?.(row.server);
-		else if (row.kind === 'folder') onFolderOpen?.(row.server, row.folder);
+		if (!r) return false;
+		if (r.kind === 'server') onServerOpen?.(r.server);
+		else if (r.kind === 'folder') onFolderOpen?.(r.server, r.folder);
 		return true;
 	};
 
@@ -567,7 +723,9 @@ const ProjectTree = ({
 			if (selected) onLaunch(selected);
 			else if (visible.length > 0) onLaunch(visible[0]);
 		};
-		const ws = selected?.workspace;
+		// the workspace a directional key acts on: the header under the
+		// cursor, else the selected project's
+		const ws = wsCursor ?? selected?.workspace;
 		// Bare navigation keys. While the search box has focus these belong to
 		// it — it forwards ↑ ↓ ⏎ itself, and ← → Home End move its caret.
 		const walk: Record<string, () => void> = {
@@ -577,23 +735,38 @@ const ProjectTree = ({
 			End: () => jump('bottom')
 		};
 		// a repo under the cursor: enter opens its page, and the workspace
-		// keys are off since there is nothing to collapse
+		// keys are off since there is nothing to collapse. a header under
+		// it: → opens a collapsed one and steps into an open one, ← closes
+		// it, enter toggles it. on a project, ← steps out to its header the
+		// way a file tree does
 		const keys: Record<string, () => void> = repoCursor
 			? { ...walk, Enter: () => openRepo() }
 			: serverCursor || folderCursor
 				? { ...walk, Enter: () => openServerRow() }
-				: {
-					...walk,
-					ArrowRight: () => ws && setCollapsedFor(ws, false),
-					ArrowLeft: () => ws && setCollapsedFor(ws, true),
-					Enter: launch
-				};
+				: wsCursor
+					? {
+							...walk,
+							ArrowRight: () =>
+								isCollapsed(wsCursor) ? setCollapsedFor(wsCursor, false) : navigate(1),
+							ArrowLeft: () => setCollapsedFor(wsCursor, true),
+							Enter: () => setCollapsedFor(wsCursor, !isCollapsed(wsCursor))
+						}
+					: {
+							...walk,
+							ArrowRight: () => ws && setCollapsedFor(ws, false),
+							ArrowLeft: () => {
+								if (!ws) return;
+								setCollapsedFor(ws, true);
+								selectWs(ws);
+							},
+							Enter: launch
+						};
 		// Modifier combos are app-level and must still work while the search
 		// box is focused — which is exactly where summon leaves you. A bare
 		// letter is unreachable there, which is why every project action is
 		// a combo.
 		const combos: [ShortcutId, () => void][] = [
-			['togglePin', () => selected && onTogglePin?.(selected)],
+			['togglePin', () => selected && !wsCursor && onTogglePin?.(selected)],
 			['toggleWorkspace', () => ws && setCollapsedFor(ws, !isCollapsed(ws))],
 			['moveWorkspaceUp', () => ws && nudge(ws, -1)],
 			['moveWorkspaceDown', () => ws && nudge(ws, 1)]
@@ -622,6 +795,7 @@ const ProjectTree = ({
 	}, [
 		selected,
 		rows,
+		wsCursor,
 		repoCursor,
 		serverCursor,
 		folderCursor,
@@ -638,8 +812,6 @@ const ProjectTree = ({
 
 	const stateFor = (ws: string) =>
 		workspaceStates?.find(s => s.workspace === ws);
-
-	const toggle = (ws: string) => setCollapsedFor(ws, !isCollapsed(ws));
 
 	// only while there is nothing to show. loading is true for the whole of
 	// a refresh too, and this line took the place of every card for a scan
@@ -667,7 +839,12 @@ const ProjectTree = ({
 				onOpenBranches: (r: GithubRepo, x: number, y: number) =>
 					onRepoBranches?.(r, x, y),
 				jobs: cloneJobs,
-				onGroupContextMenu
+				onGroupContextMenu,
+				onAddMenu: onGithubAddMenu,
+				searchInHeading: githubSearchInHeading,
+				searchRef: githubSearchRef,
+				onArrow: (dir: 1 | -1) => navigate(dir, 'github'),
+				onEnter: () => openRepo() || onRepoOpen?.(github.visible[0])
 			}}
 		/>
 	) : null;
@@ -682,6 +859,7 @@ const ProjectTree = ({
 				onContextMenu: (s: Server, x: number, y: number) =>
 					onServerContextMenu?.(s, x, y),
 				onAddMenu: (x: number, y: number) => onServersAddMenu?.(x, y),
+				searchInHeading: serversSearchInHeading,
 				folderCursor,
 				onSelectFolder: selectFolder,
 				onOpenFolder: (s: Server, f: RemoteFolder) => onFolderOpen?.(s, f),
@@ -694,6 +872,38 @@ const ProjectTree = ({
 			}}
 		/>
 	) : null;
+
+	// the lane cards in the grid, in render order: wsl, the machine's own
+	// disk, github, servers. every lane one equal column (joy: "i should
+	// not let one column stretch to two columns space"); four fold to two
+	// rows of two between 1400 and 1899, and those rows are spelled out: a
+	// row holding an open lane is minmax(0,1fr), bounded, its own scroller,
+	// and a row of collapsed lanes is auto, their headings. an implicit
+	// auto row holding a scroller sized itself to its content, and the row
+	// above collapsed to its border
+	const fsLanes = (['WSL', 'local'] as const).filter(l => lanes[l].length > 0);
+	const columns = fsLanes.length + (githubLane ? 1 : 0) + (serversLane ? 1 : 0);
+	const secondRowOpen = Boolean(github?.isOpen) || Boolean(servers?.isOpen);
+	const rowsMid =
+		columns >= 4
+			? `minmax(0,1fr) ${secondRowOpen ? 'minmax(0,1fr)' : 'auto'}`
+			: 'minmax(0,1fr)';
+	const grid = (
+		children: React.ReactNode,
+		empty?: React.ReactNode
+	) => (
+		<div className='flex-1 min-h-0 overflow-y-auto min-[1400px]:overflow-hidden flex flex-col'>
+			{empty}
+			<div
+				className={`${laneGrid(columns)} gap-3 px-3 pb-3 min-[1400px]:flex-1 min-[1400px]:min-h-0 min-[1400px]:[grid-template-rows:var(--rows-mid)] min-[1900px]:[grid-template-rows:minmax(0,1fr)]`}
+				style={{ '--rows-mid': rowsMid } as React.CSSProperties}
+			>
+				{children}
+				{githubLane}
+				{serversLane}
+			</div>
+		</div>
+	);
 
 	if (projects.length === 0) {
 		// "Nothing configured" and "everything is offline right now" are very
@@ -732,28 +942,28 @@ const ProjectTree = ({
 		}
 		// a query no project matches may still have an answer in the github
 		// rows, which is half of why they are here: the empty line is a
-		// line, not the whole screen, when there is a group to show under it
+		// line, not the whole screen, when there is a lane to show under it
 		return (
 			<div className='flex-1 flex flex-col min-h-0'>
-				<div className='flex-1 overflow-y-auto'>
-					<div className='px-3 py-3 text-15 text-text-muted'>
+				{grid(
+					null,
+					<div className='px-4 py-3 text-15 text-text-muted shrink-0'>
 						{query.trim()
 							? 'No project matches.'
 							: 'No projects found. Add a workspace to begin.'}
 					</div>
-					{githubLane}
-					{serversLane}
-				</div>
+				)}
 			</div>
 		);
 	}
 
 	// two cursors can be lit at once, the project you selected and the
-	// github row you then arrowed to, and enter acts on the second. a
-	// cursor whose row has left the list (the box was cleared) lights
-	// nothing, so it dims nothing
+	// header, github row or server you then arrowed to, and enter acts on
+	// the second. a cursor whose row has left the list (the box was
+	// cleared) lights nothing, so it dims nothing
 	const cursorLit = rows.some(
 		r =>
+			(r.kind === 'ws' && r.ws === wsCursor) ||
 			(r.kind === 'repo' && r.repo.full_name === repoCursor) ||
 			(r.kind === 'server' && r.server.id === serverCursor) ||
 			(r.kind === 'folder' && folderKey(r.server, r.folder) === folderCursor)
@@ -775,119 +985,101 @@ const ProjectTree = ({
 		onContextMenu
 	});
 
+	const workspace = ([ws, wsProjects]: [string, Project[]]) => {
+		const isOpen = !isCollapsed(ws);
+		const fs = wsProjects[0]?.file_system ?? 'Windows';
+		const wsState = stateFor(ws);
+		const isStale = wsState?.status === 'cached';
+		return (
+			<div key={ws}>
+				<WorkspaceHeader
+					{...{
+						ws,
+						count: wsProjects.length,
+						fs,
+						state: wsState,
+						open: isOpen,
+						cursor: wsCursor === ws,
+						dragging: dragging === ws,
+						drop: drop?.ws === ws ? (drop.after ? 'after' : 'before') : undefined,
+						onPointerDown: (e: React.PointerEvent<HTMLDivElement>) =>
+							headerPointerDown(e, ws),
+						onPointerMove: headerPointerMove,
+						onPointerUp: (e: React.PointerEvent<HTMLDivElement>) => endDrag(e, true),
+						onPointerCancel: (e: React.PointerEvent<HTMLDivElement>) =>
+							endDrag(e, false),
+						onClick: () => {
+							if (swallowClick.current) {
+								swallowClick.current = false;
+								return;
+							}
+							selectWs(ws);
+							setCollapsedFor(ws, isOpen);
+						},
+						onContextMenu: (x: number, y: number) => {
+							selectWs(ws);
+							onWorkspaceContextMenu?.(ws, x, y);
+						}
+					}}
+				/>
+				{/* 0fr to 1fr animates height with nothing measured; the rows stay
+				    mounted and clipped, and `rows` already skips them for the
+				    keyboard */}
+				<div
+					className='grid transition-[grid-template-rows] duration-150 ease-out'
+					style={{ gridTemplateRows: isOpen ? '1fr' : '0fr' }}
+				>
+					<div className='overflow-hidden'>
+						{wsProjects
+							.filter(p => !pinnedPaths.has(p.full_path))
+							.map((project, i) => (
+								<ProjectRow
+									key={project.full_path}
+									{...{ ...rowProps(project), i, stale: isStale }}
+								/>
+							))}
+					</div>
+				</div>
+			</div>
+		);
+	};
+
+	// the lane's label is what the machine calls its own disk; the wsl
+	// lane is always wsl
+	const laneLabel = (lane: 'WSL' | 'local') =>
+		lane === 'WSL' ? 'WSL' : localFs || 'Windows';
+
 	return (
 		<div className='flex-1 flex flex-col min-h-0'>
-			<div
-				className={`${col} px-3 py-1.5 text-13 font-bold uppercase tracking-wider text-text-primary bg-bg-hover/30 rounded-t-control shrink-0 border-b border-border`}
-			>
-				{COLUMNS.map(({ label, className }) => (
-					<div key={label} className={className}>
-						{label}
-					</div>
-				))}
-			</div>
-
-			{/* the gap is the divider between groups (joy: "we could make cards
-			    instead of the separator"): a line ran into the header above it,
-			    a card closes on its own */}
-			<div className='flex-1 overflow-y-auto flex flex-col gap-3 px-3 py-3'>
-				{pinned.length > 0 && (
-					<div className={`${card} border-t-accent/40 border-l-accent/40`}>
-						<div className='px-3 py-1 text-13 font-semibold text-text-muted'>
+			{grid(
+				fsLanes.map(lane => (
+					<WorkspaceLane
+						key={lane}
+						{...{
+							label: laneLabel(lane),
+							tone: fsTone(laneLabel(lane)),
+							edge: fsEdge(laneLabel(lane)),
+							entries: lanes[lane]
+						}}
+					>
+						{lanes[lane].map(workspace)}
+					</WorkspaceLane>
+				)),
+				pinned.length > 0 && (
+					<div className='mb-1 shrink-0'>
+						<div className='px-4 py-1 text-13 font-semibold text-text-muted'>
 							Pinned
 						</div>
 						{pinned.map(project => (
 							<ProjectRow
 								key={`pinned-${project.full_path}`}
-								{...rowProps(project)}
+								{...{ ...rowProps(project), pinned: true }}
 							/>
 						))}
+						<div className='mx-4 my-1 border-b border-border' />
 					</div>
-				)}
-
-				{entries.map(([ws, wsProjects]) => {
-					const isOpen = !isCollapsed(ws);
-					const count = wsProjects.length;
-					const fs = wsProjects[0]?.file_system ?? 'Windows';
-					const wsState = stateFor(ws);
-					const isStale = wsState?.status === 'cached';
-
-					return (
-						<div key={ws} className={`${card} ${fsEdge(fs)}`}>
-							{/* the header is the handle, open or collapsed, and the only
-							    thing that accepts a drop */}
-							<div
-								className={`${col} relative px-3 py-2 cursor-pointer hover:bg-bg-hover/50 select-none ${dragging === ws ? 'opacity-40' : ''}`}
-								data-ws-header={ws}
-								onPointerDown={e => headerPointerDown(e, ws)}
-								onPointerMove={headerPointerMove}
-								onPointerUp={e => endDrag(e, true)}
-								onPointerCancel={e => endDrag(e, false)}
-								onClick={() => {
-									if (swallowClick.current) {
-										swallowClick.current = false;
-										return;
-									}
-									toggle(ws);
-								}}
-								onContextMenu={e => {
-									e.preventDefault();
-									onWorkspaceContextMenu?.(ws, e.clientX, e.clientY);
-								}}
-								title={ws}
-							>
-								{drop?.ws === ws && (
-									<div
-										className={`absolute left-4 right-4 h-0.5 bg-accent rounded-control pointer-events-none ${drop.after ? 'bottom-0' : 'top-0'}`}
-									/>
-								)}
-								<div className='flex items-center gap-2 text-text-secondary min-w-0'>
-									<span
-										className={`text-11 shrink-0 ${isOpen ? 'text-accent' : 'text-text-muted'}`}
-									>
-										{isOpen ? '▼' : '▶'}
-									</span>
-									{/* one step under the rows: a workspace header is a label for
-									    the rows, not a row */}
-									<span className='truncate text-13 font-semibold text-text-primary'>
-										{lastSegment(ws)}
-									</span>
-									<StatusPill state={wsState} />
-								</div>
-								<div className='text-11 text-text-muted truncate' title={ws}>
-									{ws}
-								</div>
-								<FsCell {...{ fs, className: 'text-11 font-medium' }} />
-								<div className='text-right text-11 text-text-muted font-mono'>
-									{count}
-								</div>
-							</div>
-
-							{/* 0fr to 1fr animates height with nothing measured; the rows stay
-							    mounted and clipped, and `visible` already skips them for the
-							    keyboard */}
-							<div
-								className='grid transition-[grid-template-rows] duration-150 ease-out'
-								style={{ gridTemplateRows: isOpen ? '1fr' : '0fr' }}
-							>
-								<div className='overflow-hidden ml-6'>
-									{wsProjects
-										.filter(p => !pinnedPaths.has(p.full_path))
-										.map(project => (
-											<ProjectRow
-												key={project.full_path}
-												{...{ ...rowProps(project), stale: isStale }}
-											/>
-										))}
-								</div>
-							</div>
-						</div>
-					);
-				})}
-
-				{githubLane}
-				{serversLane}
-			</div>
+				)
+			)}
 		</div>
 	);
 };
