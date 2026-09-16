@@ -25,6 +25,7 @@ export const useTargets = (): TargetRegistry => {
 
 	const editors = targets.filter(t => t.kind === 'editor');
 	const terminals = targets.filter(t => t.kind === 'terminal');
+	const agents = targets.filter(t => t.kind === 'agent');
 
 	// Every write ends in a reload rather than patching local state: the list
 	// is short, the calls are local, and the store's rules (what the id
@@ -55,6 +56,7 @@ export const useTargets = (): TargetRegistry => {
 	return {
 		editors,
 		terminals,
+		agents,
 		defaults,
 		addTarget,
 		detect,

@@ -30,6 +30,13 @@ export const useLaunchActions = (
 		return invoke('open_terminal', { project: p, targetId: targetId ?? null });
 	};
 
+	// a coding agent, in the default terminal, in the project directory
+	const openAgent = (project?: Project, targetId?: string) => {
+		const p = project ?? selected;
+		if (!p) return Promise.resolve();
+		return invoke('open_agent', { project: p, targetId: targetId ?? null });
+	};
+
 	const openBoth = (project?: Project, editorId?: string, terminalId?: string) => {
 		const p = project ?? selected;
 		if (!p) return Promise.resolve();
@@ -45,6 +52,7 @@ export const useLaunchActions = (
 		removeWorkspace,
 		openEditor,
 		openTerminal,
+		openAgent,
 		openBoth
 	};
 };

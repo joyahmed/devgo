@@ -69,6 +69,13 @@ export const SHORTCUTS: Shortcut[] = [
 		needsSelection: true
 	},
 	{
+		id: 'openAgent',
+		keys: 'Ctrl+Alt+Enter',
+		label: 'Open in agent',
+		group: 'Project',
+		needsSelection: true
+	},
+	{
 		id: 'revealExplorer',
 		keys: 'Ctrl+Shift+E',
 		label: 'Reveal in Explorer',

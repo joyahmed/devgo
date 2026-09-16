@@ -249,7 +249,7 @@ interface LastProject {
 	workspace: string;
 }
 
-type TargetKind = 'editor' | 'terminal';
+type TargetKind = 'editor' | 'terminal' | 'agent';
 
 /// An editor or terminal DevGo can launch into. Both share one shape because
 /// both are "a program plus how to hand it a directory". `string | null`, not
@@ -302,6 +302,7 @@ type ShortcutId =
 	| 'openEditor'
 	| 'openTerminal'
 	| 'openBoth'
+	| 'openAgent'
 	| 'revealExplorer'
 	| 'copyWinPath'
 	| 'copyWslPath'
@@ -635,6 +636,7 @@ interface GithubState {
 interface TargetRegistry {
 	editors: LaunchTarget[];
 	terminals: LaunchTarget[];
+	agents: LaunchTarget[];
 	defaults: Record<string, string>;
 	addTarget: (target: Omit<LaunchTarget, 'id'>) => Promise<void>;
 	detect: () => Promise<DetectedTarget[]>;
