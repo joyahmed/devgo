@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { useEffect, useState } from 'react';
 import { normalizePath } from '../paths';
+import { isMac } from '../platform';
 import Button from './Button';
 import { pickTone } from './rowStyles';
 
@@ -80,8 +81,8 @@ const ScanPicker = ({
 	if (roots.length === 0) {
 		return (
 			<p className='text-15 text-text-muted py-4 text-center'>
-				No common project folders found. Choose one manually, or start a WSL
-				distro and scan again.
+				No common project folders found. Choose one manually
+				{isMac ? '.' : ', or start a WSL distro and scan again.'}
 			</p>
 		);
 	}
@@ -136,7 +137,7 @@ const ScanPicker = ({
 								<span
 									className={`text-11 px-1 rounded-control border shrink-0 ${KIND_TONE[r.kind]}`}
 								>
-									{added ? 'added' : r.kind === 'wsl' ? 'WSL' : 'WIN'}
+									{added ? 'added' : r.kind === 'wsl' ? 'WSL' : isMac ? 'LOCAL' : 'WIN'}
 								</span>
 							</label>
 						</li>

@@ -1,4 +1,5 @@
 import { compactCount, RECENT_LIMIT, relativeTime } from '../github';
+import { isMac } from '../platform';
 import Button from './Button';
 import { card, col } from './rowStyles';
 
@@ -31,7 +32,7 @@ const headerLine = (g: GithubState): string => {
 			: `updated ${relativeTime(cache.fetched_at)}`;
 	}
 	if (g.status && !g.status.installed)
-		return 'gh not found. Install: winget install GitHub.cli';
+		return `gh not found. Install: ${isMac ? 'brew install gh' : 'winget install GitHub.cli'}`;
 	if (g.status && !g.status.login) return 'not logged in. Run: gh auth login';
 	if (g.refreshing) return 'fetching your repos…';
 	return 'not loaded. Open to fetch your repos with gh';
