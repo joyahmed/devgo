@@ -484,16 +484,18 @@ pub fn get_default_targets(
 ) -> Result<Vec<(String, String)>, AppError> {
     let prefs = state.pref_store.lock().map_err(lock_err)?;
     let store = state.target_store.lock().map_err(lock_err)?;
-    Ok([TargetKind::Editor, TargetKind::Terminal]
-        .into_iter()
-        .filter_map(|k| {
-            let id = prefs
-                .default_target(k)
-                .filter(|id| store.get(id).is_some())
-                .or_else(|| store.first_of(k).map(|t| t.id))?;
-            Some((format!("{k:?}").to_lowercase(), id))
-        })
-        .collect())
+    Ok(
+        [TargetKind::Editor, TargetKind::Terminal, TargetKind::Agent]
+            .into_iter()
+            .filter_map(|k| {
+                let id = prefs
+                    .default_target(k)
+                    .filter(|id| store.get(id).is_some())
+                    .or_else(|| store.first_of(k).map(|t| t.id))?;
+                Some((format!("{k:?}").to_lowercase(), id))
+            })
+            .collect(),
+    )
 }
 
 /// Read git state for the current project list.

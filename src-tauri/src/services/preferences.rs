@@ -167,6 +167,8 @@ pub struct Preferences {
     #[serde(default)]
     pub default_terminal: Option<String>,
     #[serde(default)]
+    pub default_agent: Option<String>,
+    #[serde(default)]
     pub scan_config: ScanConfig,
     /// Absent means the three windows that were hardcoded before this was
     /// configurable. `serde(default)` again keeps an older prefs.json out of
@@ -388,6 +390,7 @@ impl PreferencesStore {
         match kind {
             TargetKind::Editor => self.prefs.default_editor.clone(),
             TargetKind::Terminal => self.prefs.default_terminal.clone(),
+            TargetKind::Agent => self.prefs.default_agent.clone(),
         }
     }
 
@@ -402,6 +405,9 @@ impl PreferencesStore {
             }
             TargetKind::Terminal => {
                 self.prefs.default_terminal = Some(id.to_string())
+            }
+            TargetKind::Agent => {
+                self.prefs.default_agent = Some(id.to_string())
             }
         }
         self.save()

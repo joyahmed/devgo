@@ -39,6 +39,13 @@ pub struct LaunchTarget {
 pub enum TargetKind {
     Editor,
     Terminal,
+    /// A coding agent CLI, run in the default terminal in the project
+    /// directory. An agent is a command, not a program with a directory
+    /// flag: `executable` is the Windows command (empty when the agent
+    /// lives only in a distro), `wsl_executable` the in-distro one (None
+    /// when Windows only); the terminal's run template does the launching
+    /// and the args templates stay empty.
+    Agent,
 }
 
 impl LaunchTarget {

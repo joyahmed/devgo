@@ -103,7 +103,11 @@ impl TargetStore {
             return Err(AppError::TargetNotFound(id.to_string()));
         };
         let kind = self.targets[pos].kind;
-        if self.targets.iter().filter(|t| t.kind == kind).count() == 1 {
+        // zero agents is a valid machine; zero editors or terminals is a
+        // launcher with a button that can never do anything
+        if kind != TargetKind::Agent
+            && self.targets.iter().filter(|t| t.kind == kind).count() == 1
+        {
             return Err(AppError::LastTarget(self.targets[pos].name.clone()));
         }
         self.targets.remove(pos);
