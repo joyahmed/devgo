@@ -305,6 +305,49 @@ fn rank_projects(
         .collect()
 }
 
+/// The list from the cache alone: no read_dir, no wsl.exe, no git. Every
+/// workspace is marked Cached; a workspace with no entry yet (first run)
+/// simply has no rows here.
+fn cached_payload(
+    workspaces: &[String],
+    cache: &ProjectCacheStore,
+    prefs: &PreferencesStore,
+) -> ProjectsPayload {
+    let mut projects = Vec::new();
+    let mut states = Vec::new();
+    for ws in workspaces {
+        if let Some(cached) = cache.get(ws) {
+            states.push(WorkspaceState {
+                workspace: ws.clone(),
+                status: WorkspaceStatus::Cached,
+                reason: None,
+                scanned_at: Some(cached.scanned_at),
+                count: cached.projects.len(),
+            });
+            projects.extend(cached.projects.iter().cloned());
+        }
+    }
+    projects.sort_by_key(|p| p.name.to_lowercase());
+    let ranks = rank_projects(&projects, prefs);
+    ProjectsPayload {
+        projects,
+        workspaces: states,
+        ranks,
+    }
+}
+
+/// The first thing the frontend asks for, so the window is up with the
+/// last known list before get_projects scans behind it.
+#[tauri::command]
+pub fn get_cached_projects(
+    state: State<AppState>,
+) -> Result<ProjectsPayload, AppError> {
+    let workspaces = state.workspace_store.lock().map_err(lock_err)?.list();
+    let cache = state.cache_store.lock().map_err(lock_err)?;
+    let prefs = state.pref_store.lock().map_err(lock_err)?;
+    Ok(cached_payload(&workspaces, &cache, &prefs))
+}
+
 #[tauri::command]
 pub fn get_projects(
     app: tauri::AppHandle,
@@ -1578,4 +1621,58 @@ pub fn set_last_project(
 ) -> Result<(), String> {
     let mut prefs = state.pref_store.lock().map_err(|e| e.to_string())?;
     prefs.set_last_project(project.full_path, project.workspace)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn temp(name: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("devgo-cmd-test-{name}"));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    fn project(name: &str, workspace: &str) -> Project {
+        Project::new(
+            name.to_string(),
+            format!("{workspace}\\{name}"),
+            workspace.to_string(),
+            "Windows".to_string(),
+        )
+    }
+
+    #[test]
+    fn cached_payload_reads_the_cache_and_ranks_it() {
+        let dir = temp("cached-payload");
+        let mut cache = ProjectCacheStore::new(dir.clone()).unwrap();
+        let mut prefs = PreferencesStore::new(dir).unwrap();
+        cache
+            .store(
+                r"G:\a",
+                vec![project("web", r"G:\a"), project("api", r"G:\a")],
+            )
+            .unwrap();
+        prefs.toggle_pin(r"G:\a\web").unwrap();
+
+        let ws = vec![r"G:\a".to_string(), r"G:\never-scanned".to_string()];
+        let payload = cached_payload(&ws, &cache, &prefs);
+
+        let names: Vec<&str> =
+            payload.projects.iter().map(|p| p.name.as_str()).collect();
+        assert_eq!(names, vec!["api", "web"]);
+        assert_eq!(payload.workspaces.len(), 1);
+        assert!(matches!(
+            payload.workspaces[0].status,
+            WorkspaceStatus::Cached
+        ));
+        assert!(payload.workspaces[0].reason.is_none());
+        assert_eq!(payload.workspaces[0].count, 2);
+        assert_eq!(payload.ranks.len(), 2);
+        assert!(payload
+            .ranks
+            .iter()
+            .any(|r| r.full_path == r"G:\a\web" && r.pinned));
+    }
 }

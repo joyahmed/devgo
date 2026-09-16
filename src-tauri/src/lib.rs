@@ -447,6 +447,7 @@ pub fn run() {
             commands::reorder_workspaces,
             commands::get_projects,
             commands::refresh_projects,
+            commands::get_cached_projects,
             commands::startup_ms,
             commands::mark_startup,
             commands::quit_app,
