@@ -70,15 +70,13 @@ const RepoRow = ({
 	onOpenBranches
 }: RepoRowProps) => (
 	<div
-		className={`${col} px-3 py-1.5 ${nested ? 'ml-6' : ''} cursor-pointer select-none transition-colors ${
+		className={`${col} px-3 py-1.5 ${nested ? 'ml-6' : ''} select-none transition-colors ${
 			repo.archived || gone ? 'opacity-60' : ''
 		} ${
 			isCursor
 				? 'bg-bg-selected text-text-primary'
 				: 'text-text-secondary hover:bg-bg-hover/50'
 		}`}
-		onClick={() => onSelect(repo)}
-		onDoubleClick={() => onOpen(repo)}
 		onContextMenu={e => {
 			e.preventDefault();
 			onSelect(repo);
@@ -87,10 +85,13 @@ const RepoRow = ({
 		title={repo.url}
 	>
 		<div className='truncate text-text-muted'>{repo.owner}</div>
+		{/* the name is the click target, as on a project row */}
 		<div
-			className={`flex items-center gap-1.5 min-w-0 font-medium font-mono ${
+			className={`flex items-center gap-1.5 min-w-0 font-medium font-mono cursor-pointer ${
 				isCursor ? 'text-text-primary' : ''
 			}`}
+			onClick={() => onSelect(repo)}
+			onDoubleClick={() => onOpen(repo)}
 		>
 			<span className='truncate'>{repo.name}</span>
 			{repo.private && <Lock />}

@@ -238,7 +238,7 @@ const ProjectRow = ({
 	onContextMenu
 }: ProjectRowProps) => (
 	<div
-		className={`${col} group px-3 py-1.5 cursor-pointer select-none transition-colors ${
+		className={`${col} group px-3 py-1.5 select-none transition-colors ${
 			stale ? 'opacity-60' : ''
 		} ${launching ? 'animate-launch' : ''} ${
 			selected
@@ -247,8 +247,6 @@ const ProjectRow = ({
 					: 'bg-bg-selected text-text-primary'
 				: 'text-text-secondary hover:bg-bg-hover/50'
 		}`}
-		onClick={() => onSelect(project)}
-		onDoubleClick={() => onDoubleClick(project)}
 		// select first so the menu and the keyboard agree on the row
 		onContextMenu={e => {
 			e.preventDefault();
@@ -259,8 +257,14 @@ const ProjectRow = ({
 		<div className='truncate text-text-muted' title={project.workspace}>
 			{lastSegment(project.workspace)}
 		</div>
+		{/* the name is the click target, not the row (joy: "the whole line
+		    being clickable makes it a bit inconvenient"): on a 2400px row a
+		    click meant for the empty middle, or a double-click near a chip,
+		    selected or launched a project. the row keeps hover and right-click */}
 		<div
-			className={`font-medium font-mono truncate ${selected ? 'text-text-primary' : ''}`}
+			className={`font-medium font-mono truncate cursor-pointer ${selected ? 'text-text-primary' : ''}`}
+			onClick={() => onSelect(project)}
+			onDoubleClick={() => onDoubleClick(project)}
 		>
 			{project.name}
 		</div>
