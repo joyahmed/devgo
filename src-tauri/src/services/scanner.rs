@@ -1,12 +1,10 @@
-use std::os::windows::process::CommandExt;
 use std::process::Command;
 
 use serde::Serialize;
 
 use super::platform::wsl;
+use super::platform::Quiet;
 use crate::models::Project;
-
-const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 // whatever the config says: prefs.json is text and import reads foreign
 // files, so the cap lives where every path meets
@@ -268,7 +266,7 @@ fn scan_wsl_nested(
     let script = wsl_find_script(&linux_root, depth, ignore);
 
     let output = Command::new("wsl")
-        .creation_flags(CREATE_NO_WINDOW)
+        .quiet()
         .env("WSL_UTF8", "1")
         .args(["-d", distro, "-e", "bash", "-lc", &script])
         .output();

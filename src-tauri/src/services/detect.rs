@@ -1,14 +1,12 @@
 use std::collections::HashMap;
-use std::os::windows::process::CommandExt;
 use std::process::Command;
 
 use serde::Serialize;
 
 use super::platform::wsl;
+use super::platform::Quiet;
 use super::scanner::distro_of;
 use crate::models::Project;
-
-const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 /// What a project appears to be, derived entirely from the names of the files
 /// in its top directory.
@@ -122,7 +120,7 @@ fn list_wsl_batch(
     }
 
     let output = Command::new("wsl")
-        .creation_flags(CREATE_NO_WINDOW)
+        .quiet()
         .env("WSL_UTF8", "1")
         .args(["-d", distro, "-e", "bash", "-c", &script])
         .output();

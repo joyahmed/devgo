@@ -1,14 +1,12 @@
 use std::collections::HashMap;
-use std::os::windows::process::CommandExt;
 use std::process::Command;
 
 use serde::Serialize;
 
 use super::platform::wsl;
+use super::platform::Quiet;
 use super::scanner::distro_of;
 use crate::models::Project;
-
-const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 /// How many Windows projects to interrogate at once. Each is three short-lived
 /// `git` processes; unbounded spawning on a large workspace is worse than the
@@ -74,7 +72,7 @@ pub fn remote_to_url(remote: &str) -> Option<String> {
 
 fn git_windows(path: &str, args: &[&str]) -> Option<String> {
     let output = Command::new("git")
-        .creation_flags(CREATE_NO_WINDOW)
+        .quiet()
         .arg("-C")
         .arg(path)
         .args(args)
@@ -194,7 +192,7 @@ fn read_wsl_batch(distro: &str, projects: &[&Project]) -> Vec<GitInfo> {
     }
 
     let output = Command::new("wsl")
-        .creation_flags(CREATE_NO_WINDOW)
+        .quiet()
         .env("WSL_UTF8", "1")
         .args(["-d", distro, "-e", "bash", "-c", &wsl_script(&linux_paths)])
         .output();
@@ -237,7 +235,7 @@ pub fn remote_branches(project: &Project, running: &[String]) -> Vec<String> {
                 &distro,
             );
             let output = Command::new("wsl")
-                .creation_flags(CREATE_NO_WINDOW)
+                .quiet()
                 .env("WSL_UTF8", "1")
                 .args(["-d", &distro, "-e", "git", "-C", &linux])
                 .args(ARGS)
