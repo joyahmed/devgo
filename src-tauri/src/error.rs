@@ -60,6 +60,10 @@ pub enum AppError {
     #[error("No such server: {0}")]
     ServerNotFound(String),
 
+    /// A root that cannot be added: empty. Phrased for the box that asked.
+    #[error("{0}")]
+    RootRefused(String),
+
     #[error(
         "{0} is the only one of its kind — add another before removing it"
     )]

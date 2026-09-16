@@ -17,7 +17,9 @@ use crate::services::groups::{self, GithubGroup};
 use crate::services::launcher;
 use crate::services::platform::{wsl, RuntimeInfo};
 use crate::services::scanner::{ScanOutcome, UnavailableReason};
-use crate::services::server_folders::{self, ListingCache, ServerListing};
+use crate::services::server_folders::{
+    self, ListingCache, RemoteFolder, ServerListing,
+};
 use crate::services::servers::{Server, ServersStore};
 use crate::services::ssh_config;
 use crate::services::GithubStore;
@@ -873,19 +875,20 @@ pub async fn list_server_folders(
     let now = crate::services::preferences::now_secs();
     let state = app.state::<AppState>();
     let mut cache = state.servers_cache.lock().map_err(lock_err)?;
+    // a re-list keeps the drill-downs made so far; a failure keeps the last
+    // good folders too, marks the box down and carries the reason
+    let previous = cache.all().remove(&id).unwrap_or_default();
     let listing = match result {
         Ok(folders) => ServerListing {
             folders,
+            subdirs: previous.subdirs,
             listed_at: now,
             up: true,
             error: None,
         },
         Err(err) => ServerListing {
-            folders: cache
-                .all()
-                .remove(&id)
-                .map(|p| p.folders)
-                .unwrap_or_default(),
+            folders: previous.folders,
+            subdirs: previous.subdirs,
             listed_at: now,
             up: false,
             error: Some(err),
@@ -893,6 +896,62 @@ pub async fn list_server_folders(
     };
     cache.store(&id, listing.clone())?;
     Ok(listing)
+}
+
+// the children of one folder: the drill-down, one ssh on the click, cached
+// on the server's listing under the path
+#[tauri::command]
+pub async fn list_server_dir(
+    id: String,
+    path: String,
+    app: tauri::AppHandle,
+) -> Result<Vec<RemoteFolder>, AppError> {
+    let server = {
+        let h = app.state::<AppState>();
+        let s = h.servers_store.lock().map_err(lock_err)?.get(&id);
+        s.ok_or_else(|| AppError::ServerNotFound(id.clone()))?
+    };
+    let p = path.clone();
+    let kids = tauri::async_runtime::spawn_blocking(move || {
+        server_folders::list_dir(&server, &p)
+    })
+    .await
+    .map_err(lock_err)?
+    .map_err(AppError::LaunchFailed)?;
+    let state = app.state::<AppState>();
+    let mut cache = state.servers_cache.lock().map_err(lock_err)?;
+    let mut listing = cache.all().remove(&id).unwrap_or_default();
+    listing.subdirs.insert(path, kids.clone());
+    cache.store(&id, listing)?;
+    Ok(kids)
+}
+
+// a root on a server's row, from the menu or a folder promoted to one. an
+// empty roots list means the defaults, so they are written out first
+#[tauri::command]
+pub fn add_server_root(
+    id: String,
+    root: String,
+    state: State<AppState>,
+) -> Result<(), AppError> {
+    let mut store = state.servers_store.lock().map_err(lock_err)?;
+    let mut server = store
+        .get(&id)
+        .ok_or_else(|| AppError::ServerNotFound(id.clone()))?;
+    let root = root.trim().trim_end_matches('/').to_string();
+    if root.is_empty() {
+        return Err(AppError::RootRefused("A root is a path".into()));
+    }
+    if server.roots.is_empty() {
+        server.roots = server_folders::DEFAULT_ROOTS
+            .iter()
+            .map(|r| r.to_string())
+            .collect();
+    }
+    if !server.roots.contains(&root) {
+        server.roots.push(root);
+    }
+    store.update(server)
 }
 
 // a terminal in a remote folder: a tmux session named after the folder
