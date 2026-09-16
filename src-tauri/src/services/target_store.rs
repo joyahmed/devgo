@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use crate::error::AppError;
 use crate::models::target::{
     defaults, LaunchTarget, TargetKind, WT_ARGS, WT_ARGS_PRE_PSMUX,
-    WT_RUN_ARGS, WT_RUN_ARGS_PRE,
+    WT_RUN_ARGS, WT_RUN_ARGS_PRE, WT_WSL_RUN_ARGS, WT_WSL_RUN_ARGS_PRE,
 };
 
 /// Editors and terminals, persisted together.
@@ -43,6 +43,7 @@ impl TargetStore {
         let mut store = Self { targets, file_path };
         store.adopt_psmux_template()?;
         store.adopt_run_template()?;
+        store.adopt_wt_semicolon_escape()?;
         Ok(store)
     }
 
@@ -84,6 +85,27 @@ impl TargetStore {
             fs::copy(&self.file_path, backup)?;
         }
         self.targets[pos].run_args_template = Some(WT_RUN_ARGS.to_string());
+        self.save()
+    }
+
+    /// wt splits its command line on a bare `;`, so the WSL run template's
+    /// `; exec bash` opened a second tab that failed. Same shape as the two
+    /// adoptions above: only the exact old default is rewritten.
+    fn adopt_wt_semicolon_escape(&mut self) -> Result<(), AppError> {
+        let Some(pos) = self.targets.iter().position(|t| {
+            t.id == "wt"
+                && t.wsl_run_args_template.as_deref()
+                    == Some(WT_WSL_RUN_ARGS_PRE)
+        }) else {
+            return Ok(());
+        };
+        if self.file_path.exists() {
+            let backup =
+                format!("{}.pre-wt-semicolon", self.file_path.display());
+            fs::copy(&self.file_path, backup)?;
+        }
+        self.targets[pos].wsl_run_args_template =
+            Some(WT_WSL_RUN_ARGS.to_string());
         self.save()
     }
 

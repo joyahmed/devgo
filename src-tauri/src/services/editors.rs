@@ -172,9 +172,7 @@ const WINDOWS: &[WinCandidate] = &[
         args: WT_ARGS,
         wsl_args: Some("wsl -d {distro} bash \"{script}\""),
         run_args: Some(crate::models::target::WT_RUN_ARGS),
-        wsl_run_args: Some(
-            "wsl -d {distro} --cd \"{linux_path}\" -e bash -lc \"{command}; exec bash\"",
-        ),
+        wsl_run_args: Some(crate::models::target::WT_WSL_RUN_ARGS),
     },
     WinCandidate {
         id: "alacritty",

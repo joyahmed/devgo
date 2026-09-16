@@ -133,6 +133,16 @@ pub const WT_ARGS_PRE_PSMUX: &str = "-d \"{path}\"";
 /// the store rewrites it once, with a backup.
 pub const WT_RUN_ARGS: &str = "-d \"{path}\" {command}";
 pub const WT_RUN_ARGS_PRE: &str = "-d \"{path}\" cmd /k {command}";
+/// The WSL run line under wt. A backslash before the semicolon, not a bare
+/// one: Windows Terminal splits its own command line on `;`, even inside
+/// quotes, into a second tab, so `"{command}; exec bash"` opened one tab
+/// running the command and one failing on `" exec bash"`. wt turns the
+/// escaped form back into `;` before the line reaches wsl, so bash sees the
+/// two commands as before. Other terminals do no such splitting.
+pub const WT_WSL_RUN_ARGS: &str =
+    "wsl -d {distro} --cd \"{linux_path}\" -e bash -lc \"{command}\\; exec bash\"";
+pub const WT_WSL_RUN_ARGS_PRE: &str =
+    "wsl -d {distro} --cd \"{linux_path}\" -e bash -lc \"{command}; exec bash\"";
 
 /// The registry every install starts with.
 ///
@@ -166,9 +176,7 @@ pub fn defaults() -> Vec<LaunchTarget> {
             wsl_executable: None,
             wsl_args_template: Some("wsl -d {distro} bash \"{script}\"".into()),
             run_args_template: Some(WT_RUN_ARGS.into()),
-            wsl_run_args_template: Some(
-                "wsl -d {distro} --cd \"{linux_path}\" -e bash -lc \"{command}; exec bash\"".into(),
-            ),
+            wsl_run_args_template: Some(WT_WSL_RUN_ARGS.into()),
         },
     ]
 }
@@ -304,7 +312,7 @@ mod tests {
             .resolve_run("x", Some(("Ubuntu", "/home/joy/app")), "bun run dev")
             .unwrap();
         assert!(args.contains(r#"--cd "/home/joy/app""#));
-        assert!(args.ends_with(r#""bun run dev; exec bash""#));
+        assert!(args.ends_with("\"bun run dev\\; exec bash\""), "{args}");
     }
 
     /// An editor has no run form; asking is a refusal, not a plain open.
