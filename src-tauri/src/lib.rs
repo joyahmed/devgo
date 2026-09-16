@@ -234,6 +234,12 @@ pub fn started() -> std::time::Instant {
 static LAUNCHED_TRANSPARENT: std::sync::OnceLock<bool> =
     std::sync::OnceLock::new();
 
+// set by a close request that arrived while the window was in native full
+// screen (macos); consumed by the Resized that ends the exit transition
+#[cfg(target_os = "macos")]
+static HIDE_AFTER_FULLSCREEN: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
 pub fn launched_transparent() -> bool {
     LAUNCHED_TRANSPARENT.get().copied().unwrap_or(false)
 }
@@ -482,9 +488,49 @@ pub fn run() {
             // launcher you stop using; Quit lives in the tray menu and Ctrl+Q.
             tauri::WindowEvent::CloseRequested { api, .. } => {
                 api.prevent_close();
+                // on macos a window in native full screen must leave it
+                // before it hides: hidden in place, its full-screen space
+                // stays on screen with nothing in it and the whole display
+                // goes black until the app is shown again. the exit is an
+                // animated transition, so the hide happens on the Resized
+                // that ends it, not here; a thread polling is_fullscreen
+                // mid-transition never saw it end
+                #[cfg(target_os = "macos")]
+                if window.is_fullscreen().unwrap_or(false) {
+                    HIDE_AFTER_FULLSCREEN
+                        .store(true, std::sync::atomic::Ordering::SeqCst);
+                    let _ = window.set_fullscreen(false);
+                    return;
+                }
                 let _ = window.hide();
             }
-            tauri::WindowEvent::Resized(_) | tauri::WindowEvent::Moved(_) => {
+            tauri::WindowEvent::Resized(_) => {
+                // the first Resized after set_fullscreen(false) already
+                // reports is_fullscreen false, but the exit animation is
+                // still running, and hiding right here stranded a blank
+                // white window on the desktop. so: note it, and hide on
+                // the main thread once the transition has had time to end
+                #[cfg(target_os = "macos")]
+                if HIDE_AFTER_FULLSCREEN
+                    .swap(false, std::sync::atomic::Ordering::SeqCst)
+                {
+                    let handle = window.app_handle().clone();
+                    std::thread::spawn(move || {
+                        std::thread::sleep(std::time::Duration::from_millis(
+                            900,
+                        ));
+                        let h = handle.clone();
+                        let _ = handle.run_on_main_thread(move || {
+                            if let Some(w) = h.get_webview_window("main") {
+                                let _ = w.hide();
+                            }
+                        });
+                    });
+                    return;
+                }
+                remember_geometry(window);
+            }
+            tauri::WindowEvent::Moved(_) => {
                 remember_geometry(window);
             }
             // every path that shows the window ends in an activation: the
