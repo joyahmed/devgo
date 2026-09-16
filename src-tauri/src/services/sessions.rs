@@ -1,10 +1,10 @@
 //! Which projects have a live multiplexer session right now. The
-//! launcher names every tmux (WSL) and psmux (Windows) session after the
-//! project, and a second launch already reattaches; this reads that fact
-//! so the row can say it. One `tmux ls` per running distro that owns a
-//! project (a stopped one is never started to ask), one `psmux
-//! list-sessions` when any project is on Windows, never more often than
-//! the badge pass.
+//! launcher names every tmux (WSL, Mac) and psmux (Windows) session after
+//! the project, and a second launch already reattaches; this reads that
+//! fact so the row can say it. One `tmux ls` per running distro that owns
+//! a project (a stopped one is never started to ask), one `list-sessions`
+//! against the local multiplexer when any project is local, never more
+//! often than the badge pass.
 
 use std::collections::HashSet;
 use std::process::Command;
@@ -20,6 +20,14 @@ use crate::services::scanner::distro_of;
 // probe_lines ignores the exit status but not stderr
 const TMUX_LIST: &str = "tmux ls -F '#S' 2>/dev/null";
 
+// the multiplexer that owns the local filesystem's sessions: psmux on
+// windows, native tmux on a mac. both answer the same -F '#S' and
+// -t =name forms, so the list and kill code below is shared
+#[cfg(windows)]
+const LOCAL_MUX: &str = "psmux.exe";
+#[cfg(not(windows))]
+const LOCAL_MUX: &str = "tmux";
+
 /// The projects, by full_path, that have a live session.
 pub fn collect(projects: &[Project], running: &[String]) -> Vec<String> {
     let names = session_names(projects);
@@ -28,14 +36,14 @@ pub fn collect(projects: &[Project], running: &[String]) -> Vec<String> {
     }
 
     let mut distros: HashSet<String> = HashSet::new();
-    let mut any_windows = false;
+    let mut any_local = false;
     for p in projects {
         match distro_of(&p.full_path) {
             Some(d) if wsl::is_running(&d, running) => {
                 distros.insert(d);
             }
             Some(_) => {}
-            None => any_windows = true,
+            None => any_local = true,
         }
     }
 
@@ -49,8 +57,8 @@ pub fn collect(projects: &[Project], running: &[String]) -> Vec<String> {
             }
         }
     }
-    if any_windows {
-        for session in psmux_sessions() {
+    if any_local {
+        for session in local_sessions() {
             if let Some(path) = names.get(&session) {
                 if distro_of(path).is_none() {
                     live.push(path.clone());
@@ -63,10 +71,12 @@ pub fn collect(projects: &[Project], running: &[String]) -> Vec<String> {
     live
 }
 
-// one name per line, nothing and exit 0 with no server (psmux 3.3.8). a
-// missing psmux is an empty list, never an error
-fn psmux_sessions() -> Vec<String> {
-    let Ok(out) = Command::new("psmux.exe")
+// one name per line. psmux prints nothing and exits 0 with no server
+// (psmux 3.3.8); tmux says "no server running" on stderr and exits 1, and
+// output() keeps stderr apart, so both read as an empty list. a missing
+// multiplexer is an empty list too, never an error
+fn local_sessions() -> Vec<String> {
+    let Ok(out) = Command::new(LOCAL_MUX)
         .quiet()
         .args(["list-sessions", "-F", "#S"])
         .output()
@@ -106,11 +116,13 @@ pub fn kill(project: &Project, running: &[String]) -> Result<(), AppError> {
             Ok(())
         }
         None => {
-            Command::new("psmux.exe")
+            Command::new(LOCAL_MUX)
                 .quiet()
                 .args(["kill-session", "-t", &target])
                 .output()
-                .map_err(|e| AppError::LaunchFailed(format!("psmux: {e}")))?;
+                .map_err(|e| {
+                    AppError::LaunchFailed(format!("{LOCAL_MUX}: {e}"))
+                })?;
             Ok(())
         }
     }
@@ -124,7 +136,7 @@ mod tests {
         let fs = if full_path.starts_with("//wsl") {
             "WSL"
         } else {
-            "Windows"
+            crate::services::scanner::LOCAL_FS
         };
         Project::new(name.into(), full_path.into(), String::new(), fs.into())
     }
@@ -145,9 +157,9 @@ mod tests {
     }
 
     // no distro is running, so the wsl project cannot have a session, and
-    // collect returns before it would spawn wsl.exe for it. the windows
-    // branch answers with whatever psmux on this box says, which for a
-    // path nothing launched is nothing
+    // collect returns before it would spawn wsl.exe for it. the local
+    // branch answers with whatever the multiplexer on this box says, which
+    // for a path nothing launched is nothing
     #[test]
     fn a_stopped_distro_contributes_nothing_and_is_never_probed() {
         let projects = vec![
@@ -156,6 +168,12 @@ mod tests {
         ];
         let live = collect(&projects, &[]);
         assert!(!live.iter().any(|p| p.starts_with("//wsl")), "{live:?}");
+    }
+
+    // the local multiplexer is the platform's own
+    #[test]
+    fn the_local_multiplexer_matches_the_platform() {
+        assert_eq!(LOCAL_MUX, if cfg!(windows) { "psmux.exe" } else { "tmux" });
     }
 
     #[test]
