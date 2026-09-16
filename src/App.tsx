@@ -2211,21 +2211,22 @@ const AppInner = () => {
 										onChange: setQuery,
 										onEnter: handleSearchEnter,
 										onArrow: handleArrow,
-										enterHint:
-											selected || filtered.length > 0 ? '⏎ Enter' : undefined,
+										enterHint: Boolean(selected) || filtered.length > 0,
 										className: 'flex-1 min-w-[12rem]'
 									}}
 								/>
 								<div className='flex items-center gap-3 shrink-0'>
+									{/* one segmented control, not three pills: the three are one
+									    choice, and one border says so */}
 									<div
-										className='flex items-center gap-1 shrink-0'
+										className='inline-flex items-center h-9 rounded-control border border-border-strong bg-bg-panel overflow-hidden shrink-0'
 										role='group'
 										title='Sort order'
 									>
 										{SORT_MODES.map(m => (
 											<Button
 												key={m.mode}
-												variant='target'
+												variant='segment'
 												aria-current={sortMode === m.mode ? 'true' : undefined}
 												onClick={() => setSort(m.mode)}
 											>
@@ -2234,8 +2235,8 @@ const AppInner = () => {
 										))}
 									</div>
 									<Button
-										variant='ghost'
-										className='gap-1 px-2 shrink-0'
+										variant='add'
+										className='shrink-0'
 										onClick={e => {
 											const r = e.currentTarget.getBoundingClientRect();
 											setAddMenu({ x: r.left, y: r.bottom + 4 });
@@ -2250,7 +2251,7 @@ const AppInner = () => {
 									</Button>
 									<Button
 										variant='ghost'
-										className='w-7 h-7 shrink-0'
+										className='w-9 h-9 shrink-0'
 										onClick={handleRefresh}
 										title={`Refresh (${prettyKeys(shortcutFor('refresh'))})`}
 									>
@@ -2269,7 +2270,7 @@ const AppInner = () => {
 											onArrow: handleGithubArrow,
 											placeholder: 'Search GitHub repos…',
 											lane: 'github' as const,
-											enterHint: hasRepos ? '⏎ Enter' : undefined,
+											enterHint: hasRepos,
 											className: 'flex-1 min-w-0'
 										}}
 									/>
@@ -2302,8 +2303,8 @@ const AppInner = () => {
 										}}
 									/>
 									<Button
-										variant='ghost'
-										className='gap-1 px-2 shrink-0'
+										variant='add'
+										className='shrink-0'
 										title='Add a server, or import ~/.ssh/config'
 										onClick={e => {
 											const r = e.currentTarget.getBoundingClientRect();

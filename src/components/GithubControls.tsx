@@ -14,7 +14,7 @@ const GithubControls = ({
 	const { payload, status, sections, showRecents, toggleRecents } = github;
 	const total = payload?.cache.repos.length ?? 0;
 	const canRefresh = Boolean(status?.login);
-	const glyph = labelled ? 'w-7 h-7 shrink-0' : 'w-6 h-6 -my-1.5 shrink-0';
+	const glyph = labelled ? 'w-9 h-9 shrink-0' : 'w-6 h-6 -my-1.5 shrink-0';
 	return (
 		<>
 			{/* the recents switch: a word that reads as a state, on in the
@@ -44,8 +44,8 @@ const GithubControls = ({
 			)}
 			{total > 0 && (
 				<Button
-					variant='ghost'
-					className={labelled ? 'gap-1 px-2 shrink-0' : `${glyph} text-18 leading-none`}
+					variant={labelled ? 'add' : 'ghost'}
+					className={labelled ? 'shrink-0' : `${glyph} text-18 leading-none`}
 					title='Clone repos into a workspace, add one by name, or group them'
 					onClick={e => {
 						e.stopPropagation();
