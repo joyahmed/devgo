@@ -4,7 +4,14 @@ A launcher for a developer's projects. Point it at the folders that hold them, o
 
 Cross-platform. On Windows that means the local drives and the WSL distros. On a Mac it means the local disk. Linux builds from the same crate but has not been run yet, for lack of time, so treat it as untested. Beside those, the GitHub account you are logged into and the servers in your ssh config get a lane of their own.
 
-<!-- screenshots: docs/screenshots/{windows,mac} -->
+![DevGo on Windows: the four lanes](docs/screenshots/windows/01-four-lanes.png)
+
+<p align="center">
+<img src="docs/screenshots/mac/01-three-lanes.png" alt="DevGo on a Mac: three lanes" width="49%">
+<img src="docs/screenshots/windows/02-app-actions.png" alt="An app's actions on a server" width="49%">
+</p>
+
+More in [docs/screenshots](docs/screenshots/README.md) — the palette, a server form, every Settings page.
 
 Tauri 2, Rust on the back, React 19 and Tailwind on the front, bun for the scripts.
 
