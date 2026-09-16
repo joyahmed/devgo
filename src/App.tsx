@@ -730,10 +730,25 @@ const AppInner = () => {
 			e => toast(showError(e))
 		);
 	const [folderMenu, setFolderMenu] = useState<FolderMenu | null>(null);
+	// the name box for a root typed by hand, on this server
+	const [rootPrompt, setRootPrompt] = useState<Server | null>(null);
+	const addRoot = async (s: Server, root: string) => {
+		await invoke('add_server_root', { id: s.id, root });
+		await servers.reload();
+		await servers.listFolders(s.id);
+	};
 	// a remote editor entry is offered when that editor is a detected target
 	const hasEditor = (id: string) => targets.editors.some(t => t.id === id);
 	const buildFolderMenu = (s: Server, f: RemoteFolder): MenuEntry[] => [
 		{ label: 'Open terminal here', hint: 'Enter', onClick: () => openFolder(s, f) },
+		{ label: 'Look inside', onClick: () => servers.toggleDir(s.id, f.path) },
+		{
+			label: 'Make this a root',
+			onClick: () =>
+				addRoot(s, f.path)
+					.then(() => toast(`${f.path} is a root of ${s.name} now`, 'success'))
+					.catch(e => toast(showError(e)))
+		},
 		'separator',
 		{
 			label: 'Open in VS Code (Remote-SSH)',
@@ -761,6 +776,7 @@ const AppInner = () => {
 			label: 'List folders',
 			onClick: () => servers.listFolders(s.id).catch(e => toast(showError(e)))
 		},
+		{ label: 'Add a root folder…', onClick: () => setRootPrompt(s) },
 		'separator',
 		{ label: 'Copy ssh command', onClick: () => copyServerLine(s, 0) },
 		{ label: 'Copy scp prefix', onClick: () => copyServerLine(s, 1) },
@@ -1432,6 +1448,27 @@ const AppInner = () => {
 					}}
 				/>
 			)}
+
+			<Drawer
+				{...{
+					side: 'right' as const,
+					open: rootPrompt !== null,
+					title: rootPrompt ? `Add a root on ${rootPrompt.name}` : 'Add a root',
+					onClose: () => setRootPrompt(null)
+				}}
+			>
+				{rootPrompt && (
+					<NameDialog
+						{...{
+							hint: 'A folder on the server to list from: /etc, /opt, ~/some/place. Its children become rows; look inside any of them.',
+							initial: '/etc',
+							submitLabel: 'Add root',
+							onSubmit: (root: string) => addRoot(rootPrompt, root),
+							onDone: () => setRootPrompt(null)
+						}}
+					/>
+				)}
+			</Drawer>
 
 			{serversAddMenu && (
 				<ContextMenu
