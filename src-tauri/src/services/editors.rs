@@ -202,6 +202,18 @@ const WINDOWS: &[WinCandidate] = &[
     },
 ];
 
+/// Coding-agent CLIs, on the Windows side and inside each running distro,
+/// found the way the editors are: where.exe here, command -v under bash -lc
+/// there (so an nvm install is on PATH). On Windows an npm-installed CLI
+/// resolves to claude.cmd; where lists it and the terminal's run template
+/// runs it.
+pub const AGENTS: &[(&str, &str)] = &[
+    ("claude", "Claude Code"),
+    ("codex", "Codex"),
+    ("opencode", "OpenCode"),
+    ("gemini", "Gemini CLI"),
+];
+
 /// Command-line editors worth looking for inside a distro. No GUI terminal
 /// emulators: running one inside WSL needs an X server, and a target that
 /// opens nothing is worse than no target.
@@ -276,8 +288,50 @@ pub fn detect(running: &[String]) -> Vec<DetectedTarget> {
         })
         .collect();
 
+    // agents on the windows side: one where.exe for the four names
+    let agent_exes: Vec<&str> = AGENTS.iter().map(|(exe, _)| *exe).collect();
+    let found = where_lookup(&agent_exes);
+    for (exe, name) in AGENTS {
+        if !found.contains_key(*exe) {
+            continue;
+        }
+        out.push(DetectedTarget {
+            target: LaunchTarget {
+                id: (*exe).to_string(),
+                name: (*name).to_string(),
+                kind: TargetKind::Agent,
+                executable: (*exe).to_string(),
+                args_template: String::new(),
+                wsl_executable: None,
+                wsl_args_template: None,
+                run_args_template: None,
+                wsl_run_args_template: None,
+            },
+            source: "path".to_string(),
+            detail: format!("agent · {exe}"),
+        });
+    }
+
     for distro in running {
-        for (exe, name) in in_distro(distro) {
+        for (exe, name) in present_in_distro(distro, AGENTS) {
+            out.push(DetectedTarget {
+                target: LaunchTarget {
+                    id: format!("{}-{}", exe, slugify(distro)),
+                    name: format!("{name} ({distro})"),
+                    kind: TargetKind::Agent,
+                    // no windows command: this agent lives in the distro
+                    executable: String::new(),
+                    args_template: String::new(),
+                    wsl_executable: Some((*exe).to_string()),
+                    wsl_args_template: Some(String::new()),
+                    run_args_template: None,
+                    wsl_run_args_template: None,
+                },
+                source: distro.clone(),
+                detail: format!("agent · {distro} · {exe}"),
+            });
+        }
+        for (exe, name) in present_in_distro(distro, IN_DISTRO) {
             out.push(DetectedTarget {
                 target: distro_target(exe, name, distro),
                 source: distro.clone(),
@@ -288,9 +342,12 @@ pub fn detect(running: &[String]) -> Vec<DetectedTarget> {
     out
 }
 
-/// Which of the in-distro editors exist, in one bash -lc per distro.
-fn in_distro(distro: &str) -> Vec<(&'static str, &'static str)> {
-    let list = IN_DISTRO
+/// Which of a table's commands exist in the distro, in one bash -lc.
+fn present_in_distro(
+    distro: &str,
+    table: &'static [(&'static str, &'static str)],
+) -> Vec<(&'static str, &'static str)> {
+    let list = table
         .iter()
         .map(|(exe, _)| *exe)
         .collect::<Vec<_>>()
@@ -299,7 +356,7 @@ fn in_distro(distro: &str) -> Vec<(&'static str, &'static str)> {
         "for c in {list}; do command -v \"$c\" >/dev/null 2>&1 && echo \"$c\"; done"
     );
     let present = wsl::probe_lines(distro, &script);
-    IN_DISTRO
+    table
         .iter()
         .filter(|(exe, _)| present.iter().any(|p| p == exe))
         .copied()
@@ -365,6 +422,18 @@ pub fn is_on_path(exe: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // what where and command -v are asked for, verbatim: no paths, no
+    // extensions, so claude.cmd on windows and claude in a distro both
+    // resolve
+    #[test]
+    fn agent_names_are_plain_commands() {
+        for (exe, name) in AGENTS {
+            assert!(exe.chars().all(|c| c.is_ascii_lowercase()), "{exe}");
+            assert!(!name.is_empty());
+        }
+        assert_eq!(AGENTS.len(), 4);
+    }
 
     #[test]
     fn every_candidate_id_is_unique() {
