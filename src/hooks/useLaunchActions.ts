@@ -47,12 +47,24 @@ export const useLaunchActions = (
 		});
 	};
 
+	// a server row: the ssh line through a local host. no id is the default
+	// terminal, the same rule as above; via picks psmux or wsl through it.
+	// the line comes back, and preview reads it without a launch
+	const openServer = (server: Server, host?: ServerHost, preview = false) =>
+		invoke<string>('open_server', {
+			id: server.id,
+			targetId: host?.targetId ?? null,
+			via: host?.via ?? null,
+			preview
+		});
+
 	return {
 		addWorkspace,
 		removeWorkspace,
 		openEditor,
 		openTerminal,
 		openAgent,
-		openBoth
+		openBoth,
+		openServer
 	};
 };
