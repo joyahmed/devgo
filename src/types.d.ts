@@ -362,7 +362,7 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
 
 /// the footer: the launch groups, and the palette's door
 /// which default just fired; its button pulses once, the launch moment
-type LaunchKind = 'editor' | 'terminal' | 'both';
+type LaunchKind = 'editor' | 'terminal' | 'both' | 'agent';
 
 interface Launching {
 	path: string;
@@ -376,8 +376,11 @@ interface StatusBarProps {
 	selectionIsWsl: boolean;
 	editors: LaunchTarget[];
 	terminals: LaunchTarget[];
+	/// coding agents: the group is absent entirely when none is detected
+	agents: LaunchTarget[];
 	defaults: Record<string, string>;
 	onEditor: (targetId?: string) => void;
+	onAgent: (targetId?: string) => void;
 	onTerminal: (targetId?: string) => void;
 	onBoth: () => void;
 	onManageTargets: () => void;

@@ -20,11 +20,20 @@ const TargetGroup = ({
 			{label}
 		</span>
 		{items.map(t => {
-			// the same fact TargetManager shows as a badge, before the click
-			const blocked = isWsl && !t.wsl_args_template;
+			// the same fact TargetManager shows as a badge, before the click. an
+			// agent is a command on one side or the other; an editor or a
+			// terminal is blocked on wsl only when it has no wsl form
+			const blocked =
+				t.kind === 'agent'
+					? isWsl
+						? !t.wsl_executable
+						: !t.executable
+					: isWsl && !t.wsl_args_template;
 			const isDefault = t.id === defaultId;
 			const title = blocked
-				? `${t.name} has no WSL configuration, so it cannot open this project`
+				? t.kind === 'agent'
+					? `${t.name} is not installed on this project's side`
+					: `${t.name} has no WSL configuration, so it cannot open this project`
 				: isDefault
 					? `${t.name} — ${shortcut}`
 					: t.name;
@@ -57,9 +66,11 @@ const StatusBar = ({
 	selectionIsWsl,
 	editors,
 	terminals,
+	agents,
 	defaults,
 	onEditor,
 	onTerminal,
+	onAgent,
 	onBoth,
 	onManageTargets,
 	onOpenPalette,
@@ -83,7 +94,20 @@ const StatusBar = ({
 			shortcut: prettyKeys(shortcutFor('openTerminal')),
 			onPick: onTerminal,
 			pulse: pulse === 'terminal'
-		}
+		},
+		// the footer must not grow an empty group
+		...(agents.length > 0
+			? [
+					{
+						label: 'Agent',
+						items: agents,
+						defaultId: defaults.agent,
+						shortcut: prettyKeys(shortcutFor('openAgent')),
+						onPick: onAgent,
+						pulse: pulse === 'agent'
+					}
+				]
+			: [])
 	];
 	const both = prettyKeys(shortcutFor('openBoth'));
 

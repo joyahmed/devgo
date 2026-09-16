@@ -104,8 +104,14 @@ const AppInner = () => {
 		setSort,
 		togglePin
 	} = useProjects();
-	const { addWorkspace, removeWorkspace, openEditor, openTerminal, openBoth } =
-		useLaunchActions(selected, refresh);
+	const {
+		addWorkspace,
+		removeWorkspace,
+		openEditor,
+		openTerminal,
+		openAgent,
+		openBoth
+	} = useLaunchActions(selected, refresh);
 	// the github group. reads its cache on mount and re-reads after every
 	// badge pass (git is the dependency) so the local marks track the disk.
 	// its box is its own; the project query never reaches it
@@ -640,6 +646,10 @@ const AppInner = () => {
 		flash('both');
 		openBoth().catch(e => toast(showError(e)));
 	};
+	const handleOpenAgent = (targetId?: string) => {
+		flash('agent');
+		openAgent(undefined, targetId).catch(e => toast(showError(e)));
+	};
 	// a target with no WSL form cannot open a WSL project; the row disables
 	// it instead of letting the launch fail after the click
 	const selectionIsWsl = selected?.file_system === 'WSL';
@@ -1092,6 +1102,8 @@ const AppInner = () => {
 			if (fire('openEditor', () => handleOpenEditor())) return;
 			if (fire('openTerminal', () => handleOpenTerminal())) return;
 			if (fire('openBoth', handleOpenBoth)) return;
+			if (targets.agents.length > 0 && fire('openAgent', () => handleOpenAgent()))
+				return;
 			if (fire('revealExplorer', () => revealInExplorer(selected))) return;
 			if (fire('copyWinPath', () => copyWindowsPath(selected))) return;
 			if (fire('copyWslPath', () => copyWslPath(selected))) return;
@@ -1666,9 +1678,11 @@ const AppInner = () => {
 					selectionIsWsl,
 					editors: targets.editors,
 					terminals: targets.terminals,
+					agents: targets.agents,
 					defaults: targets.defaults,
 					onEditor: handleOpenEditor,
 					onTerminal: handleOpenTerminal,
+					onAgent: handleOpenAgent,
 					onBoth: handleOpenBoth,
 					onManageTargets: () => openSettings('targets'),
 					onOpenPalette: () => setPaletteOpen(true),
