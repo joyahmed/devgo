@@ -56,20 +56,42 @@ export const useProjects = () => {
 	// Git and stack detection both spawn processes, so neither gates the list.
 	// These fire after the payload is already on screen and merge in as they
 	// arrive — independently, so a slow git pass does not hold up the badges.
-	const loadDetails = (list: Project[]) => {
+	//
+	// merge keeps what the maps hold for paths outside list: a one-workspace
+	// pass asks for that workspace's badges only, and replacing the whole
+	// map would strip every other row's branch and stack. a full pass
+	// replaces, so a project that left the list leaves the maps
+	const loadDetails = (list: Project[], merge = false) => {
 		if (list.length === 0) return;
+		const asked = new Set(list.map(p => p.full_path));
+		const kept = <V,>(prev: Map<string, V>) =>
+			merge
+				? new Map([...prev].filter(([k]) => !asked.has(k)))
+				: new Map<string, V>();
 		invoke<GitInfo[]>('get_git_info', { projects: list })
 			.then(infos => {
-				setGit(new Map(infos.map(i => [i.full_path, i])));
+				setGit(
+					prev => new Map([...kept(prev), ...infos.map(i => [i.full_path, i] as const)])
+				);
 			})
 			.catch(() => {});
 		invoke<ProjectTech[]>('get_project_tech', { projects: list })
 			.then(infos => {
-				setTech(new Map(infos.map(i => [i.full_path, i])));
+				setTech(
+					prev => new Map([...kept(prev), ...infos.map(i => [i.full_path, i] as const)])
+				);
 			})
 			.catch(() => {});
 		invoke<string[]>('get_live_sessions', { projects: list })
-			.then(paths => setSessions(new Set(paths)))
+			.then(paths =>
+				setSessions(
+					prev =>
+						new Set([
+							...(merge ? [...prev].filter(k => !asked.has(k)) : []),
+							...paths
+						])
+				)
+			)
 			.catch(() => {});
 	};
 
@@ -121,6 +143,41 @@ export const useProjects = () => {
 	};
 
 	const refresh = (force = false) => runPass(force, false);
+
+	// one workspace, live: the header's refresh. the backend reads that one
+	// alone (and may boot its distro, the ask names it) and answers with
+	// its projects; they replace that workspace's slice of the list, its
+	// header state and ranks, and its badges are re-read with merge so no
+	// other row goes bare. not in flight and no spinner: the list stays on
+	// screen and the header's count and pill are what change
+	const refreshWorkspace = async (ws: string) => {
+		const payload = await invoke<ProjectsPayload>('refresh_workspace', {
+			workspace: ws
+		});
+		const state = payload.workspaces.find(s => s.workspace === ws);
+		setProjects(prev => [
+			...prev.filter(p => p.workspace !== ws),
+			...payload.projects
+		]);
+		setWorkspaceStates(prev =>
+			state
+				? prev.some(s => s.workspace === ws)
+					? prev.map(s => (s.workspace === ws ? state : s))
+					: [...prev, state]
+				: prev
+		);
+		const gone = new Set(
+			projects.filter(p => p.workspace === ws).map(p => p.full_path)
+		);
+		setRanks(prev => {
+			const next = new Map([...prev].filter(([k]) => !gone.has(k)));
+			for (const r of payload.ranks) next.set(r.full_path, r);
+			return next;
+		});
+		for (const p of payload.projects) badgedPaths.current.add(p.full_path);
+		loadDetails(payload.projects, true);
+		return payload;
+	};
 
 	// Schedule a retry whenever something is recoverably missing. Cleared as soon
 	// as a pass comes back with nothing left to retry.
@@ -290,6 +347,7 @@ export const useProjects = () => {
 		selected,
 		setSelected: selectAndSave,
 		refresh,
+		refreshWorkspace,
 		loading,
 		sortMode,
 		toggleSort,
