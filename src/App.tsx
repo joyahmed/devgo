@@ -408,6 +408,22 @@ const AppInner = () => {
 		togglePin(p).catch(e => toast(showError(e)));
 	};
 
+	// one function for the palette and the row's menu, so both confirm
+	// with the same words
+	const killSession = (p: Project) =>
+		setConfirmAction({
+			title: 'Kill session',
+			confirmLabel: 'Kill',
+			message: `Kill the session for ${p.name}? Every window in it closes.`,
+			run: () =>
+				invoke('kill_session', { project: p })
+					.then(() => {
+						forgetSession(p.full_path);
+						toast(`Session for ${p.name} killed`, 'info');
+					})
+					.catch(e => toast(showError(e), 'error'))
+		});
+
 	const handleOpenRemote = (p: Project, branch?: string) => {
 		invoke('open_remote', {
 			fullPath: p.full_path,
@@ -1168,20 +1184,7 @@ const AppInner = () => {
 					: 'No live session for the selection',
 				keywords: ['tmux', 'psmux', 'session', 'kill'],
 				disabled: !selectedLive,
-				run: () =>
-					p &&
-					setConfirmAction({
-						title: 'Kill session',
-						confirmLabel: 'Kill',
-						message: `Kill the session for ${p.name}? Every window in it closes.`,
-						run: () =>
-							invoke('kill_session', { project: p })
-								.then(() => {
-									forgetSession(p.full_path);
-									toast(`Session for ${p.name} killed`, 'info');
-								})
-								.catch(e => toast(showError(e), 'error'))
-					})
+				run: () => p && killSession(p)
 			},
 			proj(
 				'revealExplorer',
@@ -1332,6 +1335,7 @@ const AppInner = () => {
 		const hint = (id: ShortcutId) => prettyKeys(shortcutFor(id));
 		const remote = git.get(p.full_path)?.remote;
 		const pinned = ranks.get(p.full_path)?.pinned ?? false;
+		const live = sessions.has(p.full_path) && tmuxOn;
 		return [
 			{
 				label: 'Open in editor',
@@ -1339,20 +1343,34 @@ const AppInner = () => {
 				onClick: () => launchEditor(p)
 			},
 			{
-				label:
-					sessions.has(p.full_path) && tmuxOn
-						? 'Reattach terminal'
-						: 'Open terminal',
+				label: live ? 'Reattach terminal' : 'Open terminal',
 				hint: hint('openTerminal'),
 				onClick: () => launchTerminal(p)
 			},
 			{ label: 'Open both', hint: hint('openBoth'), onClick: () => handleLaunch(p) },
-			...targets.agents.map(t => ({
-				label: `Open in ${t.name}`,
-				hint: t.id === targets.defaults.agent ? hint('openAgent') : undefined,
-				disabled: p.file_system === 'WSL' ? !t.wsl_executable : !t.executable,
-				onClick: () => openAgent(p, t.id).catch(e => toast(showError(e)))
-			})),
+			// a disabled entry says why: a grey line with no reason reads as
+			// broken, not as a target that cannot open this project
+			...targets.agents.map(t => {
+				const missing =
+					p.file_system === 'WSL' ? !t.wsl_executable : !t.executable;
+				return {
+					label: `Open in ${t.name}`,
+					hint: missing
+						? p.file_system === 'WSL'
+							? 'no WSL form'
+							: 'not found on Windows'
+						: t.id === targets.defaults.agent
+							? hint('openAgent')
+							: undefined,
+					disabled: missing,
+					onClick: () => openAgent(p, t.id).catch(e => toast(showError(e)))
+				};
+			}),
+			// the row that says live gets the kill beside the reattach; the
+			// palette had it, the row's own menu did not
+			...(live
+				? [{ label: 'Kill session', danger: true, onClick: () => killSession(p) }]
+				: []),
 			'separator',
 			{
 				label: 'Reveal in Explorer',
@@ -1370,11 +1388,18 @@ const AppInner = () => {
 				onClick: () => copyWslPath(p)
 			},
 			...(remote
-				? [{ label: 'Open remote', onClick: () => handleOpenRemote(p) }]
+				? [
+						{
+							label: 'Open remote',
+							hint: hint('openRemote'),
+							onClick: () => handleOpenRemote(p)
+						}
+					]
 				: []),
 			'separator',
 			{
 				label: 'Run dev script…',
+				hint: hint('runScript'),
 				onClick: () => openScripts(p, menu?.x ?? 240, menu?.y ?? 200)
 			},
 			'separator',
