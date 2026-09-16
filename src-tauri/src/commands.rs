@@ -555,6 +555,20 @@ fn running_for(projects: &[Project]) -> Vec<String> {
     }
 }
 
+// which of these projects have a live tmux / psmux session: the live
+// chip. the same liveness gate as the git pass
+#[tauri::command]
+pub fn get_live_sessions(projects: Vec<Project>) -> Vec<String> {
+    let running = running_for(&projects);
+    crate::services::sessions::collect(&projects, &running)
+}
+
+#[tauri::command]
+pub fn kill_session(project: Project) -> Result<(), AppError> {
+    let running = running_for(std::slice::from_ref(&project));
+    crate::services::sessions::kill(&project, &running)
+}
+
 #[tauri::command]
 pub fn get_git_info(
     projects: Vec<Project>,

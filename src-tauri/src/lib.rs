@@ -450,6 +450,8 @@ pub fn run() {
             commands::get_app_data_dir,
             commands::reveal_app_data_dir,
             commands::get_remote_branches,
+            commands::get_live_sessions,
+            commands::kill_session,
             commands::get_github_branches,
             commands::refresh_remote_branches_github,
             commands::get_github_repos,
