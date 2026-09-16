@@ -306,6 +306,7 @@ const ServersLane = ({
 	onSelectFolder,
 	onOpenFolder,
 	onFolderContextMenu,
+	onRootContextMenu,
 	onArrow,
 	onEnter
 }: ServersLaneProps) => {
@@ -410,6 +411,11 @@ const ServersLane = ({
 							className={`${col} px-3 py-1 ml-6 select-none cursor-pointer hover:bg-bg-hover/50`}
 							title={`${root}. Click to ${folded ? 'show' : 'hide'}`}
 							onClick={() => toggleRoot(s.id, root)}
+							onContextMenu={e => {
+								e.preventDefault();
+								e.stopPropagation();
+								onRootContextMenu(s, root, e.clientX, e.clientY);
+							}}
 						>
 							<div className='flex items-center gap-2 min-w-0 pl-6'>
 								<span
