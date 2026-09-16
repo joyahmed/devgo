@@ -71,7 +71,9 @@ Enter opens a terminal on the server in a tmux session that survives, the same p
 
 When the box carries a script at `~/scripts/devgo-inventory.sh`, the same call brings back its **apps**: each `/var/www` folder shows its domain, a dot for its pm2 processes, and its ports. The server declares its own **actions** in `devgo-actions.json` beside that script; right-click the server or an app to run them. An action is typed into a tmux window on the server and the terminal attaches to it. `sudo` asks there; DevGo never holds it, never runs a script itself, and never reads what came back.
 
-Some actions are **forms**: *New nginx site…* asks for the app, the domain, the port, the shape (`NEXT · NEST · NODE · TURBO`), www and HTTPS, and shows the exact line it composes as you type. *Preview* runs it with `--dry-run` so the script prints what it would do and changes nothing; the other button runs it for real.
+Some actions are **forms**: *New site…* asks for the name, the domain, the port, the type (`PROXY · STATIC`), www and HTTPS, and shows the exact line it composes as you type. *Preview* runs it with `--dry-run` so the script prints what it would do and changes nothing; the other button runs it for real.
+
+Teaching a box to describe itself is three files, and [`server/README.md`](server/README.md) is the contract: `server/devgo-inventory.sh` (a bash inventory for a typical Linux box: pm2 and docker processes, nginx sites, git, the lockfile), `server/devgo-actions.example.json` (the actions above, with placeholders, a local tunnel and the *New site…* form, to copy and edit) and `server/site-new.sh` (the script that form calls). `scp` them into `~/scripts/` on the server, `chmod +x`, press ↻ on the row. Every key of both JSON documents is documented there, with what the app does with it.
 
 ## ⚙️ Settings
 
