@@ -22,6 +22,12 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
+      # the server contract: the two scripts parse, the example is json
+      - run: |
+          bash -n server/devgo-inventory.sh
+          bash -n server/site-new.sh
+          jq empty server/devgo-actions.example.json
+        shell: bash
       - run: bun install --frozen-lockfile
       - run: bun run build
       - run: cargo test --manifest-path src-tauri/Cargo.toml || cargo test --manifest-path src-tauri/Cargo.toml -- --test-threads=1
