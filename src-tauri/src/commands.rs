@@ -945,10 +945,27 @@ pub async fn run_server_action(
     id: String,
     action_id: String,
     app_dir: Option<String>,
+    values: Option<HashMap<String, String>>,
+    preview: Option<bool>,
     app: tauri::AppHandle,
 ) -> Result<ActionOutcome, AppError> {
     use crate::services::server_apps::{
-        check_local, fill, placeholders, typed_command, ActionKind,
+        check_local, compose, fill, placeholders, typed_command, Action,
+        ActionKind,
+    };
+    // a form composes its line from the drawer's values first, validated
+    // as words, and then goes exactly the run way
+    let composed = |a: &Action| -> Result<String, AppError> {
+        if a.kind == ActionKind::Form {
+            compose(
+                a,
+                values.as_ref().unwrap_or(&HashMap::new()),
+                preview.unwrap_or(false),
+            )
+            .map_err(AppError::ActionRefused)
+        } else {
+            Ok(a.command.clone())
+        }
     };
     let (server, action, line) = {
         let h = app.state::<AppState>();
@@ -980,7 +997,7 @@ pub async fn run_server_action(
                     .ok_or_else(|| {
                         AppError::ActionNotFound(action_id.clone())
                     })?;
-                (a.clone(), a.command.clone())
+                (a.clone(), composed(a)?)
             }
             Some(dir) => {
                 let a =
@@ -1001,14 +1018,13 @@ pub async fn run_server_action(
                             "{dir} is not an app in the inventory"
                         ))
                     })?;
-                let line = fill(&a.command, &placeholders(entry)).ok_or_else(
-                    || {
+                let line = fill(&composed(a)?, &placeholders(entry))
+                    .ok_or_else(|| {
                         AppError::ActionRefused(format!(
                             "{} has nothing to fill {} with",
                             entry.name, a.label
                         ))
-                    },
-                )?;
+                    })?;
                 (a.clone(), line)
             }
         };
@@ -1036,8 +1052,8 @@ pub async fn run_server_action(
             launcher::launch_with_command(&terminal, &stand_in, &info, &line)?;
             Ok(ActionOutcome::Local { line })
         }
-        ActionKind::Run | ActionKind::Pretype => {
-            let press_enter = action.kind == ActionKind::Run;
+        ActionKind::Run | ActionKind::Pretype | ActionKind::Form => {
+            let press_enter = action.kind != ActionKind::Pretype;
             if !server.tmux {
                 // no window to type into: the frontend copies the line and
                 // opens the terminal plain
@@ -1066,6 +1082,53 @@ pub async fn run_server_action(
             })
         }
     }
+}
+
+// the line a form would type, for the drawer to show as the user types:
+// the truth on screen before the click. the same lookup and the same
+// compose and fill as run_server_action; nothing is sent. an error is the
+// validation message for the field it names
+#[tauri::command]
+pub fn compose_server_action(
+    id: String,
+    action_id: String,
+    app_dir: Option<String>,
+    values: HashMap<String, String>,
+    preview: bool,
+    state: State<AppState>,
+) -> Result<String, String> {
+    use crate::services::server_apps::{compose, fill, placeholders};
+    let listing = state
+        .servers_cache
+        .lock()
+        .map_err(|e| e.to_string())?
+        .all()
+        .remove(&id)
+        .unwrap_or_default();
+    let actions = listing.actions.as_ref().ok_or("No actions")?;
+    let list = if app_dir.is_some() {
+        &actions.app
+    } else {
+        &actions.server
+    };
+    let action = list
+        .iter()
+        .find(|a| a.id == action_id)
+        .ok_or("No such action")?;
+    let line = compose(action, &values, preview)?;
+    let Some(dir) = app_dir.as_deref() else {
+        return Ok(line);
+    };
+    let dir = dir.trim_end_matches('/');
+    let entry = listing
+        .inventory
+        .as_ref()
+        .and_then(|i| {
+            i.apps.iter().find(|x| x.dir.trim_end_matches('/') == dir)
+        })
+        .ok_or("Not an app in the inventory")?;
+    fill(&line, &placeholders(entry))
+        .ok_or_else(|| "This app lacks something the line needs".to_string())
 }
 
 // the children of one folder: the drill-down, one ssh on the click, cached
