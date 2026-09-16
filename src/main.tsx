@@ -1,3 +1,4 @@
+import { invoke } from '@tauri-apps/api/core';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
@@ -11,6 +12,7 @@ applyTheme(savedThemeId());
 const scale = savedTextScale();
 if (scale !== 1) applyTextScale(scale).catch(() => {});
 
+invoke('mark_startup', { stage: 'js-start' }).catch(() => {});
 ReactDOM.createRoot(
 	document.getElementById('root') as HTMLElement
 ).render(
