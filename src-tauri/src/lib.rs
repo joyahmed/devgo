@@ -451,6 +451,7 @@ pub fn run() {
             commands::reveal_app_data_dir,
             commands::get_remote_branches,
             commands::get_live_sessions,
+            commands::open_agent,
             commands::kill_session,
             commands::get_github_branches,
             commands::refresh_remote_branches_github,

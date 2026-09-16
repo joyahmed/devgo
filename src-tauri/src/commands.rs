@@ -542,6 +542,42 @@ pub fn run_script(
     record_launch(&state, &project)
 }
 
+// a coding agent in the default terminal, in the project directory. the
+// agent is a command; the terminal's run template, the dev-script path,
+// launches it, so it lands in a real terminal with its own clipboard,
+// scrollback and focus. it must exist on the project's side
+#[tauri::command]
+pub fn open_agent(
+    project: Project,
+    target_id: Option<String>,
+    state: State<AppState>,
+) -> Result<(), AppError> {
+    let agent = resolve_target(&state, TargetKind::Agent, target_id)?;
+    let on_wsl =
+        crate::services::scanner::distro_of(&project.full_path).is_some();
+    let command = if on_wsl {
+        agent.wsl_executable.clone()
+    } else {
+        Some(agent.executable.clone())
+    }
+    .filter(|c| !c.is_empty())
+    .ok_or_else(|| {
+        let (side, fix) = if on_wsl {
+            ("WSL", "install it in the distro")
+        } else {
+            ("Windows", "install it on Windows")
+        };
+        AppError::LaunchFailed(format!(
+            "{} is not installed on the {side} side. {fix} and scan again in Settings",
+            agent.name
+        ))
+    })?;
+    let info = state.runtime_info.lock().map_err(lock_err)?.clone();
+    let terminal = resolve_target(&state, TargetKind::Terminal, None)?;
+    crate::services::scripts::run(&project, &command, &terminal, &info)?;
+    record_launch(&state, &project)
+}
+
 /// Same liveness gate the scanner uses: neither git state nor a stack badge is
 /// ever worth booting a virtual machine for.
 fn running_for(projects: &[Project]) -> Vec<String> {
