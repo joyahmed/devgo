@@ -1516,6 +1516,165 @@ mod tests {
         assert!(!script.contains("new-window"), "one window, no layout");
     }
 
+    // the seeded windows terminal, the way commands.rs hands it over
+    #[cfg(windows)]
+    fn wt() -> LaunchTarget {
+        crate::models::target::defaults()
+            .into_iter()
+            .find(|t| t.id == "wt")
+            .unwrap()
+    }
+
+    #[cfg(windows)]
+    fn home() -> Project {
+        Project::new(
+            "box".into(),
+            r"C:\Users\joy".into(),
+            String::new(),
+            crate::services::scanner::LOCAL_FS.into(),
+        )
+    }
+
+    fn with_distro(name: &str) -> RuntimeInfo {
+        RuntimeInfo {
+            runtime: crate::services::platform::runtime::Runtime::Windows,
+            wsl_available: true,
+            distros: vec![name.into()],
+            default_distro: Some(name.into()),
+            local_fs: crate::services::scanner::LOCAL_FS,
+        }
+    }
+
+    const SSH: &str = "ssh -t box tmux new-session -A -s devgo";
+
+    // the terminal host is the run template with the line as the tab
+    #[cfg(windows)]
+    #[test]
+    fn a_server_through_the_terminal_is_the_ssh_line_in_a_tab() {
+        let (exe, args) = server_line(
+            &wt(),
+            &home(),
+            &no_distro(),
+            SSH,
+            ServerVia::Terminal,
+            &[],
+        )
+        .unwrap();
+        assert_eq!(exe, "wt");
+        assert_eq!(args, format!(r#"-d "C:\Users\joy" {SSH}"#));
+    }
+
+    // the psmux host is the session form: the script in the seam holds
+    // the line, the tab attaches to it
+    #[cfg(windows)]
+    #[test]
+    fn a_server_through_psmux_attaches_a_session_that_runs_the_line() {
+        let (exe, args) = server_line(
+            &wt(),
+            &home(),
+            &no_distro(),
+            SSH,
+            ServerVia::Psmux,
+            &[],
+        )
+        .unwrap();
+        assert_eq!(exe, "wt");
+        assert!(args.contains("pwsh -NoExit"), "{args}");
+        assert!(!args.contains(SSH), "the line rides in the script: {args}");
+        let script_path = args
+            .rsplit_once("-File \"")
+            .map(|(_, p)| p.trim_end_matches('"'))
+            .unwrap();
+        assert!(script_path.ends_with("devgo-ssh-box.ps1"), "{script_path}");
+        let script = std::fs::read_to_string(script_path).unwrap();
+        assert!(script.contains(&format!("-s 'ssh-box' -n 'ssh' '{SSH}'")));
+        assert!(script.contains("attach -t '=ssh-box'"));
+
+        // a terminal without the seam has nowhere to put a session
+        let mut bare = wt();
+        bare.args_template = "-d \"{path}\"".into();
+        let err = server_line(
+            &bare,
+            &home(),
+            &no_distro(),
+            SSH,
+            ServerVia::Psmux,
+            &[],
+        )
+        .unwrap_err();
+        assert!(matches!(err, AppError::TargetCannotHost(_)), "{err}");
+    }
+
+    // the wsl host is the terminal's wsl run form with the distro's own
+    // ssh: ~ for the distro's home, bash -lc for its PATH and ~/.ssh
+    #[cfg(windows)]
+    #[test]
+    fn a_server_through_wsl_runs_the_distros_own_ssh() {
+        let (exe, args) = server_line(
+            &wt(),
+            &home(),
+            &with_distro("Ubuntu"),
+            SSH,
+            ServerVia::Wsl,
+            &["Ubuntu".into()],
+        )
+        .unwrap();
+        assert_eq!(exe, "wt");
+        assert_eq!(
+            args,
+            format!(
+                r#"wsl -d Ubuntu --cd "~" -e bash -lc "{SSH}\; exec bash""#
+            )
+        );
+    }
+
+    // never a boot: a stopped default distro is a refusal that names it,
+    // and no distro at all is the older refusal
+    #[test]
+    fn a_server_through_wsl_is_refused_when_the_distro_is_not_running() {
+        let target = LaunchTarget {
+            id: "t".into(),
+            name: "T".into(),
+            kind: TargetKind::Terminal,
+            executable: "t".into(),
+            args_template: "\"{path}\"".into(),
+            wsl_executable: None,
+            wsl_args_template: None,
+            run_args_template: Some("{command}".into()),
+            wsl_run_args_template: Some("-d {distro} {command}".into()),
+        };
+        let home = local_project("box", "home");
+        let err = server_line(
+            &target,
+            &home,
+            &with_distro("Ubuntu"),
+            SSH,
+            ServerVia::Wsl,
+            &["Debian".into()],
+        )
+        .unwrap_err();
+        assert!(
+            matches!(err, AppError::WslNotRunning(ref d) if d == "Ubuntu"),
+            "{err}"
+        );
+        assert!(err.to_string().contains("never boots"), "{err}");
+        let err =
+            server_line(&target, &home, &no_distro(), SSH, ServerVia::Wsl, &[])
+                .unwrap_err();
+        assert!(matches!(err, AppError::NoWslDistro(_)), "{err}");
+        // running, any case: the distro's ssh through the wsl run form
+        let (_, args) = server_line(
+            &target,
+            &home,
+            &with_distro("Ubuntu"),
+            SSH,
+            ServerVia::Wsl,
+            &["ubuntu".into()],
+        )
+        .unwrap();
+        assert_eq!(args, format!("-d Ubuntu {SSH}"));
+    }
+
     /// The other half of the {script} contract, on the Windows side: a .ps1,
     /// its Windows path, no conversion.
     #[cfg(windows)]
