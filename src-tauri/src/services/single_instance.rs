@@ -28,9 +28,16 @@ pub fn try_acquire(
             drop(listener);
             if let Ok(port_str) = fs::read_to_string(&lock_file) {
                 if let Ok(port) = port_str.trim().parse::<u16>() {
-                    if let Ok(mut stream) =
-                        TcpStream::connect(format!("127.0.0.1:{port}"))
-                    {
+                    // a stale lock (the last DevGo was killed, not quit)
+                    // names a port nobody listens on, and a plain connect
+                    // sat in the stack's timeout on every start after one.
+                    // a live instance answers on loopback in far less
+                    let addr =
+                        std::net::SocketAddr::from(([127, 0, 0, 1], port));
+                    if let Ok(mut stream) = TcpStream::connect_timeout(
+                        &addr,
+                        std::time::Duration::from_millis(200),
+                    ) {
                         let _ = stream.write_all(b"restore");
                         return Err(
                             "Another instance is already running".into()
