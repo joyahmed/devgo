@@ -177,6 +177,7 @@ const RowMeta = ({
 	rank,
 	git,
 	tech,
+	live,
 	onTogglePin,
 	onOpenBranches
 }: RowMetaProps) => (
@@ -188,6 +189,20 @@ const RowMeta = ({
 				onOpenBranches: (x: number, y: number) => onOpenBranches?.(project, x, y)
 			}}
 		/>
+		{/* the session is still there, after devgo, the terminal, a reboot
+		    of the distro; enter reattaches, and the chip is what says so */}
+		{live && (
+			<span
+				className='text-11 font-semibold text-accent shrink-0 inline-flex items-center gap-1'
+				title={`${project.file_system === 'WSL' ? 'tmux' : 'psmux'} session is running; a terminal launch reattaches`}
+			>
+				<span
+					className='size-[7px] rounded-full bg-accent shadow-[0_0_6px_var(--color-accent)]'
+					aria-hidden='true'
+				/>
+				live
+			</span>
+		)}
 		{/* recent / frequent: off unless Appearance says otherwise. the
 		    frecency sort already puts them first, and they were the fourth
 		    item in a five-item cluster on every row */}
@@ -287,6 +302,7 @@ const ProjectTree = ({
 	ranks,
 	gitInfo,
 	techInfo,
+	sessions,
 	pinnedProjects,
 	onTogglePin,
 	onOpenBranches,
@@ -654,6 +670,7 @@ const ProjectTree = ({
 		rank: ranks?.get(project.full_path),
 		git: gitInfo?.get(project.full_path),
 		tech: techInfo?.get(project.full_path),
+		live: sessions?.has(project.full_path),
 		onSelect: selectProject,
 		onDoubleClick,
 		onTogglePin,

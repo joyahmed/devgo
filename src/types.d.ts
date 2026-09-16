@@ -804,6 +804,8 @@ interface ProjectTreeProps {
 	ranks?: Map<string, ProjectRank>;
 	gitInfo?: Map<string, GitInfo>;
 	techInfo?: Map<string, ProjectTech>;
+	/// projects with a live tmux / psmux session: the live chip
+	sessions?: Set<string>;
 	pinnedProjects?: Project[];
 	onTogglePin?: (p: Project) => void;
 	onOpenBranches?: (p: Project, x: number, y: number) => void;
@@ -855,6 +857,8 @@ interface RowMetaProps {
 	rank?: ProjectRank;
 	git?: GitInfo;
 	tech?: ProjectTech;
+	/// a tmux / psmux session is running for the project
+	live?: boolean;
 	onTogglePin?: (p: Project) => void;
 	onOpenBranches?: (p: Project, x: number, y: number) => void;
 }
