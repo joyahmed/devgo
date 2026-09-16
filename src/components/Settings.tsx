@@ -870,11 +870,14 @@ const ConfigPanel = ({ onChanged, onError }: ConfigPanelProps) => {
 
 
 // the line under a server's name: the ssh line as the row would run it,
-// and the default path when there is one
-const serverLine = (s: Server) => {
+// and the default path when there is one. by host only when the lane may
+// say it; otherwise the line says how, not where
+const serverLine = (s: Server, details: boolean) => {
 	const target = s.alias
 		? s.alias
-		: `${s.user ? `${s.user}@` : ''}${s.host}${s.port && s.port !== 22 ? ` -p ${s.port}` : ''}`;
+		: details
+			? `${s.user ? `${s.user}@` : ''}${s.host}${s.port && s.port !== 22 ? ` -p ${s.port}` : ''}`
+			: 'by host';
 	return `ssh ${target}${s.default_path ? ` · ${s.default_path}` : ''}`;
 };
 
@@ -962,7 +965,7 @@ const ServersPanel = ({
 										)}
 									</div>
 									<div className='font-mono text-11 text-text-muted truncate'>
-										{serverLine(s)}
+										{serverLine(s, servers.showDetails)}
 									</div>
 								</div>
 								<div className='flex items-center gap-1 shrink-0'>
