@@ -10,6 +10,7 @@ use std::collections::HashSet;
 use std::os::windows::process::CommandExt;
 use std::process::Command;
 
+use crate::error::AppError;
 use crate::models::Project;
 use crate::services::launcher::session_names;
 use crate::services::platform::wsl;
@@ -82,6 +83,39 @@ pub fn parse_session_lines(text: &str) -> Vec<String> {
         .map(|l| l.trim().to_string())
         .filter(|l| !l.is_empty())
         .collect()
+}
+
+/// Kill the project's session. Refuses a stopped distro rather than
+/// booting it: a session in a stopped distro is already gone.
+pub fn kill(project: &Project, running: &[String]) -> Result<(), AppError> {
+    let name = session_names(std::slice::from_ref(project))
+        .into_keys()
+        .next()
+        .ok_or_else(|| {
+            AppError::LaunchFailed("no session name for this project".into())
+        })?;
+    // = is an exact target, the rule from chapter 26
+    let target = format!("={name}");
+    match distro_of(&project.full_path) {
+        Some(distro) => {
+            if !wsl::is_running(&distro, running) {
+                return Err(AppError::LaunchFailed(format!(
+                    "{distro} is not running, there is no session to kill"
+                )));
+            }
+            let script = format!("tmux kill-session -t '{target}' 2>/dev/null");
+            wsl::probe_lines(&distro, &script);
+            Ok(())
+        }
+        None => {
+            Command::new("psmux.exe")
+                .creation_flags(CREATE_NO_WINDOW)
+                .args(["kill-session", "-t", &target])
+                .output()
+                .map_err(|e| AppError::LaunchFailed(format!("psmux: {e}")))?;
+            Ok(())
+        }
+    }
 }
 
 #[cfg(test)]
