@@ -2,7 +2,7 @@
 
 A launcher for a developer's projects. Point it at the folders that hold them, on every filesystem the machine can see, and it lists every project, finds one in a few keystrokes, and opens it in the editor, terminal or agent you already use. It is not an editor, a terminal or a git client. It opens the door and gets out of the way.
 
-On this Windows machine that means the local drives and the WSL distros. On a Mac it means the local disk. Beside those, the GitHub account you are logged into and the servers in your ssh config get a lane of their own.
+On Windows that means the local drives and the WSL distros. On a Mac it means the local disk. Beside those, the GitHub account you are logged into and the servers in your ssh config get a lane of their own.
 
 <!-- screenshots: docs/screenshots/{windows,mac} -->
 
@@ -13,7 +13,7 @@ Tauri 2, Rust on the back, React 19 and Tailwind on the front, bun for the scrip
 The window is one row of lanes. From 1900 px they sit side by side; from 1400 they fold into two rows; narrower, they stack.
 
 - **Windows** (or **Mac**, **Linux**): workspaces on the local disk. A workspace is a folder that holds projects. Add one with `Ctrl+N`, by scanning the usual roots, or by dropping a folder on the window. Depth 1 lists every immediate child; deeper, a folder is a project only when it carries a marker (`package.json`, `Cargo.toml`, `.git`, …), so a monorepo's apps become rows without every subfolder becoming one. Every row shows what the scanner found: the framework, the package manager, the git branch, `recent`.
-- **WSL**: the same, for workspaces inside a distro (`\wsl.localhost\<distro>\...`). DevGo never boots a stopped distro to read them; the rows show the last list, marked `cached · WSL stopped`, until you refresh or open one. The title bar chip says what is running and can stop a distro.
+- **WSL**: the same, for workspaces inside a distro (`\\wsl.localhost\<distro>\...`). DevGo never boots a stopped distro to read them; the rows show the last list, marked `cached · WSL stopped`, until you refresh or open one. The title bar chip says what is running and can stop a distro.
 - **GitHub**: every repository you own, through `gh`. Search it, group it, clone it into a workspace, open any branch's page.
 - **Servers**: the machines you ssh into. Enter opens a terminal on one in a tmux session that survives; expand it and it lists its folders and, when the box describes itself, its apps and their actions.
 
@@ -35,7 +35,7 @@ The GitHub lane lists every repository you own through the GitHub CLI. It needs 
 
 - **Catalogue**: the lane header says how many repos and when the list was last updated. A repo that is already cloned into one of your workspaces carries a `local` badge, and the badge follows the disk: clone one, delete one, the lane knows on the next pass.
 - **Clone**: `Clone into…` on a row picks a workspace and clones there; the new project appears in its lane as soon as the scan sees it.
-- **Groups**: put repos into named groups (`Add to group…`) so the ones you touch weekly sit above the other three hundred. The ungrouped rest stays under one line at the bottom.
+- **Groups**: put repos into named groups (`Add to group…`) so the ones you touch weekly sit above the rest. The ungrouped rest stays under one line at the bottom.
 - **Branches**: the branch chip on a row opens the repo's branches; pick one and it opens on GitHub.
 - **Live search**, off until you turn it on, is the one place a keystroke reaches the network.
 
@@ -121,6 +121,4 @@ bun tauri build    # release; the bundles land in src-tauri/target/release/bundl
 
 ## History
 
-DevGo was not designed from a feature list. Building Tax Survey in 2023 meant building the server it ran on, and as more systems went live, running them by hand became a body of work of its own. The first fix was PowerShell: a right-click on any folder that said *Open Ubuntu here* or *Open VS Code WSL here*, and a profile of shortcuts (`dev`, `build`, `killdev`) that knew the projects. That hit its ceiling fast, because a right-click needs you to find the folder first and a shell function needs you already in it.
-
-So in May 2026 DevGo started as a C# / WinForms launcher that answers *which project, where*: Windows projects, WSL workspaces, tmux sessions, editors, then agents. This Tauri rewrite followed. In July the server knowledge became scripts (`joyahmed/server`), and in September the two met: the launcher learned the servers, and the scripts learned to describe the box to it.
+DevGo was not designed from a feature list. Building Tax Survey in 2023 meant building the server it ran on, and running more systems by hand became a body of work of its own. The first fix was PowerShell: a right-click on any folder that said *Open Ubuntu here* or *Open VS Code WSL here*, and a profile of shortcuts (`dev`, `build`, `killdev`) that knew the projects; it hit its ceiling fast, because a right-click needs you to find the folder first. So in May 2026 DevGo started as a C# / WinForms launcher that answers *which project, where*; this Tauri rewrite followed. In July the server knowledge became scripts (`joyahmed/server`), and in September the two met: the launcher learned the servers, and the scripts learned to describe the box to it.
