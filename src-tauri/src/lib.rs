@@ -505,7 +505,7 @@ pub fn run() {
             commands::get_project_tech,
             commands::get_project_scripts,
             commands::run_script,
-            commands::get_running_distros,
+            commands::get_wsl_state,
             commands::terminate_distro,
             commands::shutdown_wsl,
             commands::open_remote,

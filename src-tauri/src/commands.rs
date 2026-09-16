@@ -14,7 +14,7 @@ use crate::services::git;
 use crate::services::github::{self, GhStatus, GithubCache};
 use crate::services::groups::{self, GithubGroup};
 use crate::services::launcher;
-use crate::services::platform::{wsl, Quiet, RuntimeInfo};
+use crate::services::platform::{wsl, wsl_watch, Quiet, RuntimeInfo};
 use crate::services::scanner::{ScanOutcome, UnavailableReason};
 use crate::services::server_folders::{
     self, ListingCache, RemoteFolder, ServerListing,
@@ -2034,16 +2034,21 @@ pub fn github_clone_urls(full_name: String) -> (String, String) {
     github::clone_urls(&full_name)
 }
 
-/// Which distros are up right now. Costs one management call and boots nothing,
-/// so the UI can show live state without violating the no-timer rule.
+/// Is the VM up, and which distros are running. One process-table look
+/// and one management call that boots nothing. Asked at mount and on
+/// focus; between those the watcher's `devgo://wsl` event carries the
+/// same shape.
 #[tauri::command]
-pub async fn get_running_distros() -> Vec<String> {
+pub async fn get_wsl_state() -> wsl_watch::WslState {
     // through the memo, so the chip and the scan share one wsl.exe at
     // mount instead of two, and off the main thread: a wsl.exe spawn is
     // half a second the first paint should not wait behind
-    tauri::async_runtime::spawn_blocking(wsl::running_distros_memo)
+    tauri::async_runtime::spawn_blocking(wsl_watch::current)
         .await
-        .unwrap_or_default()
+        .unwrap_or_else(|_| wsl_watch::WslState {
+            up: false,
+            distros: Vec::new(),
+        })
 }
 
 fn describe(outcome: wsl::StopOutcome, what: &str) -> Result<String, AppError> {
