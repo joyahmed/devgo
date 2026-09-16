@@ -173,6 +173,22 @@ interface Server {
 	session: string | null;
 	tunnel: boolean;
 	source: string;
+	/// where its folders are listed from; empty = the defaults
+	roots: string[];
+}
+
+/// a folder on a server, from one ls -d over the roots
+interface RemoteFolder {
+	name: string;
+	path: string;
+	root: string;
+}
+
+interface ServerListing {
+	folders: RemoteFolder[];
+	listed_at: number;
+	up: boolean;
+	error: string | null;
 }
 
 /// the form's answer: a new row has no id yet
@@ -764,6 +780,18 @@ interface ServersState {
 	remove: (id: string) => Promise<void>;
 	/// (added, updated): the sentence the toast says
 	importSshConfig: () => Promise<{ added: number; updated: number }>;
+	/// the folders on each server: the cache paints first, an ask on
+	/// expand or refresh, never on launch
+	listings: Record<string, ServerListing>;
+	/// servers with an ask in flight
+	listing: Set<string>;
+	expanded: Set<string>;
+	toggleExpanded: (id: string) => void;
+	listFolders: (id: string) => Promise<ServerListing>;
+	/// the card's own box: a server by name, alias or host, a folder by
+	/// name or path
+	query: string;
+	setQuery: (q: string) => void;
 }
 
 interface ServersLaneProps {
@@ -776,6 +804,19 @@ interface ServersLaneProps {
 	onContextMenu: (server: Server, x: number, y: number) => void;
 	/// the heading's +: add a server, or import ~/.ssh/config
 	onAddMenu: (x: number, y: number) => void;
+	/// a folder under an expanded server: the cursor by `${id}:${path}`
+	folderCursor: string | null;
+	onSelectFolder: (server: Server, folder: RemoteFolder) => void;
+	onOpenFolder: (server: Server, folder: RemoteFolder) => void;
+	onFolderContextMenu: (
+		server: Server,
+		folder: RemoteFolder,
+		x: number,
+		y: number
+	) => void;
+	/// from the card's box the arrows walk the servers and folders alone
+	onArrow: (dir: 1 | -1) => void;
+	onEnter: () => void;
 }
 
 interface ServerRowProps {
@@ -803,6 +844,13 @@ interface ServersPanelProps {
 
 interface ServerMenu {
 	server: Server;
+	x: number;
+	y: number;
+}
+
+interface FolderMenu {
+	server: Server;
+	folder: RemoteFolder;
 	x: number;
 	y: number;
 }
@@ -855,7 +903,7 @@ interface WslControlProps {
 }
 
 /// which rows a search box searches
-type SearchLane = 'projects' | 'github';
+type SearchLane = 'projects' | 'github' | 'servers';
 
 interface SearchBoxProps {
 	value: string;
@@ -875,13 +923,16 @@ interface ProjectTreeHandle {
 	navigate: (dir: 1 | -1, lane?: SearchLane) => void;
 	/// the repo under the cursor, opened; false when there is none
 	openRepo: () => boolean;
+	/// the server or folder under the cursor, opened; false when none
+	openServerRow: () => boolean;
 }
 
 /// one row the arrows can land on, in the order the tree renders them
 type NavRow =
 	| { kind: 'project'; project: Project }
 	| { kind: 'repo'; repo: GithubRepo }
-	| { kind: 'server'; server: Server };
+	| { kind: 'server'; server: Server }
+	| { kind: 'folder'; server: Server; folder: RemoteFolder };
 
 interface ProjectTreeProps {
 	projects: Project[];
@@ -926,6 +977,14 @@ interface ProjectTreeProps {
 	onServerOpen?: (server: Server) => void;
 	onServerContextMenu?: (server: Server, x: number, y: number) => void;
 	onServersAddMenu?: (x: number, y: number) => void;
+	/// a folder on a server: Enter is a terminal there
+	onFolderOpen?: (server: Server, folder: RemoteFolder) => void;
+	onFolderContextMenu?: (
+		server: Server,
+		folder: RemoteFolder,
+		x: number,
+		y: number
+	) => void;
 	/// the recent / frequent words on rows, off unless Appearance says so
 	showHints?: boolean;
 	/// the project that was just launched; its row plays the launch motion
