@@ -1168,6 +1168,44 @@ mod tests {
         let _ = std::fs::remove_file(&expected);
     }
 
+    /// devgo restarted from inside a claude code session carries its markers;
+    /// nothing it launches may. the target dumps its environment to a file.
+    #[test]
+    fn a_launched_target_inherits_no_claude_code_markers() {
+        std::env::set_var("CLAUDE_CODE_PROOF", "1");
+        std::env::set_var("CLAUDECODE", "1");
+        std::env::set_var("DEVGO_PROOF_KEPT", "1");
+        let marker = std::env::temp_dir().join("devgo-env-scrub-proof.txt");
+        let _ = std::fs::remove_file(&marker);
+        let dumps = LaunchTarget {
+            id: "dump-env".into(),
+            name: "Dump Env".into(),
+            kind: TargetKind::Terminal,
+            executable: "cmd".into(),
+            args_template: format!("/c set > \"{}\"", marker.display()),
+            wsl_executable: None,
+            wsl_args_template: None,
+            run_args_template: None,
+            wsl_run_args_template: None,
+        };
+        let project = windows_project("env-scrub", "work");
+        launch_target(&dumps, &project, &no_distro(), &tmux_with(&[])).unwrap();
+
+        // set prints sorted; windir is one of the last lines
+        let read = || std::fs::read_to_string(&marker).unwrap_or_default();
+        for _ in 0..40 {
+            if read().to_lowercase().contains("windir=") {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        let written = read();
+        assert!(written.contains("DEVGO_PROOF_KEPT=1"), "{written}");
+        assert!(!written.contains("CLAUDE_CODE_PROOF"), "{written}");
+        assert!(!written.contains("CLAUDECODE="), "{written}");
+        let _ = std::fs::remove_file(&marker);
+    }
+
     /// The `_` arm was what made a plain windows terminal fine by accident;
     /// now that the arm is real, no placeholder still has to mean no file.
     #[test]
