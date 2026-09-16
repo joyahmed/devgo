@@ -1,0 +1,259 @@
+{
+  "schema": 2,
+  "about": "The actions DevGo lists on a server row and on each app row under it. Copy this file to ~/scripts/devgo-actions.json on the box and edit it: every entry is a shell line of your own, typed into a tmux window on the server when you click it. DevGo never runs a script itself, never reads what came back, never holds sudo. server/README.md in the DevGo repository explains every key.",
+  "scripts_dir": "~/scripts",
+  "server": [
+    {
+      "id": "inventory",
+      "group": "Box",
+      "label": "Inventory (JSON)",
+      "kind": "run",
+      "root": false,
+      "command": "~/scripts/devgo-inventory.sh --pretty | less"
+    },
+    {
+      "id": "disk",
+      "group": "Box",
+      "label": "Disk usage",
+      "kind": "run",
+      "root": false,
+      "command": "df -h / && du -sh /var/www/* 2>/dev/null | sort -h | tail -20"
+    },
+    {
+      "id": "pm2-list",
+      "group": "pm2",
+      "label": "pm2 list",
+      "kind": "run",
+      "root": false,
+      "command": "pm2 list"
+    },
+    {
+      "id": "nginx-test",
+      "group": "nginx",
+      "label": "nginx -t",
+      "kind": "run",
+      "root": true,
+      "command": "sudo nginx -t"
+    },
+    {
+      "id": "nginx-errors",
+      "group": "nginx",
+      "label": "Tail nginx error log",
+      "kind": "run",
+      "root": true,
+      "command": "sudo tail -f /var/log/nginx/error.log"
+    },
+    {
+      "id": "site-new",
+      "group": "nginx",
+      "label": "New site…",
+      "kind": "form",
+      "root": true,
+      "command": "sudo ~/scripts/site-new.sh {name} {domain} {port} {flags}",
+      "preview": "--dry-run",
+      "submit": "Create site",
+      "fields": [
+        {
+          "name": "name",
+          "label": "Site name",
+          "type": "text",
+          "required": true,
+          "hint": "the file under /etc/nginx/sites-available"
+        },
+        {
+          "name": "domain",
+          "label": "Domain",
+          "type": "text",
+          "required": true,
+          "hint": "the apex; www. is added unless switched off"
+        },
+        {
+          "name": "port",
+          "label": "Port",
+          "type": "number",
+          "required": true,
+          "hint": "what nginx proxies to on 127.0.0.1"
+        },
+        {
+          "name": "type",
+          "label": "Type",
+          "type": "choice",
+          "options": ["proxy", "static"],
+          "default": "proxy",
+          "arg": "--type {value}",
+          "hint": "PROXY = an app on the port · STATIC = files under /var/www/<name>"
+        },
+        {
+          "name": "api_port",
+          "label": "API port",
+          "type": "number",
+          "required": false,
+          "when": "type=proxy",
+          "arg": "--api-port {value}",
+          "hint": "optional: /api goes to this port"
+        },
+        {
+          "name": "www",
+          "label": "Add www.",
+          "type": "bool",
+          "default": "true",
+          "arg_off": "--no-www"
+        },
+        {
+          "name": "tls",
+          "label": "HTTPS via certbot",
+          "type": "bool",
+          "default": "false",
+          "arg": "--tls",
+          "hint": "only when certbot is installed on the box"
+        },
+        {
+          "name": "force",
+          "label": "Overwrite an existing config",
+          "type": "bool",
+          "default": "false",
+          "arg": "--force",
+          "hint": "the old file is backed up first"
+        }
+      ]
+    }
+  ],
+  "app": [
+    {
+      "id": "cd",
+      "group": "App",
+      "label": "Shell in {dir}",
+      "kind": "run",
+      "root": false,
+      "command": "cd {dir} && exec $SHELL -l"
+    },
+    {
+      "id": "logs-web",
+      "group": "App",
+      "label": "Logs · {pm2_web}",
+      "kind": "run",
+      "root": false,
+      "command": "pm2 logs {pm2_web} --lines 100"
+    },
+    {
+      "id": "logs-api",
+      "group": "App",
+      "label": "Logs · {pm2_api}",
+      "kind": "run",
+      "root": false,
+      "command": "pm2 logs {pm2_api} --lines 100"
+    },
+    {
+      "id": "status-web",
+      "group": "App",
+      "label": "Status · {pm2_web}",
+      "kind": "run",
+      "root": false,
+      "command": "pm2 describe {pm2_web}"
+    },
+    {
+      "id": "status-api",
+      "group": "App",
+      "label": "Status · {pm2_api}",
+      "kind": "run",
+      "root": false,
+      "command": "pm2 describe {pm2_api}"
+    },
+    {
+      "id": "restart",
+      "group": "App",
+      "label": "Restart via {eco}",
+      "kind": "run",
+      "root": false,
+      "command": "cd {dir} && pm2 restart {eco} && pm2 ls"
+    },
+    {
+      "id": "install",
+      "group": "App",
+      "label": "Install ({pm})",
+      "kind": "run",
+      "root": false,
+      "command": "cd {dir} && {pm} install"
+    },
+    {
+      "id": "build",
+      "group": "App",
+      "label": "Build ({pm})",
+      "kind": "run",
+      "root": false,
+      "command": "cd {dir} && {pm} run build"
+    },
+    {
+      "id": "git-log",
+      "group": "Git",
+      "label": "What is deployed",
+      "kind": "run",
+      "root": false,
+      "command": "git -C {dir} log --oneline -15 && git -C {dir} status --short"
+    },
+    {
+      "id": "pull",
+      "group": "Git",
+      "label": "Pull",
+      "kind": "pretype",
+      "root": false,
+      "command": "git -C {dir} pull --ff-only"
+    },
+    {
+      "id": "open-repo",
+      "group": "Git",
+      "label": "Open github.com/{repo}",
+      "kind": "url",
+      "root": false,
+      "command": "https://github.com/{repo}"
+    },
+    {
+      "id": "nginx-conf",
+      "group": "nginx",
+      "label": "Site config · {domain}",
+      "kind": "run",
+      "root": true,
+      "command": "sudo less /etc/nginx/sites-available/{site}"
+    },
+    {
+      "id": "nginx-access",
+      "group": "nginx",
+      "label": "Tail access log · {domain}",
+      "kind": "run",
+      "root": true,
+      "command": "sudo tail -f /var/log/nginx/access.log | grep --line-buffered {domain}"
+    },
+    {
+      "id": "open-site",
+      "group": "nginx",
+      "label": "Open https://{domain}",
+      "kind": "url",
+      "root": false,
+      "command": "https://{domain}"
+    },
+    {
+      "id": "env-ls",
+      "group": "Config",
+      "label": "Env files present",
+      "kind": "run",
+      "root": false,
+      "command": "ls -la {dir}/.env* {dir}/apps/*/.env* 2>/dev/null"
+    },
+    {
+      "id": "db-psql",
+      "group": "Database",
+      "label": "psql · {db}",
+      "kind": "pretype",
+      "root": false,
+      "command": "psql -h 127.0.0.1 -d {db}"
+    },
+    {
+      "id": "db-tunnel",
+      "group": "Database",
+      "label": "DB tunnel from this PC",
+      "kind": "local",
+      "root": false,
+      "command": "ssh -N box-db"
+    }
+  ]
+}
