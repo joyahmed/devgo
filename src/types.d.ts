@@ -625,7 +625,9 @@ interface ClonePickerProps {
 	workspaces: string[];
 	/// the repo that opened the picker from its row's menu: pre-ticked
 	preselect?: string;
-	onStart: (repos: GithubRepo[], workspace: string) => void;
+	/// into: a workspace, or a folder chosen through the os picker; add
+	/// says the folder is outside every workspace and wants to be one
+	onStart: (repos: GithubRepo[], into: string, add: boolean) => void;
 	onDone: () => void;
 	/// group: the same list and checkboxes, but the destination is a group
 	/// name (typed, or picked from the ones that exist) and nothing is cloned

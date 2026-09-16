@@ -1,12 +1,25 @@
+import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import { useState } from 'react';
 import { relativeTime } from '../github';
 import { fuzzyScore } from '../palette';
-import { lastSegment } from '../paths';
+import { lastSegment, normalizePath } from '../paths';
 import Button from './Button';
 import { pickTone } from './rowStyles';
 
 // the last workspace used: a second batch usually goes where the first went
 const WS_KEY = 'devgo.cloneWorkspace';
+// the select's last entry: the os folder picker, which has its own new folder
+const PICK = '__pick__';
+
+// a path under one of the workspaces is scanned already; one outside
+// needs adding to show up in a lane
+const insideAny = (path: string, workspaces: string[]) => {
+	const p = normalizePath(path).toLowerCase();
+	return workspaces.some(w => {
+		const n = normalizePath(w).toLowerCase();
+		return p === n || p.startsWith(`${n}/`);
+	});
+};
 
 const field =
 	'w-full px-3 py-2 bg-bg-panel border border-border-strong rounded-control text-15 text-text-primary outline-none focus:border-accent placeholder:text-text-muted';
@@ -45,6 +58,25 @@ const ClonePicker = ({
 			return workspaces[0] ?? '';
 		}
 	});
+	// a folder chosen through the os picker, listed as its own option
+	const [chosen, setChosen] = useState<string | null>(null);
+	const [addAsWorkspace, setAddAsWorkspace] = useState(true);
+	const outside = chosen !== null && workspace === chosen && !insideAny(chosen, workspaces);
+
+	const pickInto = (value: string) => {
+		if (value !== PICK) return setWorkspace(value);
+		openDialog({ directory: true, defaultPath: workspace || undefined })
+			.then(picked => {
+				if (typeof picked !== 'string') return;
+				setChosen(picked);
+				setWorkspace(picked);
+			})
+			.catch(e => setError(String(e)));
+	};
+	const into = [
+		...workspaces,
+		...(chosen !== null && !workspaces.includes(chosen) ? [chosen] : [])
+	];
 
 	const q = query.trim();
 	const visible = q
@@ -90,7 +122,7 @@ const ClonePicker = ({
 		} catch {
 			// per-viewer convenience only
 		}
-		onStart(chosen, workspace);
+		onStart(chosen, workspace, outside && addAsWorkspace);
 		onDone();
 	};
 
@@ -196,16 +228,31 @@ const ClonePicker = ({
 					<select
 						className='min-w-0 flex-1 px-2 py-1.5 bg-bg-panel border border-border-strong rounded-control text-13 text-text-primary outline-none focus:border-accent'
 						value={workspace}
-						onChange={e => setWorkspace(e.target.value)}
+						onChange={e => pickInto(e.target.value)}
 						title={workspace}
 					>
-						{workspaces.map(w => (
+						{into.map(w => (
 							<option key={w} value={w}>
 								{lastSegment(w)} · {w}
 							</option>
 						))}
+						<option value={PICK}>Choose a folder…</option>
 					</select>
 				</label>
+				{outside && (
+					<label
+						className='flex items-center gap-2 shrink-0 text-13 text-text-secondary'
+						title='The folder is in no workspace. Add it so the clone shows in a lane'
+					>
+						<input
+							type='checkbox'
+							className='accent-accent'
+							checked={addAsWorkspace}
+							onChange={e => setAddAsWorkspace(e.target.checked)}
+						/>
+						Add as workspace
+					</label>
+				)}
 				<Button
 					variant='primary'
 					className='shrink-0'

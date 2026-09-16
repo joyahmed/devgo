@@ -2089,12 +2089,14 @@ const AppInner = () => {
 							local: github.payload?.local ?? {},
 							workspaces,
 							preselect: clonePicker.preselect,
-							onStart: (repos: GithubRepo[], workspace: string) => {
-								clone.enqueue(repos, workspace);
+							onStart: async (repos: GithubRepo[], into: string, add: boolean) => {
+								// the workspace first, so the clone lands in a lane
+								if (add) await handleAddWorkspace(into);
+								clone.enqueue(repos, into);
 								toast(
 									repos.length === 1
-										? `Cloning ${repos[0].name} into ${lastSegment(workspace)}…`
-										: `Cloning ${repos.length} repos into ${lastSegment(workspace)}, one at a time…`,
+										? `Cloning ${repos[0].name} into ${lastSegment(into)}…`
+										: `Cloning ${repos.length} repos into ${lastSegment(into)}, one at a time…`,
 									'info'
 								);
 							},
