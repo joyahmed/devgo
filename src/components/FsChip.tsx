@@ -37,7 +37,7 @@ const FsChip = ({
 		<div className='relative' ref={ref}>
 			<Button
 				variant='badge'
-				className={`gap-1.5 ${fsTone(fs)} ${menu ? '' : 'cursor-default'}`}
+				className={`gap-1.5 ${fsTone(fs)} ${menu ? '' : 'cursor-default!'}`}
 				title={title}
 				disabled={disabled}
 				onClick={menu ? () => setOpen(v => !v) : undefined}
