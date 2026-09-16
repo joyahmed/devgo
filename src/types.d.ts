@@ -158,6 +158,26 @@ interface GithubGroup {
 	repos: string[];
 }
 
+/// a machine you ssh into: an alias into ~/.ssh/config, or a host typed
+/// by hand with a key path. never a password
+interface Server {
+	id: string;
+	name: string;
+	alias: string | null;
+	host: string;
+	user: string | null;
+	port: number | null;
+	identity: string | null;
+	default_path: string | null;
+	tmux: boolean;
+	session: string | null;
+	tunnel: boolean;
+	source: string;
+}
+
+/// the form's answer: a new row has no id yet
+type ServerDraft = Omit<Server, 'id'> & { id?: string };
+
 /// one edit to the groups: the Rust GroupEdit enum, tagged by op
 type GroupEdit =
 	| { op: 'assign'; group: string; repo: string }
@@ -560,6 +580,11 @@ interface SettingsProps {
 	github: GithubState;
 	showHints: boolean;
 	onToggleHints: () => void;
+	/// the servers card's state and the doors App owns
+	servers: ServersState;
+	onAddServer: () => void;
+	onEditServer: (server: Server) => void;
+	onImportSsh: () => void;
 }
 
 interface AppearancePanelProps {
@@ -726,6 +751,62 @@ interface RepoMenu {
 	y: number;
 }
 
+/// what useServers hands out; named because ambient types cannot import
+interface ServersState {
+	servers: Server[];
+	/// no ssh client on PATH, no card
+	hasSsh: boolean;
+	isOpen: boolean;
+	toggleOpen: () => void;
+	reload: () => Promise<void>;
+	add: (server: ServerDraft) => Promise<Server>;
+	update: (server: Server) => Promise<void>;
+	remove: (id: string) => Promise<void>;
+	/// (added, updated): the sentence the toast says
+	importSshConfig: () => Promise<{ added: number; updated: number }>;
+}
+
+interface ServersLaneProps {
+	servers: ServersState;
+	/// the keyboard/click cursor, by id, beside the project selection
+	cursor: string | null;
+	onSelect: (server: Server) => void;
+	/// Enter / double-click: a terminal on the box
+	onOpen: (server: Server) => void;
+	onContextMenu: (server: Server, x: number, y: number) => void;
+	/// the heading's +: add a server, or import ~/.ssh/config
+	onAddMenu: (x: number, y: number) => void;
+}
+
+interface ServerRowProps {
+	server: Server;
+	isCursor: boolean;
+	onSelect: (server: Server) => void;
+	onOpen: (server: Server) => void;
+	onContextMenu: (server: Server, x: number, y: number) => void;
+}
+
+interface ServerFormProps {
+	/// editing this row, or adding when absent
+	initial?: Server;
+	onSubmit: (server: ServerDraft) => Promise<void>;
+	onDone: () => void;
+}
+
+interface ServersPanelProps {
+	servers: ServersState;
+	onAdd: () => void;
+	onEdit: (server: Server) => void;
+	onImport: () => void;
+	onError: (message: string) => void;
+}
+
+interface ServerMenu {
+	server: Server;
+	x: number;
+	y: number;
+}
+
 /// the clone picker modal; preselect is the row whose menu opened it
 interface ClonePickerRequest {
 	preselect?: string;
@@ -799,7 +880,8 @@ interface ProjectTreeHandle {
 /// one row the arrows can land on, in the order the tree renders them
 type NavRow =
 	| { kind: 'project'; project: Project }
-	| { kind: 'repo'; repo: GithubRepo };
+	| { kind: 'repo'; repo: GithubRepo }
+	| { kind: 'server'; server: Server };
 
 interface ProjectTreeProps {
 	projects: Project[];
@@ -838,6 +920,12 @@ interface ProjectTreeProps {
 	onRepoBranches?: (repo: GithubRepo, x: number, y: number) => void;
 	cloneJobs?: Map<string, CloneJob>;
 	onGroupContextMenu?: (name: string, x: number, y: number) => void;
+	/// the servers card. absent when there is no ssh client
+	servers?: ServersState;
+	/// Enter / double-click on a server row: a terminal on it
+	onServerOpen?: (server: Server) => void;
+	onServerContextMenu?: (server: Server, x: number, y: number) => void;
+	onServersAddMenu?: (x: number, y: number) => void;
 	/// the recent / frequent words on rows, off unless Appearance says so
 	showHints?: boolean;
 	/// the project that was just launched; its row plays the launch motion
