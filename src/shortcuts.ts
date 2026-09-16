@@ -20,6 +20,14 @@ export const SHORTCUTS: Shortcut[] = [
 	},
 	{ id: 'clearSearch', keys: 'Ctrl+L', label: 'Clear search', group: 'Global' },
 	{ id: 'refresh', keys: 'F5', label: 'Refresh projects', group: 'Global' },
+	// the browser's habit. matched by hand in the key handler since 11, so
+	// settings never listed it: a key not in the table is a key nobody sees
+	{
+		id: 'refreshAlt',
+		keys: 'Ctrl+R',
+		label: 'Refresh projects (browser habit)',
+		group: 'Global'
+	},
 	{ id: 'settings', keys: 'Ctrl+,', label: 'Open settings', group: 'Global' },
 	{ id: 'textBigger', keys: 'Ctrl+=', label: 'Text bigger', group: 'Global' },
 	{ id: 'textSmaller', keys: 'Ctrl+-', label: 'Text smaller', group: 'Global' },
@@ -100,6 +108,21 @@ export const SHORTCUTS: Shortcut[] = [
 		id: 'togglePin',
 		keys: 'Ctrl+S',
 		label: 'Pin / unpin',
+		group: 'Project',
+		needsSelection: true
+	},
+	// menu-only since 15 and 32 for no reason anyone recorded
+	{
+		id: 'runScript',
+		keys: 'Ctrl+Shift+D',
+		label: 'Run dev script…',
+		group: 'Project',
+		needsSelection: true
+	},
+	{
+		id: 'openRemote',
+		keys: 'Ctrl+Shift+G',
+		label: 'Open remote in browser',
 		group: 'Project',
 		needsSelection: true
 	},
