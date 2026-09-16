@@ -130,6 +130,14 @@ const SECTIONS: { title: string; body: React.ReactNode }[] = [
 					there; DevGo never holds it, never runs a script itself and never
 					reads what came back.
 				</p>
+				<p>
+					Some actions are forms: <em>New nginx site…</em> asks for the app, the
+					domain, the port, the shape (<Code>NEXT · NEST · NODE · TURBO</Code>),
+					www and HTTPS, and shows the exact line it composes as you type.{' '}
+					<em>Preview</em> runs it with <Code>--dry-run</Code> so the script prints
+					what it would do and changes nothing; the other button runs it for
+					real. Values are words: no spaces, no quotes.
+				</p>
 			</>
 		)
 	},
