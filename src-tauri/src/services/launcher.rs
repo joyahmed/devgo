@@ -162,12 +162,24 @@ fn write_psmux_script(
 /// A session name unique to this project. sanitize_file_stem already maps
 /// `.` and `:` (tmux's target separators) to `-`; the suffix is what keeps two
 /// projects called `api` from attaching to each other's shell.
-fn tmux_session_name(project: &Project) -> String {
+pub(crate) fn tmux_session_name(project: &Project) -> String {
     format!(
         "{}-{}",
         sanitize_file_stem(&project.name),
         path_suffix(&project.full_path)
     )
+}
+
+// every project's session name to its path, for the live read: the same
+// function the scripts use, so a session created on launch and a session
+// found by tmux ls agree by construction
+pub(crate) fn session_names(
+    projects: &[Project],
+) -> std::collections::HashMap<String, String> {
+    projects
+        .iter()
+        .map(|p| (tmux_session_name(p), p.full_path.clone()))
+        .collect()
 }
 
 /// FNV-1a over the normalised path, written out rather than DefaultHasher:
