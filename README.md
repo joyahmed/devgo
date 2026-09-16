@@ -118,3 +118,9 @@ bun tauri build    # release; the bundles land in src-tauri/target/release/bundl
 - **WSL never boots on launch.** Reading a WSL workspace whose distro is off would start the VM, so DevGo does not: it shows the cached list and marks it. Only Refresh and opening a project are allowed to start a distro, because you asked. Runtime detection (which distros exist, whether `wsl.exe` is there) runs on the first launch and on Refresh, never on every start.
 - **The Mac's PATH.** An app launched from the Dock inherits `launchd`'s four directories, not your shell's PATH. DevGo asks your login shell for its PATH once and hands it to every child, so `code`, `tmux`, `gh` and the nvm node are found where your terminal finds them.
 - **Nothing runs on the UI thread that can block**: `gh`, `git`, `ssh` and the scan are spawned quietly (no console window on Windows) and reported when they return.
+
+## History
+
+DevGo was not designed from a feature list. Building Tax Survey in 2023 meant building the server it ran on, and as more systems went live, running them by hand became a body of work of its own. The first fix was PowerShell: a right-click on any folder that said *Open Ubuntu here* or *Open VS Code WSL here*, and a profile of shortcuts (`dev`, `build`, `killdev`) that knew the projects. That hit its ceiling fast, because a right-click needs you to find the folder first and a shell function needs you already in it.
+
+So in May 2026 DevGo started as a C# / WinForms launcher that answers *which project, where*: Windows projects, WSL workspaces, tmux sessions, editors, then agents. This Tauri rewrite followed. In July the server knowledge became scripts (`joyahmed/server`), and in September the two met: the launcher learned the servers, and the scripts learned to describe the box to it.
