@@ -1,4 +1,21 @@
-# DevGo
+<p align="center">
+  <img src="src-tauri/icons/128x128@2x.png" width="112" alt="DevGo">
+</p>
+
+<h1 align="center">DevGo</h1>
+
+<p align="center">
+  Every project on your machine, your GitHub, your servers — one keystroke to where you work.
+</p>
+
+<p align="center">
+  <a href="https://github.com/joyahmed/devgo/actions/workflows/ci.yml"><img src="https://github.com/joyahmed/devgo/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/joyahmed/devgo/releases"><img src="https://img.shields.io/github/v/release/joyahmed/devgo?include_prereleases&label=release" alt="Release"></a>
+  <img src="https://img.shields.io/badge/platforms-Windows%20%C2%B7%20WSL%20%C2%B7%20macOS-0ea5e9" alt="Windows · WSL · macOS">
+  <img src="https://img.shields.io/badge/Tauri-2-24c8db?logo=tauri&logoColor=white" alt="Tauri 2">
+  <img src="https://img.shields.io/badge/Rust-stable-dea584?logo=rust&logoColor=black" alt="Rust">
+  <img src="https://img.shields.io/badge/React-19-61dafb?logo=react&logoColor=black" alt="React 19">
+</p>
 
 A launcher for a developer's projects. Point it at the folders that hold them, on every filesystem the machine can see, and it lists every project, finds one in a few keystrokes, and opens it in the editor, terminal or agent you already use. It is not an editor, a terminal or a git client. It opens the door and gets out of the way.
 
@@ -15,7 +32,7 @@ More in [docs/screenshots](docs/screenshots/README.md) — the palette, a server
 
 Tauri 2, Rust on the back, React 19 and Tailwind on the front, bun for the scripts.
 
-## The four lanes
+## 🛣️ The four lanes
 
 The window is one row of lanes. From 1900 px they sit side by side; from 1400 they fold into two rows; narrower, they stack.
 
@@ -26,7 +43,7 @@ The window is one row of lanes. From 1900 px they sit side by side; from 1400 th
 
 The search box over each lane filters that lane. `Ctrl+K` puts you in the first one, `Ctrl+G` in GitHub's. Pin a project with `Ctrl+S` and it stays at the top; sort by frecency, activity or name.
 
-## Launch targets
+## 🚀 Launch targets
 
 A target is a program plus how to hand it a directory. DevGo detects the usual ones on this machine (VS Code, Cursor, Windsurf, Zed, Sublime, the JetBrains IDEs, Windows Terminal, Alacritty, WezTerm; on a Mac Terminal, iTerm2, Ghostty, Kitty as well) and, on Windows, inside each running distro. Add your own in Settings › Editors & Terminals with a template: `{path}`, `{distro}`, `{linux_path}`. A WSL project opens where it lives: VS Code through Remote-WSL, a terminal inside the distro in the project directory.
 
@@ -36,7 +53,7 @@ With the multiplexer on, a terminal launch opens a named session with the window
 
 `Run dev script…` (`Ctrl+Shift+D`) reads the project's `package.json` scripts and runs the one you pick in a terminal that stays open.
 
-## GitHub
+## 🐙 GitHub
 
 The GitHub lane lists every repository you own through the GitHub CLI. It needs `gh` installed and logged in (`gh auth login`); DevGo stores no token of its own, and `gh auth logout` signs out everywhere. The list is fetched when you ask, never on launch or on focus.
 
@@ -46,7 +63,7 @@ The GitHub lane lists every repository you own through the GitHub CLI. It needs 
 - **Branches**: the branch chip on a row opens the repo's branches; pick one and it opens on GitHub.
 - **Live search**, off until you turn it on, is the one place a keystroke reaches the network.
 
-## Servers
+## 🖥️ Servers
 
 The Servers lane lists the machines you ssh into. Import `~/.ssh/config` (every `Host` becomes a row; the file is never written) or add one by hand. DevGo launches by alias so your config's key and options apply, and stores no password: an alias, a host, a key path. A `LocalForward` in the config marks the row `tunnel` and gives it *Copy tunnel command* (`ssh -N <alias>`).
 
@@ -56,7 +73,7 @@ When the box carries a script at `~/scripts/devgo-inventory.sh`, the same call b
 
 Some actions are **forms**: *New nginx site…* asks for the app, the domain, the port, the shape (`NEXT · NEST · NODE · TURBO`), www and HTTPS, and shows the exact line it composes as you type. *Preview* runs it with `--dry-run` so the script prints what it would do and changes nothing; the other button runs it for real.
 
-## Settings
+## ⚙️ Settings
 
 `Ctrl+,` or the gear. One page per concern: Workspaces, Editors & Terminals, tmux / psmux, GitHub, Shortcuts, Scanning, Appearance, Config, Servers, then Help and About.
 
@@ -68,7 +85,7 @@ Everything lives as JSON in the app-data folder (`%APPDATA%\app.zetta.devgo` on 
 
 Closing the window hides it; the summon hotkey or the tray icon brings it back, and Quit lives in the tray menu and `Ctrl+Q`. DevGo keeps one instance: launching it again shows the window you already have.
 
-## Keyboard
+## ⌨️ Keyboard
 
 Every binding is declared once in `src/shortcuts.ts`; the handler, the footer hints and Settings › Shortcuts all read that table. On a Mac, `Ctrl` reads `Cmd` and `Alt` reads `Opt`. The main ones:
 
@@ -100,7 +117,7 @@ Every binding is declared once in `src/shortcuts.ts`; the handler, the footer hi
 | `Ctrl+Q` | Quit |
 | `Ctrl+Alt+Space` | Summon (global, rebindable) |
 
-## Install
+## 📦 Install
 
 Builds are unsigned on both platforms. Download from [Releases](https://github.com/joyahmed/devgo/releases); each one is built by GitHub Actions from a `v*` tag (`.github/workflows/release.yml`), so the installer on the page is the tag's tree, nothing more.
 
@@ -120,7 +137,7 @@ bun tauri build    # release; the bundles land in src-tauri/target/release/bundl
 
 `bun run build` runs the contrast gate, `tsc` and Vite; `cargo test` in `src-tauri` runs the Rust tests. CI runs both on every push and pull request, and the tag build runs them on each platform before it bundles.
 
-## Platform notes
+## 🧭 Platform notes
 
 - **WSL never boots on launch.** Reading a WSL workspace whose distro is off would start the VM, so DevGo does not: it shows the cached list and marks it. Only Refresh and opening a project are allowed to start a distro, because you asked. Runtime detection (which distros exist, whether `wsl.exe` is there) runs on the first launch and on Refresh, never on every start.
 - **The Mac's PATH.** An app launched from the Dock inherits `launchd`'s four directories, not your shell's PATH. DevGo asks your login shell for its PATH once and hands it to every child, so `code`, `tmux`, `gh` and the nvm node are found where your terminal finds them.
