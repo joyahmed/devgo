@@ -1226,8 +1226,11 @@ pub fn get_github_repos(
 
 /// Installed / logged in as / neither, without touching the network.
 #[tauri::command]
-pub fn get_github_status() -> GhStatus {
-    github::status()
+pub async fn get_github_status() -> GhStatus {
+    // two gh spawns, never on the main thread
+    tauri::async_runtime::spawn_blocking(github::status)
+        .await
+        .unwrap_or_default()
 }
 
 /// Fetch the repo list on a spawned thread and return before it finishes.
@@ -1512,8 +1515,13 @@ pub fn github_clone_urls(full_name: String) -> (String, String) {
 /// Which distros are up right now. Costs one management call and boots nothing,
 /// so the UI can show live state without violating the no-timer rule.
 #[tauri::command]
-pub fn get_running_distros() -> Vec<String> {
-    wsl::running_distros()
+pub async fn get_running_distros() -> Vec<String> {
+    // through the memo, so the chip and the scan share one wsl.exe at
+    // mount instead of two, and off the main thread: a wsl.exe spawn is
+    // half a second the first paint should not wait behind
+    tauri::async_runtime::spawn_blocking(wsl::running_distros_memo)
+        .await
+        .unwrap_or_default()
 }
 
 fn describe(outcome: wsl::StopOutcome, what: &str) -> Result<String, AppError> {
