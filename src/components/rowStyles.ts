@@ -8,6 +8,13 @@
 export const col =
 	'grid grid-cols-[1fr_1fr_minmax(80px,0.4fr)_minmax(150px,0.9fr)] items-center gap-x-3 text-15';
 
+// a group is a card on the surface recipe every drawer and menu uses,
+// at half alpha so the transparency knob still shows through it. its hue
+// goes on the two leading edges, the way a folder tab shows its colour,
+// and runs into nothing
+export const card =
+	'rounded-panel border border-border border-t-2 border-l-2 bg-bg-secondary/50 overflow-hidden';
+
 // a picker row: already there and inert, ticked, or plain
 export const pickTone = (added: boolean, on: boolean) =>
 	added

@@ -3,7 +3,7 @@ import { lastSegment } from '../paths';
 import { isTypingTarget, matches, shortcutFor } from '../shortcuts';
 import Button from './Button';
 import GithubLane from './GithubLane';
-import { col } from './rowStyles';
+import { card, col } from './rowStyles';
 
 const COLUMNS = [
 	{ label: 'Workspace', className: '' },
@@ -34,22 +34,13 @@ const FS_TONE: Record<string, string> = {
 	Network: 'text-amber-400'
 };
 
-// the group's rail: a 2px rule the height of its rows in the file
-// system's hue, the one FsCell uses. it replaces the per-row guide that
-// flipped to accent on selection; the rail belongs to the group, and
-// selection is the row's ground and its name
-const RAIL: Record<string, string> = {
-	WSL: 'border-l-accent/50',
-	Network: 'border-l-amber-400/50',
-	Windows: 'border-l-text-muted/40'
-};
-
-// the workspace divider starts in the same hue, so it says which group
-// it closes without a label
-const DIVIDER: Record<string, string> = {
-	WSL: 'from-accent/70',
-	Network: 'from-amber-400/70',
-	Windows: 'from-text-muted/50'
+// the card's two leading edges in the file system's hue, the one FsCell
+// uses: the group says what it is at a glance, and selection stays the
+// row's ground and its name
+const EDGE: Record<string, string> = {
+	WSL: 'border-t-accent/50 border-l-accent/50',
+	Network: 'border-t-amber-400/50 border-l-amber-400/50',
+	Windows: 'border-t-text-muted/40 border-l-text-muted/40'
 };
 
 const NETWORK_WARNING =
@@ -681,45 +672,33 @@ const ProjectTree = ({
 				))}
 			</div>
 
-			<div className='flex-1 overflow-y-auto'>
+			{/* the gap is the divider between groups (joy: "we could make cards
+			    instead of the separator"): a line ran into the header above it,
+			    a card closes on its own */}
+			<div className='flex-1 overflow-y-auto flex flex-col gap-3 px-3 py-3'>
 				{pinned.length > 0 && (
-					<div className='mb-1'>
+					<div className={`${card} border-t-accent/40 border-l-accent/40`}>
 						<div className='px-3 py-1 text-13 font-semibold text-text-muted'>
 							Pinned
 						</div>
-						<div className='border-l-2 border-l-accent/40'>
-							{pinned.map(project => (
-								<ProjectRow
-									key={`pinned-${project.full_path}`}
-									{...rowProps(project)}
-								/>
-							))}
-						</div>
-						<div className='mx-3 my-1 border-b border-border' />
+						{pinned.map(project => (
+							<ProjectRow
+								key={`pinned-${project.full_path}`}
+								{...rowProps(project)}
+							/>
+						))}
 					</div>
 				)}
 
-				{entries.map(([ws, wsProjects], i) => {
+				{entries.map(([ws, wsProjects]) => {
 					const isOpen = !isCollapsed(ws);
 					const count = wsProjects.length;
 					const fs = wsProjects[0]?.file_system ?? 'Windows';
 					const wsState = stateFor(ws);
 					const isStale = wsState?.status === 'cached';
 
-					// a divider and a breath over every workspace but the first
-					// (joy: "we may put divider for workspaces", then "i want
-					// colorful divider and don't make them full width"): a short
-					// gradient rule in the group's hue, inset from the left and
-					// gone before the middle. it closes the group above without
-					// drawing a table line across a thousand pixels of quiet rows
 					return (
-						<div key={ws} className={i ? 'mt-2 pt-1' : ''}>
-							{i > 0 && (
-								<div
-									aria-hidden='true'
-									className={`h-px ml-4 mb-1 w-[38%] bg-linear-to-r to-transparent ${DIVIDER[fs] ?? 'from-accent/70'}`}
-								/>
-							)}
+						<div key={ws} className={`${card} ${EDGE[fs] ?? EDGE.Windows}`}>
 							{/* the header is the handle, open or collapsed, and the only
 							    thing that accepts a drop */}
 							<div
@@ -776,9 +755,7 @@ const ProjectTree = ({
 								className='grid transition-[grid-template-rows] duration-150 ease-out'
 								style={{ gridTemplateRows: isOpen ? '1fr' : '0fr' }}
 							>
-								<div
-									className={`overflow-hidden ml-6 border-l-2 ${RAIL[fs] ?? RAIL.Windows}`}
-								>
+								<div className='overflow-hidden ml-6'>
 									{wsProjects
 										.filter(p => !pinnedPaths.has(p.full_path))
 										.map(project => (
