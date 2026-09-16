@@ -229,6 +229,10 @@ interface ServerApp {
 	} | null;
 	env_files: string[];
 	database: { engine: string | null; name: string | null } | null;
+	/// from the lockfile: pnpm | bun | yarn | npm
+	pm: string | null;
+	/// pm2's own file, when the app has one
+	ecosystem: string | null;
 }
 
 interface ServerInventory {
@@ -274,6 +278,8 @@ interface ServerAction {
 	/// the line starts with sudo; the window will ask
 	root: boolean;
 	command: string;
+	/// the heading the menu draws over it; null = none
+	group: string | null;
 	/// form only: the fields, what Preview appends, the word on the button
 	fields: ServerActionField[];
 	preview: string | null;
@@ -1053,7 +1059,13 @@ interface MenuAction {
 	disabled?: boolean;
 }
 
-type MenuEntry = MenuAction | 'separator';
+/// a section heading: the server menus grew past twenty rows, so the
+/// entries are grouped, not pruned. not focusable, not clickable
+interface MenuHeading {
+	heading: string;
+}
+
+type MenuEntry = MenuAction | MenuHeading | 'separator';
 
 interface ContextMenuProps {
 	x: number;

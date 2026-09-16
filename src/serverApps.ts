@@ -36,6 +36,8 @@ export const placeholders = (app: ServerApp): Record<string, string | null> => {
 		api_port: site?.api_port != null ? String(site.api_port) : null,
 		db: app.database?.name ?? null,
 		repo: app.git?.repo ?? null,
+		pm: app.pm || null,
+		eco: app.ecosystem || null,
 		// the form's shape button for this app, mirroring the rust side
 		site_type:
 			app.kind === 'mono' ? 'turbo' : app.kind === 'node' ? 'node' : 'next'
@@ -89,3 +91,13 @@ export const whenHolds = (
 		? values[k.trim()] === 'true'
 		: values[k.trim()] === v.trim();
 };
+
+// a label with its placeholders filled: Logs · {pm2_api} → Logs · erp-api.
+// the menu shows nothing it cannot name, so canFill runs on the label too
+export const fillLabel = (
+	label: string,
+	values: Record<string, string | null>
+) =>
+	label.replace(/\{([a-z0-9_]+)\}/g, (m, key: string) =>
+		key in values ? (values[key] ?? m) : m
+	);
