@@ -656,11 +656,17 @@ const AppearancePanel = ({ showHints, onToggleHints }: AppearancePanelProps) => 
 	// a live window: the knob previews live only on a window born
 	// see-through, otherwise it is stored for the next launch
 	const [born, setBorn] = useState<boolean | null>(null);
+	// windows' own switch: off, and the ground goes black instead of
+	// see-through, which reads as a devgo bug. say so
+	const [osEffects, setOsEffects] = useState<boolean | null>(null);
 	useEffect(() => {
 		invoke<number>('get_window_transparency')
 			.then(setTransparencyShown)
 			.catch(() => setTransparencyShown(0));
 		launchedTransparent().then(setBorn);
+		invoke<boolean | null>('os_transparency_effects_enabled')
+			.then(setOsEffects)
+			.catch(() => setOsEffects(null));
 	}, []);
 	// the number follows the step at once; the stored value, clamped,
 	// comes back and settles it
@@ -748,6 +754,13 @@ const AppearancePanel = ({ showHints, onToggleHints }: AppearancePanelProps) => 
 					<p className='text-13 text-text-muted mt-2'>
 						Opaque. The memory a see-through window holds is given back on
 						the next launch.
+					</p>
+				)}
+				{osEffects === false && born === true && knob > 0 && (
+					<p className='text-13 text-text-muted mt-2'>
+						Windows' <em>Transparency effects</em> is off (Settings ›
+						Personalization › Colors). If the ground turns black instead of
+						see-through, that switch is why.
 					</p>
 				)}
 			</div>
