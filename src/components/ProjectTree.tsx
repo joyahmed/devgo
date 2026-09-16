@@ -44,6 +44,14 @@ const RAIL: Record<string, string> = {
 	Windows: 'border-l-text-muted/40'
 };
 
+// the workspace divider starts in the same hue, so it says which group
+// it closes without a label
+const DIVIDER: Record<string, string> = {
+	WSL: 'from-accent/70',
+	Network: 'from-amber-400/70',
+	Windows: 'from-text-muted/50'
+};
+
 const NETWORK_WARNING =
 	'On a network share — file access and dev tooling are slow here. Consider a local drive or a WSL-native path.';
 
@@ -691,21 +699,27 @@ const ProjectTree = ({
 					</div>
 				)}
 
-				{entries.map(([ws, wsProjects]) => {
+				{entries.map(([ws, wsProjects], i) => {
 					const isOpen = !isCollapsed(ws);
 					const count = wsProjects.length;
 					const fs = wsProjects[0]?.file_system ?? 'Windows';
 					const wsState = stateFor(ws);
 					const isStale = wsState?.status === 'cached';
 
-					// a hairline and a breath over every workspace but the first
-					// (joy: "we may put divider for workspaces"): the header alone
-					// did not close the group above it once the rows went quiet
+					// a divider and a breath over every workspace but the first
+					// (joy: "we may put divider for workspaces", then "i want
+					// colorful divider and don't make them full width"): a short
+					// gradient rule in the group's hue, inset from the left and
+					// gone before the middle. it closes the group above without
+					// drawing a table line across a thousand pixels of quiet rows
 					return (
-						<div
-							key={ws}
-							className='[&+&]:border-t [&+&]:border-border [&+&]:mt-1 [&+&]:pt-1'
-						>
+						<div key={ws} className={i ? 'mt-2 pt-1' : ''}>
+							{i > 0 && (
+								<div
+									aria-hidden='true'
+									className={`h-px ml-4 mb-1 w-[38%] bg-linear-to-r to-transparent ${DIVIDER[fs] ?? 'from-accent/70'}`}
+								/>
+							)}
 							{/* the header is the handle, open or collapsed, and the only
 							    thing that accepts a drop */}
 							<div
