@@ -507,6 +507,7 @@ mod tests {
             wsl_available: false,
             distros: vec![],
             default_distro: None,
+            local_fs: crate::services::scanner::LOCAL_FS,
         }
     }
 
@@ -1322,6 +1323,7 @@ mod tests {
             wsl_available: false,
             distros: vec![],
             default_distro: None,
+            local_fs: crate::services::scanner::LOCAL_FS,
         };
 
         let err = launch_target(&ghost, &project, &info, &tmux_with(&[]))
@@ -1370,6 +1372,7 @@ mod tests {
             wsl_available: false,
             distros: vec![],
             default_distro: None,
+            local_fs: crate::services::scanner::LOCAL_FS,
         };
 
         launch_target(&target, &project, &info, &tmux_with(&[])).unwrap();
