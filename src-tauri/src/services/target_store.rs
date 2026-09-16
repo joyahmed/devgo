@@ -354,7 +354,15 @@ mod tests {
         let dir = std::env::temp_dir().join("devgo-targets-fresh-psmux");
         let _ = fs::remove_dir_all(&dir);
         let s = TargetStore::new(dir.clone()).unwrap();
+        // the seeded terminal is wt on windows and terminal.app on a mac;
+        // the migration is a windows story, so only there is psmux checked
+        #[cfg(windows)]
         assert_eq!(s.get("wt").unwrap().args_template, WT_ARGS);
+        #[cfg(not(windows))]
+        assert_eq!(
+            s.get("terminal").unwrap().args_template,
+            crate::models::target::MAC_TERMINAL_ARGS
+        );
         assert!(!dir.join("targets.json.pre-psmux").exists());
     }
 
