@@ -1228,6 +1228,25 @@ mod tests {
         let _ = std::fs::remove_file(&marker);
     }
 
+    // get_envs reports a removed variable as (name, None), so the scrub is
+    // observable without spawning. the PATH line is the test's real job:
+    // it fails the day someone reaches for env_clear
+    #[test]
+    fn the_scrub_removes_the_agent_shells_conveniences_and_its_markers() {
+        let mut cmd = Command::new("cmd");
+        scrub_agent_env(&mut cmd);
+        let removed: Vec<String> = cmd
+            .get_envs()
+            .filter(|(_, v)| v.is_none())
+            .map(|(k, _)| k.to_string_lossy().into_owned())
+            .collect();
+        for name in ["NO_COLOR", "GIT_EDITOR", "GIT_TERMINAL_PROMPT", "PROMPT"]
+        {
+            assert!(removed.iter().any(|r| r == name), "{name}: {removed:?}");
+        }
+        assert!(!removed.iter().any(|r| r == "PATH"), "{removed:?}");
+    }
+
     /// The `_` arm was what made a plain windows terminal fine by accident;
     /// now that the arm is real, no placeholder still has to mean no file.
     #[test]
