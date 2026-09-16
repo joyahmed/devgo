@@ -348,12 +348,31 @@ pub fn get_cached_projects(
     Ok(cached_payload(&workspaces, &cache, &prefs))
 }
 
+// a blocking pass off the main thread. the scan, the git pass and the
+// stack pass were sync commands, and tauri runs those on the main thread
+// one after another: get_window_transparency, which gates show(), and the
+// cache first read sat behind a read_dir over every wsl.localhost
+// workspace. async + spawn_blocking is the whole fix
+async fn off_main<T, F>(app: &tauri::AppHandle, f: F) -> Result<T, AppError>
+where
+    T: Send + 'static,
+    F: FnOnce(&AppState) -> Result<T, AppError> + Send + 'static,
+{
+    let h = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = h.state::<AppState>();
+        f(&state)
+    })
+    .await
+    .map_err(lock_err)?
+}
+
 #[tauri::command]
-pub fn get_projects(
+pub async fn get_projects(
     app: tauri::AppHandle,
-    state: State<AppState>,
 ) -> Result<ProjectsPayload, AppError> {
-    let payload = collect_projects(&state, false)?;
+    let payload =
+        off_main(&app, |state| collect_projects(state, false)).await?;
     crate::tray::refresh(&app);
     Ok(payload)
 }
@@ -361,22 +380,24 @@ pub fn get_projects(
 /// Explicit user refresh. `force` is the only path allowed to start a stopped
 /// distro, and it also re-probes runtime info.
 #[tauri::command]
-pub fn refresh_projects(
+pub async fn refresh_projects(
     force: bool,
     app: tauri::AppHandle,
-    state: State<AppState>,
 ) -> Result<ProjectsPayload, AppError> {
-    if force {
-        let fresh = crate::services::platform::detection::detect_runtime();
-        *state.runtime_info.lock().map_err(lock_err)? = fresh.clone();
-        state
-            .pref_store
-            .lock()
-            .map_err(lock_err)?
-            .set_cached_runtime(fresh)
-            .map_err(AppError::Lock)?;
-    }
-    let payload = collect_projects(&state, force)?;
+    let payload = off_main(&app, move |state| {
+        if force {
+            let fresh = crate::services::platform::detection::detect_runtime();
+            *state.runtime_info.lock().map_err(lock_err)? = fresh.clone();
+            state
+                .pref_store
+                .lock()
+                .map_err(lock_err)?
+                .set_cached_runtime(fresh)
+                .map_err(AppError::Lock)?;
+        }
+        collect_projects(state, force)
+    })
+    .await?;
     crate::tray::refresh(&app);
     Ok(payload)
 }
@@ -688,9 +709,13 @@ fn running_for(projects: &[Project]) -> Vec<String> {
 // which of these projects have a live tmux / psmux session: the live
 // chip. the same liveness gate as the git pass
 #[tauri::command]
-pub fn get_live_sessions(projects: Vec<Project>) -> Vec<String> {
-    let running = running_for(&projects);
-    crate::services::sessions::collect(&projects, &running)
+pub async fn get_live_sessions(projects: Vec<Project>) -> Vec<String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let running = running_for(&projects);
+        crate::services::sessions::collect(&projects, &running)
+    })
+    .await
+    .unwrap_or_default()
 }
 
 #[tauri::command]
@@ -700,33 +725,39 @@ pub fn kill_session(project: Project) -> Result<(), AppError> {
 }
 
 #[tauri::command]
-pub fn get_git_info(
+pub async fn get_git_info(
     projects: Vec<Project>,
-    state: State<AppState>,
+    app: tauri::AppHandle,
 ) -> Result<Vec<git::GitInfo>, AppError> {
-    let running = running_for(&projects);
-    let fresh = git::collect(&projects, &running);
-    let mut cache = state.git_cache.lock().map_err(lock_err)?;
-    for info in &fresh {
-        cache.insert(info.full_path.clone(), info.clone());
-    }
-    Ok(fresh)
+    off_main(&app, move |state| {
+        let running = running_for(&projects);
+        let fresh = git::collect(&projects, &running);
+        let mut cache = state.git_cache.lock().map_err(lock_err)?;
+        for info in &fresh {
+            cache.insert(info.full_path.clone(), info.clone());
+        }
+        Ok(fresh)
+    })
+    .await
 }
 
 /// Classify projects by stack. Same contract as `get_git_info`: a separate
 /// command, off the scan's hot path, and never worth booting a distro for.
 #[tauri::command]
-pub fn get_project_tech(
+pub async fn get_project_tech(
     projects: Vec<Project>,
-    state: State<AppState>,
+    app: tauri::AppHandle,
 ) -> Result<Vec<ProjectTech>, AppError> {
-    let running = running_for(&projects);
-    let fresh = detect::collect(&projects, &running);
-    let mut cache = state.tech_cache.lock().map_err(lock_err)?;
-    for t in &fresh {
-        cache.insert(t.full_path.clone(), t.clone());
-    }
-    Ok(fresh)
+    off_main(&app, move |state| {
+        let running = running_for(&projects);
+        let fresh = detect::collect(&projects, &running);
+        let mut cache = state.tech_cache.lock().map_err(lock_err)?;
+        for t in &fresh {
+            cache.insert(t.full_path.clone(), t.clone());
+        }
+        Ok(fresh)
+    })
+    .await
 }
 
 /// Suggest roots for an empty first run. Never boots a distro; fired from the
