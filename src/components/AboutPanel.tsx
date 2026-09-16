@@ -1,6 +1,7 @@
 import { getVersion } from '@tauri-apps/api/app';
 import { invoke } from '@tauri-apps/api/core';
 import { useEffect, useState } from 'react';
+import { isMac } from '../platform';
 import Button from './Button';
 import { Code, HelpSection } from './HelpPanel';
 
@@ -32,8 +33,8 @@ const AboutPanel = () => {
 					)}
 				</h4>
 				<p className='text-13 text-text-secondary'>
-					A project launcher for Windows and WSL. Built by Joy Ahmed with
-					Tauri, Rust and React.
+					A project launcher for {isMac ? 'the Mac' : 'Windows and WSL'}.
+					Built by Joy Ahmed with Tauri, Rust and React.
 				</p>
 			</div>
 
@@ -61,9 +62,9 @@ const AboutPanel = () => {
 			<HelpSection title='Third-party'>
 				<p>
 					GitHub CLI (<Code>gh</Code>): MIT, by GitHub. Not bundled: DevGo
-					runs the copy you installed, and it holds your login. psmux: by its
-					author, not bundled. Tauri, React and Tailwind under their own
-					licences.
+					runs the copy you installed, and it holds your login.{' '}
+					{isMac ? 'tmux: by its authors' : 'psmux: by its author'}, not
+					bundled. Tauri, React and Tailwind under their own licences.
 				</p>
 			</HelpSection>
 		</div>
