@@ -2078,19 +2078,14 @@ pub fn clone_repo(
     app: tauri::AppHandle,
     state: State<AppState>,
 ) -> Result<CloneStarted, AppError> {
-    // not because a stranger could call it: because a stale picker could,
-    // after a workspace was removed underneath it
-    if !state
+    // a workspace, or a folder the picker chose. the folder is probed
+    // after the liveness gate below, so a stopped distro is never booted
+    let listed = state
         .workspace_store
         .lock()
         .map_err(lock_err)?
         .list()
-        .contains(&workspace)
-    {
-        return Err(AppError::CloneRefused(format!(
-            "{workspace} is not one of your workspaces"
-        )));
-    }
+        .contains(&workspace);
     let repo_name = full_name
         .rsplit('/')
         .next()
@@ -2107,6 +2102,9 @@ pub fn clone_repo(
         Vec::new()
     };
     clone::refuse_if_needed(&plan, &running)?;
+    if !listed {
+        clone::folder_ok(&workspace)?;
+    }
 
     let started = CloneStarted {
         full_name: full_name.clone(),

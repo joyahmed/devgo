@@ -126,6 +126,17 @@ pub fn plan(
     }
 }
 
+/// A destination that is not one of the workspaces: the picker's own
+/// folder chooser. Any folder that exists will do; a path that does not
+/// is refused here, not by git halfway in.
+pub fn folder_ok(into: &str) -> Result<(), AppError> {
+    if std::path::Path::new(into).is_dir() {
+        Ok(())
+    } else {
+        Err(AppError::CloneRefused(format!("{into} is not a folder")))
+    }
+}
+
 /// Every reason not to start, checked before the thread exists, so the
 /// caller gets the refusal as the command's own error and not a failed job.
 pub fn refuse_if_needed(
@@ -367,6 +378,16 @@ mod tests {
         let err = refuse_if_needed(&p, &[]).unwrap_err().to_string();
         assert!(err.contains("already exists"), "{err}");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_chosen_folder_must_exist() {
+        let dir = std::env::temp_dir().join("devgo-clone-into");
+        std::fs::create_dir_all(&dir).unwrap();
+        assert!(folder_ok(&dir.to_string_lossy()).is_ok());
+        let _ = std::fs::remove_dir_all(&dir);
+        let err = folder_ok(&dir.to_string_lossy()).unwrap_err().to_string();
+        assert!(err.contains("not a folder"), "{err}");
     }
 
     #[test]
