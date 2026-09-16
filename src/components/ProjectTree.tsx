@@ -3,6 +3,7 @@ import { lastSegment } from '../paths';
 import { isTypingTarget, matches, shortcutFor } from '../shortcuts';
 import Button from './Button';
 import GithubLane from './GithubLane';
+import ServersLane from './ServersLane';
 import { card, col } from './rowStyles';
 
 const COLUMNS = [
@@ -324,6 +325,10 @@ const ProjectTree = ({
 	onRepoBranches,
 	cloneJobs,
 	onGroupContextMenu,
+	servers,
+	onServerOpen,
+	onServerContextMenu,
+	onServersAddMenu,
 	showHints,
 	launchingPath,
 	ref
@@ -333,7 +338,12 @@ const ProjectTree = ({
 	// reachable by arrow. beside the selection, and any change of the
 	// selection drops it, so the two are never lit at once
 	const [repoCursor, setRepoCursor] = useState<string | null>(null);
-	useEffect(() => setRepoCursor(null), [selected]);
+	// and a server row, the same arrangement
+	const [serverCursor, setServerCursor] = useState<string | null>(null);
+	useEffect(() => {
+		setRepoCursor(null);
+		setServerCursor(null);
+	}, [selected]);
 	const searching = query.trim().length > 0;
 	const isCollapsed = (ws: string) => !searching && collapsed.has(ws);
 
@@ -456,15 +466,28 @@ const ProjectTree = ({
 	for (const repo of github?.isOpen ? github.visible : []) {
 		rows.push({ kind: 'repo', repo });
 	}
+	// and the servers last, when that card is open
+	for (const server of servers?.isOpen ? servers.servers : []) {
+		rows.push({ kind: 'server', server });
+	}
 
 	const selectProject = (p: Project) => {
 		setRepoCursor(null);
+		setServerCursor(null);
 		onSelect(p);
 	};
-	const selectRepo = (r: GithubRepo) => setRepoCursor(r.full_name);
+	const selectRepo = (r: GithubRepo) => {
+		setServerCursor(null);
+		setRepoCursor(r.full_name);
+	};
+	const selectServer = (s: Server) => {
+		setRepoCursor(null);
+		setServerCursor(s.id);
+	};
 	const land = (row: NavRow) => {
 		if (row.kind === 'project') selectProject(row.project);
-		else selectRepo(row.repo);
+		else if (row.kind === 'repo') selectRepo(row.repo);
+		else selectServer(row.server);
 	};
 
 	// from the github box the arrows walk the github rows and nothing
@@ -474,9 +497,11 @@ const ProjectTree = ({
 		const walk = lane === 'github' ? rows.filter(r => r.kind === 'repo') : rows;
 		const idx = repoCursor
 			? walk.findIndex(r => r.kind === 'repo' && r.repo.full_name === repoCursor)
-			: walk.findIndex(
-					r => r.kind === 'project' && r.project.full_path === selected?.full_path
-				);
+			: serverCursor
+				? walk.findIndex(r => r.kind === 'server' && r.server.id === serverCursor)
+				: walk.findIndex(
+						r => r.kind === 'project' && r.project.full_path === selected?.full_path
+					);
 		const next = idx === -1 ? walk[0] : walk[idx + dir];
 		if (next) land(next);
 	};
@@ -485,6 +510,13 @@ const ProjectTree = ({
 		const repo = github?.visible.find(r => r.full_name === repoCursor);
 		if (!repo) return false;
 		onRepoOpen?.(repo);
+		return true;
+	};
+	// enter on a server row: a terminal on it
+	const openServer = () => {
+		const server = servers?.servers.find(s => s.id === serverCursor);
+		if (!server) return false;
+		onServerOpen?.(server);
 		return true;
 	};
 
@@ -527,7 +559,9 @@ const ProjectTree = ({
 		// keys are off since there is nothing to collapse
 		const keys: Record<string, () => void> = repoCursor
 			? { ...walk, Enter: () => openRepo() }
-			: {
+			: serverCursor
+				? { ...walk, Enter: () => openServer() }
+				: {
 					...walk,
 					ArrowRight: () => ws && setCollapsedFor(ws, false),
 					ArrowLeft: () => ws && setCollapsedFor(ws, true),
@@ -568,11 +602,13 @@ const ProjectTree = ({
 		selected,
 		rows,
 		repoCursor,
+		serverCursor,
 		collapsed,
 		navigate,
 		onLaunch,
 		onTogglePin,
 		onRepoOpen,
+		onServerOpen,
 		workspaceOrder,
 		onReorder
 	]);
@@ -609,6 +645,20 @@ const ProjectTree = ({
 		/>
 	) : null;
 
+	const serversLane = servers?.hasSsh ? (
+		<ServersLane
+			{...{
+				servers,
+				cursor: serverCursor,
+				onSelect: selectServer,
+				onOpen: (s: Server) => onServerOpen?.(s),
+				onContextMenu: (s: Server, x: number, y: number) =>
+					onServerContextMenu?.(s, x, y),
+				onAddMenu: (x: number, y: number) => onServersAddMenu?.(x, y)
+			}}
+		/>
+	) : null;
+
 	if (projects.length === 0) {
 		// "Nothing configured" and "everything is offline right now" are very
 		// different situations and must never look the same.
@@ -637,7 +687,7 @@ const ProjectTree = ({
 				</div>
 			);
 		}
-		if (!githubLane) {
+		if (!githubLane && !serversLane) {
 			return (
 				<div className='flex-1 flex items-center justify-center text-15 text-text-muted'>
 					No projects found. Add a workspace to begin.
@@ -656,6 +706,7 @@ const ProjectTree = ({
 							: 'No projects found. Add a workspace to begin.'}
 					</div>
 					{githubLane}
+					{serversLane}
 				</div>
 			</div>
 		);
@@ -666,7 +717,9 @@ const ProjectTree = ({
 	// cursor whose row has left the list (the box was cleared) lights
 	// nothing, so it dims nothing
 	const cursorLit = rows.some(
-		r => r.kind === 'repo' && r.repo.full_name === repoCursor
+		r =>
+			(r.kind === 'repo' && r.repo.full_name === repoCursor) ||
+			(r.kind === 'server' && r.server.id === serverCursor)
 	);
 	const rowProps = (project: Project) => ({
 		project,
@@ -796,6 +849,7 @@ const ProjectTree = ({
 				})}
 
 				{githubLane}
+				{serversLane}
 			</div>
 		</div>
 	);
