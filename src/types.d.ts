@@ -558,6 +558,12 @@ interface AppearancePanelProps {
 	onToggleHints: () => void;
 }
 
+/// the transparency slider: 0 to the cap, the window is the preview
+interface TransparencySliderProps {
+	value: number | null;
+	onChange: (percent: number) => void;
+}
+
 /// the text-size stepper's three controls
 interface TextStepProps {
 	scale: number;

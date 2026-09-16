@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { relativeTime } from '../github';
 import { prettyKeys, SHORTCUTS } from '../shortcuts';
 import { applyTextScale, savedTextScale, stepTextScale, TEXT_STEPS } from '../textSize';
+import { MAX_TRANSPARENCY, setTransparency } from '../transparency';
 import { savedThemeId, setTheme, THEMES } from '../themes';
 import Button from './Button';
 import AboutPanel from './AboutPanel';
@@ -566,9 +567,46 @@ const TextStep = ({ scale, onScale }: TextStepProps) => {
 	);
 };
 
+// opaque to see-through, the number beside it; null until the preference
+// has been read, so the thumb never sits at 0 on a see-through window
+const TransparencySlider = ({ value, onChange }: TransparencySliderProps) => (
+	<div className='flex items-center gap-3'>
+		<span className='text-13 text-text-muted shrink-0'>Opaque</span>
+		<input
+			type='range'
+			min={0}
+			max={MAX_TRANSPARENCY}
+			step={5}
+			value={value ?? 0}
+			disabled={value === null}
+			className='flex-1 accent-accent'
+			aria-label='Transparency'
+			onChange={e => onChange(Number(e.target.value))}
+		/>
+		<span className='text-13 text-text-muted shrink-0'>See-through</span>
+		<span className='font-mono text-15 text-text-primary w-12 text-right'>
+			{value ?? 0}%
+		</span>
+	</div>
+);
+
 const AppearancePanel = ({ showHints, onToggleHints }: AppearancePanelProps) => {
 	const [current, setCurrent] = useState(savedThemeId());
 	const [scale, setScale] = useState(savedTextScale());
+	const [transparency, setTransparencyShown] = useState<number | null>(null);
+	useEffect(() => {
+		invoke<number>('get_window_transparency')
+			.then(setTransparencyShown)
+			.catch(() => setTransparencyShown(0));
+	}, []);
+	// the thumb follows the pointer at once; the stored value, clamped,
+	// comes back and settles it
+	const previewTransparency = (percent: number) => {
+		setTransparencyShown(percent);
+		setTransparency(percent)
+			.then(setTransparencyShown)
+			.catch(() => {});
+	};
 	// ctrl+= / ctrl+- while this panel is open must move the number too
 	useEffect(() => {
 		const sync = () => setScale(savedTextScale());
@@ -620,6 +658,18 @@ const AppearancePanel = ({ showHints, onToggleHints }: AppearancePanelProps) => 
 					<span className='font-mono'>Ctrl+0</span> is 100%.
 				</p>
 				<TextStep {...{ scale, onScale: setScale }} />
+			</div>
+			<div>
+				<h4 className={heading}>Transparency</h4>
+				<p className='text-13 text-text-muted mb-2'>
+					How much of what is behind the window shows through, with the
+					system blur so text stays readable. Windows 11 and macOS; on
+					Linux the slider changes nothing. Capped at {MAX_TRANSPARENCY}%:
+					past that, text would sit on whatever is behind you.
+				</p>
+				<TransparencySlider
+					{...{ value: transparency, onChange: previewTransparency }}
+				/>
 			</div>
 			<div>
 				<h4 className={heading}>Hint words</h4>
