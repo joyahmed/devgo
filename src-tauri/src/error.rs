@@ -57,6 +57,9 @@ pub enum AppError {
     #[error("No such editor or terminal: {0}")]
     TargetNotFound(String),
 
+    #[error("No such server: {0}")]
+    ServerNotFound(String),
+
     #[error(
         "{0} is the only one of its kind — add another before removing it"
     )]

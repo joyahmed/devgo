@@ -163,7 +163,7 @@ impl ServersStore {
     pub fn update(&mut self, server: Server) -> Result<(), AppError> {
         let Some(slot) = self.servers.iter_mut().find(|s| s.id == server.id)
         else {
-            return Err(AppError::TargetNotFound(server.id));
+            return Err(AppError::ServerNotFound(server.id));
         };
         *slot = server;
         self.save()
@@ -173,7 +173,7 @@ impl ServersStore {
         let before = self.servers.len();
         self.servers.retain(|s| s.id != id);
         if self.servers.len() == before {
-            return Err(AppError::TargetNotFound(id.to_string()));
+            return Err(AppError::ServerNotFound(id.to_string()));
         }
         self.save()
     }

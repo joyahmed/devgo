@@ -805,7 +805,7 @@ pub fn open_server(
         .lock()
         .map_err(lock_err)?
         .get(&id)
-        .ok_or_else(|| AppError::TargetNotFound(id.clone()))?;
+        .ok_or_else(|| AppError::ServerNotFound(id.clone()))?;
     let home = std::env::var("USERPROFILE").unwrap_or_else(|_| "C:\\".into());
     let stand_in = Project::new(
         server.name.clone(),
@@ -834,7 +834,7 @@ pub fn server_commands(
         .lock()
         .map_err(lock_err)?
         .get(&id)
-        .ok_or_else(|| AppError::TargetNotFound(id.clone()))?;
+        .ok_or_else(|| AppError::ServerNotFound(id.clone()))?;
     Ok((
         format!("ssh {}", server.ssh_target().join(" ")),
         server.scp_prefix(),
