@@ -1121,14 +1121,6 @@ interface FsCellProps {
 	className?: string;
 }
 
-interface WslControlProps {
-	wsl: WslState;
-	/// Called after every stop attempt, success or not — the caller re-reads.
-	onChanged: () => void;
-	onConfirm: (message: string, action: () => void) => void;
-	onResult: (message: string, kind: ToastType) => void;
-}
-
 // a title-bar chip for one file system: its name in its hue, a light when
 // it has one, and a menu under it when it has something to act on. the
 // menu is given the way to close itself
@@ -1141,7 +1133,14 @@ interface FsChipProps {
 	menu?: (close: () => void) => React.ReactNode;
 }
 
-interface WslMenuProps extends WslControlProps {
+// the wsl menu's hands: the state it lists, the app's confirm and toast,
+// and the way back
+interface WslMenuProps {
+	wsl: WslState;
+	/// Called after every stop attempt, success or not — the caller re-reads.
+	onChanged: () => void;
+	onConfirm: (message: string, action: () => void) => void;
+	onResult: (message: string, kind: ToastType) => void;
 	close: () => void;
 }
 

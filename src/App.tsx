@@ -22,7 +22,7 @@ import SearchBox from './components/SearchBox';
 import ServerForm from './components/ServerForm';
 import StatusBar from './components/StatusBar';
 import TitleBar from './components/TitleBar';
-import WslControl from './components/WslControl';
+import FileSystems from './components/FileSystems';
 import ToastProvider, { useToast } from './components/Toast';
 import { useClone } from './hooks/useClone';
 import { useGithub } from './hooks/useGithub';
@@ -32,6 +32,7 @@ import { useProjects } from './hooks/useProjects';
 import { useServers } from './hooks/useServers';
 import { useTargets } from './hooks/useTargets';
 import { useWorkspaces } from './hooks/useWorkspaces';
+import { useRuntime } from './hooks/useRuntime';
 import { useWsl } from './hooks/useWsl';
 import { lastSegment } from './paths';
 import {
@@ -157,6 +158,9 @@ const AppInner = () => {
 	// hook; the passes the app already makes re-read it too, as since 12
 	const { wsl, refreshWsl } = useWsl();
 	useEffect(refreshWsl, [workspaceStates]);
+	// the machine: the forced refresh re-probes it, and lands as a pass
+	const { runtime, refreshRuntime } = useRuntime();
+	useEffect(refreshRuntime, [workspaceStates]);
 
 	// One dialog, three destructive actions with three different sentences:
 	// the popover asks App to confirm, and App renders the question. the
@@ -1611,8 +1615,9 @@ const AppInner = () => {
 		>
 			<TitleBar>
 				<div className='flex items-center gap-2'>
-					<WslControl
+					<FileSystems
 						{...{
+							runtime,
 							wsl,
 							onChanged: refreshWsl,
 							onConfirm: (message: string, run: () => void) =>
@@ -1620,9 +1625,6 @@ const AppInner = () => {
 							onResult: toast
 						}}
 					/>
-					{/* the wsl chip stays up here, not in the row: it has to work
-					    when the table shows no wsl workspace, which is exactly when a
-					    distro wedges */}
 					<Button
 						variant='ghost'
 						className='w-7 h-7 text-15 font-semibold'
