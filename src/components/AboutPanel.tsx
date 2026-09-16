@@ -33,8 +33,9 @@ const AboutPanel = () => {
 					)}
 				</h4>
 				<p className='text-13 text-text-secondary'>
-					A project launcher for {isMac ? 'the Mac' : 'Windows and WSL'}.
-					Built by Joy Ahmed with Tauri, Rust and React.
+					A cross-platform project launcher: Windows and WSL, macOS, and a
+					Linux build that has not been run yet. Built by Joy Ahmed with
+					Tauri, Rust and React.
 				</p>
 			</div>
 
