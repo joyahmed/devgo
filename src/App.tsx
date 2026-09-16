@@ -1937,9 +1937,12 @@ const AppInner = () => {
 						    holds, which lived in the title bar; this is the list's row.
 						    the github box sits level with it at a fixed share, so the
 						    project box is the wider one at every width, with the github
-						    rows' own three controls beside it */}
-						<div className='w-full shrink-0 flex items-center gap-4'>
-						<div className='flex-1 min-w-0 flex items-center gap-3'>
+						    rows' own three controls beside it. the box shares its line
+						    with sort, + workspace and refresh and gives up width for
+						    them; under 12rem it keeps its width and the three go under
+						    it as one line (a narrow window left it a 127px slot) */}
+						<div className='w-full shrink-0 flex items-start gap-4'>
+						<div className='flex-1 min-w-0 flex flex-wrap items-center gap-3'>
 							<SearchBox
 								{...{
 									ref: searchRef,
@@ -1949,9 +1952,10 @@ const AppInner = () => {
 									onArrow: handleArrow,
 									enterHint:
 										selected || filtered.length > 0 ? '⏎ Enter' : undefined,
-									className: 'flex-1 min-w-0'
+									className: 'flex-1 min-w-[12rem]'
 								}}
 							/>
+							<div className='flex items-center gap-3 shrink-0'>
 							<div
 								className='flex items-center gap-1 shrink-0'
 								role='group'
@@ -2003,6 +2007,7 @@ const AppInner = () => {
 									<polyline points='21 3 21 9 15 9' />
 								</svg>
 							</Button>
+							</div>
 						</div>
 						{github.available && (
 							<SearchBox
@@ -2019,6 +2024,9 @@ const AppInner = () => {
 								}}
 							/>
 						)}
+						{/* the buttons on the boxes' line: h-10 is a box's height, so they
+						    stay centred on it when the project cell wraps to two lines */}
+						<div className='h-10 flex items-center gap-4 shrink-0'>
 						{github.available && (
 							<GithubControls
 								{...{
@@ -2046,6 +2054,7 @@ const AppInner = () => {
 								<span className='text-11 leading-none opacity-70'>▾</span>
 							</Button>
 						)}
+						</div>
 						</div>
 						<ProjectTree
 							{...{
