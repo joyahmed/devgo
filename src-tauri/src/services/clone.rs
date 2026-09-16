@@ -7,17 +7,15 @@
 //! disk exactly as it was. git clone removes a half-made directory when it
 //! fails, and the refusals here never let it start on one that exists.
 use std::io::{BufRead, BufReader};
-use std::os::windows::process::CommandExt;
 use std::process::{Command, Stdio};
 
 use serde::Serialize;
 
 use super::platform::paths::windows_to_wsl_path;
 use super::platform::wsl;
+use super::platform::Quiet;
 use super::scanner::distro_of;
 use crate::error::AppError;
-
-const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 /// Which transport git clone uses. Read from gh: the host-level setting
 /// first (gh config get -h github.com git_protocol, which is what gh auth
@@ -44,7 +42,7 @@ impl Protocol {
     pub fn detect() -> Self {
         let read = |args: &[&str]| {
             Command::new("gh")
-                .creation_flags(CREATE_NO_WINDOW)
+                .quiet()
                 .args(args)
                 .output()
                 .ok()
@@ -191,7 +189,7 @@ pub fn run(plan: &Plan, mut on_line: impl FnMut(&str)) -> Result<(), AppError> {
         }
     };
     let mut child = cmd
-        .creation_flags(CREATE_NO_WINDOW)
+        .quiet()
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::piped())

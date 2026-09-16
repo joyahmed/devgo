@@ -6,16 +6,14 @@
 
 use std::collections::HashMap;
 use std::fs;
-use std::os::windows::process::CommandExt;
 use std::path::PathBuf;
 use std::process::Command;
 
 use serde::{Deserialize, Serialize};
 
+use super::platform::Quiet;
 use super::servers::Server;
 use crate::error::AppError;
-
-const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 // where a box keeps its life when the row says nothing
 pub const DEFAULT_ROOTS: &[&str] = &["~", "~/projects", "/var/www", "/srv"];
@@ -207,7 +205,7 @@ pub fn zed_remote_url(server: &Server, path: &str) -> String {
 // untouched, which is what expands it
 fn ssh(server: &Server, remote: &str) -> Result<String, String> {
     let mut cmd = Command::new("ssh");
-    cmd.creation_flags(CREATE_NO_WINDOW).args([
+    cmd.quiet().args([
         "-o",
         "BatchMode=yes",
         "-o",

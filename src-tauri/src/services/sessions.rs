@@ -7,16 +7,14 @@
 //! the badge pass.
 
 use std::collections::HashSet;
-use std::os::windows::process::CommandExt;
 use std::process::Command;
 
 use crate::error::AppError;
 use crate::models::Project;
 use crate::services::launcher::session_names;
 use crate::services::platform::wsl;
+use crate::services::platform::Quiet;
 use crate::services::scanner::distro_of;
-
-const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 // with no server tmux ls writes an error to stderr and exits 1, and
 // probe_lines ignores the exit status but not stderr
@@ -69,7 +67,7 @@ pub fn collect(projects: &[Project], running: &[String]) -> Vec<String> {
 // missing psmux is an empty list, never an error
 fn psmux_sessions() -> Vec<String> {
     let Ok(out) = Command::new("psmux.exe")
-        .creation_flags(CREATE_NO_WINDOW)
+        .quiet()
         .args(["list-sessions", "-F", "#S"])
         .output()
     else {
@@ -109,7 +107,7 @@ pub fn kill(project: &Project, running: &[String]) -> Result<(), AppError> {
         }
         None => {
             Command::new("psmux.exe")
-                .creation_flags(CREATE_NO_WINDOW)
+                .quiet()
                 .args(["kill-session", "-t", &target])
                 .output()
                 .map_err(|e| AppError::LaunchFailed(format!("psmux: {e}")))?;
