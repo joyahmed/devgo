@@ -14,6 +14,7 @@ window born see-through at the transparency knob. Neon theme. Server rows are na
 | `windows/02-app-actions.png` | Right-click on the `erp` app: the actions the server declares, in sections |
 | `windows/03-nginx-form.png` | *New site…* — a form action, the exact line it will type |
 | `windows/04-palette.png` | The command palette filtered to `server` |
+| `windows/05-server-actions.png` | Right-click on the `zetta` server row: the terminals, the folder asks, then the box's own actions in sections (Box · pm2 · Backups · nginx · DNS · Database), the copy lines, Edit… |
 | `windows/10-settings-workspaces.png` | Settings › Workspaces |
 | `windows/11-settings-editors-terminals.png` | Settings › Editors & Terminals |
 | `windows/12-settings-tmux-psmux.png` | Settings › tmux / psmux |
