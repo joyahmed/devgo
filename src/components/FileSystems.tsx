@@ -34,7 +34,14 @@ const FileSystems = ({ runtime, wsl, ...hands }: FileSystemsProps) => {
 	const { local_fs, wsl_available } = runtime;
 	const chips: FsChipProps[] = [
 		...(local_fs
-			? [{ fs: local_fs, title: `${local_fs}: this machine's own disk` }]
+			? [
+					{
+						fs: local_fs,
+						title: `${local_fs}: this machine's own disk, always up`,
+						// the same light as wsl's, and it never goes out
+						light: true
+					}
+				]
 			: []),
 		...(wsl_available
 			? [wslChip(wsl, close => <WslMenu {...{ wsl, close, ...hands }} />)]
