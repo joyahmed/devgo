@@ -197,7 +197,7 @@ const CANDIDATES: &[Candidate] = &[
         name: "Windows Terminal",
         kind: TargetKind::Terminal,
         exe: "wt",
-        args: WT_ARGS,
+        args: crate::models::target::WT_ARGS,
         wsl_args: Some("wsl -d {distro} bash \"{script}\""),
         run_args: Some(crate::models::target::WT_RUN_ARGS),
         wsl_run_args: Some(crate::models::target::WT_WSL_RUN_ARGS),
