@@ -4,6 +4,7 @@ import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
+import ActionForm from './components/ActionForm';
 import AddRepo from './components/AddRepo';
 import Button from './components/Button';
 import ClonePicker from './components/ClonePicker';
@@ -31,7 +32,7 @@ import { useServers } from './hooks/useServers';
 import { useTargets } from './hooks/useTargets';
 import { useWorkspaces } from './hooks/useWorkspaces';
 import { lastSegment } from './paths';
-import { appForFolder, canFill, placeholders } from './serverApps';
+import { appForFolder, canFill, placeholders, prefillValues } from './serverApps';
 import { isTypingTarget, matches, prettyKeys, shortcutFor } from './shortcuts';
 import { applyTextScale, stepTextScale } from './textSize';
 import { loadGroundAlpha } from './transparency';
@@ -735,11 +736,19 @@ const AppInner = () => {
 	// tmux window and attaches the terminal to it; with no tmux on the row
 	// the line comes back for the clipboard and the terminal opens plain.
 	// the toast says which of those happened
-	const runServerAction = (s: Server, action: ServerAction, appDir: string | null) =>
+	const runServerAction = (
+		s: Server,
+		action: ServerAction,
+		appDir: string | null,
+		values?: Record<string, string>,
+		preview?: boolean
+	) =>
 		invoke<ActionOutcome>('run_server_action', {
 			id: s.id,
 			actionId: action.id,
-			appDir
+			appDir,
+			values: values ?? null,
+			preview: preview ?? null
 		})
 			.then(async out => {
 				if (out.kind === 'ran') toast(`Running in ${out.window} on ${s.name}`, 'success');
@@ -753,10 +762,22 @@ const AppInner = () => {
 					toast(`${action.label}: running on this PC`, 'success');
 			})
 			.catch(e => toast(showError(e)));
+	// a form action opens its drawer instead of running; the others run
+	const [actionForm, setActionForm] = useState<ActionFormRequest | null>(null);
+	const fireAction = (
+		s: Server,
+		a: ServerAction,
+		appDir: string | null,
+		app?: ServerApp
+	) =>
+		a.kind === 'form'
+			? setActionForm({ server: s, action: a, appDir, initial: prefillValues(a, app) })
+			: runServerAction(s, a, appDir);
 	// the hint beside an action: what kind of door it is
 	const actionHint = (a: ServerAction, s: Server) => {
 		const bits = [
 			a.root ? 'sudo' : null,
+			a.kind === 'form' ? 'form' : null,
 			a.kind === 'pretype' ? (s.tmux ? 'types' : 'copies') : null,
 			a.kind === 'run' && !s.tmux ? 'copies' : null,
 			a.kind === 'url' ? '↗' : null,
@@ -772,7 +793,7 @@ const AppInner = () => {
 			...acts.map(a => ({
 				label: a.label,
 				hint: actionHint(a, s),
-				onClick: () => runServerAction(s, a, null)
+				onClick: () => fireAction(s, a, null)
 			}))
 		];
 	};
@@ -790,7 +811,7 @@ const AppInner = () => {
 			...acts.map(a => ({
 				label: a.label,
 				hint: actionHint(a, s),
-				onClick: () => runServerAction(s, a, f.path)
+				onClick: () => fireAction(s, a, f.path, app)
 			}))
 		];
 	};
@@ -1033,7 +1054,7 @@ const AppInner = () => {
 					title: `Server: ${s.name} › ${a.label}`,
 					subtitle: a.command,
 					keywords: ['server', s.name.toLowerCase(), a.id, ...a.id.split('-')],
-					run: () => runServerAction(s, a, null)
+					run: () => fireAction(s, a, null)
 				}))
 			),
 			{
@@ -1542,6 +1563,36 @@ const AppInner = () => {
 							submitLabel: 'Add root',
 							onSubmit: (root: string) => addRoot(rootPrompt, root),
 							onDone: () => setRootPrompt(null)
+						}}
+					/>
+				)}
+			</Drawer>
+
+			<Drawer
+				{...{
+					side: 'right' as const,
+					open: actionForm !== null,
+					title: actionForm ? actionForm.action.label.replace(/…$/, '') : '',
+					onClose: () => setActionForm(null),
+					width: 'w-[min(640px,92vw)]'
+				}}
+			>
+				{actionForm && (
+					<ActionForm
+						{...{
+							server: actionForm.server,
+							action: actionForm.action,
+							appDir: actionForm.appDir,
+							initial: actionForm.initial,
+							onRun: (values: Record<string, string>, preview: boolean) =>
+								runServerAction(
+									actionForm.server,
+									actionForm.action,
+									actionForm.appDir,
+									values,
+									preview
+								),
+							onDone: () => setActionForm(null)
 						}}
 					/>
 				)}
