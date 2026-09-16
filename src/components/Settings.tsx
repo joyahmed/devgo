@@ -549,10 +549,11 @@ const SWATCHES: ThemeKey[] = [
 ];
 
 // no reload, no round trip: a theme is CSS variables and lives in localStorage
-// on or off; the same pair the tmux and github panels use
+// the words are shown and hidden: the switch is about the row, not a
+// feature being on
 const HINT_MODES = [
-	{ label: 'On', value: true },
-	{ label: 'Off', value: false }
+	{ label: 'Show', value: true },
+	{ label: 'Hide', value: false }
 ];
 
 // minus, the number, plus, and reset when it is not 100%
@@ -1044,13 +1045,6 @@ const Settings = ({
 			)
 		},
 		{
-			id: 'scanning',
-			label: 'Scanning',
-			render: () => (
-				<ScanningPanel {...{ onSaved: onScanChanged, onError }} />
-			)
-		},
-		{
 			id: 'tmux',
 			label: isMac ? 'tmux' : 'tmux / psmux',
 			render: () => <TmuxPanel {...{ onError }} />
@@ -1065,6 +1059,13 @@ const Settings = ({
 			label: 'Shortcuts',
 			render: () => (
 				<ShortcutTable {...{ summonHotkey, onSummonChanged, onError }} />
+			)
+		},
+		{
+			id: 'scanning',
+			label: 'Scanning',
+			render: () => (
+				<ScanningPanel {...{ onSaved: onScanChanged, onError }} />
 			)
 		},
 		{
