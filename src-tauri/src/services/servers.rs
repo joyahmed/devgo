@@ -2,7 +2,12 @@
 // host typed by hand with a key path; there is no password field. the
 // launch runs ssh with whatever the user's own setup does
 
+use std::fs;
+use std::path::PathBuf;
+
 use serde::{Deserialize, Serialize};
+
+use crate::error::AppError;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Server {
@@ -112,6 +117,105 @@ pub fn slug(name: &str) -> String {
     }
 }
 
+pub struct ServersStore {
+    servers: Vec<Server>,
+    file_path: PathBuf,
+}
+
+impl ServersStore {
+    pub fn new(app_data_dir: PathBuf) -> Result<Self, AppError> {
+        fs::create_dir_all(&app_data_dir)?;
+        let file_path = app_data_dir.join("servers.json");
+        let servers = if file_path.exists() {
+            let data = fs::read_to_string(&file_path)?;
+            super::config_io::parse_or_backup(&file_path, &data)
+        } else {
+            Vec::new()
+        };
+        Ok(Self { servers, file_path })
+    }
+
+    pub fn list(&self) -> Vec<Server> {
+        self.servers.clone()
+    }
+
+    pub fn get(&self, id: &str) -> Option<Server> {
+        self.servers.iter().find(|s| s.id == id).cloned()
+    }
+
+    // a fresh id from the name; -2, -3 on a clash
+    pub fn add(&mut self, mut server: Server) -> Result<Server, AppError> {
+        let base = slug(&server.name);
+        let mut id = base.clone();
+        let mut n = 2;
+        while self.servers.iter().any(|s| s.id == id) {
+            id = format!("{base}-{n}");
+            n += 1;
+        }
+        server.id = id;
+        self.servers.push(server.clone());
+        self.save()?;
+        Ok(server)
+    }
+
+    pub fn update(&mut self, server: Server) -> Result<(), AppError> {
+        let Some(slot) = self.servers.iter_mut().find(|s| s.id == server.id)
+        else {
+            return Err(AppError::TargetNotFound(server.id));
+        };
+        *slot = server;
+        self.save()
+    }
+
+    pub fn remove(&mut self, id: &str) -> Result<(), AppError> {
+        let before = self.servers.len();
+        self.servers.retain(|s| s.id != id);
+        if self.servers.len() == before {
+            return Err(AppError::TargetNotFound(id.to_string()));
+        }
+        self.save()
+    }
+
+    // merge an import in by alias: a new alias is added, a known one keeps
+    // what was set by hand (name, default_path, tmux, session) and takes
+    // the config's host, user, port and key. returns (added, updated)
+    pub fn upsert_from_config(
+        &mut self,
+        imported: Vec<Server>,
+    ) -> Result<(usize, usize), AppError> {
+        let mut added = 0;
+        let mut updated = 0;
+        for inc in imported {
+            let known = self
+                .servers
+                .iter_mut()
+                .find(|s| s.alias.is_some() && s.alias == inc.alias);
+            if let Some(existing) = known {
+                existing.host = inc.host;
+                existing.user = inc.user;
+                existing.port = inc.port;
+                existing.identity = inc.identity;
+                existing.tunnel = inc.tunnel;
+                existing.source = "ssh-config".into();
+                updated += 1;
+            } else {
+                self.add(inc)?;
+                added += 1;
+            }
+        }
+        if updated > 0 {
+            self.save()?;
+        }
+        Ok((added, updated))
+    }
+
+    fn save(&self) -> Result<(), AppError> {
+        let data = serde_json::to_string_pretty(&self.servers)?;
+        fs::write(&self.file_path, data)?;
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -177,5 +281,32 @@ mod tests {
     fn slug_is_safe_and_never_empty() {
         assert_eq!(slug("Zetta (VPS)"), "zetta--vps");
         assert_eq!(slug("***"), "server");
+    }
+
+    #[test]
+    fn the_store_round_trips_and_upserts_by_alias() {
+        let dir = std::env::temp_dir().join("devgo-servers-test");
+        let _ = fs::remove_dir_all(&dir);
+        let mut store = ServersStore::new(dir.clone()).unwrap();
+        let added = store.add(zetta()).unwrap();
+        assert_eq!(added.id, "zetta");
+        let again = store.add(zetta()).unwrap();
+        assert_eq!(again.id, "zetta-2", "a clash gets a suffix");
+        store.remove("zetta-2").unwrap();
+
+        // a path set by hand survives a re-import
+        let mut mine = store.get("zetta").unwrap();
+        mine.default_path = Some("/home/joy/projects".into());
+        store.update(mine).unwrap();
+        let mut fresh = zetta();
+        fresh.port = Some(2222);
+        let (a, u) = store.upsert_from_config(vec![fresh]).unwrap();
+        assert_eq!((a, u), (0, 1));
+        let after = store.get("zetta").unwrap();
+        assert_eq!(after.port, Some(2222));
+        assert_eq!(after.default_path.as_deref(), Some("/home/joy/projects"));
+
+        let reopened = ServersStore::new(dir).unwrap();
+        assert_eq!(reopened.list().len(), 1);
     }
 }
