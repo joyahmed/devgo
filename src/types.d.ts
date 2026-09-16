@@ -186,6 +186,8 @@ interface RemoteFolder {
 
 interface ServerListing {
 	folders: RemoteFolder[];
+	/// children of folders drilled into, by absolute path
+	subdirs: Record<string, RemoteFolder[]>;
 	listed_at: number;
 	up: boolean;
 	error: string | null;
@@ -792,15 +794,42 @@ interface ServersState {
 	/// name or path
 	query: string;
 	setQuery: (q: string) => void;
-	/// the servers the query leaves, each with the folders under it when
-	/// it is open; the card renders this and the tree walks it
+	/// folders drilled into, `${id}:${path}`; their children sit on the
+	/// listing under subdirs. the first open is an ask
+	openDirs: Set<string>;
+	loadingDirs: Set<string>;
+	toggleDir: (id: string, path: string) => void;
+	listDir: (id: string, path: string) => Promise<RemoteFolder[]>;
+	/// root groups folded shut, `${id}:${root}`, remembered
+	foldedRoots: Set<string>;
+	toggleRoot: (id: string, root: string) => void;
+	/// the servers the query leaves, each with its root groups and their
+	/// rows in render order when it is open; the card renders this and the
+	/// tree walks it
 	visible: VisibleServer[];
 }
 
 interface VisibleServer {
 	server: Server;
-	folders: RemoteFolder[];
 	open: boolean;
+	groups: VisibleRoot[];
+}
+
+/// one root heading and, unless folded, the rows under it: a folder, then
+/// its children one step deeper while it is open
+interface VisibleRoot {
+	root: string;
+	folded: boolean;
+	rows: VisibleFolder[];
+}
+
+interface VisibleFolder {
+	folder: RemoteFolder;
+	depth: number;
+	open: boolean;
+	busy: boolean;
+	/// how many children the last look found; absent until looked
+	inside?: number;
 }
 
 interface ServersLaneProps {
@@ -845,8 +874,9 @@ interface ServerRowProps {
 
 interface FolderRowProps {
 	server: Server;
-	folder: RemoteFolder;
+	row: VisibleFolder;
 	isCursor: boolean;
+	onToggle: (server: Server, folder: RemoteFolder) => void;
 	onSelect: (server: Server, folder: RemoteFolder) => void;
 	onOpen: (server: Server, folder: RemoteFolder) => void;
 	onContextMenu: (
