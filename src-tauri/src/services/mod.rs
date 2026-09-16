@@ -16,6 +16,7 @@ pub mod scripts;
 pub mod servers;
 pub mod sessions;
 pub mod single_instance;
+pub mod ssh_config;
 pub mod target_store;
 pub mod workspace;
 
