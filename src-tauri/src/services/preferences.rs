@@ -370,6 +370,20 @@ impl PreferencesStore {
         self.save()
     }
 
+    pub fn window_transparency(&self) -> u8 {
+        clamp_transparency(self.prefs.window_transparency)
+    }
+
+    // stored clamped, so a hand-edited 90 reads back as the cap and the
+    // file says what the window does
+    pub fn set_window_transparency(
+        &mut self,
+        percent: u8,
+    ) -> Result<(), String> {
+        self.prefs.window_transparency = clamp_transparency(percent);
+        self.save()
+    }
+
     pub fn default_target(&self, kind: TargetKind) -> Option<String> {
         match kind {
             TargetKind::Editor => self.prefs.default_editor.clone(),
@@ -576,6 +590,37 @@ mod tests {
     fn hotkey_defaults_when_unset() {
         let s = store("hotkey");
         assert_eq!(s.summon_hotkey(), DEFAULT_SUMMON_HOTKEY);
+        assert_eq!(
+            s.window_transparency(),
+            0,
+            "an old prefs.json loads opaque"
+        );
+    }
+
+    #[test]
+    fn transparency_is_clamped() {
+        assert_eq!(clamp_transparency(0), 0);
+        assert_eq!(clamp_transparency(35), 35);
+        assert_eq!(clamp_transparency(90), MAX_TRANSPARENCY);
+        assert_eq!(clamp_transparency(255), MAX_TRANSPARENCY);
+    }
+
+    #[test]
+    fn set_transparency_stores_the_clamped_value() {
+        let dir = std::env::temp_dir().join("devgo-prefs-test-transparency");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+
+        let mut s = PreferencesStore::new(dir.clone()).unwrap();
+        s.set_window_transparency(90).unwrap();
+        assert_eq!(s.window_transparency(), MAX_TRANSPARENCY);
+
+        let again = PreferencesStore::new(dir).unwrap();
+        assert_eq!(
+            again.window_transparency(),
+            MAX_TRANSPARENCY,
+            "the file holds the cap, not 90"
+        );
     }
 
     #[test]
