@@ -57,10 +57,6 @@ export const card =
 export const laneBody =
 	'min-[1400px]:flex-1 min-[1400px]:min-h-0 min-[1400px]:overflow-y-auto';
 
-// the four-column grid the table rows shared; gone with the last table row
-export const col =
-	'grid grid-cols-[1fr_1fr_minmax(80px,0.4fr)_minmax(150px,0.9fr)] items-center gap-x-3 text-15';
-
 // a picker row: already there and inert, ticked, or plain
 export const pickTone = (added: boolean, on: boolean) =>
 	added
