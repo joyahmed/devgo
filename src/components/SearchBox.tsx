@@ -1,5 +1,6 @@
 import type { KeyboardEvent } from 'react';
 import Button from './Button';
+import Kbd from './Kbd';
 
 // the input and nothing else. it carried a SEARCH PROJECTS label and a
 // 10px sort: button; the placeholder names the scope now and the sort is
@@ -63,11 +64,8 @@ const SearchBox = ({
 						&#10005;
 					</Button>
 				)}
-				{enterHint && (
-					<span className='text-11 text-text-muted px-1.5 py-0.5 border border-border-strong rounded-control'>
-						{enterHint}
-					</span>
-				)}
+				{/* the same chip every other shortcut hint wears */}
+				{enterHint && <Kbd>Enter</Kbd>}
 			</div>
 		</div>
 	);

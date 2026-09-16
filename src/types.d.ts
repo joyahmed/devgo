@@ -1200,7 +1200,8 @@ interface SearchBoxProps {
 	onChange: (v: string) => void;
 	onEnter?: () => void;
 	onArrow?: (dir: 1 | -1) => void;
-	enterHint?: string;
+	/// enter has a target: the chip says so
+	enterHint?: boolean;
 	placeholder?: string;
 	/// the project box takes focus on mount; the github box does not
 	lane?: SearchLane;
