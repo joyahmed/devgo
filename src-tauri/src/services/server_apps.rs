@@ -81,13 +81,19 @@ pub struct App {
 pub struct Process {
     #[serde(default)]
     pub pm2: Option<String>,
+    // the container name when the process is a docker container; then
+    // pm2 is null
+    #[serde(default)]
+    pub docker: Option<String>,
     #[serde(default)]
     pub pid: Option<u64>,
     #[serde(default)]
     pub status: Option<String>,
-    // a docker-run process reports null here; null is nothing to count
-    #[serde(default, deserialize_with = "null_as_zero")]
-    pub restarts: u64,
+    // a container has no pm2 restart count and no monit memory, so the
+    // script writes null. option, not a default: null means not known,
+    // not zero
+    #[serde(default)]
+    pub restarts: Option<u64>,
     #[serde(default)]
     pub uptime: Option<u64>,
     #[serde(default)]
@@ -96,14 +102,8 @@ pub struct Process {
     pub node: Option<String>,
     #[serde(default)]
     pub ports: Vec<u16>,
-    #[serde(default, deserialize_with = "null_as_zero")]
-    pub memory_mb: u64,
-}
-
-fn null_as_zero<'de, D: serde::Deserializer<'de>>(
-    d: D,
-) -> Result<u64, D::Error> {
-    Ok(Option::<u64>::deserialize(d)?.unwrap_or_default())
+    #[serde(default)]
+    pub memory_mb: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
