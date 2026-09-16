@@ -95,7 +95,7 @@ Every binding is declared once in `src/shortcuts.ts`; the handler, the footer hi
 
 ## Install
 
-Builds are unsigned on both platforms. Download from [Releases](https://github.com/joyahmed/devgo/releases).
+Builds are unsigned on both platforms. Download from [Releases](https://github.com/joyahmed/devgo/releases); each one is built by GitHub Actions from a `v*` tag (`.github/workflows/release.yml`), so the installer on the page is the tag's tree, nothing more.
 
 **Windows**: `DevGo_<version>_x64-setup.exe` installs per user into `%LOCALAPPDATA%\DevGo`, no admin. SmartScreen will say the publisher is unknown: *More info* › *Run anyway*. WebView2 is already on Windows 10 and 11; the installer fetches it if it is missing.
 
@@ -111,7 +111,7 @@ bun tauri dev      # dev build with hot reload
 bun tauri build    # release; the bundles land in src-tauri/target/release/bundle/
 ```
 
-`bun run build` runs the contrast gate, `tsc` and Vite; `cargo test` in `src-tauri` runs the Rust tests.
+`bun run build` runs the contrast gate, `tsc` and Vite; `cargo test` in `src-tauri` runs the Rust tests. CI runs both on every push and pull request, and the tag build runs them on each platform before it bundles.
 
 ## Platform notes
 
