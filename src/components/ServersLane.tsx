@@ -1,6 +1,8 @@
 import Button from './Button';
 import { card, col } from './rowStyles';
 import SearchBox from './SearchBox';
+import { isEtc } from '../etcCuration';
+import { appStatus } from '../serverApps';
 
 // where the row reaches: user@host, or the host alone
 const whoAt = (s: Server) => (s.user ? `${s.user}@${s.host}` : s.host);
@@ -38,6 +40,39 @@ const ago = (secs: number) => {
 	return `${Math.floor(d / 86400)} d ago`;
 };
 
+// the box in one line under the dot, when the inventory knows it
+const hostLine = (l: ServerListing) => {
+	const h = l.inventory?.host;
+	if (!h) return '';
+	const disk = h.disk ? ` · ${h.disk.free_gb} GB free` : '';
+	return `\n${h.pm2_online}/${h.pm2_total} pm2 · ${h.nginx_sites} sites · load ${h.load[0] ?? '?'}${disk}`;
+};
+
+// what the inventory knows about a folder that is an app: the processes
+// with their restarts, the site, the deployed commit
+const appTitle = (app: ServerApp, path: string) =>
+	[
+		...app.processes.map(
+			p =>
+				`${p.pm2 ?? '?'} ${p.status ?? ''}${p.restarts ? ` · ${p.restarts} restarts` : ''}`
+		),
+		app.site ? `site ${app.site.file}${app.site.ssl ? ' · https' : ''}` : null,
+		app.git?.head
+			? `${app.git.branch ?? ''} @ ${app.git.head} ${app.git.subject ?? ''}`.trim()
+			: null,
+		path
+	]
+		.filter(Boolean)
+		.join('\n');
+
+// the app dot: emerald when every process is online, amber when one is
+// not, hollow when nothing runs
+const APP_DOT: Record<ReturnType<typeof appStatus>, string> = {
+	online: 'bg-emerald-400',
+	trouble: 'bg-amber-400',
+	none: 'border border-text-muted'
+};
+
 // the dot: never asked, up, or down with the reason in the tooltip.
 // drawn, not a glyph
 const dotFor = (l?: ServerListing) =>
@@ -49,7 +84,7 @@ const dotFor = (l?: ServerListing) =>
 		: l.up
 			? {
 					className: 'bg-emerald-400',
-					title: `Reached ${ago(l.listed_at)} · ${l.folders.length} folders`
+					title: `Reached ${ago(l.listed_at)} · ${l.folders.length} folders${hostLine(l)}`
 				}
 			: {
 					className: 'bg-danger',
@@ -168,7 +203,12 @@ const FolderRow = ({
 	onOpen,
 	onContextMenu
 }: FolderRowProps) => {
-	const { folder, depth, open, busy, inside } = row;
+	const { folder, depth, open, busy, inside, app } = row;
+	// a bare deploy dir with no process and no site shows nothing new
+	const known = !!app && (!!app.site || app.processes.length > 0);
+	const ports = app?.site
+		? [app.site.web_port, app.site.api_port].filter(p => p != null).join('/')
+		: (app?.processes.flatMap(p => p.ports).join('/') ?? '');
 	return (
 		<div
 			className={`${col} px-3 py-1 ml-6 select-none transition-colors ${
@@ -181,7 +221,7 @@ const FolderRow = ({
 				onSelect(server, folder);
 				onContextMenu(server, folder, e.clientX, e.clientY);
 			}}
-			title={folder.path}
+			title={app ? appTitle(app, folder.path) : folder.path}
 		>
 			<div className='truncate font-mono text-11 text-text-muted pl-10'>
 				{depth === 0 ? folder.root : ''}
@@ -218,7 +258,31 @@ const FolderRow = ({
 					</span>
 				)}
 			</div>
-			<div />
+			{/* what the inventory knows: the domain, a dot for its processes,
+			    the ports */}
+			<div className='flex items-center gap-2 min-w-0'>
+				{known && app && (
+					<>
+						<span
+							className={`size-[7px] rounded-full shrink-0 ${APP_DOT[appStatus(app)]}`}
+							aria-hidden='true'
+						/>
+						{app.site?.domains[0] && (
+							<span
+								className='font-mono text-11 text-text-muted truncate'
+								title={app.site.domains.join(', ')}
+							>
+								{app.site.domains[0]}
+							</span>
+						)}
+						{ports && (
+							<span className='font-mono text-11 text-text-muted shrink-0'>
+								{ports}
+							</span>
+						)}
+					</>
+				)}
+			</div>
 			<div className='text-right text-11 text-text-muted font-mono'>
 				{open && inside ? inside : ''}
 			</div>
@@ -254,6 +318,8 @@ const ServersLane = ({
 		listFolders,
 		toggleDir,
 		toggleRoot,
+		showAllIn,
+		toggleShowAll,
 		query,
 		setQuery,
 		visible
@@ -267,6 +333,31 @@ const ServersLane = ({
 
 	// what sits under an open server: the reason it is down, an empty
 	// note, the busy word, or the root groups, each a heading that folds
+	// under /etc the curated view says how many it left out, and the row is
+	// the request to see them; opened, it is the way back
+	const showAllRow = (
+		s: Server,
+		parent: string,
+		hidden: number | undefined,
+		depth: number
+	) => {
+		const key = `${s.id}:${parent}`;
+		const lifted = isEtc(parent) && showAllIn.has(key);
+		if (!hidden && !lifted) return null;
+		return (
+			<div
+				className='ml-6 px-3 py-1 text-11 text-text-muted cursor-pointer hover:text-accent select-none'
+				style={{ paddingLeft: 52 + depth * 16 }}
+				title='/etc is curated to developer folders; the rest is one click away'
+				onClick={() => toggleShowAll(s.id, parent)}
+			>
+				{hidden
+					? `${hidden} more system folders. Show all`
+					: 'Show developer folders only'}
+			</div>
+		);
+	};
+
 	const under = (s: Server, groups: VisibleRoot[]) => {
 		const l = listings[s.id];
 		const roots = s.roots.length ? s.roots : DEFAULT_ROOTS;
@@ -289,7 +380,27 @@ const ServersLane = ({
 				{!l && listing.has(s.id) && (
 					<div className='ml-6 px-3 py-1 text-11 text-text-muted'>Listing…</div>
 				)}
-				{groups.map(({ root, folded, count, rows }) => (
+				{/* the apps come from a script on the box. a box without it still
+				    lists its folders; say what would give it apps, once, quietly */}
+				{l && l.up && !l.inventory && !l.inventory_error && (
+					<div
+						className='ml-6 px-3 py-1 text-11 text-text-muted truncate'
+						title='joyahmed/server › scripts/install.sh puts it in ~/scripts'
+					>
+						No inventory on this box.{' '}
+						<span className='font-mono'>~/scripts/devgo-inventory.sh</span>{' '}
+						would list its apps.
+					</div>
+				)}
+				{l?.inventory_error && (
+					<div
+						className='ml-6 px-3 py-1 text-11 text-danger truncate'
+						title={l.inventory_error}
+					>
+						{l.inventory_error}
+					</div>
+				)}
+				{groups.map(({ root, folded, count, hidden, rows }) => (
 					<div key={root}>
 						{/* a root heading is the same kind of thing as a group
 						    heading in the github card: one step under the rows,
@@ -316,20 +427,23 @@ const ServersLane = ({
 							</div>
 						</div>
 						{rows.map(row => (
-							<FolderRow
-								key={`${s.id}:${row.folder.path}`}
-								{...{
-									server: s,
-									row,
-									isCursor: folderCursor === `${s.id}:${row.folder.path}`,
-									onToggle: (sv: Server, f: RemoteFolder) =>
-										toggleDir(sv.id, f.path),
-									onSelect: onSelectFolder,
-									onOpen: onOpenFolder,
-									onContextMenu: onFolderContextMenu
-								}}
-							/>
+							<div key={`${s.id}:${row.folder.path}`}>
+								<FolderRow
+									{...{
+										server: s,
+										row,
+										isCursor: folderCursor === `${s.id}:${row.folder.path}`,
+										onToggle: (sv: Server, f: RemoteFolder) =>
+											toggleDir(sv.id, f.path),
+										onSelect: onSelectFolder,
+										onOpen: onOpenFolder,
+										onContextMenu: onFolderContextMenu
+									}}
+								/>
+								{showAllRow(s, row.folder.path, row.hidden, row.depth + 1)}
+							</div>
 						))}
+						{!folded && showAllRow(s, root, hidden, 0)}
 					</div>
 				))}
 			</div>
