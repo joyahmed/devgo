@@ -5,6 +5,10 @@ import { useEffect, useState } from 'react';
 const OPEN_KEY = 'devgo.serversOpen';
 // which servers show their folders, remembered like the tree's collapse set
 const EXPANDED_KEY = 'devgo.serversExpanded';
+// which root groups are folded shut, the same way
+const FOLDED_KEY = 'devgo.serversFoldedRoots';
+
+const DEFAULT_ROOTS = ['~', '~/projects', '/var/www', '/srv'];
 
 const loadOpen = (): boolean => {
 	try {
@@ -14,14 +18,16 @@ const loadOpen = (): boolean => {
 	}
 };
 
-const loadExpanded = (): Set<string> => {
+const loadSet = (key: string): Set<string> => {
 	try {
-		const raw = JSON.parse(localStorage.getItem(EXPANDED_KEY) ?? '[]');
+		const raw = JSON.parse(localStorage.getItem(key) ?? '[]');
 		return new Set(Array.isArray(raw) ? (raw as string[]) : []);
 	} catch {
 		return new Set();
 	}
 };
+const loadExpanded = () => loadSet(EXPANDED_KEY);
+const loadFolded = () => loadSet(FOLDED_KEY);
 
 // the servers card's state: the rows from servers.json, whether there is
 // an ssh client to run (no client, no card), and the edits. nothing here
@@ -85,13 +91,79 @@ export const useServers = (): ServersState => {
 		if (!expanded.has(id) && !listings[id]) listFolders(id).catch(() => {});
 	};
 
+	// folders drilled into, and the asks in flight, `${id}:${path}`. their
+	// children sit on the listing under subdirs; the first open is the ask
+	const [openDirs, setOpenDirs] = useState<Set<string>>(new Set());
+	const [loadingDirs, setLoadingDirs] = useState<Set<string>>(new Set());
+	// root groups folded shut, remembered
+	const [foldedRoots, setFoldedRoots] = useState<Set<string>>(loadFolded);
+
+	const listDir = async (id: string, path: string) => {
+		const key = `${id}:${path}`;
+		setLoadingDirs(prev => new Set(prev).add(key));
+		try {
+			const kids = await invoke<RemoteFolder[]>('list_server_dir', {
+				id,
+				path
+			});
+			setListings(prev => {
+				const cur = prev[id] ?? {
+					folders: [],
+					subdirs: {},
+					listed_at: 0,
+					up: true,
+					error: null
+				};
+				return {
+					...prev,
+					[id]: { ...cur, subdirs: { ...cur.subdirs, [path]: kids } }
+				};
+			});
+			return kids;
+		} finally {
+			setLoadingDirs(prev => {
+				const next = new Set(prev);
+				next.delete(key);
+				return next;
+			});
+		}
+	};
+
+	const toggleDir = (id: string, path: string) => {
+		const key = `${id}:${path}`;
+		const next = new Set(openDirs);
+		if (next.has(key)) next.delete(key);
+		else next.add(key);
+		setOpenDirs(next);
+		if (!openDirs.has(key) && !listings[id]?.subdirs?.[path]) {
+			listDir(id, path).catch(() => {});
+		}
+	};
+
+	const toggleRoot = (id: string, root: string) => {
+		const key = `${id}:${root}`;
+		const next = new Set(foldedRoots);
+		if (next.has(key)) next.delete(key);
+		else next.add(key);
+		try {
+			localStorage.setItem(FOLDED_KEY, JSON.stringify([...next]));
+		} catch {
+			// per-viewer convenience only
+		}
+		setFoldedRoots(next);
+	};
+
 	// what the card shows and the arrows walk, one list for both: a server
 	// by name, alias, host or user; a folder by name or path. a folder hit
 	// keeps its server, and a query shows the hits under every server that
-	// has one, expanded or not
+	// has one, expanded or not. groups come in the roots' order, not ls's
+	// (ls -d sorts every matched path together, so /etc/* came out above
+	// /home/joy/* the moment /etc was a root); under a folder that is open
+	// its children follow, one step deeper each level
 	const q = query.trim().toLowerCase();
-	const visible: VisibleServer[] = servers.flatMap(server => {
-		const all = listings[server.id]?.folders ?? [];
+	const visible = servers.flatMap((server): VisibleServer[] => {
+		const listing = listings[server.id];
+		const all = listing?.folders ?? [];
 		const hits = q
 			? all.filter(
 					f =>
@@ -105,7 +177,45 @@ export const useServers = (): ServersState => {
 			);
 		if (!matches && hits.length === 0) return [];
 		const open = expanded.has(server.id) || (q.length > 0 && hits.length > 0);
-		return [{ server, folders: open ? hits : [], open }];
+		const none: VisibleRoot[] = [];
+		if (!open) return [{ server, open, groups: none }];
+
+		const walk = (folder: RemoteFolder, depth: number): VisibleFolder[] => {
+			const key = `${server.id}:${folder.path}`;
+			const kids = listing?.subdirs?.[folder.path];
+			const isOpen = openDirs.has(key);
+			const row: VisibleFolder = {
+				folder,
+				depth,
+				open: isOpen,
+				busy: loadingDirs.has(key),
+				inside: kids?.length
+			};
+			return isOpen && kids
+				? [row, ...kids.flatMap(k => walk(k, depth + 1))]
+				: [row];
+		};
+		const order = server.roots.length ? server.roots : DEFAULT_ROOTS;
+		const byRoot = new Map<string, RemoteFolder[]>();
+		for (const f of hits) {
+			const key = f.root || '/';
+			byRoot.set(key, [...(byRoot.get(key) ?? []), f]);
+		}
+		const rank = (r: string) => {
+			const i = order.indexOf(r);
+			return i === -1 ? order.length : i;
+		};
+		const groups: VisibleRoot[] = [...byRoot.entries()]
+			.sort(([a], [b]) => rank(a) - rank(b))
+			.map(([root, folders]) => {
+				const folded = foldedRoots.has(`${server.id}:${root}`);
+				return {
+					root,
+					folded,
+					rows: folded ? [] : folders.flatMap(f => walk(f, 0))
+				};
+			});
+		return [{ server, open, groups }];
 	});
 
 	const toggleOpen = () => {
@@ -156,6 +266,12 @@ export const useServers = (): ServersState => {
 		listFolders,
 		query,
 		setQuery,
+		openDirs,
+		loadingDirs,
+		toggleDir,
+		listDir,
+		foldedRoots,
+		toggleRoot,
 		visible
 	};
 };
