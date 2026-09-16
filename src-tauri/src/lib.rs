@@ -358,6 +358,13 @@ pub fn run() {
                 .unwrap_or(0);
             let see_through = pct > 0;
             let _ = LAUNCHED_TRANSPARENT.set(see_through);
+            // on a mac this is the merged config: tauri lays
+            // tauri.macos.conf.json over tauri.conf.json, and that is where
+            // the window has decorations with titleBarStyle Overlay and
+            // hiddenTitle: native traffic lights, no title text, the
+            // frontend's bar beside them. the overlay is rfc 7396, an array
+            // replaces, so the mac file carries the whole window entry and
+            // a key changed on the main window here has to change there too
             let main_cfg = app
                 .config()
                 .app
