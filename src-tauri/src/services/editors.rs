@@ -2,22 +2,33 @@
 //!
 //! One `where.exe` for every Windows candidate and one `bash -lc` per
 //! running distro, never a process per editor. A stopped distro is not
-//! asked: an editor list is not worth booting a VM for.
+//! asked: an editor list is not worth booting a VM for. On a Mac there is
+//! no crossing at all: the login-shell PATH is one string, resolved once,
+//! and a name is found by joining it to each entry, a stat per directory.
+//!
+//! One `detect()` for both platforms. What differs is the candidate table
+//! and the PATH lookup, both cfg-selected; everything after (agents,
+//! distros, ids) is one code path.
 
 use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+#[cfg(windows)]
 use std::process::Command;
 
 use serde::Serialize;
 
 use super::platform::wsl;
+#[cfg(windows)]
 use super::platform::Quiet;
-use crate::models::target::{LaunchTarget, TargetKind, WT_ARGS};
+use crate::models::target::{LaunchTarget, TargetKind};
 
-struct WinCandidate {
+struct Candidate {
     id: &'static str,
     name: &'static str,
     kind: TargetKind,
-    /// the command as it appears on PATH
+    /// the command as it appears on PATH. empty on a mac for a program with
+    /// no cli worth calling (terminal.app, iterm2) whose only door is
+    /// open -a; then args is the whole open line and app decides installed
     exe: &'static str,
     args: &'static str,
     /// how it opens a WSL project; None means it cannot, and launch_target
@@ -25,9 +36,15 @@ struct WinCandidate {
     wsl_args: Option<&'static str>,
     run_args: Option<&'static str>,
     wsl_run_args: Option<&'static str>,
+    /// mac only: the bundle name under /Applications. a mac app is installed
+    /// by dragging it there and its cli is a separate step most people
+    /// skip, so the bundle is the truth about installation. None on every
+    /// windows row: PATH decides
+    app: Option<&'static str>,
 }
 
 // the VS Code family does the crossing itself
+#[cfg(windows)]
 const REMOTE_URI: &str =
     "--folder-uri vscode-remote://wsl+{distro}{linux_path}";
 
@@ -35,8 +52,9 @@ const REMOTE_URI: &str =
 /// the order a WSL-first developer is likely to have them. `vscode` and `wt`
 /// must keep the ids `defaults()` seeds, or detection would offer to add
 /// what every install already has.
-const WINDOWS: &[WinCandidate] = &[
-    WinCandidate {
+#[cfg(windows)]
+const CANDIDATES: &[Candidate] = &[
+    Candidate {
         id: "vscode",
         name: "VS Code",
         kind: TargetKind::Editor,
@@ -45,8 +63,9 @@ const WINDOWS: &[WinCandidate] = &[
         wsl_args: Some(REMOTE_URI),
         run_args: None,
         wsl_run_args: None,
+        app: None,
     },
-    WinCandidate {
+    Candidate {
         id: "vscode-insiders",
         name: "VS Code Insiders",
         kind: TargetKind::Editor,
@@ -55,8 +74,9 @@ const WINDOWS: &[WinCandidate] = &[
         wsl_args: Some(REMOTE_URI),
         run_args: None,
         wsl_run_args: None,
+        app: None,
     },
-    WinCandidate {
+    Candidate {
         id: "cursor",
         name: "Cursor",
         kind: TargetKind::Editor,
@@ -65,8 +85,9 @@ const WINDOWS: &[WinCandidate] = &[
         wsl_args: Some(REMOTE_URI),
         run_args: None,
         wsl_run_args: None,
+        app: None,
     },
-    WinCandidate {
+    Candidate {
         id: "windsurf",
         name: "Windsurf",
         kind: TargetKind::Editor,
@@ -75,11 +96,12 @@ const WINDOWS: &[WinCandidate] = &[
         wsl_args: Some(REMOTE_URI),
         run_args: None,
         wsl_run_args: None,
+        app: None,
     },
     // zed's windows cli takes the distro as a flag and resolves the linux
     // path itself; it was None until that cli shipped, and devgo refused
     // WSL projects zed opened fine by hand
-    WinCandidate {
+    Candidate {
         id: "zed",
         name: "Zed",
         kind: TargetKind::Editor,
@@ -88,8 +110,9 @@ const WINDOWS: &[WinCandidate] = &[
         wsl_args: Some("--wsl {distro} \"{linux_path}\""),
         run_args: None,
         wsl_run_args: None,
+        app: None,
     },
-    WinCandidate {
+    Candidate {
         id: "sublime",
         name: "Sublime Text",
         kind: TargetKind::Editor,
@@ -98,8 +121,9 @@ const WINDOWS: &[WinCandidate] = &[
         wsl_args: None,
         run_args: None,
         wsl_run_args: None,
+        app: None,
     },
-    WinCandidate {
+    Candidate {
         id: "idea",
         name: "IntelliJ IDEA",
         kind: TargetKind::Editor,
@@ -108,8 +132,9 @@ const WINDOWS: &[WinCandidate] = &[
         wsl_args: None,
         run_args: None,
         wsl_run_args: None,
+        app: None,
     },
-    WinCandidate {
+    Candidate {
         id: "webstorm",
         name: "WebStorm",
         kind: TargetKind::Editor,
@@ -118,8 +143,9 @@ const WINDOWS: &[WinCandidate] = &[
         wsl_args: None,
         run_args: None,
         wsl_run_args: None,
+        app: None,
     },
-    WinCandidate {
+    Candidate {
         id: "pycharm",
         name: "PyCharm",
         kind: TargetKind::Editor,
@@ -128,8 +154,9 @@ const WINDOWS: &[WinCandidate] = &[
         wsl_args: None,
         run_args: None,
         wsl_run_args: None,
+        app: None,
     },
-    WinCandidate {
+    Candidate {
         id: "rustrover",
         name: "RustRover",
         kind: TargetKind::Editor,
@@ -138,8 +165,9 @@ const WINDOWS: &[WinCandidate] = &[
         wsl_args: None,
         run_args: None,
         wsl_run_args: None,
+        app: None,
     },
-    WinCandidate {
+    Candidate {
         id: "goland",
         name: "GoLand",
         kind: TargetKind::Editor,
@@ -148,8 +176,9 @@ const WINDOWS: &[WinCandidate] = &[
         wsl_args: None,
         run_args: None,
         wsl_run_args: None,
+        app: None,
     },
-    WinCandidate {
+    Candidate {
         id: "fleet",
         name: "Fleet",
         kind: TargetKind::Editor,
@@ -158,11 +187,12 @@ const WINDOWS: &[WinCandidate] = &[
         wsl_args: None,
         run_args: None,
         wsl_run_args: None,
+        app: None,
     },
     // terminals open WSL projects through the tmux script, like the seed;
     // WT_ARGS shared with it, so a wt removed and added back from this list
     // gets the psmux script and not the bare tab the default used to open
-    WinCandidate {
+    Candidate {
         id: "wt",
         name: "Windows Terminal",
         kind: TargetKind::Terminal,
@@ -171,8 +201,9 @@ const WINDOWS: &[WinCandidate] = &[
         wsl_args: Some("wsl -d {distro} bash \"{script}\""),
         run_args: Some(crate::models::target::WT_RUN_ARGS),
         wsl_run_args: Some(crate::models::target::WT_WSL_RUN_ARGS),
+        app: None,
     },
-    WinCandidate {
+    Candidate {
         id: "alacritty",
         name: "Alacritty",
         kind: TargetKind::Terminal,
@@ -183,8 +214,9 @@ const WINDOWS: &[WinCandidate] = &[
         wsl_run_args: Some(
             "-e wsl -d {distro} --cd \"{linux_path}\" -e bash -lc \"{command}; exec bash\"",
         ),
+        app: None,
     },
-    WinCandidate {
+    Candidate {
         id: "wezterm",
         name: "WezTerm",
         kind: TargetKind::Terminal,
@@ -195,6 +227,224 @@ const WINDOWS: &[WinCandidate] = &[
         wsl_run_args: Some(
             "start -- wsl -d {distro} --cd \"{linux_path}\" -e bash -lc \"{command}; exec bash\"",
         ),
+        app: None,
+    },
+];
+
+// editors and terminals worth looking for on a mac. no wsl form anywhere,
+// and every row carries its bundle name, because on a mac the bundle is
+// what installed means. when the cli is on the login PATH the cli form
+// runs; when only the bundle is there, locate swaps the form for
+// open -a "<App>" "{path}". terminal.app and iterm2 have no cli: their
+// door is open -a <App> <file>, which opens a window that runs the file,
+// the {script} seam. the others have real clis with a working directory
+// and a way to run a command; a bundle without its cli on PATH is still
+// found, through the binary inside it (Contents/MacOS/<exe>). neovim and
+// helix are not here: a mac project is local, so launch_target would
+// spawn nvim with no window to live in, the entry that fails to launch
+#[cfg(not(windows))]
+const CANDIDATES: &[Candidate] = &[
+    Candidate {
+        id: "vscode",
+        name: "VS Code",
+        kind: TargetKind::Editor,
+        exe: "code",
+        args: "\"{path}\"",
+        wsl_args: None,
+        run_args: None,
+        wsl_run_args: None,
+        app: Some("Visual Studio Code"),
+    },
+    Candidate {
+        id: "vscode-insiders",
+        name: "VS Code Insiders",
+        kind: TargetKind::Editor,
+        exe: "code-insiders",
+        args: "\"{path}\"",
+        wsl_args: None,
+        run_args: None,
+        wsl_run_args: None,
+        app: Some("Visual Studio Code - Insiders"),
+    },
+    Candidate {
+        id: "cursor",
+        name: "Cursor",
+        kind: TargetKind::Editor,
+        exe: "cursor",
+        args: "\"{path}\"",
+        wsl_args: None,
+        run_args: None,
+        wsl_run_args: None,
+        app: Some("Cursor"),
+    },
+    Candidate {
+        id: "windsurf",
+        name: "Windsurf",
+        kind: TargetKind::Editor,
+        exe: "windsurf",
+        args: "\"{path}\"",
+        wsl_args: None,
+        run_args: None,
+        wsl_run_args: None,
+        app: Some("Windsurf"),
+    },
+    Candidate {
+        id: "zed",
+        name: "Zed",
+        kind: TargetKind::Editor,
+        exe: "zed",
+        args: "\"{path}\"",
+        wsl_args: None,
+        run_args: None,
+        wsl_run_args: None,
+        app: Some("Zed"),
+    },
+    Candidate {
+        id: "sublime",
+        name: "Sublime Text",
+        kind: TargetKind::Editor,
+        exe: "subl",
+        args: "\"{path}\"",
+        wsl_args: None,
+        run_args: None,
+        wsl_run_args: None,
+        app: Some("Sublime Text"),
+    },
+    Candidate {
+        id: "idea",
+        name: "IntelliJ IDEA",
+        kind: TargetKind::Editor,
+        exe: "idea",
+        args: "\"{path}\"",
+        wsl_args: None,
+        run_args: None,
+        wsl_run_args: None,
+        app: Some("IntelliJ IDEA"),
+    },
+    Candidate {
+        id: "webstorm",
+        name: "WebStorm",
+        kind: TargetKind::Editor,
+        exe: "webstorm",
+        args: "\"{path}\"",
+        wsl_args: None,
+        run_args: None,
+        wsl_run_args: None,
+        app: Some("WebStorm"),
+    },
+    Candidate {
+        id: "pycharm",
+        name: "PyCharm",
+        kind: TargetKind::Editor,
+        exe: "pycharm",
+        args: "\"{path}\"",
+        wsl_args: None,
+        run_args: None,
+        wsl_run_args: None,
+        app: Some("PyCharm"),
+    },
+    Candidate {
+        id: "rustrover",
+        name: "RustRover",
+        kind: TargetKind::Editor,
+        exe: "rustrover",
+        args: "\"{path}\"",
+        wsl_args: None,
+        run_args: None,
+        wsl_run_args: None,
+        app: Some("RustRover"),
+    },
+    Candidate {
+        id: "goland",
+        name: "GoLand",
+        kind: TargetKind::Editor,
+        exe: "goland",
+        args: "\"{path}\"",
+        wsl_args: None,
+        run_args: None,
+        wsl_run_args: None,
+        app: Some("GoLand"),
+    },
+    Candidate {
+        id: "fleet",
+        name: "Fleet",
+        kind: TargetKind::Editor,
+        exe: "fleet",
+        args: "\"{path}\"",
+        wsl_args: None,
+        run_args: None,
+        wsl_run_args: None,
+        app: Some("Fleet"),
+    },
+    // MAC_TERMINAL_ARGS shared with the seed, as wt shares WT_ARGS:
+    // re-adding terminal from this list must give back the session script
+    Candidate {
+        id: "terminal",
+        name: "Terminal",
+        kind: TargetKind::Terminal,
+        exe: "",
+        args: crate::models::target::MAC_TERMINAL_ARGS,
+        wsl_args: None,
+        run_args: Some(crate::models::target::MAC_TERMINAL_RUN_ARGS),
+        wsl_run_args: None,
+        app: Some("Terminal"),
+    },
+    Candidate {
+        id: "iterm",
+        name: "iTerm2",
+        kind: TargetKind::Terminal,
+        exe: "",
+        args: "-a iTerm \"{script}\"",
+        wsl_args: None,
+        run_args: Some("-a iTerm \"{script}\""),
+        wsl_run_args: None,
+        app: Some("iTerm"),
+    },
+    // -e takes the rest of the line as the command; the tab closes when it
+    // exits, which is ghostty's own rule
+    Candidate {
+        id: "ghostty",
+        name: "Ghostty",
+        kind: TargetKind::Terminal,
+        exe: "ghostty",
+        args: "--working-directory=\"{path}\"",
+        wsl_args: None,
+        run_args: Some("--working-directory=\"{path}\" -e {command}"),
+        wsl_run_args: None,
+        app: Some("Ghostty"),
+    },
+    Candidate {
+        id: "wezterm",
+        name: "WezTerm",
+        kind: TargetKind::Terminal,
+        exe: "wezterm",
+        args: "start --cwd \"{path}\"",
+        wsl_args: None,
+        run_args: Some("start --cwd \"{path}\" -- {command}"),
+        wsl_run_args: None,
+        app: Some("WezTerm"),
+    },
+    Candidate {
+        id: "kitty",
+        name: "Kitty",
+        kind: TargetKind::Terminal,
+        exe: "kitty",
+        args: "--directory \"{path}\"",
+        wsl_args: None,
+        run_args: Some("--directory \"{path}\" {command}"),
+        wsl_run_args: None,
+        app: Some("kitty"),
+    },
+    Candidate {
+        id: "alacritty",
+        name: "Alacritty",
+        kind: TargetKind::Terminal,
+        exe: "alacritty",
+        args: "--working-directory \"{path}\"",
+        wsl_args: None,
+        run_args: Some("--working-directory \"{path}\" -e {command}"),
+        wsl_run_args: None,
+        app: Some("Alacritty"),
     },
 ];
 
@@ -202,7 +452,8 @@ const WINDOWS: &[WinCandidate] = &[
 /// found the way the editors are: where.exe here, command -v under bash -lc
 /// there (so an nvm install is on PATH). On Windows an npm-installed CLI
 /// resolves to claude.cmd; where lists it and the terminal's run template
-/// runs it.
+/// runs it. On a Mac the same four names resolve on the login-shell PATH,
+/// which is where nvm put them.
 pub const AGENTS: &[(&str, &str)] = &[
     ("claude", "Claude Code"),
     ("codex", "Codex"),
@@ -221,7 +472,7 @@ const IN_DISTRO: &[(&str, &str)] = &[
     ("micro", "Micro"),
 ];
 
-fn to_target(c: &WinCandidate) -> LaunchTarget {
+fn to_target(c: &Candidate) -> LaunchTarget {
     LaunchTarget {
         id: c.id.to_string(),
         name: c.name.to_string(),
@@ -260,33 +511,110 @@ fn distro_target(exe: &str, name: &str, distro: &str) -> LaunchTarget {
 #[derive(Debug, Clone, Serialize)]
 pub struct DetectedTarget {
     pub target: LaunchTarget,
-    /// "path" for a Windows program, or the distro name
+    /// "path" for a program on PATH, "app" for a mac bundle found without
+    /// its cli, or the distro name
     pub source: String,
-    /// the resolved exe path, or "Ubuntu-26.04 · nvim"
+    /// the resolved exe path, the bundle path, or "Ubuntu-26.04 · nvim"
     pub detail: String,
+}
+
+// where a mac keeps its applications: the system folder, the user's own,
+// and the two the os ships in (terminal.app is under utilities). on
+// windows none exist and the walk finds nothing, which is right
+fn app_dirs() -> Vec<PathBuf> {
+    let mut dirs = vec![
+        PathBuf::from("/Applications"),
+        PathBuf::from("/System/Applications"),
+        PathBuf::from("/System/Applications/Utilities"),
+    ];
+    if let Some(home) = std::env::var_os("HOME") {
+        dirs.insert(1, PathBuf::from(home).join("Applications"));
+    }
+    dirs
+}
+
+// the bundle for app, if it is installed in any of the usual places
+fn app_bundle(app: &str) -> Option<PathBuf> {
+    app_dirs()
+        .into_iter()
+        .map(|d| d.join(format!("{app}.app")))
+        .find(|p| p.is_dir())
+}
+
+// is this candidate installed, and how is it launched? in order: its cli
+// is on PATH, the cli form as the table spells it (the only rule that can
+// fire on windows, no windows row has an app; a mac row with no exe skips
+// it, no cli is the point of the row); it has a bundle and the bundle is
+// there, bundle_form; neither, not installed and not offered
+fn locate(
+    c: &Candidate,
+    found: &HashMap<String, String>,
+) -> Option<DetectedTarget> {
+    if !c.exe.is_empty() {
+        if let Some(path) = found.get(&c.exe.to_lowercase()) {
+            return Some(DetectedTarget {
+                target: to_target(c),
+                source: "path".to_string(),
+                detail: path.clone(),
+            });
+        }
+    }
+
+    let app = c.app?;
+    let bundle = app_bundle(app)?;
+    Some(DetectedTarget {
+        target: bundle_form(c, app, &bundle),
+        source: "app".to_string(),
+        detail: bundle.to_string_lossy().into_owned(),
+    })
+}
+
+// the launch forms for a candidate whose bundle was found and whose cli
+// was not on PATH. a row with no cli (terminal.app, iterm2) is launched
+// through open and its args were written as the whole open line; a
+// terminal whose binary sits inside the bundle keeps its cli forms with
+// the binary's full path; anything else opens through open -a "<App>",
+// with no run form, open cannot carry one. pure, so a test hands it a
+// bundle of its own making instead of depending on /Applications
+fn bundle_form(c: &Candidate, app: &str, bundle: &Path) -> LaunchTarget {
+    let mut target = to_target(c);
+
+    if c.exe.is_empty() {
+        target.executable = "open".to_string();
+        return target;
+    }
+
+    let inside = bundle.join("Contents").join("MacOS").join(c.exe);
+    if c.kind == TargetKind::Terminal && inside.is_file() {
+        target.executable = inside.to_string_lossy().into_owned();
+    } else {
+        target.executable = "open".to_string();
+        target.args_template = format!("-a \"{app}\" \"{{path}}\"");
+        target.run_args_template = None;
+    }
+    target
 }
 
 /// Everything installed, as targets ready to be added. `running` is passed
 /// in so a caller that already paid for `wsl -l --running` does not pay
-/// twice; only those distros are asked.
+/// twice; only those distros are asked. On a Mac it is empty and the
+/// distro loops are never entered.
 pub fn detect(running: &[String]) -> Vec<DetectedTarget> {
-    let names: Vec<&str> = WINDOWS.iter().map(|c| c.exe).collect();
-    let found = where_lookup(&names);
-
-    let mut out: Vec<DetectedTarget> = WINDOWS
+    let names: Vec<&str> = CANDIDATES
         .iter()
-        .filter_map(|c| {
-            found.get(&c.exe.to_lowercase()).map(|path| DetectedTarget {
-                target: to_target(c),
-                source: "path".to_string(),
-                detail: path.clone(),
-            })
-        })
+        .map(|c| c.exe)
+        .filter(|e| !e.is_empty())
+        .collect();
+    let found = path_lookup(&names);
+
+    let mut out: Vec<DetectedTarget> = CANDIDATES
+        .iter()
+        .filter_map(|c| locate(c, &found))
         .collect();
 
-    // agents on the windows side: one where.exe for the four names
+    // agents on the local side: one lookup for the four names
     let agent_exes: Vec<&str> = AGENTS.iter().map(|(exe, _)| *exe).collect();
-    let found = where_lookup(&agent_exes);
+    let found = path_lookup(&agent_exes);
     for (exe, name) in AGENTS {
         if !found.contains_key(*exe) {
             continue;
@@ -377,7 +705,8 @@ fn slugify(s: &str) -> String {
 /// name is missing, which is the normal case here, so the status is ignored
 /// and stdout parsed: each line is a full path, mapped back to the name that
 /// asked for it by file stem.
-fn where_lookup(names: &[&str]) -> HashMap<String, String> {
+#[cfg(windows)]
+fn path_lookup(names: &[&str]) -> HashMap<String, String> {
     let mut found = HashMap::new();
     if names.is_empty() {
         return found;
@@ -401,14 +730,47 @@ fn where_lookup(names: &[&str]) -> HashMap<String, String> {
     found
 }
 
-/// Is this executable resolvable? A full path the user typed is checked
-/// directly: `where` only searches PATH and would call it missing.
+// the mac twin of the where.exe batch, in no spawns: the PATH is one
+// string login_path resolved once, and a name is found by joining it to
+// each entry and asking the filesystem, first hit wins, which is what the
+// shell would do. not env::var("PATH"): a dock-launched app has the bare
+// four directories and every editor cli lives elsewhere. same shape as
+// the windows result, lowercase name to resolved path
+#[cfg(not(windows))]
+fn path_lookup(names: &[&str]) -> HashMap<String, String> {
+    let mut found = HashMap::new();
+    if names.is_empty() {
+        return found;
+    }
+
+    let path = super::platform::login_path();
+    let dirs: Vec<PathBuf> = std::env::split_paths(&path).collect();
+
+    for name in names {
+        if name.is_empty() {
+            continue;
+        }
+        if let Some(hit) =
+            dirs.iter().map(|d| d.join(name)).find(|p| p.is_file())
+        {
+            found
+                .entry(name.to_lowercase())
+                .or_insert_with(|| hit.to_string_lossy().into_owned());
+        }
+    }
+
+    found
+}
+
+/// Is this executable resolvable? A full path the user typed, or one
+/// `locate` resolved inside a bundle, is checked directly: the PATH lookup
+/// only searches PATH and would call it missing.
 pub fn is_on_path(exe: &str) -> bool {
-    let direct = std::path::Path::new(exe);
+    let direct = Path::new(exe);
     if direct.is_absolute() {
         return direct.is_file();
     }
-    !where_lookup(&[exe]).is_empty()
+    !path_lookup(&[exe]).is_empty()
 }
 
 #[cfg(test)]
@@ -427,9 +789,15 @@ mod tests {
         assert_eq!(AGENTS.len(), 4);
     }
 
+    // the shell that certainly exists, so the lookup is exercised for real
+    #[cfg(windows)]
+    const SHELL: &str = "cmd";
+    #[cfg(not(windows))]
+    const SHELL: &str = "sh";
+
     #[test]
     fn every_candidate_id_is_unique() {
-        let mut ids: Vec<&str> = WINDOWS.iter().map(|c| c.id).collect();
+        let mut ids: Vec<&str> = CANDIDATES.iter().map(|c| c.id).collect();
         let before = ids.len();
         ids.sort_unstable();
         ids.dedup();
@@ -442,11 +810,18 @@ mod tests {
     #[test]
     fn detected_seeds_match_the_seeded_defaults() {
         for seed in crate::models::target::defaults() {
-            let c = WINDOWS
+            let c = CANDIDATES
                 .iter()
                 .find(|c| c.id == seed.id)
                 .unwrap_or_else(|| panic!("{} has no candidate", seed.id));
-            let t = to_target(c);
+            // a row with no cli (terminal.app) is only ever launched as
+            // its bundle form, so that is the one to compare
+            let t = match c.app {
+                Some(app) if c.exe.is_empty() => {
+                    bundle_form(c, app, Path::new(""))
+                }
+                _ => to_target(c),
+            };
             assert_eq!(t.executable, seed.executable);
             assert_eq!(t.args_template, seed.args_template);
             assert_eq!(t.wsl_args_template, seed.wsl_args_template);
@@ -458,19 +833,20 @@ mod tests {
     /// A VS Code fork carries the remote-URI form; a Windows-only editor
     /// carries none, so launch_target refuses rather than opening the wrong
     /// directory.
+    #[cfg(windows)]
     #[test]
     fn wsl_form_decides_whether_a_target_can_open_wsl() {
-        let code = WINDOWS.iter().find(|c| c.id == "cursor").unwrap();
+        let code = CANDIDATES.iter().find(|c| c.id == "cursor").unwrap();
         let t = to_target(code);
         assert!(t.resolve("x", Some(("Ubuntu", "/home/joy"))).is_some());
 
-        let subl = WINDOWS.iter().find(|c| c.id == "sublime").unwrap();
+        let subl = CANDIDATES.iter().find(|c| c.id == "sublime").unwrap();
         let t = to_target(subl);
         assert!(t.resolve("x", Some(("Ubuntu", "/home/joy"))).is_none());
         assert!(t.resolve(r"G:\dev", None).is_some(), "still opens Windows");
 
         // a third form: the program crosses with its own flag
-        let zed = WINDOWS.iter().find(|c| c.id == "zed").unwrap();
+        let zed = CANDIDATES.iter().find(|c| c.id == "zed").unwrap();
         let (_, args) = to_target(zed)
             .resolve("x", Some(("Ubuntu", "/home/joy/p")))
             .unwrap();
@@ -491,11 +867,128 @@ mod tests {
         assert_eq!(args, "-d Ubuntu-26.04 --cd \"/srv/app\" -e nvim .");
     }
 
-    /// where.exe is always present on Windows, so this is the real lookup:
-    /// cmd.exe resolves, an invented name does not.
+    /// The shell is always present, so this is the real lookup: cmd.exe (or
+    /// /bin/sh through the login PATH) resolves, an invented name does not.
     #[test]
     fn path_lookup_finds_real_programs_and_rejects_invented_ones() {
-        assert!(is_on_path("cmd"), "cmd.exe must resolve on PATH");
+        assert!(is_on_path(SHELL), "{SHELL} must resolve on PATH");
         assert!(!is_on_path("devgo-definitely-not-a-real-program"));
+    }
+
+    // a mac has no second filesystem, so no candidate may claim a wsl form:
+    // one that did would make launch_target accept a \\wsl.localhost path
+    // and spawn wsl, which does not exist here. and every row carries its
+    // bundle name, because that is what installed means on a mac
+    #[cfg(not(windows))]
+    #[test]
+    fn mac_candidates_have_no_wsl_form_and_every_app_has_a_bundle() {
+        for c in CANDIDATES {
+            assert!(c.wsl_args.is_none(), "{}", c.id);
+            assert!(c.wsl_run_args.is_none(), "{}", c.id);
+            assert!(c.app.is_some(), "{} has no bundle name", c.id);
+            assert!(
+                !c.exe.is_empty() || c.args.starts_with("-a "),
+                "a row without a cli is launched through open: {}",
+                c.id
+            );
+        }
+    }
+
+    // the three shapes locate can give a mac candidate, decided without
+    // touching /Applications: the cli form when the cli resolved, open -a
+    // for an editor found only by bundle, and the bundle's own binary for
+    // a terminal found only by bundle
+    #[cfg(not(windows))]
+    #[test]
+    fn a_bundle_without_its_cli_is_launched_through_open_or_its_own_binary() {
+        let code = CANDIDATES.iter().find(|c| c.id == "vscode").unwrap();
+        let mut found = HashMap::new();
+        found.insert("code".to_string(), "/opt/homebrew/bin/code".to_string());
+        let d = locate(code, &found).expect("on PATH");
+        assert_eq!(d.source, "path");
+        assert_eq!(d.target.executable, "code");
+        assert_eq!(d.target.args_template, "\"{path}\"");
+
+        let ghost = Candidate {
+            id: "ghost",
+            name: "Ghost",
+            kind: TargetKind::Editor,
+            exe: "ghost",
+            args: "\"{path}\"",
+            wsl_args: None,
+            run_args: None,
+            wsl_run_args: None,
+            app: Some("DevGo Ghost Editor That Does Not Exist"),
+        };
+        assert!(locate(&ghost, &HashMap::new()).is_none());
+
+        let root = std::env::temp_dir().join("devgo-editors-bundle-test");
+        let _ = std::fs::remove_dir_all(&root);
+        let bin = root.join("Fake Term.app/Contents/MacOS");
+        std::fs::create_dir_all(&bin).unwrap();
+        std::fs::write(bin.join("faketerm"), "").unwrap();
+        std::fs::create_dir_all(root.join("Fake Editor.app/Contents/MacOS"))
+            .unwrap();
+
+        let term = Candidate {
+            id: "faketerm",
+            name: "Fake Term",
+            kind: TargetKind::Terminal,
+            exe: "faketerm",
+            args: "--working-directory \"{path}\"",
+            wsl_args: None,
+            run_args: Some("--working-directory \"{path}\" -e {command}"),
+            wsl_run_args: None,
+            app: Some("Fake Term"),
+        };
+        let editor = Candidate {
+            id: "fakeed",
+            name: "Fake Editor",
+            kind: TargetKind::Editor,
+            exe: "fakeed",
+            args: "\"{path}\"",
+            wsl_args: None,
+            run_args: None,
+            wsl_run_args: None,
+            app: Some("Fake Editor"),
+        };
+        let no_cli = Candidate {
+            id: "fakeopen",
+            name: "Fake Open",
+            kind: TargetKind::Terminal,
+            exe: "",
+            args: "-a \"Fake Editor\" \"{script}\"",
+            wsl_args: None,
+            run_args: Some("-a \"Fake Editor\" \"{script}\""),
+            wsl_run_args: None,
+            app: Some("Fake Editor"),
+        };
+
+        // none of these fakes is in /Applications, so locate itself says no
+        for c in [&term, &editor, &no_cli] {
+            assert!(locate(c, &HashMap::new()).is_none(), "{}", c.id);
+        }
+
+        let t = bundle_form(&term, "Fake Term", &root.join("Fake Term.app"));
+        assert_eq!(t.executable, bin.join("faketerm").to_string_lossy());
+        assert_eq!(t.args_template, "--working-directory \"{path}\"");
+        assert!(t.run_args_template.is_some(), "the run form survives");
+        assert!(is_on_path(&t.executable), "an absolute exe passes the gate");
+
+        let editor_bundle = root.join("Fake Editor.app");
+        let t = bundle_form(&editor, "Fake Editor", &editor_bundle);
+        assert_eq!(t.executable, "open");
+        assert_eq!(t.args_template, "-a \"Fake Editor\" \"{path}\"");
+        assert!(t.run_args_template.is_none(), "open cannot carry a command");
+
+        let t = bundle_form(&no_cli, "Fake Editor", &editor_bundle);
+        assert_eq!(t.executable, "open");
+        assert_eq!(t.args_template, "-a \"Fake Editor\" \"{script}\"");
+        assert_eq!(
+            t.run_args_template.as_deref(),
+            Some("-a \"Fake Editor\" \"{script}\"")
+        );
+
+        let _ = std::fs::remove_dir_all(&root);
     }
 }
