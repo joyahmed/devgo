@@ -820,6 +820,8 @@ interface VisibleServer {
 interface VisibleRoot {
 	root: string;
 	folded: boolean;
+	/// how many folders sit directly under the root, folded or not
+	count: number;
 	rows: VisibleFolder[];
 }
 

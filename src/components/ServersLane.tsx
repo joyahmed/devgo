@@ -289,7 +289,7 @@ const ServersLane = ({
 				{!l && listing.has(s.id) && (
 					<div className='ml-6 px-3 py-1 text-11 text-text-muted'>Listing…</div>
 				)}
-				{groups.map(({ root, folded, rows }) => (
+				{groups.map(({ root, folded, count, rows }) => (
 					<div key={root}>
 						{/* a root heading is the same kind of thing as a group
 						    heading in the github card: one step under the rows,
@@ -312,7 +312,7 @@ const ServersLane = ({
 							<div />
 							<div />
 							<div className='text-right text-13 text-text-muted font-mono'>
-								{rows.filter(r => r.depth === 0).length}
+								{count}
 							</div>
 						</div>
 						{rows.map(row => (

@@ -212,6 +212,7 @@ export const useServers = (): ServersState => {
 				return {
 					root,
 					folded,
+					count: folders.length,
 					rows: folded ? [] : folders.flatMap(f => walk(f, 0))
 				};
 			});
