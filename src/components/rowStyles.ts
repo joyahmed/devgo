@@ -11,9 +11,11 @@ export const col =
 // a group is a card on the surface recipe every drawer and menu uses,
 // at half alpha so the transparency knob still shows through it. its hue
 // goes on the two leading edges, the way a folder tab shows its colour,
-// and runs into nothing
+// and runs into nothing. shrink-0: a card is a flex child of the scroller,
+// and without it a full list shrank every card and clipped its rows
+// instead of scrolling
 export const card =
-	'rounded-panel border border-border border-t-2 border-l-2 bg-bg-secondary/50 overflow-hidden';
+	'shrink-0 rounded-panel border border-border border-t-2 border-l-2 bg-bg-secondary/50 overflow-hidden';
 
 // a picker row: already there and inert, ticked, or plain
 export const pickTone = (added: boolean, on: boolean) =>
