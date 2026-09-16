@@ -1755,8 +1755,9 @@ pub struct GithubPayload {
     pub refreshing: bool,
     /// the user's org choice; None means every org the last refresh found
     pub orgs: Option<Vec<String>>,
-    /// full_name to local project path, for every row cloned here. As
-    /// current as the last badge pass; the frontend re-reads after each
+    /// full_name to local project path, for every row cloned here. Over
+    /// the projects listed right now, with the remote the last badge pass
+    /// read; the frontend re-reads after every pass, either kind
     pub local: HashMap<String, String>,
     /// the opt-in for live gh search as you type. Off by default
     pub live_search: bool,
@@ -1774,12 +1775,14 @@ pub fn get_github_repos(
         (prefs.github_orgs(), prefs.github_live_search())
     };
     let local = {
+        // the projects cache is what every pass just wrote, a deleted
+        // folder gone from it; the git cache alone remembered that folder
+        // until the next launch, and its row kept the mark
+        let listed = state.cache_store.lock().map_err(lock_err)?.all_projects();
         let git = state.git_cache.lock().map_err(lock_err)?;
         github::local_matches(
             &cache.repos,
-            git.values().filter_map(|i| {
-                i.remote.as_deref().map(|r| (i.full_path.as_str(), r))
-            }),
+            github::current_remotes(&listed, &git),
         )
     };
     Ok(GithubPayload {

@@ -14,8 +14,10 @@ use std::process::Command;
 
 use serde::{Deserialize, Serialize};
 
+use super::git::GitInfo;
 use super::platform::Quiet;
 use crate::error::AppError;
+use crate::models::Project;
 
 // gh repo list caps at 1000 per call. the lane header shows the count, so
 // a cap would be visible rather than silent
@@ -452,6 +454,23 @@ pub fn local_matches<'a>(
         .collect()
 }
 
+/// The remotes the local mark is allowed to see: one per project in the
+/// list right now, looked up in the git cache. The cache is insert-only
+/// and remembers every project the session ever badged, a deleted clone
+/// included; the list is what is on disk this pass. So the list is the
+/// truth and the cache is only where its remotes are kept.
+pub fn current_remotes<'a>(
+    projects: &'a [Project],
+    git: &'a HashMap<String, GitInfo>,
+) -> impl Iterator<Item = (&'a str, &'a str)> {
+    projects.iter().filter_map(|p| {
+        git.get(&p.full_path)?
+            .remote
+            .as_deref()
+            .map(|r| (p.full_path.as_str(), r))
+    })
+}
+
 /// The two clone urls a row offers, built from full_name rather than
 /// parsed back out of url: the same fact, and this one is a format.
 pub fn clone_urls(full_name: &str) -> (String, String) {
@@ -545,6 +564,51 @@ mod tests {
             local["joyahmed/devgo-app-private"],
             r"G:\01_tauri\devgo-app-private"
         );
+    }
+
+    #[test]
+    fn a_deleted_clone_leaves_the_local_mark_with_the_list() {
+        let here = r"G:\01_tauri\devgo-app-private";
+        let gone = r"G:\01_tauri\devgo-scratch";
+        let info = |path: &str, remote: &str| GitInfo {
+            full_path: path.to_string(),
+            branch: None,
+            dirty: false,
+            remote: Some(remote.to_string()),
+            last_commit: 0,
+            remote_branches: None,
+        };
+        // the cache remembers both: it is insert-only for the session
+        let git: HashMap<String, GitInfo> = [
+            (
+                here.to_string(),
+                info(here, "https://github.com/joyahmed/devgo-app-private"),
+            ),
+            (
+                gone.to_string(),
+                info(gone, "https://github.com/joyahmed/empty"),
+            ),
+        ]
+        .into_iter()
+        .collect();
+        // the list no longer has the second: its folder was deleted
+        let listed = [Project::new(
+            "devgo-app-private".into(),
+            here.into(),
+            r"G:\01_tauri".into(),
+            "Windows".into(),
+        )];
+
+        let remotes: Vec<_> = current_remotes(&listed, &git).collect();
+        assert_eq!(
+            remotes,
+            vec![(here, "https://github.com/joyahmed/devgo-app-private")]
+        );
+
+        let repos = parse_repos(SAMPLE).unwrap();
+        let local = local_matches(&repos, current_remotes(&listed, &git));
+        assert!(local.contains_key("joyahmed/devgo-app-private"));
+        assert!(!local.contains_key("joyahmed/empty"), "clone is back");
     }
 
     #[test]
