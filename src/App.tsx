@@ -1091,9 +1091,25 @@ const AppInner = () => {
 		},
 		'separator'
 	];
+	// one line per local host, the default terminal carrying the key; the
+	// tmux flag under them, the same word the footer chip says
+	const hostEntries = (s: Server): MenuEntry[] => [
+		...serverHosts.map(h => ({
+			label: `Open in ${h.name}`,
+			hint: h.blocked ?? (h.id === targets.defaults.terminal ? 'Enter' : undefined),
+			disabled: Boolean(h.blocked),
+			onClick: () => openServer(s, h)
+		})),
+		{
+			label: 'tmux on the box',
+			hint: s.tmux ? 'on' : 'off',
+			onClick: () => setServerTmux(s, !s.tmux)
+		}
+	];
 	const buildServerMenu = (s: Server): MenuEntry[] => [
 		...detailsEntries,
-		{ label: 'Open terminal', hint: 'Enter', onClick: () => openServer(s) },
+		...hostEntries(s),
+		'separator',
 		{
 			label: 'List folders & apps',
 			onClick: () => servers.listFolders(s.id).catch(e => toast(showError(e)))
