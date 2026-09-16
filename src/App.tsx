@@ -97,6 +97,7 @@ const AppInner = () => {
 		git,
 		tech,
 		sessions,
+		forgetSession,
 		pinnedProjects,
 		sortMode,
 		toggleSort,
@@ -814,6 +815,27 @@ const AppInner = () => {
 			proj('openEditor', 'Open in editor', ['code', 'edit'], launchEditor),
 			proj('openTerminal', 'Open terminal', ['term', 'shell', 'wt'], launchTerminal),
 			proj('openBoth', 'Open both', ['launch'], handleLaunch),
+			{
+				id: 'session.kill',
+				title: p ? `Session: kill for ${p.name}` : 'Session: kill for this project',
+				subtitle: selectedLive
+					? 'The tmux / psmux session and every window in it'
+					: 'No live session for the selection',
+				keywords: ['tmux', 'psmux', 'session', 'kill'],
+				disabled: !selectedLive,
+				run: () =>
+					p &&
+					setConfirmAction({
+						message: `Kill the session for ${p.name}? Every window in it closes.`,
+						run: () =>
+							invoke('kill_session', { project: p })
+								.then(() => {
+									forgetSession(p.full_path);
+									toast(`Session for ${p.name} killed`, 'info');
+								})
+								.catch(e => toast(showError(e), 'error'))
+					})
+			},
 			proj(
 				'revealExplorer',
 				'Reveal in Explorer',
