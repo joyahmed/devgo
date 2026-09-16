@@ -672,6 +672,10 @@ const AppInner = () => {
 			toast(showError(e))
 		);
 	};
+	// a workspace is a bare path; the same door takes it
+	const revealWorkspace = (ws: string) => {
+		invoke('reveal_in_explorer', { path: ws }).catch(e => toast(showError(e)));
+	};
 
 	// secure context + user gesture, so no clipboard plugin needed
 	const copyText = async (text: string, label: string) => {
@@ -1250,10 +1254,8 @@ const AppInner = () => {
 		},
 		{
 			label: 'Reveal in Explorer',
-			onClick: () =>
-				invoke('reveal_in_explorer', { path: ws }).catch(e =>
-					toast(showError(e))
-				)
+			hint: prettyKeys(shortcutFor('revealWorkspace')),
+			onClick: () => revealWorkspace(ws)
 		},
 		'separator',
 		{
@@ -1384,6 +1386,18 @@ const AppInner = () => {
 			if (fire('textReset', () => applyTextScale(1).catch(() => {}))) return;
 			if (fire('quit', () => invoke('quit_app').catch(() => {}))) return;
 			if (fire('addWorkspace', pickWorkspaceFolder)) return;
+			// same rule as delete: the workspace is the selected project's, and
+			// the key says so when there is none
+			if (
+				fire('revealWorkspace', () => {
+					if (!selected) {
+						toast('Select a project first — the key reveals its workspace', 'info');
+						return;
+					}
+					revealWorkspace(selected.workspace);
+				})
+			)
+				return;
 			// Delete is the one bare typing key in the table: in the search box it
 			// deletes a character, and that stays the search box's.
 			if (!isTypingTarget(e) && fire('removeWorkspace', handleRemoveShortcut))
