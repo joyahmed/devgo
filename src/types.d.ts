@@ -447,6 +447,7 @@ type ShortcutId =
 	| 'focusGithubSearch'
 	| 'clearSearch'
 	| 'refresh'
+	| 'refreshAlt'
 	| 'settings'
 	| 'textBigger'
 	| 'textSmaller'
@@ -465,6 +466,8 @@ type ShortcutId =
 	| 'copyWinPath'
 	| 'copyWslPath'
 	| 'togglePin'
+	| 'runScript'
+	| 'openRemote'
 	| 'expand'
 	| 'collapse'
 	| 'toggleWorkspace'
@@ -603,6 +606,8 @@ interface ClonePickerProps {
 	/// name (typed, or picked from the ones that exist) and nothing is cloned
 	mode?: 'clone' | 'group';
 	groups?: GithubGroup[];
+	/// the group the picker opens pointed at; a header passes its own name
+	initialGroup?: string;
 	onGroup?: (repos: GithubRepo[], group: string) => Promise<void>;
 }
 
@@ -989,6 +994,7 @@ interface ServersLaneProps {
 		x: number,
 		y: number
 	) => void;
+	onRootContextMenu: (server: Server, root: string, x: number, y: number) => void;
 	/// from the card's box the arrows walk the servers and folders alone
 	onArrow: (dir: 1 | -1) => void;
 	onEnter: () => void;
@@ -1048,6 +1054,14 @@ interface ServerMenu {
 interface FolderMenu {
 	server: Server;
 	folder: RemoteFolder;
+	x: number;
+	y: number;
+}
+
+/// a top-level group's heading on a server: the row that owns the pin
+interface RootMenu {
+	server: Server;
+	root: string;
 	x: number;
 	y: number;
 }
@@ -1188,6 +1202,7 @@ interface ProjectTreeProps {
 		x: number,
 		y: number
 	) => void;
+	onRootContextMenu?: (server: Server, root: string, x: number, y: number) => void;
 	/// the recent / frequent words on rows, off unless Appearance says so
 	showHints?: boolean;
 	/// the project that was just launched; its row plays the launch motion
