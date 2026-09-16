@@ -85,6 +85,29 @@ export const useServers = (): ServersState => {
 		if (!expanded.has(id) && !listings[id]) listFolders(id).catch(() => {});
 	};
 
+	// what the card shows and the arrows walk, one list for both: a server
+	// by name, alias, host or user; a folder by name or path. a folder hit
+	// keeps its server, and a query shows the hits under every server that
+	// has one, expanded or not
+	const q = query.trim().toLowerCase();
+	const visible: VisibleServer[] = servers.flatMap(server => {
+		const all = listings[server.id]?.folders ?? [];
+		const hits = q
+			? all.filter(
+					f =>
+						f.name.toLowerCase().includes(q) || f.path.toLowerCase().includes(q)
+				)
+			: all;
+		const matches =
+			!q ||
+			[server.name, server.alias ?? '', server.host, server.user ?? ''].some(
+				t => t.toLowerCase().includes(q)
+			);
+		if (!matches && hits.length === 0) return [];
+		const open = expanded.has(server.id) || (q.length > 0 && hits.length > 0);
+		return [{ server, folders: open ? hits : [], open }];
+	});
+
 	const toggleOpen = () => {
 		try {
 			localStorage.setItem(OPEN_KEY, isOpen ? '0' : '1');
@@ -132,6 +155,7 @@ export const useServers = (): ServersState => {
 		toggleExpanded,
 		listFolders,
 		query,
-		setQuery
+		setQuery,
+		visible
 	};
 };

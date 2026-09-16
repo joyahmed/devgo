@@ -792,6 +792,15 @@ interface ServersState {
 	/// name or path
 	query: string;
 	setQuery: (q: string) => void;
+	/// the servers the query leaves, each with the folders under it when
+	/// it is open; the card renders this and the tree walks it
+	visible: VisibleServer[];
+}
+
+interface VisibleServer {
+	server: Server;
+	folders: RemoteFolder[];
+	open: boolean;
 }
 
 interface ServersLaneProps {

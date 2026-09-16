@@ -231,40 +231,23 @@ const ServersLane = ({
 		toggleOpen,
 		listings,
 		listing,
-		expanded,
 		toggleExpanded,
 		listFolders,
 		query,
-		setQuery
+		setQuery,
+		visible
 	} = servers;
 
-	// the filter: a server by name, alias, host or user; a folder by name or
-	// path. a folder hit keeps its server, and a query shows the hits under
-	// every server that has one
-	const q = query.trim().toLowerCase();
-	const matchesServer = (s: Server) =>
-		!q ||
-		[s.name, s.alias ?? '', s.host, s.user ?? ''].some(t =>
-			t.toLowerCase().includes(q)
-		);
-	const folderHits = (s: Server) =>
-		(listings[s.id]?.folders ?? []).filter(
-			f =>
-				!q ||
-				f.name.toLowerCase().includes(q) ||
-				f.path.toLowerCase().includes(q)
-		);
-	const list = all.filter(s => matchesServer(s) || folderHits(s).length > 0);
+	const q = query.trim();
 	const countLine =
 		all.length === 0
 			? 'none yet'
 			: `${all.length} ${all.length === 1 ? 'machine' : 'machines'}`;
 
-	// what sits under an expanded server: the reason it is down, an empty
+	// what sits under an open server: the reason it is down, an empty
 	// note, the busy word, or the folders grouped by root
-	const under = (s: Server) => {
+	const under = (s: Server, folders: RemoteFolder[]) => {
 		const l = listings[s.id];
-		const folders = q ? folderHits(s) : (l?.folders ?? []);
 		const roots = s.roots.length ? s.roots : DEFAULT_ROOTS;
 		return (
 			<div>
@@ -387,17 +370,12 @@ const ServersLane = ({
 							<span className='font-mono'>~/.ssh/config</span>.
 						</div>
 					)}
-					{q && list.length === 0 && (
+					{q && visible.length === 0 && (
 						<div className='px-3 py-2 text-15 text-text-muted'>
 							Nothing matches <span className='font-mono'>{query.trim()}</span>.
 						</div>
 					)}
-					{list.map(server => {
-						// with a query every server that has a hit reads as expanded,
-						// so the hits are on screen
-						const open =
-							expanded.has(server.id) ||
-							(q.length > 0 && folderHits(server).length > 0);
+					{visible.map(({ server, folders, open }) => {
 						return (
 							<div key={server.id}>
 								<ServerRow
@@ -414,7 +392,7 @@ const ServersLane = ({
 										onContextMenu
 									}}
 								/>
-								{open && under(server)}
+								{open && under(server, folders)}
 							</div>
 						);
 					})}
