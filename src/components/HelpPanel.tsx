@@ -118,7 +118,7 @@ const SECTIONS: { title: string; body: React.ReactNode; windowsOnly?: boolean }[
 		title: 'GitHub',
 		body: (
 			<p>
-				The GitHub rows under the workspaces list every repository you own
+				The GitHub lane lists every repository you own
 				through the GitHub CLI. It needs <Code>gh</Code> installed and logged
 				in (<Code>gh auth login</Code>); DevGo stores no token of its own, and{' '}
 				<Code>gh auth logout</Code> signs out everywhere. The list is fetched
@@ -134,7 +134,7 @@ const SECTIONS: { title: string; body: React.ReactNode; windowsOnly?: boolean }[
 		body: (
 			<>
 				<p>
-					The Servers card lists the machines you SSH into. Import{' '}
+					The Servers lane lists the machines you SSH into. Import{' '}
 					<Code>~/.ssh/config</Code> (every <Code>Host</Code> becomes a row; the
 					file is never written) or add one by hand. Enter opens a terminal on
 					it in a tmux session that survives, the same promise a WSL project

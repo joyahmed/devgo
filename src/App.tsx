@@ -1544,6 +1544,13 @@ const AppInner = () => {
 							onClick: () => copyWslPath(p)
 						} as MenuEntry
 					]),
+			'separator',
+			// the two that leave the row for somewhere else share a section
+			{
+				label: 'Run dev script…',
+				hint: hint('runScript'),
+				onClick: () => openScripts(p, menu?.x ?? 240, menu?.y ?? 200)
+			},
 			...(remote
 				? [
 						{
@@ -1553,12 +1560,6 @@ const AppInner = () => {
 						}
 					]
 				: []),
-			'separator',
-			{
-				label: 'Run dev script…',
-				hint: hint('runScript'),
-				onClick: () => openScripts(p, menu?.x ?? 240, menu?.y ?? 200)
-			},
 			'separator',
 			{
 				label: pinned ? 'Unpin' : 'Pin to top',
