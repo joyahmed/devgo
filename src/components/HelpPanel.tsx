@@ -109,14 +109,28 @@ const SECTIONS: { title: string; body: React.ReactNode }[] = [
 	{
 		title: 'Servers',
 		body: (
-			<p>
-				The Servers card lists the machines you SSH into. Import{' '}
-				<Code>~/.ssh/config</Code> (every <Code>Host</Code> becomes a row; the
-				file is never written) or add one by hand. Enter opens a terminal on
-				it in a tmux session that survives, the same promise a WSL project
-				gets. DevGo launches by alias so your config's key and options apply,
-				and stores no password: an alias, a host, a key <em>path</em>.
-			</p>
+			<>
+				<p>
+					The Servers card lists the machines you SSH into. Import{' '}
+					<Code>~/.ssh/config</Code> (every <Code>Host</Code> becomes a row; the
+					file is never written) or add one by hand. Enter opens a terminal on
+					it in a tmux session that survives, the same promise a WSL project
+					gets. DevGo launches by alias so your config's key and options
+					apply, and stores no password: an alias, a host, a key <em>path</em>.
+				</p>
+				<p>
+					Expand a server (or ↻) and one <Code>ssh</Code> lists its folders
+					and, when the box has <Code>~/scripts/devgo-inventory.sh</Code> from{' '}
+					<Code>joyahmed/server</Code>, its <em>apps</em>: each{' '}
+					<Code>/var/www</Code> folder shows its domain, a dot for its pm2
+					processes and its ports. The server declares its own actions in{' '}
+					<Code>devgo-actions.json</Code> beside that script; right-click the
+					server or an app for them. An action is typed into a tmux window on
+					the server and the terminal attaches to it. <Code>sudo</Code> asks
+					there; DevGo never holds it, never runs a script itself and never
+					reads what came back.
+				</p>
+			</>
 		)
 	},
 	{
