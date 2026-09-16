@@ -68,6 +68,13 @@ pub struct App {
     pub env_files: Vec<String>,
     #[serde(default)]
     pub database: Option<Db>,
+    // from the lockfile: pnpm | bun | yarn | npm, the install and build lines
+    #[serde(default)]
+    pub pm: Option<String>,
+    // pm2's own file when the app has one: the restart that restarts
+    // everything the app declares
+    #[serde(default)]
+    pub ecosystem: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
@@ -199,6 +206,10 @@ pub struct Action {
     #[serde(default)]
     pub root: bool,
     pub command: String,
+    // the heading the menu draws over it, groups in the order they first
+    // appear; none means no heading
+    #[serde(default)]
+    pub group: Option<String>,
     // form only: the fields, what preview appends, the word on the button
     #[serde(default)]
     pub fields: Vec<Field>,
@@ -230,6 +241,8 @@ struct RawAction {
     #[serde(default)]
     root: bool,
     command: String,
+    #[serde(default)]
+    group: Option<String>,
     #[serde(default)]
     fields: Vec<Field>,
     #[serde(default)]
@@ -270,6 +283,7 @@ pub fn parse_actions(text: &str) -> Result<Actions, String> {
                     kind,
                     root: a.root,
                     command: a.command,
+                    group: a.group,
                     fields: a.fields,
                     preview: a.preview,
                     submit: a.submit,
@@ -325,6 +339,8 @@ pub fn placeholders(app: &App) -> HashMap<&'static str, Option<String>> {
         ("api_port", port(site.and_then(|s| s.api_port))),
         ("db", app.database.as_ref().and_then(|d| d.name.clone())),
         ("repo", app.git.as_ref().and_then(|g| g.repo.clone())),
+        ("pm", app.pm.clone().filter(|p| !p.is_empty())),
+        ("eco", app.ecosystem.clone().filter(|e| !e.is_empty())),
         // what the form's shape buttons call this app: the inventory says
         // mono | next | node | other; the buttons say next nest node turbo
         (
@@ -595,7 +611,8 @@ mod tests {
            {"pm2": "erp-api", "pid": 2, "status": "online", "restarts": 0, "uptime": 10, "cwd": "/var/www/erp/apps/api", "node": "v20.19.6", "ports": [3009], "memory_mb": 90}],
          "site": {"file": "erp", "domains": ["hrm.zettabyteincorp.com"], "ssl": true, "upstreams": [], "aliases": [], "web_port": 3008, "api_port": 3009},
          "git": {"remote": "git@github.com:joyahmed/erp.git", "repo": "joyahmed/erp", "branch": "main", "head": "abc1234", "committed": "2026-09-01", "subject": "deploy"},
-         "env_files": [".env", "apps/api/.env"], "database": {"engine": "postgres", "host": "127.0.0.1", "port": 5432, "name": "erp"}},
+         "env_files": [".env", "apps/api/.env"], "database": {"engine": "postgres", "host": "127.0.0.1", "port": 5432, "name": "erp"},
+         "pm": "pnpm", "ecosystem": "ecosystem.config.js"},
         {"name": "zetta-hms", "dir": "/var/www/zetta-hms", "kind": "mono", "processes": [],
          "site": {"file": "zetta-hms", "domains": ["hms.zettademos.com"], "ssl": true, "upstreams": [], "aliases": [], "web_port": 3005, "api_port": 3004},
          "git": null, "env_files": [], "database": null},
@@ -670,6 +687,10 @@ mod tests {
         assert_eq!(erp["api_port"].as_deref(), Some("3009"));
         assert_eq!(erp["db"].as_deref(), Some("erp"));
         assert_eq!(erp["repo"].as_deref(), Some("joyahmed/erp"));
+        assert_eq!(erp["pm"].as_deref(), Some("pnpm"));
+        assert_eq!(erp["eco"].as_deref(), Some("ecosystem.config.js"));
+        let hms = placeholders(&i.apps[1]);
+        assert_eq!(hms["eco"], None, "no ecosystem file, no restart entry");
     }
 
     #[test]
