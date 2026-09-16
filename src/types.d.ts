@@ -207,12 +207,14 @@ interface ServerApp {
 	kind: string;
 	processes: {
 		pm2: string | null;
+		/// the container name when the process is a docker container (then pm2 is null)
+		docker: string | null;
 		status: string | null;
-		restarts: number;
+		restarts: number | null;
 		uptime: number | null;
 		cwd: string | null;
 		ports: number[];
-		memory_mb: number;
+		memory_mb: number | null;
 	}[];
 	site: {
 		file: string;
