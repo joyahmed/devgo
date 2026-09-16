@@ -264,6 +264,7 @@ pub fn run() {
                     }
                 };
 
+            commands::mark_startup("lock".into());
             let app_handle = app.handle().clone();
             single_instance::start_restore_listener(listener, move || {
                 let h = app_handle.clone();
