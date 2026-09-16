@@ -420,6 +420,7 @@ const ProjectTree = ({
 	onGroupContextMenu,
 	servers,
 	onServerOpen,
+	onServerCursor,
 	onServerContextMenu,
 	onServersAddMenu,
 	onServersHeadingContextMenu,
@@ -448,11 +449,13 @@ const ProjectTree = ({
 	// server by `${id}:${path}`
 	const [serverCursor, setServerCursor] = useState<string | null>(null);
 	const [folderCursor, setFolderCursor] = useState<string | null>(null);
+	// the footer follows the server row: told on the way in and out
 	const clearCursors = () => {
 		setWsCursor(null);
 		setRepoCursor(null);
 		setServerCursor(null);
 		setFolderCursor(null);
+		onServerCursor?.(null);
 	};
 	useEffect(clearCursors, [selected]);
 	const folderKey = (s: Server, f: RemoteFolder) => `${s.id}:${f.path}`;
@@ -628,6 +631,7 @@ const ProjectTree = ({
 	const selectServer = (s: Server) => {
 		clearCursors();
 		setServerCursor(s.id);
+		onServerCursor?.(s);
 	};
 	const selectFolder = (s: Server, f: RemoteFolder) => {
 		clearCursors();
