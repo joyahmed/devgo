@@ -518,7 +518,11 @@ const AppInner = () => {
 	const [groupHeaderMenu, setGroupHeaderMenu] =
 		useState<GroupHeaderMenu | null>(null);
 	const [namePrompt, setNamePrompt] = useState<NamePrompt | null>(null);
-	const [groupPicker, setGroupPicker] = useState(false);
+	// group preselects the destination: a heading's own add repos… opens
+	// the picker already pointed at itself
+	const [groupPicker, setGroupPicker] = useState<{ group?: string } | null>(
+		null
+	);
 	const groupEdit = (edit: GroupEdit) =>
 		github.editGroups(edit).catch(e => {
 			toast(showError(e), 'error');
@@ -551,6 +555,10 @@ const AppInner = () => {
 			groupEdit({ op: 'reorder', order: next }).catch(() => {});
 		};
 		return [
+			// the group's own door for taking repos in; before it the only ways
+			// were a repo's add to group… or the picker from the palette
+			{ label: `Add repos to ${name}…`, onClick: () => setGroupPicker({ group: name }) },
+			'separator',
 			{ label: 'Rename…', onClick: () => setNamePrompt({ kind: 'rename', from: name }) },
 			{ label: 'Move up', disabled: i <= 0, onClick: () => move(i - 1) },
 			{
@@ -1108,7 +1116,7 @@ const AppInner = () => {
 				subtitle: 'tick repos, name a group',
 				keywords: ['gh', 'label', 'organise', 'folder'],
 				disabled: !hasRepos,
-				run: () => setGroupPicker(true)
+				run: () => setGroupPicker({})
 			},
 			{
 				id: 'github.add',
@@ -1644,7 +1652,7 @@ const AppInner = () => {
 							'separator',
 							{
 								label: 'Group repos…',
-								onClick: () => setGroupPicker(true),
+								onClick: () => setGroupPicker({}),
 								disabled: !hasRepos
 							}
 						],
@@ -1823,13 +1831,13 @@ const AppInner = () => {
 			<Drawer
 				{...{
 					side: 'right' as const,
-					open: groupPicker,
+					open: groupPicker !== null,
 					title: 'Group repos',
-					onClose: () => setGroupPicker(false),
+					onClose: () => setGroupPicker(null),
 					width: 'w-[min(640px,92vw)]'
 				}}
 			>
-				{groupPicker && (
+				{groupPicker !== null && (
 					<ClonePicker
 						{...{
 							mode: 'group' as const,
@@ -1837,6 +1845,7 @@ const AppInner = () => {
 							local: github.payload?.local ?? {},
 							workspaces,
 							groups: github.groups,
+							initialGroup: groupPicker.group,
 							onStart: () => {},
 							onGroup: async (repos: GithubRepo[], group: string) => {
 								for (const r of repos) {
@@ -1847,7 +1856,7 @@ const AppInner = () => {
 									'success'
 								);
 							},
-							onDone: () => setGroupPicker(false)
+							onDone: () => setGroupPicker(null)
 						}}
 					/>
 				)}
