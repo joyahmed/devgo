@@ -64,6 +64,7 @@ const StatusBar = ({
 	onManageTargets,
 	onOpenPalette,
 	onOpenHelp,
+	reattach = false,
 	pulse = null
 }: StatusBarProps) => {
 	const groups = [
@@ -76,7 +77,7 @@ const StatusBar = ({
 			pulse: pulse === 'editor'
 		},
 		{
-			label: 'Terminal',
+			label: reattach ? 'Reattach' : 'Terminal',
 			items: terminals,
 			defaultId: defaults.terminal,
 			shortcut: prettyKeys(shortcutFor('openTerminal')),

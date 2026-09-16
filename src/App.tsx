@@ -185,6 +185,17 @@ const AppInner = () => {
 	};
 
 	const [showSettings, setShowSettings] = useState(false);
+	// whether the multiplexer is on: read on mount and again when settings
+	// closes (the tmux panel saves there). off, a launch is a plain shell,
+	// so the verb stays Terminal even under a live chip
+	const [tmuxOn, setTmuxOn] = useState(true);
+	useEffect(() => {
+		if (showSettings) return;
+		invoke<TmuxConfig>('get_tmux_config')
+			.then(c => setTmuxOn(c.enabled))
+			.catch(() => {});
+	}, [showSettings]);
+	const selectedLive = Boolean(selected && sessions.has(selected.full_path));
 	const [settingsPanel, setSettingsPanel] = useState<string | undefined>();
 	const openSettings = (panel?: string) => {
 		searchRef.current?.blur();
@@ -936,7 +947,10 @@ const AppInner = () => {
 				onClick: () => launchEditor(p)
 			},
 			{
-				label: 'Open terminal',
+				label:
+					sessions.has(p.full_path) && tmuxOn
+						? 'Reattach terminal'
+						: 'Open terminal',
 				hint: hint('openTerminal'),
 				onClick: () => launchTerminal(p)
 			},
@@ -1631,6 +1645,7 @@ const AppInner = () => {
 					onManageTargets: () => openSettings('targets'),
 					onOpenPalette: () => setPaletteOpen(true),
 					onOpenHelp: () => openSettings('help'),
+					reattach: selectedLive && tmuxOn,
 					pulse: launching?.kind ?? null
 				}}
 			/>

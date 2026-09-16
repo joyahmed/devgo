@@ -383,6 +383,9 @@ interface StatusBarProps {
 	onOpenPalette: () => void;
 	pulse?: LaunchKind | null;
 	onOpenHelp: () => void;
+	/// the selection has a live session and the multiplexer is on: the
+	/// terminal group reads Reattach, which is what the script does
+	reattach?: boolean;
 }
 
 interface TitleBarProps {
