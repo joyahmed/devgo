@@ -4,7 +4,7 @@ import TitleBarButton, { TITLE_BAR_BUTTONS } from './TitleBarButton';
 const appWindow = getCurrentWindow();
 
 const TitleBar = ({ children }: TitleBarProps) => (
-	<header className='flex items-center justify-between h-12 px-4 bg-bg-secondary border-b border-border shrink-0 select-none'>
+	<header className='flex items-center justify-between h-12 px-4 ground-chrome border-b border-border shrink-0 select-none'>
 		<div
 			className='flex flex-1 items-center gap-2 cursor-grab'
 			onMouseDown={() => appWindow.startDragging()}

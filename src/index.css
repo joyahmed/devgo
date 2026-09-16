@@ -114,11 +114,33 @@ body,
 	overflow: hidden;
 }
 
+/* one ground, one knob: the six themes keep their opaque tokens and the
+   contrast gate keeps measuring them; only the ground and the two bars
+   on the window's edge let the desktop through, by the alpha the
+   transparency setting puts here. rows, panels and drawers sit on the
+   ground and keep their tokens, or they would not be readable over
+   whatever is behind the window */
+:root {
+	--ground-alpha: 1;
+}
+
 body {
 	font-family: var(--font-sans);
-	background: var(--color-bg-primary);
+	background: color-mix(
+		in srgb,
+		var(--color-bg-primary) calc(var(--ground-alpha) * 100%),
+		transparent
+	);
 	color: var(--color-text-primary);
 	-webkit-font-smoothing: antialiased;
+}
+
+.ground-chrome {
+	background: color-mix(
+		in srgb,
+		var(--color-bg-secondary) calc(var(--ground-alpha) * 100%),
+		transparent
+	);
 }
 
 /* keyboard focus is visible, in the accent: tab used to land on buttons

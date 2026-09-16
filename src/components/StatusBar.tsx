@@ -87,7 +87,7 @@ const StatusBar = ({
 	const both = prettyKeys(shortcutFor('openBoth'));
 
 	return (
-		<footer className='flex items-center justify-between gap-6 h-12 px-4 bg-bg-secondary border-t border-border shrink-0 text-11 select-none overflow-hidden'>
+		<footer className='flex items-center justify-between gap-6 h-12 px-4 ground-chrome border-t border-border shrink-0 text-11 select-none overflow-hidden'>
 			<div className='flex items-center gap-4 min-w-0 overflow-hidden'>
 				{groups.map(g => (
 					<TargetGroup
