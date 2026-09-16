@@ -27,10 +27,12 @@ thiserror = "2.0.20"
 tauri-plugin-global-shortcut = "2"
 
 
-# Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
+# size leaning: a launcher's exe is read from disk on every cold start and
+# nothing in it is hot enough for opt-level 3 to matter. no panic = "abort":
+# keep the unwind so a panicking command surfaces as an error the frontend
+# can toast, not a dead process
 [profile.release]
 codegen-units = 1
 lto = true
-opt-level = 3
-panic = "abort"
+opt-level = "s"
 strip = true
