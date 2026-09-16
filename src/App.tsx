@@ -140,12 +140,12 @@ const AppInner = () => {
 	// marks track the disk. its box is its own; the project query never
 	// reaches it
 	const github = useGithub(projects, git);
+	const { toast } = useToast();
 	// the machines you ssh into: its own file, no network
-	const servers = useServers();
+	const servers = useServers(e => toast(showError(e)));
 	// one registry: a second useTargets in Settings would leave the row stale
 	// after an add until the next mount
 	const targets = useTargets();
-	const { toast } = useToast();
 	const [removeIndex, setRemoveIndex] = useState<number | null>(null);
 	// the + menu, anchored under its button, and the scan picker it opens.
 	// two ways in, choose one folder or scan and tick several, and the

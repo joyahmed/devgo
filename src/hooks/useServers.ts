@@ -35,7 +35,8 @@ const loadFolded = () => loadSet(FOLDED_KEY);
 // an ssh client to run (no client, no card), and the edits. nothing here
 // touches the network; a row is an alias, and the network happens when
 // enter runs ssh in a terminal
-export const useServers = (): ServersState => {
+// onError hears a failed ask (a folder drill on a box that is down)
+export const useServers = (onError?: (e: unknown) => void): ServersState => {
 	const [servers, setServers] = useState<Server[]>([]);
 	const [hasSsh, setHasSsh] = useState(false);
 	const [isOpen, setOpen] = useState<boolean>(loadOpen);
@@ -147,9 +148,17 @@ export const useServers = (): ServersState => {
 		if (next.has(key)) next.delete(key);
 		else next.add(key);
 		setOpenDirs(next);
-		if (!openDirs.has(key) && !listings[id]?.subdirs?.[path]) {
-			listDir(id, path).catch(() => {});
-		}
+		if (openDirs.has(key) || listings[id]?.subdirs?.[path]) return;
+		// the ask failed: the arrow closes again and onError says why, or a
+		// box that is down shows an open folder with nothing under it
+		listDir(id, path).catch(e => {
+			setOpenDirs(prev => {
+				const n = new Set(prev);
+				n.delete(key);
+				return n;
+			});
+			onError?.(e);
+		});
 	};
 
 	const toggleRoot = (id: string, root: string) => {
