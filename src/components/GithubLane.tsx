@@ -333,12 +333,21 @@ const GithubLane = ({
 								{part.rows.map(repo => rowFor(repo, false, false))}
 							</div>
 						))}
-					{shown?.map(section => {
+					{shown?.map((section, i) => {
 						const name = section.group;
 						const isFolded = name !== null && folded.has(name);
 						const heading = name !== null || (sections?.length ?? 0) > 1;
+						// a short rule in the accent over every group but the first
+						// (joy: "github groups should also have separator"): groups
+						// stack inside one card, which is where a line is needed
 						return (
-							<div key={name ?? '\u0000tail'}>
+							<div key={name ?? '\u0000tail'} className={i ? 'mt-2 pt-1' : ''}>
+								{i > 0 && (
+									<div
+										aria-hidden='true'
+										className='h-px ml-4 mb-1 w-[38%] bg-linear-to-r from-accent/70 to-transparent'
+									/>
+								)}
 								{heading && (
 									<div
 										className={`${col} px-3 py-1.5 select-none ${
@@ -360,8 +369,10 @@ const GithubLane = ({
 													{isFolded ? '▶' : '▼'}
 												</span>
 											)}
+											{/* a group heading is the same kind of thing as a
+											    workspace header: one step under the rows */}
 											<span
-												className={`truncate font-semibold ${name === null ? 'text-text-muted' : 'text-text-primary'}`}
+												className={`truncate text-13 font-semibold ${name === null ? 'text-text-muted' : 'text-text-primary'}`}
 											>
 												{name ?? 'Not in a group'}
 											</span>
