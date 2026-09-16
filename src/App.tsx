@@ -1267,6 +1267,18 @@ const AppInner = () => {
 				run: () => setServerForm({})
 			},
 			{
+				id: 'servers.details',
+				title: servers.showDetails
+					? 'Servers: hide connection details'
+					: 'Servers: show connection details',
+				subtitle: 'user@host and the port on every row, or the name alone',
+				keywords: ['ssh', 'server', 'host', 'port', 'privacy', 'details'],
+				run: () =>
+					servers
+						.setShowDetails(!servers.showDetails)
+						.catch(e => toast(showError(e)))
+			},
+			{
 				id: 'sort',
 				title: `Sort order: ${sortMode} (cycle)`,
 				keywords: ['order', 'frecency', 'activity', 'name'],
