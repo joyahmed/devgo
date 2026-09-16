@@ -445,6 +445,24 @@ fi
     format!("{MAC_PREAMBLE}{bail}{body}")
 }
 
+// the run script for a local project on a mac: PATH, into the project,
+// the command, then a login shell so the window stays open in the project
+// after the command exits, windows terminal's -NoExit spelled in bash. a
+// failing dev script leaves its error on screen instead of vanishing. the
+// path goes through sh_quote; || exit 1 because a cd that fails must not
+// run the command wherever terminal started. the command is the user's
+// own line, shell syntax by definition, and is not quoted
+#[cfg(any(not(windows), test))]
+fn build_mac_run_script(path: &str, command: &str) -> String {
+    format!(
+        r#"{MAC_PREAMBLE}cd {} || exit 1
+{command}
+exec "${{SHELL:-bash}}" -l
+"#,
+        sh_quote(path)
+    )
+}
+
 /// The PowerShell twin of build_tmux_script, line for line where the
 /// shells allow it. psmux speaks tmux's commands and returns tmux's exit
 /// codes, so every rule above holds here for the same reasons: reconcile
@@ -564,7 +582,39 @@ pub fn launch_with_command(
     let (exe, args) = resolved
         .ok_or_else(|| AppError::TargetCannotRun(target.name.clone()))?;
 
+    let args = run_script_args(&args, project, command)?;
     spawn_raw(&exe, &args)
+}
+
+// a windows run template carries the command on the terminal's own line
+// (the command IS the tab), so there is nothing to write
+#[cfg(windows)]
+fn run_script_args(
+    args: &str,
+    _project: &Project,
+    _command: &str,
+) -> Result<String, AppError> {
+    Ok(args.to_string())
+}
+
+// a mac run template may ask for {script} instead: terminal.app cannot
+// take a command at all, only a file to run, so the command goes into a
+// devgo-run-{session}.command. a template without the placeholder
+// (wezterm's start -- {command}) is spawned as resolved
+#[cfg(not(windows))]
+fn run_script_args(
+    args: &str,
+    project: &Project,
+    command: &str,
+) -> Result<String, AppError> {
+    if !args.contains("{script}") {
+        return Ok(args.to_string());
+    }
+    let session = tmux_session_name(project);
+    let script = build_mac_run_script(&project.full_path, command);
+    let path =
+        write_command_file(&format!("devgo-run-{session}.command"), &script)?;
+    Ok(args.replace("{script}", &path))
 }
 
 // the command sits inside a double-quoted bash -lc argument
@@ -1649,6 +1699,18 @@ mod tests {
             session.matches(quoted).count(),
             "the path appears only inside its quotes: {session}"
         );
+
+        let run = build_mac_run_script(&path, "bun dev");
+        assert!(run.starts_with(MAC_PREAMBLE), "{run}");
+        assert!(
+            run.contains(&format!("cd {quoted} || exit 1\nbun dev\n")),
+            "cd, then the line verbatim: {run}"
+        );
+        assert!(run.ends_with("exec \"${SHELL:-bash}\" -l\n"), "{run}");
+        assert_eq!(
+            run.matches("My Projects").count(),
+            run.matches(quoted).count()
+        );
     }
 
     // the mac twin of the psmux placeholder test: a local project gets a
@@ -1718,5 +1780,98 @@ mod tests {
         assert!(!written.contains(".sh") && !written.contains(".ps1"));
         let _ = std::fs::remove_file(&marker);
         let _ = std::fs::remove_file(&expected);
+    }
+
+    // for real: a {script} run template goes through launch_with_command
+    // on a project whose directory has a space and an apostrophe, the
+    // .command runs under sh, and the command inside it runs in that
+    // directory. exit 0 at the end of the line ends the script before its
+    // final exec would hand the test a login shell to sit in
+    #[cfg(not(windows))]
+    #[test]
+    fn a_run_script_enters_a_directory_with_a_space_and_an_apostrophe() {
+        let root = std::env::temp_dir().join("devgo-hostile-dir-test");
+        let dir = root.join(HOSTILE_DIR);
+        std::fs::create_dir_all(&dir).unwrap();
+        let marker = root.join("where-was-i.txt");
+        let _ = std::fs::remove_file(&marker);
+
+        let terminal = LaunchTarget {
+            id: "runs-script".into(),
+            name: "Runs Script".into(),
+            kind: TargetKind::Terminal,
+            executable: SHELL.into(),
+            args_template: shell_exit(""),
+            wsl_executable: None,
+            wsl_args_template: None,
+            // the terminal.app shape: the file is the whole command line
+            run_args_template: Some("-c \"{script}\"".into()),
+            wsl_run_args_template: None,
+        };
+        let project = Project::new(
+            "hostile".into(),
+            dir.to_string_lossy().into_owned(),
+            root.to_string_lossy().into_owned(),
+            crate::services::scanner::LOCAL_FS.into(),
+        );
+        let command = format!("pwd > '{}' && exit 0", marker.display());
+
+        launch_with_command(&terminal, &project, &no_distro(), &command)
+            .unwrap();
+
+        let expected = std::env::temp_dir()
+            .join(format!("devgo-run-{}.command", tmux_session_name(&project)));
+        let script =
+            std::fs::read_to_string(&expected).expect("the run script");
+        assert!(
+            script.contains(&format!(
+                "cd {} || exit 1\n{command}\n",
+                sh_quote(&dir.to_string_lossy())
+            )),
+            "{script}"
+        );
+
+        let written_len = || std::fs::metadata(&marker).map_or(0, |m| m.len());
+        for _ in 0..40 {
+            if written_len() > 0 {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        let written =
+            std::fs::read_to_string(&marker).expect("the command never ran");
+        assert!(
+            written.trim_end().ends_with(HOSTILE_DIR),
+            "ran somewhere other than the project: {written:?}"
+        );
+
+        let _ = std::fs::remove_file(&expected);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    // a run template without {script} (wezterm's start -- {command}) is
+    // spawned as resolved and writes nothing
+    #[cfg(not(windows))]
+    #[test]
+    fn a_run_template_without_the_placeholder_writes_no_run_script() {
+        let project = local_project("no-run-script", "work");
+        let expected = std::env::temp_dir()
+            .join(format!("devgo-run-{}.command", tmux_session_name(&project)));
+        let _ = std::fs::remove_file(&expected);
+
+        let terminal = LaunchTarget {
+            id: "plain-run".into(),
+            name: "Plain Run".into(),
+            kind: TargetKind::Terminal,
+            executable: SHELL.into(),
+            args_template: shell_exit(""),
+            wsl_executable: None,
+            wsl_args_template: None,
+            run_args_template: Some("-c \"{command}\"".into()),
+            wsl_run_args_template: None,
+        };
+        launch_with_command(&terminal, &project, &no_distro(), "exit 0")
+            .unwrap();
+        assert!(!expected.exists(), "orphaned at {}", expected.display());
     }
 }
