@@ -15,7 +15,7 @@ const TargetGroup = ({
 	onPick,
 	pulse
 }: TargetGroupProps) => (
-	<div className='flex items-center gap-1.5 min-w-0'>
+	<div className='flex items-center gap-1.5 shrink-0'>
 		<span className='text-11 text-text-muted shrink-0'>
 			{label}
 		</span>
@@ -60,7 +60,9 @@ const TargetGroup = ({
 // the footer is the action bar. it was two strips, a launch row over a
 // status footer, and the buttons said everything a hint could. pinned to
 // the bottom: you aim at these from muscle memory while your eyes are
-// still on the list, and expanding a workspace must not move them
+// still on the list, and expanding a workspace must not move them.
+// when it runs out of width it wraps by whole groups: every group is a
+// direct child of the footer, and the hints ml-auto onto the last line
 const StatusBar = ({
 	hasSelection,
 	selectionIsWsl,
@@ -112,36 +114,34 @@ const StatusBar = ({
 	const both = prettyKeys(shortcutFor('openBoth'));
 
 	return (
-		<footer className='flex items-center justify-between gap-6 h-12 px-4 ground-chrome border-t border-border shrink-0 text-11 select-none overflow-hidden'>
-			<div className='flex items-center gap-4 min-w-0 overflow-hidden'>
-				{groups.map(g => (
-					<TargetGroup
-						key={g.label}
-						{...{ ...g, isWsl: selectionIsWsl, hasSelection }}
-					/>
-				))}
-				<Button
-					variant='target'
-					className={`shrink-0 ${pulse === 'both' ? 'animate-pulse-once' : ''}`}
-					disabled={!hasSelection}
-					onClick={onBoth}
-					title={`Open Both — ${both}`}
-				>
-					<span className='text-11 leading-none'>Open Both</span>
-					<Kbd>{both}</Kbd>
-				</Button>
-				<Button
-					variant='ghost'
-					className='text-11 px-2 shrink-0'
-					onClick={onManageTargets}
-					title='Add, remove or scan for editors and terminals'
-				>
-					Manage…
-				</Button>
-			</div>
+		<footer className='flex flex-wrap items-center gap-x-6 gap-y-1.5 min-h-12 py-1.5 px-4 ground-chrome border-t border-border shrink-0 text-11 select-none'>
+			{groups.map(g => (
+				<TargetGroup
+					key={g.label}
+					{...{ ...g, isWsl: selectionIsWsl, hasSelection }}
+				/>
+			))}
+			<Button
+				variant='target'
+				className={`shrink-0 ${pulse === 'both' ? 'animate-pulse-once' : ''}`}
+				disabled={!hasSelection}
+				onClick={onBoth}
+				title={`Open Both — ${both}`}
+			>
+				<span className='text-11 leading-none'>Open Both</span>
+				<Kbd>{both}</Kbd>
+			</Button>
+			<Button
+				variant='ghost'
+				className='text-11 px-2 shrink-0'
+				onClick={onManageTargets}
+				title='Add, remove or scan for editors and terminals'
+			>
+				Manage…
+			</Button>
 			{/* the palette's only visible door, and help beside it; without
 			    them the discovery surfaces are themselves undiscoverable */}
-			<div className='flex items-center gap-4 shrink-0'>
+			<div className='flex items-center gap-4 shrink-0 ml-auto'>
 				<Button
 					variant='ghost'
 					className='gap-1.5 text-11 shrink-0 hover:bg-transparent hover:text-accent'
