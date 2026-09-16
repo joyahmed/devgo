@@ -719,7 +719,8 @@ interface AppearancePanelProps {
 }
 
 /// the transparency slider: 0 to the cap, the window is the preview
-interface TransparencySliderProps {
+/// the transparency stepper: the value, null until read
+interface TransparencyStepProps {
 	value: number | null;
 	onChange: (percent: number) => void;
 }

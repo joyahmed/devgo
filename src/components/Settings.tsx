@@ -567,28 +567,60 @@ const TextStep = ({ scale, onScale }: TextStepProps) => {
 	);
 };
 
-// opaque to see-through, the number beside it; null until the preference
-// has been read, so the thumb never sits at 0 on a see-through window
-const TransparencySlider = ({ value, onChange }: TransparencySliderProps) => (
-	<div className='flex items-center gap-3'>
-		<span className='text-13 text-text-muted shrink-0'>Opaque</span>
-		<input
-			type='range'
-			min={0}
-			max={MAX_TRANSPARENCY}
-			step={5}
-			value={value ?? 0}
-			disabled={value === null}
-			className='flex-1 accent-accent'
-			aria-label='Transparency'
-			onChange={e => onChange(Number(e.target.value))}
-		/>
-		<span className='text-13 text-text-muted shrink-0'>See-through</span>
-		<span className='font-mono text-15 text-text-primary w-12 text-right'>
-			{value ?? 0}%
-		</span>
-	</div>
-);
+// a stepper and a typed number, not a slider: a slider on a five-step
+// grid was too rigid. one percent at a time from the buttons, any number
+// typed, the same shape as text size. null until the preference has been
+// read, so the controls never say 0 on a see-through window
+const TransparencyStep = ({ value, onChange }: TransparencyStepProps) => {
+	const clamp = (n: number) =>
+		Math.max(0, Math.min(MAX_TRANSPARENCY, Math.round(n)));
+	const ends = [
+		{ label: '−', by: -1, title: 'One percent more opaque', at: 0 },
+		{ label: '+', by: 1, title: 'One percent more see-through', at: MAX_TRANSPARENCY }
+	];
+	const [minus, plus] = ends.map(e => (
+		<Button
+			key={e.label}
+			variant='choice'
+			disabled={value === null || value === e.at}
+			title={e.title}
+			onClick={() => onChange(clamp((value ?? 0) + e.by))}
+		>
+			{e.label}
+		</Button>
+	));
+	return (
+		<div className='flex items-center gap-2'>
+			{minus}
+			<input
+				type='number'
+				min={0}
+				max={MAX_TRANSPARENCY}
+				step={1}
+				inputMode='numeric'
+				value={value ?? 0}
+				disabled={value === null}
+				aria-label='Transparency, percent see-through'
+				className='w-16 px-2 py-1 bg-bg-panel border border-border-strong rounded-control font-mono text-15 text-text-primary text-center outline-none focus:border-accent'
+				onChange={e => {
+					const n = Number(e.target.value);
+					if (Number.isFinite(n)) onChange(clamp(n));
+				}}
+			/>
+			<span className='text-13 text-text-muted'>% see-through</span>
+			{plus}
+			{(value ?? 0) > 0 && (
+				<Button
+					variant='ghost'
+					className='ml-2 text-13 text-accent'
+					onClick={() => onChange(0)}
+				>
+					Opaque
+				</Button>
+			)}
+		</div>
+	);
+};
 
 const AppearancePanel = ({ showHints, onToggleHints }: AppearancePanelProps) => {
 	const [current, setCurrent] = useState(savedThemeId());
@@ -662,12 +694,13 @@ const AppearancePanel = ({ showHints, onToggleHints }: AppearancePanelProps) => 
 			<div>
 				<h4 className={heading}>Transparency</h4>
 				<p className='text-13 text-text-muted mb-2'>
-					How much of what is behind the window shows through, with the
-					system blur so text stays readable. Windows 11 and macOS; on
-					Linux the slider changes nothing. Capped at {MAX_TRANSPARENCY}%:
-					past that, text would sit on whatever is behind you.
+					How much of what is behind the window shows through: sharp, in
+					the theme's own colour, no system blur. Every surface follows it;
+					text, icons and borders stay solid. Type a number or step it;
+					capped at {MAX_TRANSPARENCY}%: past that, text would sit on
+					whatever is behind you.
 				</p>
-				<TransparencySlider
+				<TransparencyStep
 					{...{ value: transparency, onChange: previewTransparency }}
 				/>
 			</div>
