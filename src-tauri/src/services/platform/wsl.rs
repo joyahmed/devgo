@@ -133,9 +133,21 @@ pub fn running_distros_memo() -> Vec<String> {
 }
 
 // a memo that still says running after a stop would send the next scan
-// into \\wsl.localhost\, which boots the distro right back
-fn forget_running() {
+// into \\wsl.localhost\, which boots the distro right back. the vm
+// watcher clears it too, when the vm has just gone
+pub(crate) fn forget_running() {
     *RUNNING_MEMO.lock().unwrap_or_else(|e| e.into_inner()) = None;
+}
+
+// ask now and make the answer the memo: the watcher has just seen the vm
+// appear, and the chip, the scan and the badge pass that follow read this
+// one answer instead of each spawning wsl.exe inside the ttl
+#[cfg_attr(not(windows), allow(dead_code))]
+pub(crate) fn refresh_running() -> Vec<String> {
+    let fresh = running_distros();
+    *RUNNING_MEMO.lock().unwrap_or_else(|e| e.into_inner()) =
+        Some((Instant::now(), fresh.clone()));
+    fresh
 }
 
 /// Run a "print what exists" script in a distro and return its lines.
