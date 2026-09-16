@@ -306,6 +306,10 @@ pub fn run() {
             let servers_store =
                 services::servers::ServersStore::new(app_data_dir.clone())
                     .expect("failed to initialize servers store");
+            let servers_cache = services::server_folders::ListingCache::new(
+                app_data_dir.clone(),
+            )
+            .expect("failed to initialize servers cache");
 
             commands::mark_startup("stores".into());
             let store = WorkspaceStore::new(app_data_dir)
@@ -330,6 +334,7 @@ pub fn run() {
                     std::collections::HashMap::new(),
                 ),
                 servers_store: std::sync::Mutex::new(servers_store),
+                servers_cache: std::sync::Mutex::new(servers_cache),
             });
 
             // geometry goes on before the webview calls show(), so the first
@@ -483,6 +488,10 @@ pub fn run() {
             commands::has_ssh,
             commands::open_server,
             commands::server_commands,
+            commands::get_server_listings,
+            commands::list_server_folders,
+            commands::open_server_folder,
+            commands::open_server_folder_in,
             commands::open_agent,
             commands::kill_session,
             commands::get_github_branches,

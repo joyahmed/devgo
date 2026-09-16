@@ -17,6 +17,7 @@ use crate::services::groups::{self, GithubGroup};
 use crate::services::launcher;
 use crate::services::platform::{wsl, RuntimeInfo};
 use crate::services::scanner::{ScanOutcome, UnavailableReason};
+use crate::services::server_folders::{self, ListingCache, ServerListing};
 use crate::services::servers::{Server, ServersStore};
 use crate::services::ssh_config;
 use crate::services::GithubStore;
@@ -130,6 +131,7 @@ pub struct AppState {
     /// memory only, like git_cache, and for the same reason.
     pub github_branches: Mutex<HashMap<String, Vec<String>>>,
     pub servers_store: Mutex<ServersStore>,
+    pub servers_cache: Mutex<ListingCache>,
 }
 
 #[tauri::command]
@@ -756,7 +758,8 @@ pub fn remove_server(
     id: String,
     state: State<AppState>,
 ) -> Result<(), AppError> {
-    state.servers_store.lock().map_err(lock_err)?.remove(&id)
+    state.servers_store.lock().map_err(lock_err)?.remove(&id)?;
+    state.servers_cache.lock().map_err(lock_err)?.forget(&id)
 }
 
 // read ~/.ssh/config and merge its hosts in by alias. an explicit ask
@@ -839,6 +842,117 @@ pub fn server_commands(
         format!("ssh {}", server.ssh_target().join(" ")),
         server.scp_prefix(),
     ))
+}
+
+// the cached listings, for the card's first paint. no network
+#[tauri::command]
+pub fn get_server_listings(
+    state: State<AppState>,
+) -> Result<HashMap<String, ServerListing>, AppError> {
+    Ok(state.servers_cache.lock().map_err(lock_err)?.all())
+}
+
+// one server's folders: the explicit ask. one ssh off the main thread;
+// success is also "up". the result is cached and returned; a failure
+// keeps the last good folders, marks the box down and carries the reason
+#[tauri::command]
+pub async fn list_server_folders(
+    id: String,
+    app: tauri::AppHandle,
+) -> Result<ServerListing, AppError> {
+    let server = {
+        let h = app.state::<AppState>();
+        let s = h.servers_store.lock().map_err(lock_err)?.get(&id);
+        s.ok_or_else(|| AppError::ServerNotFound(id.clone()))?
+    };
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        server_folders::list(&server)
+    })
+    .await
+    .map_err(lock_err)?;
+    let now = crate::services::preferences::now_secs();
+    let state = app.state::<AppState>();
+    let mut cache = state.servers_cache.lock().map_err(lock_err)?;
+    let listing = match result {
+        Ok(folders) => ServerListing {
+            folders,
+            listed_at: now,
+            up: true,
+            error: None,
+        },
+        Err(err) => ServerListing {
+            folders: cache
+                .all()
+                .remove(&id)
+                .map(|p| p.folders)
+                .unwrap_or_default(),
+            listed_at: now,
+            up: false,
+            error: Some(err),
+        },
+    };
+    cache.store(&id, listing.clone())?;
+    Ok(listing)
+}
+
+// a terminal in a remote folder: a tmux session named after the folder
+#[tauri::command]
+pub fn open_server_folder(
+    id: String,
+    path: String,
+    state: State<AppState>,
+) -> Result<(), AppError> {
+    let server = state
+        .servers_store
+        .lock()
+        .map_err(lock_err)?
+        .get(&id)
+        .ok_or_else(|| AppError::ServerNotFound(id.clone()))?;
+    let home = std::env::var("USERPROFILE").unwrap_or_else(|_| "C:\\".into());
+    let stand_in = Project::new(
+        server.name.clone(),
+        home,
+        String::new(),
+        "Windows".into(),
+    );
+    let info = state.runtime_info.lock().map_err(lock_err)?.clone();
+    let terminal = resolve_target(&state, TargetKind::Terminal, None)?;
+    let line = server_folders::folder_terminal_command(&server, &path);
+    launcher::launch_with_command(&terminal, &stand_in, &info, &line)
+}
+
+// a remote folder in vs code (remote-ssh) or zed (ssh://). both use the
+// system ssh, so the alias resolves
+#[tauri::command]
+pub fn open_server_folder_in(
+    id: String,
+    path: String,
+    editor: String,
+    state: State<AppState>,
+) -> Result<(), AppError> {
+    let server = state
+        .servers_store
+        .lock()
+        .map_err(lock_err)?
+        .get(&id)
+        .ok_or_else(|| AppError::ServerNotFound(id.clone()))?;
+    let (exe, args) = match editor.as_str() {
+        "vscode" => {
+            ("code", server_folders::vscode_remote_args(&server, &path))
+        }
+        "zed" => ("zed", server_folders::zed_remote_url(&server, &path)),
+        other => return Err(AppError::TargetNotFound(other.to_string())),
+    };
+    if !editors::is_on_path(exe) {
+        return Err(AppError::TargetNotInstalled(exe.to_string()));
+    }
+    // through cmd: code is code.cmd on windows
+    std::process::Command::new("cmd")
+        .creation_flags(0x08000000)
+        .raw_arg(format!("/c {exe} {args}"))
+        .spawn()
+        .map_err(|e| AppError::LaunchFailed(format!("{exe}: {e}")))?;
+    Ok(())
 }
 
 #[tauri::command]
