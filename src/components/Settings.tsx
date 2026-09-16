@@ -2,7 +2,14 @@ import { invoke } from '@tauri-apps/api/core';
 import { open as openDialog, save } from '@tauri-apps/plugin-dialog';
 import { useEffect, useState } from 'react';
 import { relativeTime } from '../github';
-import { prettyKeys, SHORTCUTS } from '../shortcuts';
+import { isMac } from '../platform';
+import {
+	isAvailable,
+	labelFor,
+	prettyKeys,
+	SHORTCUTS,
+	shortcutFor
+} from '../shortcuts';
 import { applyTextScale, savedTextScale, stepTextScale, TEXT_STEPS } from '../textSize';
 import {
 	MAX_TRANSPARENCY,
@@ -34,14 +41,16 @@ const NAV_KEYS: Record<string, string> = {
 };
 
 // a key event as a tauri accelerator, or null while only modifiers are down
-// or the key is one we cannot bind. a global hotkey must carry a modifier
+// or the key is one we cannot bind. a global hotkey must carry a modifier.
+// metaKey is two keys: ⌘ on a mac, the win key on windows; tauri spells
+// them Cmd and Super, and a ⌘ binding written Super registers the wrong key
 const toAccelerator = (e: KeyboardEvent): string | null => {
 	if (MODIFIER_KEYS.has(e.key)) return null;
 	const mods = [
 		e.ctrlKey && 'Ctrl',
 		e.altKey && 'Alt',
 		e.shiftKey && 'Shift',
-		e.metaKey && 'Super'
+		e.metaKey && (isMac ? 'Cmd' : 'Super')
 	].filter(Boolean);
 	if (mods.length === 0) return null;
 
@@ -104,22 +113,22 @@ const ShortcutTable = ({
 					</span>
 				</div>
 				<p className='text-13 text-text-muted mt-1'>
-					Click Rebind, then press the combination — it needs a modifier
-					(Ctrl / Alt / Shift / Super). If another app owns the keys, the old
-					binding stays.
+					Click Rebind, then press the combination — it needs a modifier (
+					{isMac ? 'Cmd / Opt / Shift / Ctrl' : 'Ctrl / Alt / Shift / Super'}
+					). If another app owns the keys, the old binding stays.
 				</p>
 			</div>
 
 			{groups.map(g => (
 				<div key={g}>
 					<h4 className={heading}>{g}</h4>
-					{SHORTCUTS.filter(s => s.group === g).map(s => (
+					{SHORTCUTS.filter(s => s.group === g && isAvailable(s)).map(s => (
 						<div
 							key={s.id}
 							className='flex items-center justify-between py-1 text-15'
 						>
 							<span className='text-text-secondary'>
-								{s.label}
+								{labelFor(s.id)}
 								{s.needsSelection && (
 									<span className='text-text-muted text-13'>
 										{' '}
@@ -287,22 +296,34 @@ const TmuxPanel = ({ onError }: TmuxPanelProps) => {
 			{/* the switch first, and the list dims under it: a live text box
 			    under a disabled feature is a promise the app is not keeping */}
 			<div>
-				<h4 className={heading}>Use tmux / psmux</h4>
+				<h4 className={heading}>{isMac ? 'Use tmux' : 'Use tmux / psmux'}</h4>
 				<p className='text-13 text-text-muted mb-2'>
-					On, a terminal launch opens a session with the windows below — tmux
-					inside the distro for a WSL project, psmux for a Windows project.
-					Off, it opens one plain shell in the project directory and starts
+					On, a terminal launch opens a session with the windows below
+					{isMac
+						? ' in tmux'
+						: ' — tmux inside the distro for a WSL project, psmux for a Windows project'}
+					. Off, it opens one plain shell in the project directory and starts
 					no multiplexer at all — the right answer if you only ever use one
 					tab.
 				</p>
-				<p className='text-13 text-text-muted mb-2'>
-					psmux is a tmux for Windows and is installed separately:{' '}
-					<code className='text-text-secondary'>
-						winget install marlocarlo.psmux
-					</code>
-					. Without it a Windows launch falls back to a plain shell and says
-					so.
-				</p>
+				{/* two install hints, not one with a swapped word: psmux is a
+				    windows port and does not exist on a mac */}
+				{isMac ? (
+					<p className='text-13 text-text-muted mb-2'>
+						tmux is installed separately:{' '}
+						<code className='text-text-secondary'>brew install tmux</code>.
+						Without it a launch falls back to a plain shell and says so.
+					</p>
+				) : (
+					<p className='text-13 text-text-muted mb-2'>
+						psmux is a tmux for Windows and is installed separately:{' '}
+						<code className='text-text-secondary'>
+							winget install marlocarlo.psmux
+						</code>
+						. Without it a Windows launch falls back to a plain shell and
+						says so.
+					</p>
+				)}
 				<div className='flex items-center gap-2'>
 					{modes.map(m => (
 						<Button
@@ -395,7 +416,7 @@ const GithubPanel = ({ github, onError }: GithubPanelProps) => {
 	const statusLine = !status
 		? 'Checking for gh…'
 		: !status.installed
-			? 'gh not found. Install it: winget install GitHub.cli'
+			? `gh not found. Install it: ${isMac ? 'brew install gh' : 'winget install GitHub.cli'}`
 			: !status.login
 				? 'gh is installed but not logged in. Run: gh auth login'
 				: `gh ${status.version ?? ''} · logged in as ${status.login}`;
@@ -695,9 +716,11 @@ const AppearancePanel = ({ showHints, onToggleHints }: AppearancePanelProps) => 
 				<h4 className={heading}>Text size</h4>
 				<p className='text-13 text-text-muted mb-2'>
 					The whole window, in steps: the same as{' '}
-					<span className='font-mono'>Ctrl+=</span> and{' '}
-					<span className='font-mono'>Ctrl+-</span>;{' '}
-					<span className='font-mono'>Ctrl+0</span> is 100%.
+					<span className='font-mono'>{prettyKeys(shortcutFor('textBigger'))}</span>{' '}
+					and{' '}
+					<span className='font-mono'>{prettyKeys(shortcutFor('textSmaller'))}</span>;{' '}
+					<span className='font-mono'>{prettyKeys(shortcutFor('textReset'))}</span>{' '}
+					is 100%.
 				</p>
 				<TextStep {...{ scale, onScale: setScale }} />
 			</div>
@@ -892,8 +915,10 @@ const ServersPanel = ({
 				</p>
 				{!servers.hasSsh && (
 					<p className='text-13 text-danger mb-3'>
-						No <code>ssh</code> client on PATH. Windows ships one under Settings
-						› Apps › Optional features › OpenSSH Client.
+						No <code>ssh</code> client on PATH.{' '}
+						{isMac
+							? 'macOS ships one at /usr/bin/ssh, so something has stripped PATH.'
+							: 'Windows ships one under Settings › Apps › Optional features › OpenSSH Client.'}
 					</p>
 				)}
 				{servers.servers.length === 0 ? (
@@ -1027,7 +1052,7 @@ const Settings = ({
 		},
 		{
 			id: 'tmux',
-			label: 'tmux / psmux',
+			label: isMac ? 'tmux' : 'tmux / psmux',
 			render: () => <TmuxPanel {...{ onError }} />
 		},
 		{
