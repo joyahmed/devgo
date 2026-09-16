@@ -1,5 +1,6 @@
 use std::process::Command;
 
+#[cfg(windows)]
 use super::platform::Quiet;
 use super::platform::RuntimeInfo;
 use super::preferences::TmuxConfig;
@@ -42,11 +43,14 @@ fn distro_from_project(
 ///
 /// `Command::args` re-quotes anything containing spaces, which turns
 /// `--folder-uri vscode-remote://…` into a single quoted argument and breaks
-/// it. `shell_line` (`raw_arg` on Windows, `platform::Quiet`) hands the
-/// string to Windows verbatim, so the target's own `args_template` is the
-/// only thing deciding how it is split.
-fn spawn_raw(exe: &str, args: &str) -> Result<(), AppError> {
-    // the process spawned below is cmd.exe, which always exists, so a
+/// it. So the line goes through a shell that does the splitting the
+/// template intended: `cmd /c` on Windows (`shell_line` hands the string
+/// over verbatim), `sh -c` on a Mac. Either way the target's own
+/// `args_template` is the only thing deciding how it is split. pub(crate)
+/// because commands.rs launches a remote editor the same way and must not
+/// keep its own copy of the shell choice.
+pub(crate) fn spawn_raw(exe: &str, args: &str) -> Result<(), AppError> {
+    // the process spawned below is the shell, which always exists, so a
     // missing editor "launched" fine: a console flashed, Ok came back, and a
     // frecency launch was recorded. wsl is exempt: the program it runs lives
     // inside the distro, where a windows PATH lookup means nothing
@@ -54,12 +58,34 @@ fn spawn_raw(exe: &str, args: &str) -> Result<(), AppError> {
         return Err(AppError::TargetNotInstalled(exe.to_string()));
     }
 
-    let mut cmd = Command::new("cmd");
-    cmd.quiet().shell_line(format!("/c {exe} {args}"));
+    let mut cmd = shell_command(exe, args);
     scrub_agent_env(&mut cmd);
     cmd.spawn()
         .map_err(|e| AppError::LaunchFailed(format!("{exe}: {e}")))?;
     Ok(())
+}
+
+// the shell that splits a template's line on windows: cmd /c, the line
+// handed over verbatim through raw_arg
+#[cfg(windows)]
+fn shell_command(exe: &str, args: &str) -> Command {
+    let mut cmd = Command::new("cmd");
+    cmd.quiet().shell_line(format!("/c {exe} {args}"));
+    cmd
+}
+
+// the shell that splits a template's line on a mac: /bin/sh -c, with the
+// login-shell PATH in its environment, or code, zed and every nvm agent
+// are "not installed" from the dock. the template already double-quotes
+// {path}, so the string that works under cmd works under sh; the exe is
+// single-quoted because it may be a path inside a bundle, and a bundle
+// name can carry a space
+#[cfg(not(windows))]
+fn shell_command(exe: &str, args: &str) -> Command {
+    let mut cmd = Command::new("/bin/sh");
+    cmd.arg("-c").arg(format!("{} {args}", sh_quote(exe)));
+    super::platform::with_login_path(&mut cmd);
+    cmd
 }
 
 // what an agent's tool shell sets so its own commands stay plain and
@@ -492,12 +518,77 @@ mod tests {
         )
     }
 
+    // a windows project, because psmux only enters the picture for those
+    #[cfg(windows)]
     fn windows_project(name: &str, workspace: &str) -> Project {
         Project::new(
             name.into(),
             format!(r"G:\{workspace}\{name}"),
             format!(r"G:\{workspace}"),
             "Windows".into(),
+        )
+    }
+
+    // every test that really spawns needs a program that certainly exists
+    // and can be told to exit, or to echo a substituted argument into a
+    // marker file: cmd on windows, sh elsewhere. written once against
+    // these, so each proves the same thing on both platforms
+    #[cfg(windows)]
+    const SHELL: &str = "cmd";
+    #[cfg(not(windows))]
+    const SHELL: &str = "sh";
+
+    // runs the shell and exits, with the suffix on the line: on windows
+    // exit ignores what follows, on unix it lands in $0 and is ignored too
+    #[cfg(windows)]
+    fn shell_exit(suffix: &str) -> String {
+        format!("/c exit{suffix}")
+    }
+    #[cfg(not(windows))]
+    fn shell_exit(suffix: &str) -> String {
+        format!("-c exit{suffix}")
+    }
+
+    // echoes `what` (a placeholder, so the launcher fills it in) into
+    // marker. three arguments plus a redirect on windows; on unix one -c
+    // string the template itself quotes, which sh -c must not re-quote
+    #[cfg(windows)]
+    fn shell_echo_to(what: &str, marker: &std::path::Path) -> String {
+        format!("/c echo {what} > \"{}\"", marker.display())
+    }
+    #[cfg(not(windows))]
+    fn shell_echo_to(what: &str, marker: &std::path::Path) -> String {
+        format!("-c \"echo {what} > '{}'\"", marker.display())
+    }
+
+    // dumps the child's environment into marker
+    #[cfg(windows)]
+    fn shell_dump_env(marker: &std::path::Path) -> String {
+        format!("/c set > \"{}\"", marker.display())
+    }
+    #[cfg(not(windows))]
+    fn shell_dump_env(marker: &std::path::Path) -> String {
+        format!("-c \"env > '{}'\"", marker.display())
+    }
+
+    // a local path spelled the way this platform spells one
+    #[cfg(windows)]
+    fn local_path(rest: &str) -> String {
+        format!(r"G:\{}", rest.replace('/', r"\"))
+    }
+    #[cfg(not(windows))]
+    fn local_path(rest: &str) -> String {
+        format!("/Users/joy/{rest}")
+    }
+
+    // a project on this platform's local filesystem, for the tests that
+    // really launch and look at what the process was handed
+    fn local_project(name: &str, workspace: &str) -> Project {
+        Project::new(
+            name.into(),
+            local_path(&format!("{workspace}/{name}")),
+            local_path(workspace),
+            crate::services::scanner::LOCAL_FS.into(),
         )
     }
 
@@ -575,13 +666,10 @@ mod tests {
             id: "echo-script".into(),
             name: "Echo Script".into(),
             kind: TargetKind::Terminal,
-            executable: "cmd".into(),
-            args_template: "/c exit".into(),
+            executable: SHELL.into(),
+            args_template: shell_exit(""),
             wsl_executable: None,
-            wsl_args_template: Some(format!(
-                "/c echo {{script}} > \"{}\"",
-                marker.display()
-            )),
+            wsl_args_template: Some(shell_echo_to("{script}", &marker)),
             run_args_template: None,
             wsl_run_args_template: None,
         };
@@ -614,10 +702,10 @@ mod tests {
             id: "plain".into(),
             name: "Plain".into(),
             kind: TargetKind::Terminal,
-            executable: "cmd".into(),
-            args_template: "/c exit".into(),
+            executable: SHELL.into(),
+            args_template: shell_exit(""),
             wsl_executable: None,
-            wsl_args_template: Some("/c exit".into()),
+            wsl_args_template: Some(shell_exit("")),
             run_args_template: None,
             wsl_run_args_template: None,
         };
@@ -776,10 +864,10 @@ mod tests {
             id: "tmux-term".into(),
             name: "tmux Terminal".into(),
             kind: TargetKind::Terminal,
-            executable: "cmd".into(),
-            args_template: "/c exit".into(),
+            executable: SHELL.into(),
+            args_template: shell_exit(""),
             wsl_executable: None,
-            wsl_args_template: Some("/c exit {script}".into()),
+            wsl_args_template: Some(shell_exit(" {script}")),
             run_args_template: None,
             wsl_run_args_template: None,
         };
@@ -1129,6 +1217,7 @@ mod tests {
 
     /// The other half of the {script} contract, on the Windows side: a .ps1,
     /// its Windows path, no conversion.
+    #[cfg(windows)]
     #[test]
     fn the_script_placeholder_is_substituted_for_a_windows_project_too() {
         let marker =
@@ -1204,20 +1293,20 @@ mod tests {
             id: "dump-env".into(),
             name: "Dump Env".into(),
             kind: TargetKind::Terminal,
-            executable: "cmd".into(),
-            args_template: format!("/c set > \"{}\"", marker.display()),
+            executable: SHELL.into(),
+            args_template: shell_dump_env(&marker),
             wsl_executable: None,
             wsl_args_template: None,
             run_args_template: None,
             wsl_run_args_template: None,
         };
-        let project = windows_project("env-scrub", "work");
+        let project = local_project("env-scrub", "work");
         launch_target(&dumps, &project, &no_distro(), &tmux_with(&[])).unwrap();
 
-        // set prints sorted; windir is one of the last lines
+        // the kept marker is the last thing set; wait for it, not for bytes
         let read = || std::fs::read_to_string(&marker).unwrap_or_default();
         for _ in 0..40 {
-            if read().to_lowercase().contains("windir=") {
+            if read().contains("DEVGO_PROOF_KEPT=1") {
                 break;
             }
             std::thread::sleep(std::time::Duration::from_millis(50));
@@ -1234,7 +1323,7 @@ mod tests {
     // it fails the day someone reaches for env_clear
     #[test]
     fn the_scrub_removes_the_agent_shells_conveniences_and_its_markers() {
-        let mut cmd = Command::new("cmd");
+        let mut cmd = Command::new(SHELL);
         scrub_agent_env(&mut cmd);
         let removed: Vec<String> = cmd
             .get_envs()
@@ -1252,7 +1341,7 @@ mod tests {
     /// now that the arm is real, no placeholder still has to mean no file.
     #[test]
     fn a_windows_terminal_template_without_the_placeholder_writes_no_script() {
-        let project = windows_project("orphan-check", "work");
+        let project = local_project("orphan-check", "work");
         let script_path = std::env::temp_dir()
             .join(format!("devgo-{}.ps1", tmux_session_name(&project)));
         let _ = std::fs::remove_file(&script_path);
@@ -1260,8 +1349,8 @@ mod tests {
             id: "plain".into(),
             name: "Plain".into(),
             kind: TargetKind::Terminal,
-            executable: "cmd".into(),
-            args_template: "/c exit".into(),
+            executable: SHELL.into(),
+            args_template: shell_exit(""),
             wsl_executable: None,
             wsl_args_template: None,
             run_args_template: None,
@@ -1312,22 +1401,11 @@ mod tests {
             run_args_template: None,
             wsl_run_args_template: None,
         };
-        let project = Project::new(
-            "proj".into(),
-            r"G:\some\project".into(),
-            r"G:\some".into(),
-            "Windows".into(),
-        );
-        let info = RuntimeInfo {
-            runtime: crate::services::platform::runtime::Runtime::Windows,
-            wsl_available: false,
-            distros: vec![],
-            default_distro: None,
-            local_fs: crate::services::scanner::LOCAL_FS,
-        };
+        let project = local_project("project", "some");
 
-        let err = launch_target(&ghost, &project, &info, &tmux_with(&[]))
-            .unwrap_err();
+        let err =
+            launch_target(&ghost, &project, &no_distro(), &tmux_with(&[]))
+                .unwrap_err();
         assert!(
             matches!(err, AppError::TargetNotInstalled(ref e) if e == "devgo-no-such-editor"),
             "expected TargetNotInstalled, got {err:?}"
@@ -1348,34 +1426,20 @@ mod tests {
             id: "proof".into(),
             name: "Proof".into(),
             kind: TargetKind::Editor,
-            executable: "cmd".into(),
+            executable: SHELL.into(),
             // Three separate arguments plus a redirect: exactly the shape that
             // breaks under re-quoting.
-            args_template: format!(
-                "/c echo {{path}} > \"{}\"",
-                marker.display()
-            ),
+            args_template: shell_echo_to("{path}", &marker),
             wsl_executable: None,
             wsl_args_template: None,
             run_args_template: None,
             wsl_run_args_template: None,
         };
 
-        let project = Project::new(
-            "proof".into(),
-            r"G:\some\project".into(),
-            r"G:\some".into(),
-            "Windows".into(),
-        );
-        let info = RuntimeInfo {
-            runtime: crate::services::platform::runtime::Runtime::Windows,
-            wsl_available: false,
-            distros: vec![],
-            default_distro: None,
-            local_fs: crate::services::scanner::LOCAL_FS,
-        };
+        let project = local_project("project", "some");
 
-        launch_target(&target, &project, &info, &tmux_with(&[])).unwrap();
+        launch_target(&target, &project, &no_distro(), &tmux_with(&[]))
+            .unwrap();
 
         // The spawn is async; give the child a moment to finish writing. The
         // redirect creates the file before echo runs, so wait for bytes, not
@@ -1391,7 +1455,7 @@ mod tests {
         let written =
             std::fs::read_to_string(&marker).expect("target never ran");
         assert!(
-            written.contains(r"G:\some\project"),
+            written.contains(&local_path("some/project")),
             "template did not survive into the process: {written:?}"
         );
         let _ = std::fs::remove_file(&marker);

@@ -34,9 +34,11 @@ pub trait Quiet {
     // one argument handed to the os verbatim. arg re-quotes anything with
     // a space, which turns --folder-uri vscode-remote://… into one quoted
     // argument and breaks it; raw_arg passes the line through and the
-    // target's own template decides the split. every caller today is a
-    // cmd /c line, which means nothing off windows: there this is a plain
-    // arg, so the crate compiles, and the mac gets its own doors later
+    // target's own template decides the split. every caller is a cmd /c
+    // line, which means nothing off windows: there this is a plain arg,
+    // so the crate compiles, and since the launcher has its own sh -c
+    // door nothing off windows calls it at all, hence the allow
+    #[cfg_attr(not(windows), allow(dead_code))]
     fn shell_line(&mut self, line: impl AsRef<OsStr>) -> &mut Self;
 }
 
