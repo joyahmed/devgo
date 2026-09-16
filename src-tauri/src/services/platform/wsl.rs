@@ -1,4 +1,11 @@
+// off windows there is no wsl.exe and nothing here may go looking for
+// one: the three functions that spawn it (run, probe_lines,
+// run_with_timeout) each have a not(windows) twin that answers nothing
+// without touching a process. every public function sits above one of
+// the three, so the seam is at the bottom and the callers are not cfg'd
+#[cfg(windows)]
 use super::Quiet;
+#[cfg(windows)]
 use std::process::Command;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
@@ -8,7 +15,7 @@ use std::time::{Duration, Instant};
 /// `WSL_UTF8=1` makes wsl.exe emit UTF-8. Without it the default is UTF-16LE,
 /// and decoding that as UTF-8 turns "Ubuntu-26.04" into
 /// "U\0b\0u\0n\0t\0u\0-\02\06\0.\00\04\0" — see `decode`.
-
+#[cfg(windows)]
 fn wsl_command() -> Command {
     let mut cmd = Command::new("wsl");
     cmd.quiet();
@@ -20,7 +27,9 @@ fn wsl_command() -> Command {
 /// UTF-16LE. Sniff the buffer instead of trusting the env var: interior NUL
 /// bytes never occur in this command's UTF-8 output, but appear in every other
 /// byte of ASCII-range UTF-16LE.
-
+// off windows only the tests reach it; the bytes it decodes are tested
+// on every platform
+#[cfg_attr(not(windows), allow(dead_code))]
 fn decode(bytes: &[u8]) -> String {
     if bytes.contains(&0) {
         let units: Vec<u16> = bytes
@@ -40,6 +49,7 @@ fn clean(line: &str) -> &str {
     line.trim_matches(|c: char| c.is_whitespace() || c == '\0')
 }
 
+#[cfg(windows)]
 fn run(args: &[&str]) -> Option<String> {
     let output = wsl_command().args(args).output().ok()?;
     if output.status.success() {
@@ -47,6 +57,12 @@ fn run(args: &[&str]) -> Option<String> {
     } else {
         None
     }
+}
+
+// no wsl.exe to ask: the answer a failed spawn gives on windows
+#[cfg(not(windows))]
+fn run(_args: &[&str]) -> Option<String> {
+    None
 }
 
 fn parse_list(text: &str) -> Vec<String> {
@@ -57,6 +73,10 @@ fn parse_list(text: &str) -> Vec<String> {
         .collect()
 }
 
+// a mac's detect_runtime is a constant and never asks, so these two have
+// no caller there; they stay so the stubs beneath them are exercised by
+// the same tests on every platform
+#[cfg_attr(target_os = "macos", allow(dead_code))]
 pub fn list_distros() -> Vec<String> {
     run(&["-l", "-q"])
         .as_deref()
@@ -68,7 +88,7 @@ pub fn list_distros() -> Vec<String> {
 /// display language. Parsing `wsl --status` for the literal
 /// "Default Distribution:" is localized and never matches on a non-English
 /// install.
-
+#[cfg_attr(target_os = "macos", allow(dead_code))]
 pub fn default_distro() -> Option<String> {
     if let Some(text) = run(&["-l", "-v"]) {
         for line in text.lines() {
@@ -157,6 +177,7 @@ pub(crate) fn refresh_running() -> Vec<String> {
 /// status of its last iteration: a missing last candidate makes the whole
 /// probe "fail" after printing perfectly good output. A spawn failure is an
 /// empty vec too, which is the honest answer for optional discovery.
+#[cfg(windows)]
 pub fn probe_lines(distro: &str, script: &str) -> Vec<String> {
     let Ok(out) = wsl_command()
         .args(["-d", distro, "-e", "bash", "-lc", script])
@@ -165,6 +186,12 @@ pub fn probe_lines(distro: &str, script: &str) -> Vec<String> {
         return Vec::new();
     };
     parse_list(&decode(&out.stdout))
+}
+
+// no distro can exist here, so no script runs: nothing matched
+#[cfg(not(windows))]
+pub fn probe_lines(_distro: &str, _script: &str) -> Vec<String> {
+    Vec::new()
 }
 
 pub fn is_running(distro: &str, running: &[String]) -> bool {
@@ -255,6 +282,20 @@ mod tests {
         let e = entry(now + Duration::from_secs(1));
         assert!(memo_hit(Some(&e), now, Duration::from_secs(5)).is_some());
     }
+
+    // every public entry point answers nothing from the stubs: no
+    // distros, no lines, and a stop is an error, not a fake success
+    #[cfg(not(windows))]
+    #[test]
+    fn off_windows_every_answer_is_nothing() {
+        assert!(list_distros().is_empty());
+        assert_eq!(default_distro(), None);
+        assert!(running_distros().is_empty());
+        assert!(running_distros_memo().is_empty());
+        assert!(probe_lines("Ubuntu-26.04", "echo hi").is_empty());
+        assert!(terminate("Ubuntu-26.04").is_err());
+        assert!(shutdown_all().is_err());
+    }
 }
 
 /// How long to wait for a stop command before giving up on it.
@@ -264,6 +305,7 @@ mod tests {
 /// WSLService stops answering — this machine's System log carries five
 /// 30-second WSLService transaction timeouts. Without a bound, the command that
 /// fixes the hang would itself hang, taking DevGo with it.
+#[cfg(windows)]
 const STOP_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(20);
 
 pub enum StopOutcome {
@@ -275,6 +317,14 @@ pub enum StopOutcome {
     TimedOut,
 }
 
+// off windows a stop is an error, not a silent stopped: a stop request
+// that reaches here on a mac is a bug in whoever showed the control
+#[cfg(not(windows))]
+fn run_with_timeout(_args: &[&str]) -> Result<bool, String> {
+    Err("WSL does not exist on this platform".to_string())
+}
+
+#[cfg(windows)]
 fn run_with_timeout(args: &[&str]) -> Result<bool, String> {
     let mut child = wsl_command()
         .args(args)

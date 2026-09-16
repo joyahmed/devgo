@@ -19,6 +19,20 @@ fn local_fs() -> &'static str {
     LOCAL_FS
 }
 
+// a mac has one filesystem and no wsl: the answer is a constant, and
+// nothing here spawns wsl. not "ask list_distros and let it come back
+// empty": that is a spawn per detection for a binary that cannot exist
+#[cfg(target_os = "macos")]
+pub fn detect_runtime() -> RuntimeInfo {
+    RuntimeInfo {
+        runtime: Runtime::MacOs,
+        wsl_available: false,
+        distros: vec![],
+        default_distro: None,
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
 pub fn detect_runtime() -> RuntimeInfo {
     let is_wsl = std::env::var("WSL_DISTRO_NAME").is_ok();
 
@@ -68,5 +82,19 @@ mod tests {
         let back: RuntimeInfo = serde_json::from_str(&foreign).unwrap();
         assert_eq!(back.local_fs, LOCAL_FS);
         assert_eq!(back.distros, vec!["Ubuntu"]);
+    }
+}
+
+#[cfg(all(test, target_os = "macos"))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_mac_has_no_second_filesystem() {
+        let info = detect_runtime();
+        assert!(matches!(info.runtime, Runtime::MacOs));
+        assert!(!info.wsl_available);
+        assert!(info.distros.is_empty());
+        assert_eq!(info.default_distro, None);
     }
 }
