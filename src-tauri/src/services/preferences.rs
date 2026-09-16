@@ -9,6 +9,15 @@ use crate::models::target::TargetKind;
 
 pub const DEFAULT_SUMMON_HOTKEY: &str = "Ctrl+Alt+Space";
 
+// past 60% see-through the text sits on whatever window is behind devgo
+// with only the blur between them, and the contrast gate, which measures
+// ink on the opaque token, has nothing left to say
+pub const MAX_TRANSPARENCY: u8 = 60;
+
+pub fn clamp_transparency(percent: u8) -> u8 {
+    percent.min(MAX_TRANSPARENCY)
+}
+
 /// How often and how recently a project has been launched.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ProjectStat {
@@ -184,6 +193,11 @@ pub struct Preferences {
     /// call, and it is opted into, never inherited by an upgrade.
     #[serde(default)]
     pub github_live_search: bool,
+    /// How see-through the window is, 0 to MAX_TRANSPARENCY percent. 0,
+    /// the serde default so every prefs.json before this field stays
+    /// opaque, applies no effect at all: no acrylic, no compositing cost.
+    #[serde(default)]
+    pub window_transparency: u8,
 }
 
 // bare names, not globs: a cheap comparison on the listing the scan already has
