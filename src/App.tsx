@@ -133,7 +133,8 @@ const AppInner = () => {
 		openEditor,
 		openTerminal,
 		openAgent,
-		openBoth
+		openBoth,
+		openServer: launchServer
 	} = useLaunchActions(selected, refresh);
 	// the github group. reads its cache on mount and re-reads after every
 	// pass (the list and the badges are its dependencies) so the local
@@ -817,10 +818,59 @@ const AppInner = () => {
 	const [serverForm, setServerForm] = useState<{ initial?: Server } | null>(
 		null
 	);
-	const openServer = (s: Server) =>
-		invoke('open_server', { id: s.id, targetId: null }).catch(e =>
-			toast(showError(e))
-		);
+	// the server under the cursor, by id: a toggle reloads the list and
+	// the row object with it
+	const [serverCursorId, setServerCursorId] = useState<string | null>(null);
+	const serverSel = servers.servers.find(s => s.id === serverCursorId) ?? null;
+	// the local hosts a server row offers: every terminal target, then a
+	// psmux session and the default distro's own ssh, both through the
+	// default terminal. wsl is blocked with the reason and never booted
+	const distro = runtime.default_distro;
+	const wslBlocked = isMac
+		? 'No WSL on a Mac'
+		: !runtime.wsl_available || !distro
+			? 'No WSL distro on this machine'
+			: !wsl.distros.some(d => d.toLowerCase() === distro.toLowerCase())
+				? `${distro} is not running`
+				: undefined;
+	const serverHosts: ServerHost[] = [
+		...targets.terminals.map(t => ({ id: t.id, name: t.name, targetId: t.id })),
+		...(isMac
+			? []
+			: [
+					{
+						id: 'psmux',
+						name: 'psmux',
+						via: 'psmux' as const,
+						title: 'A psmux session on this PC whose window runs the ssh line'
+					},
+					{
+						id: 'wsl',
+						name: 'WSL',
+						via: 'wsl' as const,
+						title: `ssh from inside ${distro ?? 'the default distro'}, with its own keys`,
+						blocked: wslBlocked
+					}
+				])
+	];
+	// no host is the default terminal, the row's enter
+	const openServer = (s: Server, host?: ServerHost) => {
+		flash('terminal', s.id);
+		launchServer(s, host).catch(e => toast(showError(e)));
+	};
+	// the remote half: the server's own flag, so it holds across launches
+	const setServerTmux = (s: Server, on: boolean) =>
+		servers
+			.update({ ...s, tmux: on })
+			.then(() =>
+				toast(
+					on
+						? `${s.name}: a tmux session on the box from now on`
+						: `${s.name}: a plain shell on the box from now on`,
+					'info'
+				)
+			)
+			.catch(e => toast(showError(e)));
 	const importSsh = () =>
 		servers
 			.importSshConfig()
@@ -877,7 +927,7 @@ const AppInner = () => {
 					toast(`Typed into ${out.window} on ${s.name}. Enter runs it`, 'success');
 				else if (out.kind === 'copied') {
 					await copyText(out.line, 'line');
-					await invoke('open_server', { id: s.id, targetId: null });
+					await launchServer(s);
 					toast(`${s.name} has no tmux. The line is copied; paste it in the terminal`, 'success');
 				} else if (out.kind === 'local')
 					toast(`${action.label}: running on this PC`, 'success');
@@ -2423,6 +2473,7 @@ const AppInner = () => {
 									setGroupHeaderMenu({ name, x, y }),
 								servers,
 								onServerOpen: openServer,
+								onServerCursor: (s: Server | null) => setServerCursorId(s?.id ?? null),
 								onServerContextMenu: (s: Server, x: number, y: number) =>
 									setServerMenu({ server: s, x, y }),
 								onServersAddMenu: (x: number, y: number) =>
@@ -2476,7 +2527,11 @@ const AppInner = () => {
 					onOpenShortcuts: () => openSettings('shortcuts'),
 					onOpenHelp: () => openSettings('help'),
 					reattach: selectedLive && tmuxOn,
-					pulse: launching?.kind ?? null
+					pulse: launching?.kind ?? null,
+					server: serverSel,
+					serverHosts,
+					onServerHost: (h: ServerHost) => serverSel && openServer(serverSel, h),
+					onServerTmux: setServerTmux
 				}}
 			/>
 		</div>
