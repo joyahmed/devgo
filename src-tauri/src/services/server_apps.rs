@@ -152,6 +152,42 @@ pub enum ActionKind {
     Pretype,
     Url,
     Local,
+    // a drawer of fields composes the line, then it goes the run way
+    Form,
+}
+
+// one field of a form action. a bool emits arg when on and arg_off when
+// off; a typed value emits arg when it differs from default; when hides
+// the field, and its requirement, until that other field says so;
+// prefill is a placeholder filled from the app row
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Field {
+    pub name: String,
+    #[serde(default)]
+    pub label: Option<String>,
+    // text | number | choice | bool
+    #[serde(rename = "type", default = "default_field_type")]
+    pub kind: String,
+    #[serde(default)]
+    pub required: bool,
+    #[serde(default)]
+    pub default: Option<String>,
+    #[serde(default)]
+    pub options: Vec<String>,
+    #[serde(default)]
+    pub prefill: Option<String>,
+    #[serde(default)]
+    pub when: Option<String>,
+    #[serde(default)]
+    pub arg: Option<String>,
+    #[serde(default)]
+    pub arg_off: Option<String>,
+    #[serde(default)]
+    pub hint: Option<String>,
+}
+
+fn default_field_type() -> String {
+    "text".into()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -163,6 +199,13 @@ pub struct Action {
     #[serde(default)]
     pub root: bool,
     pub command: String,
+    // form only: the fields, what preview appends, the word on the button
+    #[serde(default)]
+    pub fields: Vec<Field>,
+    #[serde(default)]
+    pub preview: Option<String>,
+    #[serde(default)]
+    pub submit: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
@@ -187,6 +230,12 @@ struct RawAction {
     #[serde(default)]
     root: bool,
     command: String,
+    #[serde(default)]
+    fields: Vec<Field>,
+    #[serde(default)]
+    preview: Option<String>,
+    #[serde(default)]
+    submit: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -212,6 +261,7 @@ pub fn parse_actions(text: &str) -> Result<Actions, String> {
                     "pretype" => ActionKind::Pretype,
                     "url" => ActionKind::Url,
                     "local" => ActionKind::Local,
+                    "form" => ActionKind::Form,
                     _ => return None,
                 };
                 Some(Action {
@@ -220,6 +270,9 @@ pub fn parse_actions(text: &str) -> Result<Actions, String> {
                     kind,
                     root: a.root,
                     command: a.command,
+                    fields: a.fields,
+                    preview: a.preview,
+                    submit: a.submit,
                 })
             })
             .collect()
@@ -272,6 +325,19 @@ pub fn placeholders(app: &App) -> HashMap<&'static str, Option<String>> {
         ("api_port", port(site.and_then(|s| s.api_port))),
         ("db", app.database.as_ref().and_then(|d| d.name.clone())),
         ("repo", app.git.as_ref().and_then(|g| g.repo.clone())),
+        // what the form's shape buttons call this app: the inventory says
+        // mono | next | node | other; the buttons say next nest node turbo
+        (
+            "site_type",
+            Some(
+                match app.kind.as_str() {
+                    "mono" => "turbo",
+                    "node" => "node",
+                    _ => "next",
+                }
+                .to_string(),
+            ),
+        ),
     ])
 }
 
@@ -414,6 +480,104 @@ pub fn check_local(line: &str) -> Result<(), String> {
     }
 }
 
+// a form value is a word. devgo never quotes for the remote shell (the
+// line is shown as typed and typed as shown), so a space, a quote or a
+// shell character is refused here, naming the field
+pub fn is_word(v: &str) -> bool {
+    !v.is_empty()
+        && v.chars()
+            .all(|c| c.is_ascii_alphanumeric() || "._@/:+=-".contains(c))
+}
+
+fn when_holds(when: &str, values: &HashMap<String, String>) -> bool {
+    match when.split_once('=') {
+        Some((k, v)) => values.get(k.trim()).is_some_and(|x| x == v.trim()),
+        None => values.get(when.trim()).is_some_and(|x| x == "true"),
+    }
+}
+
+// compose a form action's line from the user's values: every field
+// validated by type, {field} substituted, {flags} built by the rule, the
+// preview word appended when asked. what comes back may still carry
+// inventory {placeholders} for fill
+pub fn compose(
+    action: &Action,
+    values: &HashMap<String, String>,
+    preview: bool,
+) -> Result<String, String> {
+    // the user's value, else the default, else empty
+    let mut effective: HashMap<String, String> = HashMap::new();
+    for f in &action.fields {
+        let v = values
+            .get(&f.name)
+            .cloned()
+            .or_else(|| f.default.clone())
+            .unwrap_or_default();
+        effective.insert(f.name.clone(), v.trim().to_string());
+    }
+    let mut flags: Vec<String> = Vec::new();
+    for f in &action.fields {
+        let label = f.label.clone().unwrap_or_else(|| f.name.clone());
+        if f.when
+            .as_deref()
+            .is_some_and(|w| !when_holds(w, &effective))
+        {
+            continue;
+        }
+        let v = effective.get(&f.name).cloned().unwrap_or_default();
+        let default = f.default.clone().unwrap_or_default();
+        match f.kind.as_str() {
+            // a bool says its word whenever it is on or off, default or not:
+            // a regen form that opens with overwrite on must still send
+            // --force. only a typed value is compared to its default
+            "bool" => {
+                let a = if v == "true" { &f.arg } else { &f.arg_off };
+                if let Some(a) = a {
+                    flags.push(a.replace("{value}", &v));
+                }
+            }
+            kind => {
+                if v.is_empty() {
+                    if f.required {
+                        return Err(format!("{label} is required"));
+                    }
+                    continue;
+                }
+                if !is_word(&v) {
+                    return Err(format!(
+                        "{label}: letters, digits and . _ @ / : + = - only, no spaces or quotes"
+                    ));
+                }
+                if kind == "number" && v.parse::<u16>().is_err() {
+                    return Err(format!(
+                        "{label} must be a port number (1-65535)"
+                    ));
+                }
+                if kind == "choice" && !f.options.contains(&v) {
+                    return Err(format!(
+                        "{label} must be one of {}",
+                        f.options.join(" / ")
+                    ));
+                }
+                if let Some(a) = f.arg.as_ref().filter(|_| v != default) {
+                    flags.push(a.replace("{value}", &v));
+                }
+            }
+        }
+    }
+    let mut line = action.command.clone();
+    for (k, v) in &effective {
+        line = line.replace(&format!("{{{k}}}"), v);
+    }
+    line = line.replace("{flags}", &flags.join(" "));
+    if let Some(p) = action.preview.as_ref().filter(|_| preview) {
+        line.push(' ');
+        line.push_str(p);
+    }
+    // an empty {flags} leaves a double space behind
+    Ok(line.split_whitespace().collect::<Vec<_>>().join(" "))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -445,7 +609,7 @@ mod tests {
       "server": [
         {"id": "nginx-test", "label": "nginx -t", "kind": "run", "root": true, "command": "sudo nginx -t"},
         {"id": "new-site", "label": "New nginx site…", "kind": "pretype", "root": true, "command": "sudo ~/scripts/new-site.sh <app> <domain> <port> --dry-run"},
-        {"id": "future", "label": "From a newer schema", "kind": "form", "root": false, "command": "x"}
+        {"id": "future", "label": "From a newer schema", "kind": "wizard", "root": false, "command": "x"}
       ],
       "app": [
         {"id": "logs", "label": "Logs", "kind": "run", "root": false, "command": "pm2 logs {pm2} --lines 100"},
@@ -485,7 +649,11 @@ mod tests {
     #[test]
     fn an_unknown_action_kind_is_dropped_not_fatal() {
         let a = parse_actions(ACTIONS).unwrap();
-        assert_eq!(a.server.len(), 2, "the form kind belongs to a later stage");
+        assert_eq!(
+            a.server.len(),
+            2,
+            "a kind this build does not know is dropped"
+        );
         assert_eq!(a.server[1].kind, ActionKind::Pretype);
         assert!(a.server[0].root);
         assert_eq!(a.app.len(), 5);
@@ -606,5 +774,178 @@ mod tests {
         let err = check_local("ssh -N zetta-db && echo done").unwrap_err();
         assert!(err.contains("`&`"), "{err}");
         assert!(check_local("a | b").is_err());
+    }
+
+    fn new_site() -> Action {
+        let text = r#"{ "schema": 2, "server": [{ "id": "new-site", "label": "New nginx site…", "kind": "form", "root": true,
+          "command": "sudo ~/scripts/new-site.sh {app} {domain} {port} {flags}", "preview": "--dry-run", "submit": "Create",
+          "fields": [
+            {"name": "app", "label": "App name", "required": true},
+            {"name": "domain", "label": "Domain", "required": true},
+            {"name": "port", "label": "Port", "type": "number", "required": true},
+            {"name": "type", "label": "Shape", "type": "choice", "options": ["next", "nest", "node", "turbo"], "default": "next", "arg": "--type {value}"},
+            {"name": "api_port", "label": "API port", "type": "number", "when": "type=turbo", "required": true, "arg": "--api-port {value}"},
+            {"name": "www", "label": "Add www.", "type": "bool", "default": "true", "arg_off": "--no-www"},
+            {"name": "ssl", "label": "HTTPS", "type": "bool", "default": "true", "arg_off": "--no-ssl"},
+            {"name": "force", "label": "Overwrite", "type": "bool", "default": "false", "arg": "--force"}
+          ] }] }"#;
+        parse_actions(text).unwrap().server.remove(0)
+    }
+
+    fn vals(pairs: &[(&str, &str)]) -> HashMap<String, String> {
+        pairs
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect()
+    }
+
+    #[test]
+    fn a_form_composes_by_the_differs_from_default_rule() {
+        let a = new_site();
+        assert_eq!(a.kind, ActionKind::Form);
+        assert_eq!(a.fields.len(), 8);
+        let plain = vals(&[
+            ("app", "shop"),
+            ("domain", "shop.zettademos.com"),
+            ("port", "3025"),
+        ]);
+        assert_eq!(
+            compose(&a, &plain, false).unwrap(),
+            "sudo ~/scripts/new-site.sh shop shop.zettademos.com 3025",
+            "next is the default, so no --type; www and ssl on carry no arg"
+        );
+        // a bool that defaults on still says its word
+        let mut regen = a.clone();
+        for f in &mut regen.fields {
+            if f.name == "force" {
+                f.default = Some("true".into());
+            }
+        }
+        let line = compose(&regen, &plain, false).unwrap();
+        assert!(line.ends_with("3025 --force"), "{line}");
+        let turbo = vals(&[
+            ("app", "portal"),
+            ("domain", "portal.x.com"),
+            ("port", "3027"),
+            ("type", "turbo"),
+            ("api_port", "3028"),
+            ("www", "false"),
+        ]);
+        assert_eq!(
+            compose(&a, &turbo, true).unwrap(),
+            "sudo ~/scripts/new-site.sh portal portal.x.com 3027 --type turbo --api-port 3028 --no-www --dry-run"
+        );
+        let nest = vals(&[
+            ("app", "b"),
+            ("domain", "b.io"),
+            ("port", "3026"),
+            ("type", "nest"),
+            ("force", "true"),
+        ]);
+        assert_eq!(
+            compose(&a, &nest, false).unwrap(),
+            "sudo ~/scripts/new-site.sh b b.io 3026 --type nest --force"
+        );
+    }
+
+    #[test]
+    fn a_form_refuses_what_is_not_a_word_and_names_the_field() {
+        let a = new_site();
+        let err = compose(
+            &a,
+            &vals(&[
+                ("app", "shop; rm -rf /"),
+                ("domain", "d.io"),
+                ("port", "1"),
+            ]),
+            false,
+        )
+        .unwrap_err();
+        assert!(err.starts_with("App name:"), "{err}");
+        let err = compose(
+            &a,
+            &vals(&[("app", "shop"), ("domain", "d.io"), ("port", "80000")]),
+            false,
+        )
+        .unwrap_err();
+        assert!(err.contains("Port"), "{err}");
+        let err = compose(
+            &a,
+            &vals(&[
+                ("app", "shop"),
+                ("domain", "d.io"),
+                ("port", "3000"),
+                ("type", "turbo"),
+            ]),
+            false,
+        )
+        .unwrap_err();
+        assert_eq!(
+            err, "API port is required",
+            "the when-field is required once type=turbo"
+        );
+        let ok = compose(
+            &a,
+            &vals(&[
+                ("app", "shop"),
+                ("domain", "d.io"),
+                ("port", "3000"),
+                ("api_port", "9"),
+            ]),
+            false,
+        )
+        .unwrap();
+        assert!(
+            !ok.contains("--api-port"),
+            "hidden by when, so ignored: {ok}"
+        );
+        let err =
+            compose(&a, &vals(&[("domain", "d.io"), ("port", "3000")]), false)
+                .unwrap_err();
+        assert!(err.contains("App name is required"));
+        let err = compose(
+            &a,
+            &vals(&[
+                ("app", "a"),
+                ("domain", "d.io"),
+                ("port", "3000"),
+                ("type", "php"),
+            ]),
+            false,
+        )
+        .unwrap_err();
+        assert!(err.contains("one of next / nest / node / turbo"));
+    }
+
+    #[test]
+    fn site_type_speaks_new_site_sh() {
+        let i = inv();
+        assert_eq!(
+            placeholders(&i.apps[0])["site_type"].as_deref(),
+            Some("turbo")
+        );
+        assert_eq!(
+            placeholders(&i.apps[2])["site_type"].as_deref(),
+            Some("node")
+        );
+        // a regen form: fields prefilled by the caller, {dir} left for fill
+        let a = Action {
+            command: "sudo ~/scripts/new-site.sh {app} {domain} {port} --path {dir} {flags}".into(),
+            ..new_site()
+        };
+        let v = vals(&[
+            ("app", "erp"),
+            ("domain", "hrm.zettabyteincorp.com"),
+            ("port", "3008"),
+            ("type", "turbo"),
+            ("api_port", "3009"),
+            ("force", "true"),
+        ]);
+        let line = compose(&a, &v, true).unwrap();
+        assert_eq!(line, "sudo ~/scripts/new-site.sh erp hrm.zettabyteincorp.com 3008 --path {dir} --type turbo --api-port 3009 --force --dry-run");
+        assert_eq!(
+            fill(&line, &placeholders(&i.apps[0])).unwrap(),
+            "sudo ~/scripts/new-site.sh erp hrm.zettabyteincorp.com 3008 --path /var/www/erp --type turbo --api-port 3009 --force --dry-run"
+        );
     }
 }
