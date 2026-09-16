@@ -514,6 +514,15 @@ interface WorkspaceManagerProps {
 
 /// A settings section. Later chapters add panels by adding to the registry in
 /// Settings.tsx — the shell itself never changes.
+interface HelpSectionProps {
+	title: string;
+	children: React.ReactNode;
+}
+
+interface HelpPanelProps {
+	onError: (message: string) => void;
+}
+
 interface SettingsPanel {
 	id: string;
 	label: string;

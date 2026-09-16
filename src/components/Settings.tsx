@@ -7,6 +7,7 @@ import { applyTextScale, savedTextScale, stepTextScale, TEXT_STEPS } from '../te
 import { savedThemeId, setTheme, THEMES } from '../themes';
 import Button from './Button';
 import Drawer from './Drawer';
+import HelpPanel from './HelpPanel';
 import Kbd from './Kbd';
 import TargetManager from './TargetManager';
 import WorkspaceManager from './WorkspaceManager';
@@ -809,7 +810,8 @@ const Settings = ({
 			id: 'config',
 			label: 'Config',
 			render: () => <ConfigPanel {...{ onChanged: onImported, onError }} />
-		}
+		},
+		{ id: 'help', label: 'Help', render: () => <HelpPanel {...{ onError }} /> }
 	];
 
 	const [active, setActive] = useState(
