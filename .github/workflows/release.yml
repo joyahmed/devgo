@@ -1,0 +1,43 @@
+# a v* tag builds the installers and drafts the github release; joy
+# publishes the draft. run workflow from a tag does the same by hand.
+# unsigned on both platforms on purpose: there is no certificate, and
+# the readme tells the user what the os will say.
+name: release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+
+jobs:
+  windows:
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - run: bun install --frozen-lockfile
+      - run: bun run build
+      # the launcher tests share temp names; a second pass on one thread
+      # tells a race from a failure
+      - run: cargo test --manifest-path src-tauri/Cargo.toml || cargo test --manifest-path src-tauri/Cargo.toml -- --test-threads=1
+        shell: bash
+      - uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: DevGo ${{ github.ref_name }}
+          releaseDraft: true
+          prerelease: false
+          args: --bundles nsis
