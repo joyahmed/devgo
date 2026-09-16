@@ -141,9 +141,13 @@ const AppInner = () => {
 	};
 	useEffect(refreshDistros, [workspaceStates]);
 
-	// One dialog, two destructive actions with two different sentences: the
-	// popover asks App to confirm, and App renders the question.
+	// One dialog, three destructive actions with three different sentences:
+	// the popover asks App to confirm, and App renders the question. the
+	// title and the verb are the action's; the wsl ones were the only ones
+	// until the session kill, and they sat in the dialog itself
 	const [confirmAction, setConfirmAction] = useState<{
+		title?: string;
+		confirmLabel?: string;
 		message: string;
 		run: () => void;
 	} | null>(null);
@@ -826,6 +830,8 @@ const AppInner = () => {
 				run: () =>
 					p &&
 					setConfirmAction({
+						title: 'Kill session',
+						confirmLabel: 'Kill',
 						message: `Kill the session for ${p.name}? Every window in it closes.`,
 						run: () =>
 							invoke('kill_session', { project: p })
@@ -1465,9 +1471,9 @@ const AppInner = () => {
 			<ConfirmDialog
 				{...{
 					open: confirmAction !== null,
-					title: 'Stop WSL',
+					title: confirmAction?.title ?? 'Stop WSL',
 					message: confirmAction?.message ?? '',
-					confirmLabel: 'Stop',
+					confirmLabel: confirmAction?.confirmLabel ?? 'Stop',
 					onConfirm: () => {
 						confirmAction?.run();
 						setConfirmAction(null);
