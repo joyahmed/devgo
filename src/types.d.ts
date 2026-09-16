@@ -191,7 +191,88 @@ interface ServerListing {
 	listed_at: number;
 	up: boolean;
 	error: string | null;
+	/// the apps on the box, from ~/scripts/devgo-inventory.sh; null when
+	/// the box has no such script
+	inventory: ServerInventory | null;
+	/// the actions the server declares, from devgo-actions.json beside it
+	actions: ServerActions | null;
+	inventory_error: string | null;
 }
+
+/// one app on a server: a /var/www/<name> with what runs it and what
+/// fronts it. every field but name and dir may be empty on a bare deploy
+interface ServerApp {
+	name: string;
+	dir: string;
+	kind: string;
+	processes: {
+		pm2: string | null;
+		status: string | null;
+		restarts: number;
+		uptime: number | null;
+		cwd: string | null;
+		ports: number[];
+		memory_mb: number;
+	}[];
+	site: {
+		file: string;
+		domains: string[];
+		ssl: boolean;
+		web_port: number | null;
+		api_port: number | null;
+	} | null;
+	git: {
+		repo: string | null;
+		branch: string | null;
+		head: string | null;
+		subject: string | null;
+	} | null;
+	env_files: string[];
+	database: { engine: string | null; name: string | null } | null;
+}
+
+interface ServerInventory {
+	schema: number;
+	generated: string | null;
+	host: {
+		hostname: string | null;
+		uptime: number | null;
+		load: number[];
+		disk: { total_gb: number; free_gb: number } | null;
+		pm2_total: number;
+		pm2_online: number;
+		nginx_sites: number;
+	};
+	apps: ServerApp[];
+}
+
+/// run types the line and presses enter; pretype leaves it on the prompt;
+/// url opens the browser; local runs on this pc
+type ServerActionKind = 'run' | 'pretype' | 'url' | 'local';
+
+interface ServerAction {
+	id: string;
+	label: string;
+	kind: ServerActionKind;
+	/// the line starts with sudo; the window will ask
+	root: boolean;
+	command: string;
+}
+
+interface ServerActions {
+	schema: number;
+	scripts_dir: string | null;
+	server: ServerAction[];
+	app: ServerAction[];
+}
+
+/// what run_server_action did
+type ActionOutcome =
+	| { kind: 'ran'; window: string }
+	| { kind: 'typed'; window: string }
+	| { kind: 'copied'; line: string }
+	| { kind: 'opened'; url: string }
+	| { kind: 'local'; line: string };
 
 /// the form's answer: a new row has no id yet
 type ServerDraft = Omit<Server, 'id'> & { id?: string };
@@ -803,6 +884,9 @@ interface ServersState {
 	/// root groups folded shut, `${id}:${root}`, remembered
 	foldedRoots: Set<string>;
 	toggleRoot: (id: string, root: string) => void;
+	/// parents whose curated view was opened up to all this session
+	showAllIn: Set<string>;
+	toggleShowAll: (id: string, path: string) => void;
 	/// the servers the query leaves, each with its root groups and their
 	/// rows in render order when it is open; the card renders this and the
 	/// tree walks it
@@ -822,6 +906,8 @@ interface VisibleRoot {
 	folded: boolean;
 	/// how many folders sit directly under the root, folded or not
 	count: number;
+	/// system folders the curation left out; 0 when none or shown
+	hidden: number;
 	rows: VisibleFolder[];
 }
 
@@ -832,6 +918,10 @@ interface VisibleFolder {
 	busy: boolean;
 	/// how many children the last look found; absent until looked
 	inside?: number;
+	/// the app this folder is, when the inventory knows it
+	app?: ServerApp;
+	/// children the curation left out under this folder
+	hidden?: number;
 }
 
 interface ServersLaneProps {
