@@ -62,11 +62,28 @@ fn spawn_raw(exe: &str, args: &str) -> Result<(), AppError> {
     Ok(())
 }
 
+// what an agent's tool shell sets so its own commands stay plain and
+// never ask: no colours, no editor, no credential prompt. a terminal
+// opened from a devgo started in that shell came up all white
+const AGENT_SHELL_VARS: &[&str] = &[
+    "NO_COLOR",
+    "GIT_EDITOR",
+    "GIT_ASKPASS",
+    "GIT_TERMINAL_PROMPT",
+    "GCM_INTERACTIVE",
+    "PROMPT",
+    "DISABLE_AUTOUPDATER",
+    "NoDefaultCurrentDirectoryInExePath",
+];
+
 // a launcher is nobody's child. devgo started from inside a claude code
-// session inherits that session's markers, and every editor, terminal
-// and agent it opens inherits them too: a claude launched that way said
-// its transcript saving was off. scrub the markers so what devgo opens
-// is a fresh top-level thing, whatever started devgo
+// session inherits that session's environment, and every editor, terminal
+// and agent it opens inherits it too: a claude launched that way said
+// its transcript saving was off, a terminal had no colours. scrub both so
+// what devgo opens is a fresh top-level thing, whatever started devgo.
+// the markers by prefix because their set grows; the list unconditionally,
+// env_remove on a name that is not set is a no-op. never env_clear: that
+// drops PATH and HOME with them
 fn scrub_agent_env(cmd: &mut Command) {
     for (key, _) in std::env::vars_os() {
         let name = key.to_string_lossy();
@@ -76,6 +93,9 @@ fn scrub_agent_env(cmd: &mut Command) {
         {
             cmd.env_remove(&key);
         }
+    }
+    for name in AGENT_SHELL_VARS {
+        cmd.env_remove(name);
     }
 }
 
