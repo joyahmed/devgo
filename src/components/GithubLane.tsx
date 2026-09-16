@@ -1,6 +1,6 @@
 import { compactCount, RECENT_LIMIT, relativeTime } from '../github';
 import Button from './Button';
-import { col } from './rowStyles';
+import { card, col } from './rowStyles';
 
 const Lock = () => (
 	<svg
@@ -262,7 +262,8 @@ const GithubLane = ({
 	);
 
 	return (
-		<div>
+		// the accent on the edges: github rows have no file system hue
+		<div className={`${card} border-t-accent/50 border-l-accent/50`}>
 			{/* the header is the collapse handle and, on a first run, the door
 			    to the first fetch: a click, which is what explicit ask means */}
 			<div
@@ -301,9 +302,7 @@ const GithubLane = ({
 				className='grid transition-[grid-template-rows] duration-150 ease-out'
 				style={{ gridTemplateRows: isOpen ? '1fr' : '0fr' }}
 			>
-				{/* the group's rail, in the strong border: github rows have no
-				    file system hue */}
-				<div className='overflow-hidden ml-6 border-l-2 border-l-border-strong'>
+				<div className='overflow-hidden ml-6'>
 					{github.lastError && (
 						<div className='px-3 py-2 text-13 text-danger'>
 							{github.lastError}
