@@ -1302,19 +1302,41 @@ const AppInner = () => {
 				keywords: ['ssh', 'server', 'machines'],
 				run: () => openSettings('servers')
 			},
-			// the subtitle names the host only when the lane may; the host stays
-			// a keyword either way, so typing it still finds the row
-			...servers.servers.map(s => ({
-				id: `server.open.${s.id}`,
-				title: `Server: open ${s.name}`,
-				subtitle: s.alias
-					? `ssh ${s.alias}`
-					: servers.showDetails
-						? `ssh ${s.user ? `${s.user}@` : ''}${s.host}`
-						: 'over ssh',
-				keywords: ['server', 'ssh', 'connect', s.name.toLowerCase(), s.host],
-				run: () => openServer(s)
-			})),
+			// one per server and local host, then the tmux flag. the subtitle
+			// names the host only when the lane may; the host stays a keyword
+			// either way, so typing it still finds the row
+			...servers.servers.flatMap(s => [
+				...serverHosts.map(h => ({
+					id: `server.open.${s.id}.${h.id}`,
+					title: `Server: open ${s.name} in ${h.name}`,
+					subtitle:
+						h.blocked ??
+						(s.alias
+							? `ssh ${s.alias}`
+							: servers.showDetails
+								? `ssh ${s.user ? `${s.user}@` : ''}${s.host}`
+								: 'over ssh'),
+					keywords: [
+						'server',
+						'ssh',
+						'connect',
+						s.name.toLowerCase(),
+						s.host,
+						h.name.toLowerCase()
+					],
+					disabled: Boolean(h.blocked),
+					run: () => openServer(s, h)
+				})),
+				{
+					id: `server.tmux.${s.id}`,
+					title: `Server: ${s.name} tmux on the box ${s.tmux ? 'off' : 'on'}`,
+					subtitle: s.tmux
+						? 'A plain login shell on the box from now on'
+						: 'Attach a tmux session on the box from now on',
+					keywords: ['server', 'tmux', 'shell', 'session', s.name.toLowerCase()],
+					run: () => setServerTmux(s, !s.tmux)
+				}
+			]),
 			// the server-level actions a box declares, not the per-app ones:
 			// twenty apps by seventeen actions is a menu, not a palette
 			...servers.servers.flatMap(s =>
