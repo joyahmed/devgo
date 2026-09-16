@@ -1,10 +1,15 @@
 pub mod detection;
+pub mod login_path;
 pub mod paths;
 pub mod runtime;
 pub mod wsl;
 pub mod wsl_watch;
 
 pub use detection::RuntimeInfo;
+// off windows every spawn reaches these through quiet(); on windows the
+// process PATH is already the user's and nothing calls them
+#[cfg_attr(windows, allow(unused_imports))]
+pub use login_path::{login_path, with_login_path};
 
 use std::ffi::OsStr;
 use std::process::Command;
