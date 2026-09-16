@@ -89,7 +89,7 @@ const RepoRow = ({
 		}}
 		title={repo.url}
 	>
-		<div className={rowIndented}>
+		<div className={`${rowIndented} border-l-border`}>
 			{/* the name is the click target, as on a project row */}
 			<div
 				className={`flex items-center gap-1.5 flex-1 min-w-0 font-medium font-mono cursor-pointer ${

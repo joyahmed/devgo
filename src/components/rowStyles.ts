@@ -9,7 +9,7 @@
 export const row = 'select-none transition-colors';
 export const rowInner = 'w-full flex items-center gap-4 text-15';
 export const rowFlat = `${rowInner} px-4`;
-export const rowIndented = `${rowInner} pl-10 pr-4 border-l border-l-border`;
+export const rowIndented = `${rowInner} pl-10 pr-4 border-l`;
 
 // 34% of a lane, not of the window: a lane is about half as wide, and a
 // name that still gets a third of it leaves the meta within an eye
@@ -35,6 +35,7 @@ export const WIDE_QUERY = '(min-width: 1900px)';
 export const MID_QUERY = '(min-width: 1400px)';
 
 const GRID: Record<number, string> = {
+	1: 'grid grid-cols-1',
 	2: 'grid grid-cols-1 min-[1400px]:grid-cols-2',
 	3: 'grid grid-cols-1 min-[1400px]:grid-cols-3',
 	4: 'grid grid-cols-1 min-[1400px]:grid-cols-2 min-[1900px]:grid-cols-4'

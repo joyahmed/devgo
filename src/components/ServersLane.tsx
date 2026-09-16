@@ -128,7 +128,7 @@ const ServerRow = ({
 			}}
 			title={server.alias ? `ssh ${server.alias}` : `ssh ${whoAt(server)}`}
 		>
-			<div className={rowIndented}>
+			<div className={`${rowIndented} border-l-border`}>
 				<Button
 					variant='ghost'
 					className={`text-11 leading-none w-4 p-0 hover:bg-transparent shrink-0 ${
