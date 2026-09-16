@@ -474,9 +474,11 @@ const ProjectTree = ({
 	}
 	// and the servers last, when that card is open, each expanded server's
 	// folders right under it, the order the eye reads
-	for (const { server, folders } of servers?.isOpen ? servers.visible : []) {
+	for (const { server, groups } of servers?.isOpen ? servers.visible : []) {
 		rows.push({ kind: 'server', server });
-		for (const folder of folders) rows.push({ kind: 'folder', server, folder });
+		for (const { rows: under } of groups) {
+			for (const { folder } of under) rows.push({ kind: 'folder', server, folder });
+		}
 	}
 
 	const selectProject = (p: Project) => {

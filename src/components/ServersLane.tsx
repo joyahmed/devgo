@@ -56,17 +56,6 @@ const dotFor = (l?: ServerListing) =>
 					title: `Unreachable ${ago(l.listed_at)}${l.error ? ` — ${l.error}` : ''}`
 				};
 
-// folders by their root, first-seen order, which is the roots' order
-// since ls -d prints the globs as given
-const groupByRoot = (folders: RemoteFolder[]) => {
-	const out = new Map<string, RemoteFolder[]>();
-	for (const f of folders) {
-		const key = f.root || '/';
-		out.set(key, [...(out.get(key) ?? []), f]);
-	}
-	return [...out.entries()];
-};
-
 // a server in the same four columns a project uses: where it reaches in
 // the workspace column, the name where the location goes, SSH as its
 // file system, and the meta cell on the right. the expander before the
@@ -168,44 +157,74 @@ const ServerRow = ({
 };
 
 // a folder under its server: the root where the workspace goes, the name
-// as the click target, one step in from the server row
+// as the click target one step in per level, and before it the expander
+// that is the ask: the first open lists what is inside over one ssh
 const FolderRow = ({
 	server,
-	folder,
+	row,
 	isCursor,
+	onToggle,
 	onSelect,
 	onOpen,
 	onContextMenu
-}: FolderRowProps) => (
-	<div
-		className={`${col} px-3 py-1 ml-6 select-none transition-colors ${
-			isCursor
-				? 'bg-bg-selected text-text-primary'
-				: 'text-text-secondary hover:bg-bg-hover/50'
-		}`}
-		onContextMenu={e => {
-			e.preventDefault();
-			onSelect(server, folder);
-			onContextMenu(server, folder, e.clientX, e.clientY);
-		}}
-		title={folder.path}
-	>
-		<div className='truncate font-mono text-11 text-text-muted pl-10'>
-			{folder.root}
-		</div>
+}: FolderRowProps) => {
+	const { folder, depth, open, busy, inside } = row;
+	return (
 		<div
-			className={`font-mono text-13 truncate cursor-pointer ${
-				isCursor ? 'text-text-primary' : ''
+			className={`${col} px-3 py-1 ml-6 select-none transition-colors ${
+				isCursor
+					? 'bg-bg-selected text-text-primary'
+					: 'text-text-secondary hover:bg-bg-hover/50'
 			}`}
-			onClick={() => onSelect(server, folder)}
-			onDoubleClick={() => onOpen(server, folder)}
+			onContextMenu={e => {
+				e.preventDefault();
+				onSelect(server, folder);
+				onContextMenu(server, folder, e.clientX, e.clientY);
+			}}
+			title={folder.path}
 		>
-			{folder.name}
+			<div className='truncate font-mono text-11 text-text-muted pl-10'>
+				{depth === 0 ? folder.root : ''}
+			</div>
+			<div
+				className='flex items-center gap-2 min-w-0'
+				style={{ paddingLeft: depth * 16 }}
+			>
+				<Button
+					variant='ghost'
+					className={`text-11 leading-none w-4 p-0 hover:bg-transparent shrink-0 ${
+						open ? 'text-accent' : 'text-text-muted'
+					}`}
+					title={open ? 'Hide what is inside' : 'Look inside (one ssh)'}
+					onClick={e => {
+						e.stopPropagation();
+						onToggle(server, folder);
+					}}
+				>
+					{busy ? '…' : open ? '▼' : '▶'}
+				</Button>
+				<span
+					className={`font-mono text-13 truncate cursor-pointer ${
+						isCursor ? 'text-text-primary' : ''
+					}`}
+					onClick={() => onSelect(server, folder)}
+					onDoubleClick={() => onOpen(server, folder)}
+				>
+					{folder.name}
+				</span>
+				{open && inside === 0 && (
+					<span className='text-11 text-text-muted shrink-0'>
+						no folders inside
+					</span>
+				)}
+			</div>
+			<div />
+			<div className='text-right text-11 text-text-muted font-mono'>
+				{open && inside ? inside : ''}
+			</div>
 		</div>
-		<div />
-		<div />
-	</div>
-);
+	);
+};
 
 // the machines you ssh into, as one more card in the table: a header that
 // collapses like a workspace's, one row per server, and under an expanded
@@ -233,6 +252,8 @@ const ServersLane = ({
 		listing,
 		toggleExpanded,
 		listFolders,
+		toggleDir,
+		toggleRoot,
 		query,
 		setQuery,
 		visible
@@ -245,8 +266,8 @@ const ServersLane = ({
 			: `${all.length} ${all.length === 1 ? 'machine' : 'machines'}`;
 
 	// what sits under an open server: the reason it is down, an empty
-	// note, the busy word, or the folders grouped by root
-	const under = (s: Server, folders: RemoteFolder[]) => {
+	// note, the busy word, or the root groups, each a heading that folds
+	const under = (s: Server, groups: VisibleRoot[]) => {
 		const l = listings[s.id];
 		const roots = s.roots.length ? s.roots : DEFAULT_ROOTS;
 		return (
@@ -268,16 +289,22 @@ const ServersLane = ({
 				{!l && listing.has(s.id) && (
 					<div className='ml-6 px-3 py-1 text-11 text-text-muted'>Listing…</div>
 				)}
-				{groupByRoot(folders).map(([root, rows]) => (
+				{groups.map(({ root, folded, rows }) => (
 					<div key={root}>
 						{/* a root heading is the same kind of thing as a group
-						    heading in the github card: one step under the rows */}
+						    heading in the github card: one step under the rows,
+						    and it folds like one */}
 						<div
-							className={`${col} px-3 py-1 ml-6 select-none`}
-							title={`${rows.length} under ${root}`}
+							className={`${col} px-3 py-1 ml-6 select-none cursor-pointer hover:bg-bg-hover/50`}
+							title={`${root}. Click to ${folded ? 'show' : 'hide'}`}
+							onClick={() => toggleRoot(s.id, root)}
 						>
 							<div className='flex items-center gap-2 min-w-0 pl-6'>
-								<span className='text-11 text-text-muted shrink-0'>▾</span>
+								<span
+									className={`text-11 shrink-0 ${folded ? 'text-text-muted' : 'text-accent'}`}
+								>
+									{folded ? '▶' : '▼'}
+								</span>
 								<span className='truncate font-mono text-13 font-semibold text-text-primary'>
 									{root}
 								</span>
@@ -285,16 +312,18 @@ const ServersLane = ({
 							<div />
 							<div />
 							<div className='text-right text-13 text-text-muted font-mono'>
-								{rows.length}
+								{rows.filter(r => r.depth === 0).length}
 							</div>
 						</div>
-						{rows.map(f => (
+						{rows.map(row => (
 							<FolderRow
-								key={`${s.id}:${f.path}`}
+								key={`${s.id}:${row.folder.path}`}
 								{...{
 									server: s,
-									folder: f,
-									isCursor: folderCursor === `${s.id}:${f.path}`,
+									row,
+									isCursor: folderCursor === `${s.id}:${row.folder.path}`,
+									onToggle: (sv: Server, f: RemoteFolder) =>
+										toggleDir(sv.id, f.path),
 									onSelect: onSelectFolder,
 									onOpen: onOpenFolder,
 									onContextMenu: onFolderContextMenu
@@ -375,7 +404,7 @@ const ServersLane = ({
 							Nothing matches <span className='font-mono'>{query.trim()}</span>.
 						</div>
 					)}
-					{visible.map(({ server, folders, open }) => {
+					{visible.map(({ server, groups, open }) => {
 						return (
 							<div key={server.id}>
 								<ServerRow
@@ -392,7 +421,7 @@ const ServersLane = ({
 										onContextMenu
 									}}
 								/>
-								{open && under(server, folders)}
+								{open && under(server, groups)}
 							</div>
 						);
 					})}
