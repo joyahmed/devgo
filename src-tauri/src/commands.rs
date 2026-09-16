@@ -919,6 +919,34 @@ pub async fn refresh_remote_branches_github(
     Ok(branches)
 }
 
+/// An https:// link from Help or About: the same door open_remote uses.
+#[tauri::command]
+pub fn open_url(url: String) -> Result<(), AppError> {
+    open_in_browser(&url)
+}
+
+/// Where the JSON files live, for Help's "where your config lives" line.
+/// The lock file sits in the app-data dir, so its parent is the answer.
+#[tauri::command]
+pub fn get_app_data_dir(state: State<AppState>) -> String {
+    state
+        .lock_path
+        .parent()
+        .map(|p| p.to_string_lossy().into_owned())
+        .unwrap_or_default()
+}
+
+/// The same folder, in Explorer.
+#[tauri::command]
+pub fn reveal_app_data_dir(state: State<AppState>) -> Result<(), AppError> {
+    let dir = get_app_data_dir(state);
+    std::process::Command::new("explorer")
+        .arg(&dir)
+        .spawn()
+        .map_err(|e| AppError::LaunchFailed(format!("explorer: {e}")))?;
+    Ok(())
+}
+
 /// Open a repo in the browser: the repo root, or one branch of it.
 ///
 /// Two doors, one command. A project (full_path) resolves its root from
