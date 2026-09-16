@@ -168,7 +168,8 @@ pub fn vm_is_up() -> bool {
 
 // the name test on a nul-terminated utf-16 buffer, apart from the snapshot
 // so it tests without one. case-insensitive: nothing says a future build
-// keeps the capitals
+// keeps the capitals. off windows only the tests reach it
+#[cfg_attr(not(windows), allow(dead_code))]
 fn is_vm_name(exe_file: &[u16]) -> bool {
     let len = exe_file
         .iter()
