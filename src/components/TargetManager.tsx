@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import Button from './Button';
 
-const KINDS: TargetKind[] = ['editor', 'terminal'];
+const KINDS: TargetKind[] = ['editor', 'terminal', 'agent'];
 
 const BLANK: TargetDraft = {
 	name: '',
@@ -60,6 +60,8 @@ const TargetList = ({
 		{items.map(t => {
 			// The "windows only" badge reads the refusal straight off the model:
 			// a null WSL template is the target saying it cannot open WSL projects.
+			// an agent lives on one side or the other: say which
+			const agent = t.kind === 'agent';
 			const badges = [
 				{
 					show: t.id === defaultId,
@@ -67,16 +69,22 @@ const TargetList = ({
 					className: 'text-accent border-accent/40'
 				},
 				{
-					show: !t.wsl_args_template,
+					show: !agent && !t.wsl_args_template,
 					label: 'windows only',
 					className: 'text-text-muted border-border-strong',
 					title: 'No WSL configuration — this target cannot open WSL projects'
 				},
 				{
-					show: !t.args_template,
+					show: !agent && !t.args_template,
 					label: 'wsl only',
 					className: 'text-text-muted border-border-strong',
 					title: 'Runs inside a distro — this target cannot open Windows projects'
+				},
+				{
+					show: agent,
+					label: t.wsl_executable ? 'in distro' : 'windows',
+					className: 'text-text-muted border-border-strong',
+					title: 'The side this agent is installed on'
 				}
 			];
 			const actions = [
@@ -110,7 +118,9 @@ const TargetList = ({
 								))}
 						</div>
 						<div className='font-mono text-11 text-text-muted truncate'>
-							{t.executable} {t.args_template}
+							{agent
+								? (t.wsl_executable ?? t.executable)
+								: `${t.executable} ${t.args_template}`}
 						</div>
 					</div>
 					<div className='flex items-center gap-1 shrink-0'>
@@ -136,6 +146,7 @@ const TargetList = ({
 const TargetManager = ({
 	editors,
 	terminals,
+	agents,
 	defaults,
 	onAdd,
 	onDetect,
@@ -159,7 +170,8 @@ const TargetManager = ({
 
 	const lists = [
 		{ kind: 'editor' as TargetKind, label: 'Editors', items: editors },
-		{ kind: 'terminal' as TargetKind, label: 'Terminals', items: terminals }
+		{ kind: 'terminal' as TargetKind, label: 'Terminals', items: terminals },
+		{ kind: 'agent' as TargetKind, label: 'Agents', items: agents }
 	];
 
 	const close = () => {
@@ -189,7 +201,7 @@ const TargetManager = ({
 	const scanLabel = scanning ? 'Scanning…' : found ? 'Scan again' : 'Scan';
 	const scanHint =
 		found === null
-			? 'Looks for installed editors and terminals on PATH, and for command-line editors inside distros that are already running. It never starts a distro.'
+			? 'Looks for installed editors, terminals and coding agents (Claude Code, Codex, OpenCode, Gemini CLI) on PATH, and for command-line editors and agents inside distros that are already running. It never starts a distro. An agent opens in your default terminal, in the project directory.'
 			: found.length === 0
 				? 'Nothing new: everything found is already registered.'
 				: null;

@@ -817,6 +817,7 @@ const Settings = ({
 					{...{
 						editors: targets.editors,
 						terminals: targets.terminals,
+						agents: targets.agents,
 						defaults: targets.defaults,
 						onAdd: targets.addTarget,
 						onDetect: targets.detect,

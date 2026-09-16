@@ -656,6 +656,7 @@ interface TargetListProps {
 interface TargetManagerProps {
 	editors: LaunchTarget[];
 	terminals: LaunchTarget[];
+	agents: LaunchTarget[];
 	/// Kind → id of the target that would actually launch, resolved in Rust.
 	defaults: Record<string, string>;
 	onAdd: (t: Omit<LaunchTarget, 'id'>) => Promise<void>;
