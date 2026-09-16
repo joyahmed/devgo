@@ -53,6 +53,7 @@ pub fn parse(text: &str) -> Vec<Server> {
                         session: None,
                         tunnel: false,
                         source: "ssh-config".into(),
+                        roots: Vec::new(),
                     });
                 }
             }

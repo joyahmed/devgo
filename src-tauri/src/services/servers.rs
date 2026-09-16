@@ -40,6 +40,9 @@ pub struct Server {
     // "ssh-config" or "manual"
     #[serde(default = "default_source")]
     pub source: String,
+    // where its folders are listed from; empty means the defaults
+    #[serde(default)]
+    pub roots: Vec<String>,
 }
 
 fn default_true() -> bool {
@@ -236,6 +239,7 @@ mod tests {
             session: None,
             tunnel: false,
             source: "ssh-config".into(),
+            roots: vec![],
         }
     }
 
