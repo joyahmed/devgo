@@ -2240,6 +2240,36 @@ pub fn window_launched_transparent() -> bool {
     crate::launched_transparent()
 }
 
+// windows' own transparency effects switch. off, and the os draws no
+// blur: the ground turns black instead of see-through, which reads as a
+// devgo bug. Some(false) is the answer worth a note; None when the key
+// cannot be read and the note stays quiet. read on the appearance page
+// only, never at startup
+#[tauri::command]
+pub fn os_transparency_effects_enabled() -> Option<bool> {
+    #[cfg(windows)]
+    {
+        let out = std::process::Command::new("reg")
+            .quiet()
+            .args([
+                "query",
+                r"HKCU\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize",
+                "/v",
+                "EnableTransparency",
+            ])
+            .output()
+            .ok()?;
+        let text = String::from_utf8_lossy(&out.stdout);
+        let line = text.lines().find(|l| l.contains("EnableTransparency"))?;
+        let word = line.split_whitespace().last()?;
+        Some(word != "0x0")
+    }
+    #[cfg(not(windows))]
+    {
+        None
+    }
+}
+
 // the window is the preview when it was born see-through: every change
 // is applied and persisted by this one call, which hands back the
 // clamped value for the stepper

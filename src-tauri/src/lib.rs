@@ -546,6 +546,7 @@ pub fn run() {
             commands::get_summon_hotkey,
             commands::get_window_transparency,
             commands::window_launched_transparent,
+            commands::os_transparency_effects_enabled,
             commands::set_window_transparency,
             commands::set_summon_hotkey,
             commands::get_git_info,
