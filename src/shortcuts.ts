@@ -1,3 +1,5 @@
+import { isMac } from './platform';
+
 /// Every keyboard binding in DevGo, declared once.
 ///
 /// Three things read this list: the handler that binds them, the hints rendered
@@ -87,6 +89,7 @@ export const SHORTCUTS: Shortcut[] = [
 		id: 'revealExplorer',
 		keys: 'Ctrl+Shift+E',
 		label: 'Reveal in Explorer',
+		macLabel: 'Reveal in Finder',
 		group: 'Project',
 		needsSelection: true
 	},
@@ -94,6 +97,7 @@ export const SHORTCUTS: Shortcut[] = [
 		id: 'copyWinPath',
 		keys: 'Ctrl+Shift+C',
 		label: 'Copy Windows path',
+		macLabel: 'Copy path',
 		group: 'Project',
 		needsSelection: true
 	},
@@ -101,6 +105,7 @@ export const SHORTCUTS: Shortcut[] = [
 		id: 'copyWslPath',
 		keys: 'Ctrl+Shift+W',
 		label: 'Copy WSL path',
+		windowsOnly: true,
 		group: 'Project',
 		needsSelection: true
 	},
@@ -145,6 +150,7 @@ export const SHORTCUTS: Shortcut[] = [
 		id: 'revealWorkspace',
 		keys: 'Ctrl+Alt+E',
 		label: 'Reveal workspace in Explorer',
+		macLabel: 'Reveal workspace in Finder',
 		group: 'Workspace',
 		needsSelection: true
 	},
@@ -166,6 +172,18 @@ export const SHORTCUTS: Shortcut[] = [
 
 export const shortcutFor = (id: ShortcutId): string =>
 	SHORTCUTS.find(s => s.id === id)?.keys ?? '';
+
+// the action's name on this desktop. the context menus, the palette and
+// the settings panel all ask here, so reveal in finder is decided once
+export const labelFor = (id: ShortcutId): string => {
+	const s = SHORTCUTS.find(x => x.id === id);
+	if (!s) return '';
+	return (isMac && s.macLabel) || s.label;
+};
+
+// does this binding mean anything on this desktop? a shortcut the table
+// declares but the desktop cannot honour must not be advertised
+export const isAvailable = (s: Shortcut): boolean => !(isMac && s.windowsOnly);
 
 /// Does this event match a declared binding?
 ///
@@ -210,10 +228,27 @@ const NAMED: Record<string, string> = {
 	Space: 'Space'
 };
 
+// modifiers as this desktop's user reads them. the table stays canonical
+// (Ctrl+…, which matches already accepts from a cmd press); only what is
+// shown changes, so matches never sees a translated string. words, not
+// ⌘ and ⌥: both glyphs are hairline outlines in jetbrains mono at 11px,
+// the class 09 measured vanishing. the summon hotkey arrives from tauri
+// already spelled Cmd, so it maps to itself
+const MAC_MODIFIER: Record<string, string> = { Ctrl: 'Cmd', Cmd: 'Cmd', Alt: 'Opt' };
+export const displayKeys = (keys: string): string =>
+	isMac
+		? keys
+				.split('+')
+				.map(p => MAC_MODIFIER[p] ?? p)
+				.join('+')
+		: keys;
+
 /// Compact form for rendering next to a button. The table stores what
 /// `KeyboardEvent.key` says; the user reads `→`. Nothing parses `→` back.
+/// Every hint in the app comes through here, so this is the one place the
+/// desktop's modifier names apply.
 export const prettyKeys = (keys: string): string =>
-	keys
+	displayKeys(keys)
 		.split('+')
 		.map(p => NAMED[p] ?? p)
 		.join('+');
