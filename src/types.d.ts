@@ -12,6 +12,15 @@ interface Project {
 	file_system: string;
 }
 
+/// The WSL chip's state: the watcher's event and `get_wsl_state` share it.
+/// `up` is the VM's process being in the process table; `distros` is what
+/// `wsl -l -q --running` last said. Up with an empty list is a VM that has
+/// just started and not yet registered its distro.
+interface WslState {
+	up: boolean;
+	distros: string[];
+}
+
 type WorkspaceStatus = 'live' | 'cached' | 'unavailable';
 
 /// Why a workspace could not be read. "distro_stopped" is not a failure — it
