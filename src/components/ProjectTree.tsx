@@ -122,11 +122,9 @@ const TechBadges = ({ tech }: TechBadgesProps) => {
 			)}
 			{runnable && !tech.has_deps && (
 				<span
-					className='text-text-muted leading-none'
+					className='size-[7px] rounded-full border border-text-muted shrink-0'
 					title='Dependencies do not appear to be installed'
-				>
-					○
-				</span>
+				/>
 			)}
 		</span>
 	);
@@ -141,10 +139,13 @@ const GitBadge = ({ info, onOpenBranches }: GitBadgeProps) => {
 	if (!info?.branch) return null;
 	return (
 		<span className='flex items-center gap-1 min-w-0'>
+			{/* a drawn dot, not a glyph: a character sits on the baseline and
+			    lands a pixel off the text's centre; a box is centred by flex */}
 			{info.dirty && (
-				<span className='text-amber-400 leading-none' title='Uncommitted changes'>
-					●
-				</span>
+				<span
+					className='size-[7px] rounded-full bg-amber-400 shrink-0'
+					title='Uncommitted changes'
+				/>
 			)}
 			<span
 				className={`truncate font-mono text-11 text-text-muted ${
