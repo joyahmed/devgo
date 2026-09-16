@@ -564,6 +564,18 @@ pub fn launch_with_command(
     info: &RuntimeInfo,
     command: &str,
 ) -> Result<(), AppError> {
+    let (exe, args) = run_line(target, project, info, command)?;
+    spawn_raw(&exe, &args)
+}
+
+// what launch_with_command spawns, before the spawn: a caller that only
+// wants to show the line reads it here
+pub fn run_line(
+    target: &LaunchTarget,
+    project: &Project,
+    info: &RuntimeInfo,
+    command: &str,
+) -> Result<(String, String), AppError> {
     let resolved = if is_wsl(project) {
         let distro = distro_from_project(project, info)?;
         let linux_path = super::platform::paths::windows_to_wsl_path(
@@ -583,7 +595,7 @@ pub fn launch_with_command(
         .ok_or_else(|| AppError::TargetCannotRun(target.name.clone()))?;
 
     let args = run_script_args(&args, project, command)?;
-    spawn_raw(&exe, &args)
+    Ok((exe, args))
 }
 
 // a windows run template carries the command on the terminal's own line
