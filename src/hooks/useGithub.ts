@@ -94,7 +94,13 @@ export const useGithub = (git: Map<string, GitInfo>): GithubState => {
 	// whether the lane renders at all before a cache exists, and which of
 	// the three sentences its header says
 	useEffect(() => {
-		invoke<GhStatus>('get_github_status').then(setStatus).catch(() => {});
+		// gh --version and gh config get are two process spawns; a short
+		// defer moves them behind the first paint. the status decides the
+		// header's sentence, not the list
+		const t = window.setTimeout(() => {
+			invoke<GhStatus>('get_github_status').then(setStatus).catch(() => {});
+		}, 250);
+		return () => window.clearTimeout(t);
 	}, []);
 
 	// the local map is computed from the git cache on the rust side, so it
