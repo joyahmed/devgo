@@ -2,6 +2,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { useEffect, useState } from 'react';
 import { curate } from '../etcCuration';
 import { appForFolder } from '../serverApps';
+import { useServerDetails } from './useServerDetails';
 
 // whether the card is open, remembered like the github one
 const OPEN_KEY = 'devgo.serversOpen';
@@ -46,6 +47,7 @@ export const useServers = (onError?: (e: unknown) => void): ServersState => {
 	const [listing, setListing] = useState<Set<string>>(new Set());
 	const [expanded, setExpanded] = useState<Set<string>>(loadExpanded);
 	const [query, setQuery] = useState('');
+	const { showDetails, setShowDetails } = useServerDetails();
 
 	const reload = () =>
 		invoke<Server[]>('get_servers')
@@ -296,6 +298,8 @@ export const useServers = (onError?: (e: unknown) => void): ServersState => {
 		update,
 		remove,
 		importSshConfig,
+		showDetails,
+		setShowDetails,
 		listings,
 		listing,
 		expanded,

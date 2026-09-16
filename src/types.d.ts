@@ -966,6 +966,10 @@ interface ServersState {
 	remove: (id: string) => Promise<void>;
 	/// (added, updated): the sentence the toast says
 	importSshConfig: () => Promise<{ added: number; updated: number }>;
+	/// whether a row prints user@host and the port. off by default: the
+	/// name is the row, and a screenshot is not a list of where you ssh
+	showDetails: boolean;
+	setShowDetails: (on: boolean) => Promise<void>;
 	/// the folders on each server: the cache paints first, an ask on
 	/// expand or refresh, never on launch
 	listings: Record<string, ServerListing>;
