@@ -116,33 +116,58 @@ body,
 	overflow: hidden;
 }
 
-/* one ground, one knob: the six themes keep their opaque tokens and the
-   contrast gate keeps measuring them; only the ground and the two bars
-   on the window's edge let the desktop through, by the alpha the
-   transparency setting puts here. rows, panels and drawers sit on the
-   ground and keep their tokens, or they would not be readable over
-   whatever is behind the window */
+/* one knob, every surface. --ground-alpha is 1 until the transparency
+   setting says otherwise. the five surface tokens are derived here from
+   the theme's solid values (--solid-bg-*, which applyTheme sets) mixed
+   with the knob, so every bg-bg-* utility, and every /50 modifier on one,
+   follows the slider; text, icons, borders and the accent stay solid, the
+   themes' hexes the contrast gate keeps measuring. a knob that only
+   reached the ground did almost nothing: the cards covered it at their
+   own alpha */
 :root {
 	--ground-alpha: 1;
+	--solid-bg-primary: #05070d;
+	--solid-bg-secondary: #090e19;
+	--solid-bg-panel: #0c1322;
+	--solid-bg-hover: #131f38;
+	--solid-bg-selected: #0f2f57;
+	--color-bg-primary: color-mix(
+		in srgb,
+		var(--solid-bg-primary) calc(var(--ground-alpha) * 100%),
+		transparent
+	);
+	--color-bg-secondary: color-mix(
+		in srgb,
+		var(--solid-bg-secondary) calc(var(--ground-alpha) * 100%),
+		transparent
+	);
+	--color-bg-panel: color-mix(
+		in srgb,
+		var(--solid-bg-panel) calc(var(--ground-alpha) * 100%),
+		transparent
+	);
+	--color-bg-hover: color-mix(
+		in srgb,
+		var(--solid-bg-hover) calc(var(--ground-alpha) * 100%),
+		transparent
+	);
+	--color-bg-selected: color-mix(
+		in srgb,
+		var(--solid-bg-selected) calc(var(--ground-alpha) * 100%),
+		transparent
+	);
 }
 
 body {
 	font-family: var(--font-sans);
-	background: color-mix(
-		in srgb,
-		var(--color-bg-primary) calc(var(--ground-alpha) * 100%),
-		transparent
-	);
+	background: var(--color-bg-primary);
 	color: var(--color-text-primary);
 	-webkit-font-smoothing: antialiased;
 }
 
+/* the title bar and the footer: the secondary surface */
 .ground-chrome {
-	background: color-mix(
-		in srgb,
-		var(--color-bg-secondary) calc(var(--ground-alpha) * 100%),
-		transparent
-	);
+	background: var(--color-bg-secondary);
 }
 
 /* keyboard focus is visible, in the accent: tab used to land on buttons
@@ -190,4 +215,12 @@ body {
 ::-webkit-scrollbar-thumb:hover {
 	background: var(--color-accent);
 	background-clip: padding-box;
+}
+
+/* our own − and + stand beside every number field; the browser's spinner
+   would be a second, smaller pair */
+input[type='number']::-webkit-inner-spin-button,
+input[type='number']::-webkit-outer-spin-button {
+	-webkit-appearance: none;
+	margin: 0;
 }

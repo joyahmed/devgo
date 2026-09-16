@@ -140,8 +140,12 @@ export const savedThemeId = () => localStorage.getItem(THEME_KEY) ?? DEFAULT;
 export const applyTheme = (id: string) => {
 	const theme = THEMES.find(t => t.id === id) ?? THEMES[0];
 	const root = document.documentElement;
+	// the surfaces are set as --solid-bg-*: index.css derives --color-bg-*
+	// from them and the transparency knob. setting --color-bg-* inline here
+	// would override that
 	for (const key of KEYS) {
-		root.style.setProperty(`--color-${key}`, theme.colors[key]);
+		const name = key.startsWith('bg-') ? `--solid-${key}` : `--color-${key}`;
+		root.style.setProperty(name, theme.colors[key]);
 	}
 };
 
