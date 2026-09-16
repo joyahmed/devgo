@@ -77,7 +77,9 @@ impl Server {
     }
 
     // the whole line the terminal runs. with tmux, attach or create the
-    // named session, and a login shell when the box has no tmux
+    // named session, and a login shell when the box has no tmux. $SHELL is
+    // the remote one: nothing between wt and ssh reads a dollar, and a
+    // backslash reached the box as a literal
     pub fn ssh_command(&self) -> String {
         let target = self.ssh_target().join(" ");
         if !self.tmux {
@@ -86,7 +88,7 @@ impl Server {
         let session = present(&self.session).unwrap_or("devgo");
         format!(
             "ssh -t {target} \"command -v tmux >/dev/null 2>&1 && \
-             tmux new-session -A -s {session} || exec \\$SHELL -l\""
+             tmux new-session -A -s {session} || exec $SHELL -l\""
         )
     }
 
@@ -243,7 +245,8 @@ mod tests {
         let line = zetta().ssh_command();
         assert!(line.starts_with("ssh -t zetta \""), "{line}");
         assert!(line.contains("tmux new-session -A -s devgo"), "{line}");
-        assert!(line.contains("|| exec \\$SHELL -l"), "{line}");
+        assert!(line.contains("|| exec $SHELL -l"), "{line}");
+        assert!(!line.contains("\\"), "a backslash reaches the box: {line}");
     }
 
     #[test]
