@@ -270,11 +270,26 @@ fn collect_projects(
         .retain_known(&live, &live_roots)
         .map_err(AppError::Lock)?;
 
+    let ranks = rank_projects(&projects, &prefs);
+
+    Ok(ProjectsPayload {
+        projects,
+        workspaces: states,
+        ranks,
+    })
+}
+
+// the frecency rank of every project, from the launch history and the
+// pins: shared by the live pass and the cache first payload
+fn rank_projects(
+    projects: &[Project],
+    prefs: &PreferencesStore,
+) -> Vec<ProjectRank> {
     let stats = prefs.project_stats();
     let pinned = prefs.pinned();
     let now = crate::services::preferences::now_secs();
 
-    let ranks = projects
+    projects
         .iter()
         .map(|p| {
             let stat = stats.get(&p.full_path).cloned().unwrap_or_default();
@@ -287,13 +302,7 @@ fn collect_projects(
                 full_path: p.full_path.clone(),
             }
         })
-        .collect();
-
-    Ok(ProjectsPayload {
-        projects,
-        workspaces: states,
-        ranks,
-    })
+        .collect()
 }
 
 #[tauri::command]
