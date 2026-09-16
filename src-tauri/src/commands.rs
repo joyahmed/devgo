@@ -427,6 +427,22 @@ pub async fn refresh_projects(
     Ok(payload)
 }
 
+/// Refresh one workspace, the header's own refresh. An explicit ask that
+/// names the workspace, so it may boot that one's distro and no other: the
+/// pass reads nothing else. The payload carries its projects only.
+#[tauri::command]
+pub async fn refresh_workspace(
+    workspace: String,
+    app: tauri::AppHandle,
+) -> Result<ProjectsPayload, AppError> {
+    let payload = off_main(&app, move |state| {
+        collect_projects(state, true, Some(&workspace))
+    })
+    .await?;
+    crate::tray::refresh(&app);
+    Ok(payload)
+}
+
 /// Count a launch. Deliberately runs only after the launch itself succeeded, so
 /// a project that fails to open does not climb the ranking.
 fn record_launch(state: &AppState, project: &Project) -> Result<(), AppError> {
