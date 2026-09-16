@@ -189,6 +189,25 @@ pub fn run(plan: &Plan, mut on_line: impl FnMut(&str)) -> Result<(), AppError> {
         }
         None => {
             let mut c = Command::new("git");
+            // https needs a credential, and DevGo's is gh's. the app is
+            // logged in through gh for the whole github lane, but git on this
+            // machine may have no helper for github.com — macos ships
+            // osxkeychain with no token in it, and `gh auth setup-git` is the
+            // step people skip — so a headless clone (no terminal to prompt)
+            // dies with "could not read Username for https://github.com". hand
+            // git gh's own credential helper for the clone, the same way the
+            // launcher hands a child the login PATH (55): gh is on that PATH,
+            // so `!gh auth git-credential` resolves. ssh carries its own key
+            // and needs none. windows has its own working story (git credential
+            // manager ships with git for windows), so it is left alone — the
+            // mirror of 55's `not(windows)` PATH seam.
+            #[cfg(not(windows))]
+            if plan.url.starts_with("https://") {
+                c.args([
+                    "-c",
+                    "credential.https://github.com.helper=!gh auth git-credential",
+                ]);
+            }
             c.args(["clone", "--progress", &plan.url, &plan.git_dest]);
             c
         }
