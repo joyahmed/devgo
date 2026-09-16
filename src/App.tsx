@@ -1575,14 +1575,9 @@ const AppInner = () => {
 			if (!isTypingTarget(e) && fire('removeWorkspace', handleRemoveShortcut))
 				return;
 
-			// Ctrl+R is a second binding for refresh, kept because it is muscle
-			// memory from the browser and costs nothing. The table maps one id to
-			// one chord; an alias is written out here rather than widening the type.
-			if ((e.ctrlKey || e.metaKey) && e.key === 'r') {
-				e.preventDefault();
-				handleRefresh();
-				return;
-			}
+			// the browser's refresh key, a table row like every other: matched
+			// by hand here since 11, so settings › shortcuts never listed it
+			if (fire('refreshAlt', handleRefresh)) return;
 
 			if (!selected) return;
 			if (fire('openEditor', () => handleOpenEditor())) return;
@@ -1593,10 +1588,18 @@ const AppInner = () => {
 			if (fire('revealExplorer', () => revealInExplorer(selected))) return;
 			if (fire('copyWinPath', () => copyWindowsPath(selected))) return;
 			if (fire('copyWslPath', () => copyWslPath(selected))) return;
+			if (fire('runScript', () => openScripts(selected, 240, 200))) return;
+			if (
+				fire('openRemote', () => {
+					if (git.get(selected.full_path)?.remote) handleOpenRemote(selected);
+					else toast(`${selected.name} has no remote to open`, 'info');
+				})
+			)
+				return;
 		};
 		window.addEventListener('keydown', handler);
 		return () => window.removeEventListener('keydown', handler);
-	}, [selected, workspaces]);
+	}, [selected, workspaces, git]);
 
 	return (
 		// the radius belongs to a floating window; flush with the screen it
