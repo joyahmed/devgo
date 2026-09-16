@@ -187,7 +187,7 @@ const RowMeta = ({
 		{live && (
 			<span
 				className='text-11 font-semibold text-accent shrink-0 inline-flex items-center gap-1'
-				title={`${project.file_system === 'WSL' ? 'tmux' : 'psmux'} session is running; a terminal launch reattaches`}
+				title={`${project.file_system === 'Windows' ? 'psmux' : 'tmux'} session is running; a terminal launch reattaches`}
 			>
 				<span
 					className='size-[7px] rounded-full bg-accent shadow-[0_0_6px_var(--color-accent)]'
