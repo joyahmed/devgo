@@ -775,6 +775,135 @@ const ConfigPanel = ({ onChanged, onError }: ConfigPanelProps) => {
 	);
 };
 
+
+// the line under a server's name: the ssh line as the row would run it,
+// and the default path when there is one
+const serverLine = (s: Server) => {
+	const target = s.alias
+		? s.alias
+		: `${s.user ? `${s.user}@` : ''}${s.host}${s.port && s.port !== 22 ? ` -p ${s.port}` : ''}`;
+	return `ssh ${target}${s.default_path ? ` · ${s.default_path}` : ''}`;
+};
+
+// the machines, an edit per row, the tmux switch inline, and the two
+// doors: add, and import from ~/.ssh/config. devgo stores aliases and key
+// paths, never a password
+const ServersPanel = ({
+	servers,
+	onAdd,
+	onEdit,
+	onImport,
+	onError
+}: ServersPanelProps) => {
+	const attempt = (action: Promise<unknown>) =>
+		action.catch(e => onError(String(e)));
+	const doors = [
+		{ label: 'Add server…', onClick: onAdd, title: undefined },
+		{
+			label: 'Import from ~/.ssh/config',
+			onClick: onImport,
+			title: 'Every Host block becomes a row; the file is never written'
+		}
+	];
+	const rowButtons = (s: Server) => [
+		{
+			label: 'tmux',
+			on: s.tmux,
+			title: s.tmux
+				? `tmux session ${s.session ?? 'devgo'}. Click for a plain shell`
+				: 'Plain shell. Click for a tmux session',
+			onClick: () => attempt(servers.update({ ...s, tmux: !s.tmux }))
+		},
+		{ label: 'Edit', on: false, title: undefined, onClick: () => onEdit(s) },
+		{
+			label: 'Remove',
+			on: false,
+			title: 'Your ssh config and keys are untouched',
+			onClick: () => attempt(servers.remove(s.id))
+		}
+	];
+
+	return (
+		<div className='flex flex-col gap-5'>
+			<div>
+				<h4 className={heading}>Machines</h4>
+				<p className='text-13 text-text-muted mb-3'>
+					Each row is a machine you SSH into. Enter opens a terminal on it, in
+					a tmux session that survives when the switch is on. DevGo stores the
+					alias or host and a key <em>path</em>, never a password;{' '}
+					<code className='text-text-secondary'>ssh</code> uses your own keys
+					and config.
+				</p>
+				{!servers.hasSsh && (
+					<p className='text-13 text-danger mb-3'>
+						No <code>ssh</code> client on PATH. Windows ships one under Settings
+						› Apps › Optional features › OpenSSH Client.
+					</p>
+				)}
+				{servers.servers.length === 0 ? (
+					<p className='text-13 text-text-muted italic mb-3'>None yet.</p>
+				) : (
+					<div className='flex flex-col gap-1 mb-3'>
+						{servers.servers.map(s => (
+							<div
+								key={s.id}
+								className='flex items-center justify-between gap-3 px-3 py-2 bg-bg-panel rounded-control'
+							>
+								<div className='min-w-0'>
+									<div className='flex items-center gap-2'>
+										<span className='text-15 text-text-primary truncate'>
+											{s.name}
+										</span>
+										{s.source === 'ssh-config' && (
+											<span
+												className='text-11 text-text-muted border border-border-strong rounded-control px-1'
+												title='From ~/.ssh/config'
+											>
+												config
+											</span>
+										)}
+										{s.tunnel && (
+											<span className='text-11 text-text-muted'>tunnel</span>
+										)}
+									</div>
+									<div className='font-mono text-11 text-text-muted truncate'>
+										{serverLine(s)}
+									</div>
+								</div>
+								<div className='flex items-center gap-1 shrink-0'>
+									{rowButtons(s).map(b => (
+										<Button
+											key={b.label}
+											variant='target'
+											aria-current={b.on ? 'true' : undefined}
+											title={b.title}
+											onClick={b.onClick}
+										>
+											{b.label}
+										</Button>
+									))}
+								</div>
+							</div>
+						))}
+					</div>
+				)}
+				<div className='flex items-center gap-2'>
+					{doors.map(d => (
+						<Button
+							key={d.label}
+							title={d.title}
+							onClick={d.onClick}
+							disabled={!servers.hasSsh}
+						>
+							{d.label}
+						</Button>
+					))}
+				</div>
+			</div>
+		</div>
+	);
+};
+
 const Settings = ({
 	open,
 	onClose,
@@ -790,7 +919,11 @@ const Settings = ({
 	targets,
 	github,
 	showHints,
-	onToggleHints
+	onToggleHints,
+	servers,
+	onAddServer,
+	onEditServer,
+	onImportSsh
 }: SettingsProps) => {
 
 	// The registry. A later chapter adds a panel by adding an object here; the
@@ -862,6 +995,21 @@ const Settings = ({
 			id: 'config',
 			label: 'Config',
 			render: () => <ConfigPanel {...{ onChanged: onImported, onError }} />
+		},
+		{
+			id: 'servers',
+			label: 'Servers',
+			render: () => (
+				<ServersPanel
+					{...{
+						servers,
+						onAdd: onAddServer,
+						onEdit: onEditServer,
+						onImport: onImportSsh,
+						onError
+					}}
+				/>
+			)
 		},
 		{ id: 'help', label: 'Help', render: () => <HelpPanel {...{ onError }} /> },
 		{ id: 'about', label: 'About', render: () => <AboutPanel /> }
