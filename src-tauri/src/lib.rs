@@ -227,6 +227,17 @@ pub fn started() -> std::time::Instant {
     *STARTED.get_or_init(std::time::Instant::now)
 }
 
+// whether the main window was created see-through. decided once in
+// setup from the stored knob: transparent is a creation flag, so this
+// is what the settings panel asks to know if a move of the knob shows
+// now or at the next launch
+static LAUNCHED_TRANSPARENT: std::sync::OnceLock<bool> =
+    std::sync::OnceLock::new();
+
+pub fn launched_transparent() -> bool {
+    LAUNCHED_TRANSPARENT.get().copied().unwrap_or(false)
+}
+
 pub fn run() {
     started();
     let context: tauri::Context<tauri::Wry> = tauri::generate_context!();
@@ -332,6 +343,39 @@ pub fn run() {
                 servers_cache: std::sync::Mutex::new(servers_cache),
             });
 
+            // the window is built here, not by the config: transparent is
+            // decided at creation and it is not free. a window born
+            // see-through holds one screen-sized alpha surface (about 13 mb
+            // on 2560x1440) that an opaque one never asks for, so only a
+            // window that will show through is created so. the knob still
+            // previews live on a window born see-through; born opaque it
+            // lands at the next launch, and the panel says which
+            let pct = app
+                .state::<AppState>()
+                .pref_store
+                .lock()
+                .map(|p| p.window_transparency())
+                .unwrap_or(0);
+            let see_through = pct > 0;
+            let _ = LAUNCHED_TRANSPARENT.set(see_through);
+            let main_cfg = app
+                .config()
+                .app
+                .windows
+                .iter()
+                .find(|w| w.label == "main")
+                .cloned()
+                .expect("tauri.conf.json declares the main window");
+            let builder = tauri::WebviewWindowBuilder::from_config(
+                app.handle(),
+                &main_cfg,
+            )?;
+            // on macos the builder method needs macos-private-api, which
+            // this crate does not enable; the config's false stands there
+            #[cfg(not(target_os = "macos"))]
+            let builder = builder.transparent(see_through);
+            builder.build()?;
+
             // geometry goes on before the webview calls show(), so the first
             // paint is already the right shape
             if let Some(window) = app.get_webview_window("main") {
@@ -374,12 +418,6 @@ pub fn run() {
 
                 // and the effect: an acrylic window that appears opaque
                 // and then blurs is a flash, like the geometry snap
-                let pct = app
-                    .state::<AppState>()
-                    .pref_store
-                    .lock()
-                    .map(|p| p.window_transparency())
-                    .unwrap_or(0);
                 apply_transparency(&window, pct);
             }
 
