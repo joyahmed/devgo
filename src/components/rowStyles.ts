@@ -65,12 +65,21 @@ export const pickTone = (added: boolean, on: boolean) =>
 			? 'border-accent cursor-pointer'
 			: 'border-border cursor-pointer hover:border-border-strong';
 
-// a file system's hue, the one the rows' cell, the card's edges and the
-// title bar's chips share: wsl in the accent, a share in amber, the
-// machine's own disk muted, whatever it is called
+// a file system's hue, the one the lane heading, the card's edges, the
+// pinned rows' cell and the title bar's chips share. fixed hues, chosen
+// by hue angle and not the accent: wsl and the machine's own disk are two
+// real file systems, and one in the accent beside one in grey read as one
+// real and one greyed out. sky and orange are 169 degrees apart, which is
+// what survives being small; the 200 shades passed every ratio and still
+// read as the same near-white. a share is fuchsia, 88 degrees from both,
+// so the warning is never mistaken for the ordinary cases. the gate
+// checks every entry on every surface of every palette, and the gaps
 const FS_TONE: Record<string, string> = {
-	WSL: 'text-accent',
-	Network: 'text-amber-400'
+	WSL: 'text-orange-300',
+	Windows: 'text-sky-300',
+	Mac: 'text-sky-300',
+	Linux: 'text-sky-300',
+	Network: 'text-fuchsia-300'
 };
 
 export const fsTone = (fs: string) => FS_TONE[fs] ?? 'text-text-muted';
@@ -79,8 +88,11 @@ export const fsTone = (fs: string) => FS_TONE[fs] ?? 'text-text-muted';
 // uses: the lane says what it is at a glance, and selection stays the
 // row's ground and its name
 const EDGE: Record<string, string> = {
-	WSL: 'border-t-accent/50 border-l-accent/50',
-	Network: 'border-t-amber-400/50 border-l-amber-400/50'
+	WSL: 'border-t-orange-300/60 border-l-orange-300/60',
+	Windows: 'border-t-sky-300/60 border-l-sky-300/60',
+	Mac: 'border-t-sky-300/60 border-l-sky-300/60',
+	Linux: 'border-t-sky-300/60 border-l-sky-300/60',
+	Network: 'border-t-fuchsia-300/60 border-l-fuchsia-300/60'
 };
 
 export const fsEdge = (fs: string) =>
