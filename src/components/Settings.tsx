@@ -6,6 +6,7 @@ import { prettyKeys, SHORTCUTS } from '../shortcuts';
 import { applyTextScale, savedTextScale, stepTextScale, TEXT_STEPS } from '../textSize';
 import { savedThemeId, setTheme, THEMES } from '../themes';
 import Button from './Button';
+import AboutPanel from './AboutPanel';
 import Drawer from './Drawer';
 import HelpPanel from './HelpPanel';
 import Kbd from './Kbd';
@@ -811,7 +812,8 @@ const Settings = ({
 			label: 'Config',
 			render: () => <ConfigPanel {...{ onChanged: onImported, onError }} />
 		},
-		{ id: 'help', label: 'Help', render: () => <HelpPanel {...{ onError }} /> }
+		{ id: 'help', label: 'Help', render: () => <HelpPanel {...{ onError }} /> },
+		{ id: 'about', label: 'About', render: () => <AboutPanel /> }
 	];
 
 	const [active, setActive] = useState(
