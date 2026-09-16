@@ -37,7 +37,7 @@ const SearchBox = ({
 
 	return (
 		<div
-			className={`relative bg-bg-panel rounded-control border border-border-strong focus-within:border-accent transition-colors ${className}`}
+			className={`relative bg-bg-panel rounded-control border border-border-strong focus-within:border-accent focus-within:shadow-[var(--color-glow)] transition-colors ${className}`}
 		>
 			<input
 				ref={ref}

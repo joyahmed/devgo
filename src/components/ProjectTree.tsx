@@ -252,7 +252,7 @@ const ProjectRow = ({
 			selected
 				? quiet
 					? 'bg-bg-selected/40 text-text-primary'
-					: 'bg-bg-selected text-text-primary'
+					: 'bg-bg-selected text-text-primary shadow-[var(--color-glow)]'
 				: 'text-text-secondary hover:bg-bg-hover/50'
 		}`}
 		// select first so the menu and the keyboard agree on the row
