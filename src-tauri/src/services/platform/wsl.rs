@@ -1,9 +1,7 @@
-use std::os::windows::process::CommandExt;
+use super::Quiet;
 use std::process::Command;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
-
-const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 /// Every `wsl.exe` invocation goes through here.
 ///
@@ -13,7 +11,7 @@ const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 fn wsl_command() -> Command {
     let mut cmd = Command::new("wsl");
-    cmd.creation_flags(CREATE_NO_WINDOW);
+    cmd.quiet();
     cmd.env("WSL_UTF8", "1");
     cmd
 }
