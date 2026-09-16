@@ -13,6 +13,7 @@ pub mod preferences;
 pub mod project_cache;
 pub mod scanner;
 pub mod scripts;
+pub mod server_apps;
 pub mod server_folders;
 pub mod servers;
 pub mod sessions;
