@@ -563,9 +563,9 @@ pub fn open_agent(
     .filter(|c| !c.is_empty())
     .ok_or_else(|| {
         let (side, fix) = if on_wsl {
-            ("WSL", "install it in the distro")
+            ("WSL", "Install it in the distro")
         } else {
-            ("Windows", "install it on Windows")
+            ("Windows", "Install it on Windows")
         };
         AppError::LaunchFailed(format!(
             "{} is not installed on the {side} side. {fix} and scan again in Settings",
