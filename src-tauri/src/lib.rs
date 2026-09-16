@@ -203,6 +203,26 @@ fn monitor_rects(monitors: &[tauri::Monitor]) -> Vec<MonitorRect> {
         .collect()
 }
 
+// the os half of the transparency knob. 0 is no effect at all, and no
+// compositing cost; above it acrylic on windows 11 (blur and tint; not
+// mica, which shows the wallpaper rather than what is behind a window
+// that summons over other windows), the hud on macos, nothing on linux.
+// the ground's own alpha is the frontend's, from the same number
+pub fn apply_transparency(window: &tauri::WebviewWindow, percent: u8) {
+    use tauri::window::{Effect, EffectsBuilder};
+    let pct = services::preferences::clamp_transparency(percent);
+    let effects = (pct > 0).then(|| {
+        #[cfg(target_os = "macos")]
+        let effect = Effect::HudWindow;
+        #[cfg(not(target_os = "macos"))]
+        let effect = Effect::Acrylic;
+        EffectsBuilder::new().effect(effect).build()
+    });
+    if let Err(e) = window.set_effects(effects) {
+        eprintln!("transparency: {e}");
+    }
+}
+
 pub fn run() {
     let context: tauri::Context<tauri::Wry> = tauri::generate_context!();
 
@@ -332,6 +352,16 @@ pub fn run() {
                 // visible, and what it finds then is what it paints
                 let plain: tauri::Window = window.as_ref().window();
                 win_taskbar::apply_window_icon(&plain);
+
+                // and the effect: an acrylic window that appears opaque
+                // and then blurs is a flash, like the geometry snap
+                let pct = app
+                    .state::<AppState>()
+                    .pref_store
+                    .lock()
+                    .map(|p| p.window_transparency())
+                    .unwrap_or(0);
+                apply_transparency(&window, pct);
             }
 
             // A hotkey another app already owns must not stop DevGo from
