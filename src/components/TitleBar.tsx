@@ -1,10 +1,21 @@
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { isMac } from '../platform';
 import TitleBarButton, { TITLE_BAR_BUTTONS } from './TitleBarButton';
 
 const appWindow = getCurrentWindow();
 
+// on a mac the window keeps its native traffic lights (titleBarStyle
+// Overlay), drawn by the os over the top-left ~78×28 px of our content. so
+// two things differ there and nothing else: the brand steps right of
+// them, and our own three buttons do not render, a second set beside the
+// real one is a title bar with six window controls. the drag region is
+// unchanged; startDragging works under overlay
+const brandInset = isMac ? 'pl-[84px]' : 'pl-4';
+
 const TitleBar = ({ children }: TitleBarProps) => (
-	<header className='flex items-center justify-between h-12 px-4 ground-chrome border-b border-border shrink-0 select-none'>
+	<header
+		className={`flex items-center justify-between h-12 ${brandInset} pr-4 ground-chrome border-b border-border shrink-0 select-none`}
+	>
 		<div
 			className='flex flex-1 items-center gap-2 cursor-grab'
 			onMouseDown={() => appWindow.startDragging()}
@@ -19,9 +30,10 @@ const TitleBar = ({ children }: TitleBarProps) => (
 		</div>
 		<div className='flex items-center gap-1 shrink-0'>
 			{children}
-			{TITLE_BAR_BUTTONS.map(({ id, ...button }) => (
-				<TitleBarButton key={id} {...button} />
-			))}
+			{!isMac &&
+				TITLE_BAR_BUTTONS.map(({ id, ...button }) => (
+					<TitleBarButton key={id} {...button} />
+				))}
 		</div>
 	</header>
 );
