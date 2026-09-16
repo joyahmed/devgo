@@ -171,16 +171,23 @@ body {
 	}
 }
 
+/* the thumb was --color-border, the quiet hairline token, 1.2:1 against
+   the card it scrolls: there, and invisible. border-strong is the
+   control-edge token, 3:1 or better on every surface */
 ::-webkit-scrollbar {
-	width: 6px;
+	width: 8px;
+	height: 8px;
 }
 ::-webkit-scrollbar-track {
 	background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-	background: var(--color-border);
-	border-radius: 3px;
+	background: var(--color-border-strong);
+	border-radius: 4px;
+	border: 2px solid transparent;
+	background-clip: padding-box;
 }
 ::-webkit-scrollbar-thumb:hover {
-	background: var(--color-text-muted);
+	background: var(--color-accent);
+	background-clip: padding-box;
 }
