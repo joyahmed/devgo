@@ -99,19 +99,19 @@ mod tests {
     // shaped like a real file: a bare host, a real one, a tunnel alias to
     // the same box, a wildcard rule, and a Match block that must not leak
     const FIXTURE: &str = r#"
-  Host zettaserver
-    HostName zettaserver
+  Host lanbox
+    HostName lanbox
 
-Host zetta
-    HostName 213.190.4.162
+Host box
+    HostName 203.0.113.7
     User joy
     Port 9999
     IdentityFile ~/.ssh/id_ed25519_office
     IdentitiesOnly yes
 
 # the tunnel
-Host zetta-db
-    HostName 213.190.4.162
+Host box-db
+    HostName 203.0.113.7
     User joy
     Port 9999
     LocalForward 15432 localhost:5432
@@ -137,18 +137,15 @@ Host a b
         let s = parse(FIXTURE);
         let names: Vec<_> =
             s.iter().map(|x| x.alias.clone().unwrap()).collect();
-        assert_eq!(names, ["zettaserver", "zetta", "zetta-db", "a", "b"]);
-        let zetta = by_alias(&s, "zetta");
-        assert_eq!(zetta.host, "213.190.4.162");
-        assert_eq!(zetta.user.as_deref(), Some("joy"));
-        assert_eq!(zetta.port, Some(9999));
-        assert_eq!(zetta.identity.as_deref(), Some("~/.ssh/id_ed25519_office"));
-        assert!(!zetta.tunnel);
-        assert!(
-            by_alias(&s, "zetta-db").tunnel,
-            "LocalForward marks a tunnel"
-        );
-        assert_eq!(by_alias(&s, "zettaserver").host, "zettaserver");
+        assert_eq!(names, ["lanbox", "box", "box-db", "a", "b"]);
+        let b = by_alias(&s, "box");
+        assert_eq!(b.host, "203.0.113.7");
+        assert_eq!(b.user.as_deref(), Some("joy"));
+        assert_eq!(b.port, Some(9999));
+        assert_eq!(b.identity.as_deref(), Some("~/.ssh/id_ed25519_office"));
+        assert!(!b.tunnel);
+        assert!(by_alias(&s, "box-db").tunnel, "LocalForward marks a tunnel");
+        assert_eq!(by_alias(&s, "lanbox").host, "lanbox");
         assert!(
             s.iter().all(|x| x.user.as_deref() != Some("nobody")),
             "Match leaked"

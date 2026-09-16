@@ -381,7 +381,7 @@ const ServersLane = ({
 				{l && l.up && !l.inventory && !l.inventory_error && (
 					<div
 						className={`${note} text-text-muted`}
-						title='joyahmed/server › scripts/install.sh puts it in ~/scripts'
+						title='a script on the box, in ~/scripts, that lists its apps as json'
 					>
 						No inventory on this box.{' '}
 						<span className='font-mono'>~/scripts/devgo-inventory.sh</span>{' '}

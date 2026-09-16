@@ -331,16 +331,16 @@ mod tests {
     fn a_wsl_workspace_clones_inside_the_distro_at_the_linux_path() {
         let p = plan(
             r"\\wsl.localhost\Ubuntu-26.04\home\joy\projects\01_turbo",
-            "joyahmed/zetta-hrm",
-            "zetta-hrm",
+            "joyahmed/notes",
+            "notes",
             Protocol::Ssh,
         );
         assert_eq!(
             p.dest,
-            r"\\wsl.localhost\Ubuntu-26.04\home\joy\projects\01_turbo\zetta-hrm"
+            r"\\wsl.localhost\Ubuntu-26.04\home\joy\projects\01_turbo\notes"
         );
         assert_eq!(p.distro.as_deref(), Some("Ubuntu-26.04"));
-        assert_eq!(p.git_dest, "/home/joy/projects/01_turbo/zetta-hrm");
+        assert_eq!(p.git_dest, "/home/joy/projects/01_turbo/notes");
     }
 
     #[test]

@@ -25,8 +25,8 @@ const FIELDS: {
 	digits?: boolean;
 }[] = [
 	{ key: 'name', label: 'Name', placeholder: 'Hostinger VPS', wide: true },
-	{ key: 'alias', label: 'Alias (from ~/.ssh/config)', placeholder: 'zetta' },
-	{ key: 'host', label: 'Host (if no alias)', placeholder: '192.168.0.175' },
+	{ key: 'alias', label: 'Alias (from ~/.ssh/config)', placeholder: 'box' },
+	{ key: 'host', label: 'Host (if no alias)', placeholder: '203.0.113.7' },
 	{ key: 'user', label: 'User', placeholder: 'joy' },
 	{ key: 'port', label: 'Port', placeholder: '22', digits: true },
 	{

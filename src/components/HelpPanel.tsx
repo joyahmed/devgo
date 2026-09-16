@@ -143,8 +143,8 @@ const SECTIONS: { title: string; body: React.ReactNode; windowsOnly?: boolean }[
 				</p>
 				<p>
 					Expand a server (or ↻) and one <Code>ssh</Code> lists its folders
-					and, when the box has <Code>~/scripts/devgo-inventory.sh</Code> from{' '}
-					<Code>joyahmed/server</Code>, its <em>apps</em>: each{' '}
+					and, when the box has <Code>~/scripts/devgo-inventory.sh</Code>, its{' '}
+					<em>apps</em>: each{' '}
 					<Code>/var/www</Code> folder shows its domain, a dot for its pm2
 					processes and its ports. The server declares its own actions in{' '}
 					<Code>devgo-actions.json</Code> beside that script; right-click the

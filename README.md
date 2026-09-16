@@ -45,7 +45,7 @@ The Servers lane lists the machines you ssh into. Import `~/.ssh/config` (every 
 
 Enter opens a terminal on the server in a tmux session that survives, the same promise a WSL project gets. Expand a server (or ↻) and one `ssh` lists its folders: `~`, `~/projects`, `/var/www` and `/srv` by default, plus any folder you pin as top level.
 
-When the box carries `~/scripts/devgo-inventory.sh` from `joyahmed/server`, the same call brings back its **apps**: each `/var/www` folder shows its domain, a dot for its pm2 processes, and its ports. The server declares its own **actions** in `devgo-actions.json` beside that script; right-click the server or an app to run them. An action is typed into a tmux window on the server and the terminal attaches to it. `sudo` asks there; DevGo never holds it, never runs a script itself, and never reads what came back.
+When the box carries a script at `~/scripts/devgo-inventory.sh`, the same call brings back its **apps**: each `/var/www` folder shows its domain, a dot for its pm2 processes, and its ports. The server declares its own **actions** in `devgo-actions.json` beside that script; right-click the server or an app to run them. An action is typed into a tmux window on the server and the terminal attaches to it. `sudo` asks there; DevGo never holds it, never runs a script itself, and never reads what came back.
 
 Some actions are **forms**: *New nginx site…* asks for the app, the domain, the port, the shape (`NEXT · NEST · NODE · TURBO`), www and HTTPS, and shows the exact line it composes as you type. *Preview* runs it with `--dry-run` so the script prints what it would do and changes nothing; the other button runs it for real.
 

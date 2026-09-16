@@ -18,7 +18,7 @@ pub struct GithubGroup {
 }
 
 // the name as stored: trimmed. empty is refused; a duplicate (case-
-// insensitive) is refused, two groups called zetta and Zetta are one mistake
+// insensitive) is refused, two groups called acme and Acme are one mistake
 fn valid_name(
     groups: &[GithubGroup],
     name: &str,
@@ -142,12 +142,11 @@ mod tests {
 
     #[test]
     fn assign_creates_then_is_idempotent() {
-        let groups = assign(vec![], "zetta", "joyahmed/zetta-hrm").unwrap();
-        assert_eq!(groups, vec![g("zetta", &["joyahmed/zetta-hrm"])]);
-        let again =
-            assign(groups.clone(), "zetta", "joyahmed/zetta-hrm").unwrap();
+        let groups = assign(vec![], "acme", "joyahmed/notes").unwrap();
+        assert_eq!(groups, vec![g("acme", &["joyahmed/notes"])]);
+        let again = assign(groups.clone(), "acme", "joyahmed/notes").unwrap();
         assert_eq!(again, groups, "assigning twice is one membership");
-        let more = assign(again, "ZETTA", "joyahmed/zetta-cloud").unwrap();
+        let more = assign(again, "ACME", "joyahmed/cloud").unwrap();
         assert_eq!(
             more[0].repos.len(),
             2,
@@ -168,9 +167,9 @@ mod tests {
     #[test]
     fn names_are_trimmed_unique_and_never_empty() {
         assert!(assign(vec![], "  ", "o/r").is_err());
-        let groups = vec![g("zetta", &[]), g("clients", &[])];
+        let groups = vec![g("acme", &[]), g("clients", &[])];
         assert!(
-            rename(groups.clone(), "clients", "Zetta").is_err(),
+            rename(groups.clone(), "clients", "Acme").is_err(),
             "case-insensitive clash"
         );
         assert!(

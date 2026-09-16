@@ -135,7 +135,7 @@ pub fn without_root(server: &Server, root: &str) -> Vec<String> {
         .collect()
 }
 
-// /var/www/erp -> erp. tmux forbids . and : in a session name
+// /var/www/shop -> shop. tmux forbids . and : in a session name
 pub fn session_slug(path: &str) -> String {
     let last = path.trim_end_matches('/').rsplit('/').next().unwrap_or("");
     let s: String = last
@@ -354,12 +354,12 @@ impl ListingCache {
 mod tests {
     use super::*;
 
-    fn zetta() -> Server {
+    fn boxy() -> Server {
         Server {
-            id: "zetta".into(),
-            name: "zetta".into(),
-            alias: Some("zetta".into()),
-            host: "213.190.4.162".into(),
+            id: "box".into(),
+            name: "box".into(),
+            alias: Some("box".into()),
+            host: "203.0.113.7".into(),
             user: Some("joy".into()),
             port: Some(9999),
             identity: None,
@@ -382,7 +382,7 @@ mod tests {
     fn listing_lines_become_folders_attributed_to_their_root() {
         let roots = vec!["~/projects".to_string(), "/var/www".to_string()];
         let text =
-            "/home/joy/projects/api/\n/var/www/erp/\n/var/www/zetta-hms/\n\n";
+            "/home/joy/projects/api/\n/var/www/shop/\n/var/www/blog/\n\n";
         let f = parse_listing(text, &roots, Some("/home/joy"));
         assert_eq!(f.len(), 3);
         assert_eq!(
@@ -394,7 +394,7 @@ mod tests {
             }
         );
         assert_eq!(f[1].root, "/var/www");
-        assert_eq!(f[2].name, "zetta-hms");
+        assert_eq!(f[2].name, "blog");
     }
 
     #[test]
@@ -419,7 +419,7 @@ mod tests {
 
     #[test]
     fn defaults_apply_only_when_the_row_says_nothing() {
-        let mut s = zetta();
+        let mut s = boxy();
         assert_eq!(
             effective_roots(&s),
             ["~", "~/projects", "/var/www", "/srv"]
@@ -432,13 +432,13 @@ mod tests {
     // are written out, so the list does not read as "the defaults" again
     #[test]
     fn unpinning_a_default_keeps_the_other_defaults() {
-        let s = zetta();
+        let s = boxy();
         assert_eq!(without_root(&s, "~/projects"), ["~", "/var/www", "/srv"]);
     }
 
     #[test]
     fn unpinning_trims_the_way_pinning_did() {
-        let mut s = zetta();
+        let mut s = boxy();
         s.roots = vec!["/etc/nginx".into(), "/opt".into()];
         assert_eq!(without_root(&s, " /etc/nginx/ "), ["/opt"]);
         // unpinning the last one leaves an empty list: the defaults again
@@ -448,39 +448,36 @@ mod tests {
 
     #[test]
     fn a_folder_terminal_is_a_session_named_after_the_folder() {
-        let line = folder_terminal_command(&zetta(), "/var/www/erp");
+        let line = folder_terminal_command(&boxy(), "/var/www/shop");
         assert_eq!(
             line,
-            "ssh -t zetta tmux new-session -A -s erp -c /var/www/erp"
+            "ssh -t box tmux new-session -A -s shop -c /var/www/shop"
         );
-        assert_eq!(session_slug("/var/www/zetta.hms"), "zetta-hms");
-        let mut plain = zetta();
+        assert_eq!(session_slug("/var/www/my.blog"), "my-blog");
+        let mut plain = boxy();
         plain.tmux = false;
-        assert_eq!(
-            folder_terminal_command(&plain, "/var/www/erp"),
-            "ssh zetta"
-        );
+        assert_eq!(folder_terminal_command(&plain, "/var/www/shop"), "ssh box");
     }
 
     #[test]
     fn remote_editor_lines_use_the_alias_when_there_is_one() {
         assert_eq!(
-            vscode_remote_args(&zetta(), "/var/www/erp"),
-            "--remote ssh-remote+zetta \"/var/www/erp\""
+            vscode_remote_args(&boxy(), "/var/www/shop"),
+            "--remote ssh-remote+box \"/var/www/shop\""
         );
         assert_eq!(
-            zed_remote_url(&zetta(), "/var/www/erp"),
-            "ssh://zetta/var/www/erp"
+            zed_remote_url(&boxy(), "/var/www/shop"),
+            "ssh://box/var/www/shop"
         );
-        let mut manual = zetta();
+        let mut manual = boxy();
         manual.alias = None;
         assert_eq!(
-            zed_remote_url(&manual, "/var/www/erp"),
-            "ssh://joy@213.190.4.162:9999/var/www/erp"
+            zed_remote_url(&manual, "/var/www/shop"),
+            "ssh://joy@203.0.113.7:9999/var/www/shop"
         );
         assert_eq!(
             vscode_remote_args(&manual, "/x"),
-            "--remote ssh-remote+joy@213.190.4.162 \"/x\""
+            "--remote ssh-remote+joy@203.0.113.7 \"/x\""
         );
     }
 
@@ -490,7 +487,7 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
         let mut c = ListingCache::new(dir.clone()).unwrap();
         c.store(
-            "zetta",
+            "box",
             ServerListing {
                 listed_at: 5,
                 up: true,
@@ -499,6 +496,6 @@ mod tests {
         )
         .unwrap();
         let again = ListingCache::new(dir).unwrap();
-        assert!(again.all()["zetta"].up);
+        assert!(again.all()["box"].up);
     }
 }

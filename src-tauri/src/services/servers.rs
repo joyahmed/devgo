@@ -224,12 +224,12 @@ impl ServersStore {
 mod tests {
     use super::*;
 
-    fn zetta() -> Server {
+    fn boxy() -> Server {
         Server {
-            id: "zetta".into(),
-            name: "zetta".into(),
-            alias: Some("zetta".into()),
-            host: "213.190.4.162".into(),
+            id: "box".into(),
+            name: "box".into(),
+            alias: Some("box".into()),
+            host: "203.0.113.7".into(),
             user: Some("joy".into()),
             port: Some(9999),
             identity: Some("~/.ssh/id".into()),
@@ -244,9 +244,9 @@ mod tests {
 
     #[test]
     fn an_alias_is_launched_as_the_alias_and_nothing_else() {
-        assert_eq!(zetta().ssh_target(), ["zetta"]);
-        let line = zetta().ssh_command();
-        assert_eq!(line, "ssh -t zetta tmux new-session -A -s devgo");
+        assert_eq!(boxy().ssh_target(), ["box"]);
+        let line = boxy().ssh_command();
+        assert_eq!(line, "ssh -t box tmux new-session -A -s devgo");
         assert!(
             !line.contains('"') && !line.contains('\''),
             "no quotes: the line is shell agnostic"
@@ -255,38 +255,38 @@ mod tests {
 
     #[test]
     fn a_manual_server_spells_out_user_port_and_key() {
-        let mut s = zetta();
+        let mut s = boxy();
         s.alias = None;
         s.session = Some("work".into());
         assert_eq!(
             s.ssh_target(),
-            ["-p", "9999", "-i", "\"~/.ssh/id\"", "joy@213.190.4.162"]
+            ["-p", "9999", "-i", "\"~/.ssh/id\"", "joy@203.0.113.7"]
         );
         assert!(s.ssh_command().contains("-s work"));
         s.port = Some(22);
         s.identity = None;
         s.user = None;
-        assert_eq!(s.ssh_target(), ["213.190.4.162"]);
+        assert_eq!(s.ssh_target(), ["203.0.113.7"]);
     }
 
     #[test]
     fn tmux_off_is_a_plain_ssh() {
-        let mut s = zetta();
+        let mut s = boxy();
         s.tmux = false;
-        assert_eq!(s.ssh_command(), "ssh zetta");
+        assert_eq!(s.ssh_command(), "ssh box");
     }
 
     #[test]
     fn scp_prefix_follows_the_same_rule() {
-        assert_eq!(zetta().scp_prefix(), "zetta:");
-        let mut s = zetta();
+        assert_eq!(boxy().scp_prefix(), "box:");
+        let mut s = boxy();
         s.alias = None;
-        assert_eq!(s.scp_prefix(), "joy@213.190.4.162:");
+        assert_eq!(s.scp_prefix(), "joy@203.0.113.7:");
     }
 
     #[test]
     fn slug_is_safe_and_never_empty() {
-        assert_eq!(slug("Zetta (VPS)"), "zetta--vps");
+        assert_eq!(slug("Acme (VPS)"), "acme--vps");
         assert_eq!(slug("***"), "server");
     }
 
@@ -295,21 +295,21 @@ mod tests {
         let dir = std::env::temp_dir().join("devgo-servers-test");
         let _ = fs::remove_dir_all(&dir);
         let mut store = ServersStore::new(dir.clone()).unwrap();
-        let added = store.add(zetta()).unwrap();
-        assert_eq!(added.id, "zetta");
-        let again = store.add(zetta()).unwrap();
-        assert_eq!(again.id, "zetta-2", "a clash gets a suffix");
-        store.remove("zetta-2").unwrap();
+        let added = store.add(boxy()).unwrap();
+        assert_eq!(added.id, "box");
+        let again = store.add(boxy()).unwrap();
+        assert_eq!(again.id, "box-2", "a clash gets a suffix");
+        store.remove("box-2").unwrap();
 
         // a path set by hand survives a re-import
-        let mut mine = store.get("zetta").unwrap();
+        let mut mine = store.get("box").unwrap();
         mine.default_path = Some("/home/joy/projects".into());
         store.update(mine).unwrap();
-        let mut fresh = zetta();
+        let mut fresh = boxy();
         fresh.port = Some(2222);
         let (a, u) = store.upsert_from_config(vec![fresh]).unwrap();
         assert_eq!((a, u), (0, 1));
-        let after = store.get("zetta").unwrap();
+        let after = store.get("box").unwrap();
         assert_eq!(after.port, Some(2222));
         assert_eq!(after.default_path.as_deref(), Some("/home/joy/projects"));
 

@@ -598,27 +598,27 @@ pub fn compose(
 mod tests {
     use super::*;
 
-    // two apps from a live document, trimmed: erp is a turborepo with a
-    // web and an api process; zetta-hms has a site and no process at all
+    // two apps from a live document, trimmed: shop is a turborepo with a
+    // web and an api process; blog has a site and no process at all
     const INVENTORY: &str = r#"{
       "schema": 1, "generated": "2026-09-12T20:00:00+0600",
-      "host": {"hostname": "zettaserver", "uptime": 543457, "load": [0.0, 0.1, 0.0],
+      "host": {"hostname": "box", "uptime": 543457, "load": [0.0, 0.1, 0.0],
                "disk": {"total_gb": 206.9, "free_gb": 156.6}, "pm2_total": 16, "pm2_online": 16, "nginx_sites": 12},
       "apps": [
-        {"name": "erp", "dir": "/var/www/erp", "kind": "mono",
+        {"name": "shop", "dir": "/var/www/shop", "kind": "mono",
          "processes": [
-           {"pm2": "erp-frontend", "pid": 1, "status": "online", "restarts": 3, "uptime": 10, "cwd": "/var/www/erp/apps/web", "node": "v20.19.6", "ports": [3008], "memory_mb": 120},
-           {"pm2": "erp-api", "pid": 2, "status": "online", "restarts": 0, "uptime": 10, "cwd": "/var/www/erp/apps/api", "node": "v20.19.6", "ports": [3009], "memory_mb": 90}],
-         "site": {"file": "erp", "domains": ["hrm.zettabyteincorp.com"], "ssl": true, "upstreams": [], "aliases": [], "web_port": 3008, "api_port": 3009},
-         "git": {"remote": "git@github.com:joyahmed/erp.git", "repo": "joyahmed/erp", "branch": "main", "head": "abc1234", "committed": "2026-09-01", "subject": "deploy"},
-         "env_files": [".env", "apps/api/.env"], "database": {"engine": "postgres", "host": "127.0.0.1", "port": 5432, "name": "erp"},
+           {"pm2": "shop-web", "pid": 1, "status": "online", "restarts": 3, "uptime": 10, "cwd": "/var/www/shop/apps/web", "node": "v20.19.6", "ports": [3008], "memory_mb": 120},
+           {"pm2": "shop-api", "pid": 2, "status": "online", "restarts": 0, "uptime": 10, "cwd": "/var/www/shop/apps/api", "node": "v20.19.6", "ports": [3009], "memory_mb": 90}],
+         "site": {"file": "shop", "domains": ["shop.example.com"], "ssl": true, "upstreams": [], "aliases": [], "web_port": 3008, "api_port": 3009},
+         "git": {"remote": "git@github.com:joyahmed/shop.git", "repo": "joyahmed/shop", "branch": "main", "head": "abc1234", "committed": "2026-09-01", "subject": "deploy"},
+         "env_files": [".env", "apps/api/.env"], "database": {"engine": "postgres", "host": "127.0.0.1", "port": 5432, "name": "shop"},
          "pm": "pnpm", "ecosystem": "ecosystem.config.js"},
-        {"name": "zetta-hms", "dir": "/var/www/zetta-hms", "kind": "mono", "processes": [],
-         "site": {"file": "zetta-hms", "domains": ["hms.zettademos.com"], "ssl": true, "upstreams": [], "aliases": [], "web_port": 3005, "api_port": 3004},
+        {"name": "blog", "dir": "/var/www/blog", "kind": "mono", "processes": [],
+         "site": {"file": "blog", "domains": ["blog.example.com"], "ssl": true, "upstreams": [], "aliases": [], "web_port": 3005, "api_port": 3004},
          "git": null, "env_files": [], "database": null},
         {"name": "thing", "dir": "/opt/thing", "kind": "node", "processes": [], "site": null, "git": null, "env_files": [], "database": null}
       ],
-      "orphan_processes": [{"pm2": "gh-runner-zettabyte"}], "orphan_sites": []
+      "orphan_processes": [{"pm2": "gh-runner"}], "orphan_sites": []
     }"#;
 
     const ACTIONS: &str = r#"{
@@ -633,7 +633,7 @@ mod tests {
         {"id": "nginx-conf", "label": "nginx config", "kind": "run", "root": false, "command": "less /etc/nginx/sites-available/{site}"},
         {"id": "nginx-access", "label": "Tail access log", "kind": "run", "root": true, "command": "sudo tail -f /var/log/nginx/access.log | grep --line-buffered {domain}"},
         {"id": "open-site", "label": "Open in browser", "kind": "url", "root": false, "command": "https://{domain}"},
-        {"id": "db-tunnel", "label": "DB tunnel", "kind": "local", "root": false, "command": "ssh -N zetta-db"}
+        {"id": "db-tunnel", "label": "DB tunnel", "kind": "local", "root": false, "command": "ssh -N box-db"}
       ]
     }"#;
 
@@ -660,10 +660,10 @@ mod tests {
     // box: pm2, pid, restarts, uptime, node and memory_mb all null
     #[test]
     fn a_docker_container_with_null_counters_parses() {
-        let text = r#"{"apps":[{"name":"zetta-hms","dir":"/var/www/zetta-hms","processes":[{"pm2": null, "docker": "zetta-hms", "pid": null, "status": "online", "restarts": null, "uptime": null, "cwd": "/var/www/zetta-hms", "node": null, "ports": [3005], "memory_mb": null}]}]}"#;
+        let text = r#"{"apps":[{"name":"blog","dir":"/var/www/blog","processes":[{"pm2": null, "docker": "blog", "pid": null, "status": "online", "restarts": null, "uptime": null, "cwd": "/var/www/blog", "node": null, "ports": [3005], "memory_mb": null}]}]}"#;
         let inv = parse_inventory(text).unwrap();
         let p = &inv.apps[0].processes[0];
-        assert_eq!(p.docker.as_deref(), Some("zetta-hms"));
+        assert_eq!(p.docker.as_deref(), Some("blog"));
         assert_eq!(p.pm2, None);
         assert_eq!(p.restarts, None);
         assert_eq!(p.memory_mb, None);
@@ -686,45 +686,45 @@ mod tests {
     #[test]
     fn placeholders_name_the_web_and_api_processes() {
         let i = inv();
-        let erp = placeholders(&i.apps[0]);
-        assert_eq!(erp["pm2"].as_deref(), Some("erp-frontend"));
-        assert_eq!(erp["pm2_web"].as_deref(), Some("erp-frontend"));
-        assert_eq!(erp["pm2_api"].as_deref(), Some("erp-api"));
-        assert_eq!(erp["domain"].as_deref(), Some("hrm.zettabyteincorp.com"));
-        assert_eq!(erp["api_port"].as_deref(), Some("3009"));
-        assert_eq!(erp["db"].as_deref(), Some("erp"));
-        assert_eq!(erp["repo"].as_deref(), Some("joyahmed/erp"));
-        assert_eq!(erp["pm"].as_deref(), Some("pnpm"));
-        assert_eq!(erp["eco"].as_deref(), Some("ecosystem.config.js"));
-        let hms = placeholders(&i.apps[1]);
-        assert_eq!(hms["eco"], None, "no ecosystem file, no restart entry");
+        let shop = placeholders(&i.apps[0]);
+        assert_eq!(shop["pm2"].as_deref(), Some("shop-web"));
+        assert_eq!(shop["pm2_web"].as_deref(), Some("shop-web"));
+        assert_eq!(shop["pm2_api"].as_deref(), Some("shop-api"));
+        assert_eq!(shop["domain"].as_deref(), Some("shop.example.com"));
+        assert_eq!(shop["api_port"].as_deref(), Some("3009"));
+        assert_eq!(shop["db"].as_deref(), Some("shop"));
+        assert_eq!(shop["repo"].as_deref(), Some("joyahmed/shop"));
+        assert_eq!(shop["pm"].as_deref(), Some("pnpm"));
+        assert_eq!(shop["eco"].as_deref(), Some("ecosystem.config.js"));
+        let blog = placeholders(&i.apps[1]);
+        assert_eq!(blog["eco"], None, "no ecosystem file, no restart entry");
     }
 
     #[test]
     fn an_action_needing_what_the_row_lacks_is_hidden_not_broken() {
         let i = inv();
-        let hms = placeholders(&i.apps[1]);
-        assert_eq!(fill("pm2 logs {pm2} --lines 100", &hms), None);
+        let blog = placeholders(&i.apps[1]);
+        assert_eq!(fill("pm2 logs {pm2} --lines 100", &blog), None);
         assert_eq!(
-            fill("less /etc/nginx/sites-available/{site}", &hms).as_deref(),
-            Some("less /etc/nginx/sites-available/zetta-hms")
+            fill("less /etc/nginx/sites-available/{site}", &blog).as_deref(),
+            Some("less /etc/nginx/sites-available/blog")
         );
-        let erp = placeholders(&i.apps[0]);
+        let shop = placeholders(&i.apps[0]);
         assert_eq!(
             fill(
                 "sudo tail -f /var/log/nginx/access.log | grep --line-buffered {domain}",
-                &erp
+                &shop
             )
             .as_deref(),
-            Some("sudo tail -f /var/log/nginx/access.log | grep --line-buffered hrm.zettabyteincorp.com"),
+            Some("sudo tail -f /var/log/nginx/access.log | grep --line-buffered shop.example.com"),
             "the pipe rides through untouched"
         );
         assert_eq!(
-            fill("echo {later_schema} {name}", &erp).as_deref(),
-            Some("echo {later_schema} erp")
+            fill("echo {later_schema} {name}", &shop).as_deref(),
+            Some("echo {later_schema} shop")
         );
-        assert_eq!(fill("no braces", &erp).as_deref(), Some("no braces"));
-        assert_eq!(fill("open {", &erp).as_deref(), Some("open {"));
+        assert_eq!(fill("no braces", &shop).as_deref(), Some("no braces"));
+        assert_eq!(fill("open {", &shop).as_deref(), Some("open {"));
     }
 
     #[test]
@@ -740,10 +740,10 @@ mod tests {
             cmd.contains("|| cat /var/www/server/scripts/devgo-actions.json")
         );
         let stdout = format!(
-            "/home/joy\n/var/www/erp/\n{INVENTORY_MARK}\n{INVENTORY}\n{ACTIONS_MARK}\n{ACTIONS}\n"
+            "/home/joy\n/var/www/shop/\n{INVENTORY_MARK}\n{INVENTORY}\n{ACTIONS_MARK}\n{ACTIONS}\n"
         );
         let p = split(&stdout);
-        assert_eq!(p.listing, "/home/joy\n/var/www/erp/\n");
+        assert_eq!(p.listing, "/home/joy\n/var/www/shop/\n");
         assert_eq!(p.inventory.unwrap().unwrap().apps.len(), 3);
         assert_eq!(p.actions.unwrap().unwrap().app.len(), 5);
         // a box without the scripts: the marks, nothing after them
@@ -761,14 +761,14 @@ mod tests {
     #[test]
     fn an_app_outside_every_root_still_gets_a_row() {
         let mut folders = vec![RemoteFolder {
-            name: "erp".into(),
-            path: "/var/www/erp".into(),
+            name: "shop".into(),
+            path: "/var/www/shop".into(),
             root: "/var/www".into(),
         }];
         append_unlisted(&mut folders, &inv());
         let paths: Vec<&str> =
             folders.iter().map(|f| f.path.as_str()).collect();
-        assert_eq!(paths, ["/var/www/erp", "/var/www/zetta-hms", "/opt/thing"]);
+        assert_eq!(paths, ["/var/www/shop", "/var/www/blog", "/opt/thing"]);
         assert_eq!(folders[2].root, "/opt");
         assert_eq!(folders[1].root, "/var/www");
         append_unlisted(&mut folders, &inv());
@@ -780,26 +780,25 @@ mod tests {
         let run = typed_command(
             "devgo",
             "logs",
-            "pm2 logs erp-frontend --lines 100",
+            "pm2 logs shop-web --lines 100",
             true,
         );
         assert_eq!(
             run,
-            "tmux new-session -d -s devgo 2>/dev/null; tmux new-window -t devgo -n logs; tmux send-keys -t devgo:logs 'pm2 logs erp-frontend --lines 100' Enter"
+            "tmux new-session -d -s devgo 2>/dev/null; tmux new-window -t devgo -n logs; tmux send-keys -t devgo:logs 'pm2 logs shop-web --lines 100' Enter"
         );
         let typed =
-            typed_command("devgo", "restart", "pm2 restart erp-api", false);
-        assert!(
-            typed.ends_with("send-keys -t devgo:restart 'pm2 restart erp-api'")
-        );
+            typed_command("devgo", "restart", "pm2 restart shop-api", false);
+        assert!(typed
+            .ends_with("send-keys -t devgo:restart 'pm2 restart shop-api'"));
         let quote = typed_command("devgo", "x", "echo it's", true);
         assert!(quote.contains("'echo it'\\''s' Enter"), "{quote}");
     }
 
     #[test]
     fn a_local_line_with_a_shell_character_is_refused_by_name() {
-        assert!(check_local("ssh -N zetta-db").is_ok());
-        let err = check_local("ssh -N zetta-db && echo done").unwrap_err();
+        assert!(check_local("ssh -N box-db").is_ok());
+        let err = check_local("ssh -N box-db && echo done").unwrap_err();
         assert!(err.contains("`&`"), "{err}");
         assert!(check_local("a | b").is_err());
     }
@@ -833,13 +832,13 @@ mod tests {
         assert_eq!(a.kind, ActionKind::Form);
         assert_eq!(a.fields.len(), 8);
         let plain = vals(&[
-            ("app", "shop"),
-            ("domain", "shop.zettademos.com"),
+            ("app", "wiki"),
+            ("domain", "wiki.example.com"),
             ("port", "3025"),
         ]);
         assert_eq!(
             compose(&a, &plain, false).unwrap(),
-            "sudo ~/scripts/new-site.sh shop shop.zettademos.com 3025",
+            "sudo ~/scripts/new-site.sh wiki wiki.example.com 3025",
             "next is the default, so no --type; www and ssl on carry no arg"
         );
         // a bool that defaults on still says its word
@@ -962,18 +961,18 @@ mod tests {
             ..new_site()
         };
         let v = vals(&[
-            ("app", "erp"),
-            ("domain", "hrm.zettabyteincorp.com"),
+            ("app", "shop"),
+            ("domain", "shop.example.com"),
             ("port", "3008"),
             ("type", "turbo"),
             ("api_port", "3009"),
             ("force", "true"),
         ]);
         let line = compose(&a, &v, true).unwrap();
-        assert_eq!(line, "sudo ~/scripts/new-site.sh erp hrm.zettabyteincorp.com 3008 --path {dir} --type turbo --api-port 3009 --force --dry-run");
+        assert_eq!(line, "sudo ~/scripts/new-site.sh shop shop.example.com 3008 --path {dir} --type turbo --api-port 3009 --force --dry-run");
         assert_eq!(
             fill(&line, &placeholders(&i.apps[0])).unwrap(),
-            "sudo ~/scripts/new-site.sh erp hrm.zettabyteincorp.com 3008 --path /var/www/erp --type turbo --api-port 3009 --force --dry-run"
+            "sudo ~/scripts/new-site.sh shop shop.example.com 3008 --path /var/www/shop --type turbo --api-port 3009 --force --dry-run"
         );
     }
 }
