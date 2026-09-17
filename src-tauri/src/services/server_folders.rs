@@ -211,10 +211,10 @@ pub fn zed_remote_url(server: &Server, path: &str) -> String {
     }
 }
 
-// one ssh with a remote command: stdout, or what ssh printed. ssh is
-// spawned directly, not through a shell, so a * reaches the remote shell
+// the ssh every ask runs, up to the remote command. ssh is spawned
+// directly, not through a shell, so a * reaches the remote shell
 // untouched, which is what expands it
-fn ssh(server: &Server, remote: &str) -> Result<String, String> {
+fn ssh_command(server: &Server, remote: &str) -> Command {
     let mut cmd = Command::new("ssh");
     cmd.quiet().args([
         "-o",
@@ -228,7 +228,41 @@ fn ssh(server: &Server, remote: &str) -> Result<String, String> {
         cmd.arg(a.trim_matches('"'));
     }
     cmd.arg(remote);
-    let out = cmd.output().map_err(|e| format!("ssh: {e}"))?;
+    cmd
+}
+
+// one ssh with a remote command: stdout, or what ssh printed
+fn ssh(server: &Server, remote: &str) -> Result<String, String> {
+    let out = ssh_command(server, remote)
+        .output()
+        .map_err(|e| format!("ssh: {e}"))?;
+    finish(out)
+}
+
+// the same, with bytes on the remote command's stdin: how files reach a
+// box without scp. the child's stdin is written and closed before the
+// wait, so a remote that reads to the end sees it
+fn ssh_with_input(
+    server: &Server,
+    remote: &str,
+    input: &[u8],
+) -> Result<String, String> {
+    use std::io::Write;
+    use std::process::Stdio;
+    let mut child = ssh_command(server, remote)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("ssh: {e}"))?;
+    if let Some(mut stdin) = child.stdin.take() {
+        stdin.write_all(input).map_err(|e| format!("ssh: {e}"))?;
+    }
+    let out = child.wait_with_output().map_err(|e| format!("ssh: {e}"))?;
+    finish(out)
+}
+
+fn finish(out: std::process::Output) -> Result<String, String> {
     // ssh exits 255 for its own failures; any other code is the remote
     // command's, and ls -d exits 2 when one root is missing on that box
     // while listing the rest fine
@@ -286,6 +320,20 @@ pub fn list(server: &Server) -> Result<Listed, String> {
 // one remote line whose output nobody reads: the send-keys door
 pub fn run_remote(server: &Server, line: &str) -> Result<(), String> {
     ssh(server, line).map(|_| ())
+}
+
+// one remote line whose output is the answer: the setup probe
+pub fn read_remote(server: &Server, line: &str) -> Result<String, String> {
+    ssh(server, line)
+}
+
+// one remote line fed on stdin: the setup's write
+pub fn put_remote(
+    server: &Server,
+    line: &str,
+    input: &[u8],
+) -> Result<(), String> {
+    ssh_with_input(server, line, input).map(|_| ())
 }
 
 // the children of one folder: the drill-down. same ssh, same rules; the
