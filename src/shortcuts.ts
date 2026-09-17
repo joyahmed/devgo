@@ -151,6 +151,15 @@ export const SHORTCUTS: Shortcut[] = [
 		group: 'Project',
 		needsSelection: true
 	},
+	// the attach view: the row's session in a pane under the lanes; with
+	// the pane open the same key detaches
+	{
+		id: 'attach',
+		keys: 'Ctrl+Shift+A',
+		label: 'Attach session here / detach',
+		group: 'Project',
+		needsSelection: true
+	},
 
 	{
 		id: 'addWorkspace',
@@ -272,3 +281,13 @@ export const prettyKeys = (keys: string): string =>
 		.split('+')
 		.map(p => NAMED[p] ?? p)
 		.join('+');
+
+// the keys that stay the app's while the attach pane has focus: the
+// palette and the attach key itself. every other key is the shell's,
+// ctrl+l and ctrl+r included
+export const PANE_KEYS: ShortcutId[] = ['commandPalette', 'attach'];
+
+export const paneOwns = (e: KeyboardEvent): boolean =>
+	e.target instanceof Element &&
+	e.target.closest('[data-attach]') !== null &&
+	!PANE_KEYS.some(id => matches(e, shortcutFor(id)));

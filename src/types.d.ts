@@ -503,6 +503,7 @@ type ShortcutId =
 	| 'openSelected'
 	| 'runScript'
 	| 'openRemote'
+	| 'attach'
 	| 'expand'
 	| 'collapse'
 	| 'toggleWorkspace'
@@ -603,6 +604,8 @@ interface StatusBarProps {
 	serverHosts?: ServerHost[];
 	onServerHost?: (host: ServerHost) => void;
 	onServerTmux?: (server: Server, on: boolean) => void;
+	/// the attach view's door in the terminal group, beside the hosts
+	onServerAttach?: (server: Server) => void;
 }
 
 interface TitleBarProps {
@@ -1516,4 +1519,57 @@ interface ServerSetupState {
 
 interface SetupSheetProps {
 	setup: ServerSetupState;
+}
+
+/* Attach view */
+
+/// what the pane attaches to: rust's AttachTarget
+type AttachTarget =
+	| { kind: 'project'; project: Project }
+	| { kind: 'server'; id: string };
+
+/// what pty_open answers: the pane's id and the line it runs
+interface AttachOpened {
+	id: string;
+	line: string;
+	session: string;
+	place: string;
+}
+
+/// devgo://pty-exit: the client ended, the session stays
+interface PtyExit {
+	id: string;
+	code: number;
+}
+
+type AttachStatus = 'opening' | 'attached' | 'ended';
+
+/// the one open pane
+interface AttachPane {
+	/// bumps on every open, so the mount effect runs once per pane
+	seq: number;
+	target: AttachTarget;
+	title: string;
+	/// from rust once the pty is up
+	id: string | null;
+	session: string | null;
+	place: string | null;
+	line: string | null;
+	status: AttachStatus;
+	/// the exit code, once ended
+	code: number | null;
+}
+
+interface AttachState {
+	pane: AttachPane | null;
+	/// where the terminal mounts: the pane's body
+	host: React.RefObject<HTMLDivElement | null>;
+	/// one pane at a time: opening another replaces it, which detaches
+	open: (target: AttachTarget, title: string) => void;
+	/// ends the client; the session stays where it was
+	detach: () => void;
+}
+
+interface AttachPaneProps {
+	attach: AttachState;
 }
