@@ -85,25 +85,38 @@ const StatusBar = ({
 	server = null,
 	serverHosts = [],
 	onServerHost,
-	onServerTmux
+	onServerTmux,
+	onServerAttach
 }: StatusBarProps) => {
 	const choices = (list: LaunchTarget[]) =>
 		list.map(t => choiceOf(t, selectionIsWsl));
 	const terminalKey = prettyKeys(shortcutFor('openTerminal'));
-	// a server row: one group, its local hosts, and the terminal key opens
-	// the default one. the remote half is the chip beside it
+	// a server row: one group, its local hosts, then the attach view, and
+	// the terminal key opens the default host. the remote half is the
+	// chip beside it
+	const ATTACH = 'attach';
 	const groups = server
 		? [
 				{
 					label: 'Terminal',
-					items: serverHosts,
+					items: [
+						...serverHosts,
+						{
+							id: ATTACH,
+							name: 'Attach here',
+							title: `${server.name}'s tmux session in a pane under the lanes — ${prettyKeys(shortcutFor('attach'))}`,
+							blocked: server.tmux ? undefined : 'tmux on the box is off'
+						}
+					],
 					defaultId: defaults.terminal,
 					shortcut: terminalKey,
 					onPick: (id?: string) =>
-						onServerHost?.(
-							serverHosts.find(h => h.id === (id ?? defaults.terminal)) ??
-								serverHosts[0]
-						),
+						id === ATTACH
+							? onServerAttach?.(server)
+							: onServerHost?.(
+									serverHosts.find(h => h.id === (id ?? defaults.terminal)) ??
+										serverHosts[0]
+								),
 					pulse: pulse === 'terminal'
 				}
 			]

@@ -6,6 +6,7 @@ import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import ActionForm from './components/ActionForm';
 import AddRepo from './components/AddRepo';
+import AttachPane from './components/AttachPane';
 import Button from './components/Button';
 import ClonePicker from './components/ClonePicker';
 import CommandPalette from './components/CommandPalette';
@@ -26,6 +27,7 @@ import StatusBar from './components/StatusBar';
 import TitleBar from './components/TitleBar';
 import FileSystems from './components/FileSystems';
 import ToastProvider, { useToast } from './components/Toast';
+import { useAttach } from './hooks/useAttach';
 import { useClone } from './hooks/useClone';
 import { useGithub } from './hooks/useGithub';
 import { useLaunchActions } from './hooks/useLaunchActions';
@@ -51,6 +53,7 @@ import {
 	isTypingTarget,
 	labelFor,
 	matches,
+	paneOwns,
 	prettyKeys,
 	shortcutFor
 } from './shortcuts';
@@ -153,6 +156,13 @@ const AppInner = () => {
 			toast(`Installed ${n} file${n === 1 ? '' : 's'} on ${s.name}. Listing its apps…`, 'success'),
 		e => toast(showError(e))
 	);
+	// the attach view: one pane under the lanes; a project's session or a
+	// server's, and detach never kills
+	const attach = useAttach(e => toast(showError(e)));
+	const attachProject = (p: Project) =>
+		attach.open({ kind: 'project', project: p }, p.name);
+	const attachServer = (s: Server) =>
+		attach.open({ kind: 'server', id: s.id }, s.name);
 	// one registry: a second useTargets in Settings would leave the row stale
 	// after an add until the next mount
 	const targets = useTargets();
@@ -1110,6 +1120,12 @@ const AppInner = () => {
 			onClick: () => openServer(s, h)
 		})),
 		{
+			label: 'Attach here',
+			hint: s.tmux ? prettyKeys(shortcutFor('attach')) : 'tmux on the box is off',
+			disabled: !s.tmux,
+			onClick: () => attachServer(s)
+		},
+		{
 			label: 'tmux on the box',
 			hint: s.tmux ? 'on' : 'off',
 			onClick: () => setServerTmux(s, !s.tmux)
@@ -1473,6 +1489,40 @@ const AppInner = () => {
 			proj('openEditor', 'Open in editor', ['code', 'edit'], launchEditor),
 			proj('openTerminal', 'Open terminal', ['term', 'shell', 'wt'], launchTerminal),
 			proj('openBoth', 'Open both', ['launch'], handleLaunch),
+			// the attach view's doors: every live session by name, every
+			// server's box session, and the way out while a pane is open
+			...projects
+				.filter(x => sessions.has(x.full_path))
+				.map(x => ({
+					id: `attach.project.${x.full_path}`,
+					title: `Attach: ${x.name}`,
+					hint: hint('attach'),
+					subtitle: 'Its session, in a pane under the lanes',
+					keywords: ['attach', 'session', 'tmux', 'psmux', 'pane'],
+					run: () => attachProject(x)
+				})),
+			...servers.servers.map(s => ({
+				id: `attach.server.${s.id}`,
+				title: `Attach: ${s.name}`,
+				subtitle: s.tmux
+					? `Its tmux session on the box, in a pane under the lanes`
+					: 'tmux on the box is off for this server',
+				keywords: ['attach', 'session', 'tmux', 'server', 'pane', s.name.toLowerCase()],
+				disabled: !s.tmux,
+				run: () => attachServer(s)
+			})),
+			...(attach.pane
+				? [
+						{
+							id: 'attach.detach',
+							title: `Attach: detach from ${attach.pane.title}`,
+							hint: hint('attach'),
+							subtitle: 'Ends the client here; the session keeps running',
+							keywords: ['attach', 'detach', 'close', 'pane'],
+							run: attach.detach
+						}
+					]
+				: []),
 			{
 				id: 'session.kill',
 				title: p ? `Session: kill for ${p.name}` : 'Session: kill for this project',
@@ -1680,7 +1730,14 @@ const AppInner = () => {
 			// the row that says live gets the kill beside the reattach; the
 			// palette had it, the row's own menu did not
 			...(live
-				? [{ label: 'Kill session', danger: true, onClick: () => killSession(p) }]
+				? [
+						{
+							label: 'Attach here',
+							hint: hint('attach'),
+							onClick: () => attachProject(p)
+						},
+						{ label: 'Kill session', danger: true, onClick: () => killSession(p) }
+					]
 				: []),
 			'separator',
 			{
@@ -1755,6 +1812,8 @@ const AppInner = () => {
 	// the bindings that work with nothing selected, then the ones that need one.
 	useEffect(() => {
 		const handler = (e: KeyboardEvent) => {
+			// a key typed into the attach pane is the shell's
+			if (paneOwns(e)) return;
 			const fire = (id: ShortcutId, run: () => void) => {
 				if (!matches(e, shortcutFor(id))) return false;
 				e.preventDefault();
@@ -1763,6 +1822,18 @@ const AppInner = () => {
 			};
 
 			if (fire('commandPalette', () => setPaletteOpen(true))) return;
+			// with a pane open the key detaches; else the server under the
+			// cursor, else the selection when it has a session
+			if (
+				fire('attach', () => {
+					if (attach.pane) attach.detach();
+					else if (serverSel) attachServer(serverSel);
+					else if (selected && sessions.has(selected.full_path))
+						attachProject(selected);
+					else toast('Select a row with a live session first', 'info');
+				})
+			)
+				return;
 			if (fire('focusSearch', () => searchRef.current?.select())) return;
 			if (fire('focusGithubSearch', () => githubSearchRef.current?.select()))
 				return;
@@ -1819,7 +1890,7 @@ const AppInner = () => {
 		};
 		window.addEventListener('keydown', handler);
 		return () => window.removeEventListener('keydown', handler);
-	}, [selected, workspaces, git, serverSel]);
+	}, [selected, workspaces, git, serverSel, sessions, attach.pane]);
 
 	return (
 		// the radius belongs to a floating window; flush with the screen it
@@ -2576,6 +2647,8 @@ const AppInner = () => {
 				</div>
 			)}
 
+			<AttachPane {...{ attach }} />
+
 			<StatusBar
 				{...{
 					hasSelection: selected !== null,
@@ -2597,7 +2670,8 @@ const AppInner = () => {
 					server: serverSel,
 					serverHosts,
 					onServerHost: (h: ServerHost) => serverSel && openServer(serverSel, h),
-					onServerTmux: setServerTmux
+					onServerTmux: setServerTmux,
+					onServerAttach: attachServer
 				}}
 			/>
 		</div>
