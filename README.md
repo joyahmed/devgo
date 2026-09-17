@@ -75,6 +75,10 @@ Some actions are **forms**: *New site…* asks for the name, the domain, the por
 
 Teaching a box to describe itself is three files, and [`server/README.md`](server/README.md) is the contract: `server/devgo-inventory.sh` (a bash inventory for a typical Linux box: pm2 and docker processes, nginx sites, git, the lockfile), `server/devgo-actions.example.json` (the actions above, with placeholders, a local tunnel and the *New site…* form, to copy and edit) and `server/site-new.sh` (the script that form calls). The app carries them: right-click the server, *Set up this box…*, and one ssh puts the ones the box lacks into `~/scripts/` and lists its apps. A file already there that differs is yours and is left alone. Or `scp` them by hand, `chmod +x`, press ↻ on the row. Every key of both JSON documents is documented there, with what the app does with it.
 
+## 📎 Attach
+
+A row with a live session gets *Attach here* (`Ctrl+Shift+A`, the row menu, the palette): the session opens in a pane under the lanes, the list still in view above it. The pane is an **attach view, not a terminal**: what runs in it is the multiplexer client — `psmux attach` for a Windows project, `tmux attach` inside the distro for a WSL one, `ssh -t … tmux new-session -A` for a server — and *Detach* ends that client while the session keeps running where it was, exactly as it would in a real terminal. Kill the session elsewhere and the pane says *detached*. One pane at a time; opening another replaces it. Keys typed into the pane are the shell's, `Ctrl+L` and `Ctrl+R` included; only the palette and the attach key stay DevGo's. It follows the theme and the transparency knob. DevGo still is not a terminal: the pane has no shell of its own and cannot open one.
+
 ## ⚙️ Settings
 
 `Ctrl+,` or the gear. One page per concern: Workspaces, Editors & Terminals, tmux / psmux, GitHub, Shortcuts, Scanning, Appearance, Config, Servers, then Help and About.
@@ -107,6 +111,7 @@ Every binding is declared once in `src/shortcuts.ts`; the handler, the footer hi
 | `Ctrl+Alt+Enter` | Open in agent |
 | `Ctrl+S` | Pin / unpin |
 | `Ctrl+Shift+D` | Run dev script… |
+| `Ctrl+Shift+A` | Attach the session here / detach |
 | `Ctrl+Shift+G` | Open remote in browser |
 | `Ctrl+Shift+E` | Reveal in Explorer (Finder) |
 | `Ctrl+Shift+C` | Copy Windows path (copy path on a Mac) |
