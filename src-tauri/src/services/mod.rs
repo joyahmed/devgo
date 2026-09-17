@@ -15,6 +15,7 @@ pub mod scanner;
 pub mod scripts;
 pub mod server_apps;
 pub mod server_folders;
+pub mod server_setup;
 pub mod servers;
 pub mod sessions;
 pub mod single_instance;
