@@ -845,6 +845,64 @@ mod tests {
         assert_eq!(parse_version(""), None);
     }
 
+    // three days of …/traffic/views as gh api prints them
+    const VIEWS: &str = r#"{"count":35,"uniques":3,"views":[{"timestamp":"2026-09-13T00:00:00Z","count":0,"uniques":0},{"timestamp":"2026-09-14T00:00:00Z","count":12,"uniques":2},{"timestamp":"2026-09-15T00:00:00Z","count":23,"uniques":3}]}"#;
+
+    #[test]
+    fn views_parse_to_totals_and_days() {
+        let s = parse_traffic_series(VIEWS).unwrap();
+        assert_eq!((s.count, s.uniques), (35, 3));
+        assert_eq!(s.days.len(), 3);
+        assert_eq!(s.days[2].timestamp, "2026-09-15T00:00:00Z");
+        assert_eq!((s.days[2].count, s.days[2].uniques), (23, 3));
+    }
+
+    #[test]
+    fn clones_share_the_parser_under_their_own_key() {
+        let text = VIEWS.replace("\"views\":[", "\"clones\":[");
+        let s = parse_traffic_series(&text).unwrap();
+        assert_eq!(s.count, 35);
+        assert_eq!(s.days.len(), 3, "the clones list is the days");
+        // a document with no list at all is a quiet fortnight
+        let none = parse_traffic_series(r#"{"count":0,"uniques":0}"#).unwrap();
+        assert!(none.days.is_empty());
+        assert!(parse_traffic_series("{ nope").is_err());
+    }
+
+    #[test]
+    fn referrers_parse_and_an_empty_list_is_no_referrers() {
+        let list = parse_referrers(
+            r#"[{"referrer":"github.com","count":31,"uniques":1},{"referrer":"news.ycombinator.com","count":4,"uniques":4}]"#,
+        )
+        .unwrap();
+        assert_eq!(list.len(), 2);
+        assert_eq!(list[0].referrer, "github.com");
+        assert_eq!((list[1].count, list[1].uniques), (4, 4));
+        assert!(parse_referrers("[]").unwrap().is_empty());
+    }
+
+    #[test]
+    fn a_403_is_the_owner_refusal_and_nothing_else_is() {
+        let err = "{\"message\":\"Must have push access to repository\",\"status\":\"403\"}gh: Must have push access to repository (HTTP 403)";
+        assert_eq!(
+            traffic_refusal(err, "rust-lang/rust").as_deref(),
+            Some("Traffic for rust-lang/rust is only shown to the repository's owner")
+        );
+        assert_eq!(traffic_refusal("gh: Not Found (HTTP 404)", "a/b"), None);
+        assert_eq!(traffic_refusal("", "a/b"), None);
+    }
+
+    #[test]
+    fn traffic_goes_stale_after_an_hour() {
+        assert!(traffic_is_stale(0, 1_000), "never read is stale");
+        assert!(!traffic_is_stale(1_000, 1_000 + TRAFFIC_STALE_SECS));
+        assert!(traffic_is_stale(1_000, 1_000 + TRAFFIC_STALE_SECS + 1));
+        assert!(
+            TRAFFIC_STALE_SECS < STALE_AFTER_SECS,
+            "sooner than the list"
+        );
+    }
+
     #[test]
     fn clone_urls_come_from_the_full_name() {
         let (ssh, https) = clone_urls("joyahmed/devgo");
