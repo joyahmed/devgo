@@ -110,6 +110,7 @@ Every binding is declared once in `src/shortcuts.ts`; the handler, the footer hi
 | `Shift+Enter` | Open terminal |
 | `Alt+Enter` | Open both |
 | `Ctrl+Alt+Enter` | Open in agent |
+| `Ctrl+Alt+Shift+Enter` | Open in the other agent (the first one that is not the default) |
 | `Ctrl+S` | Pin / unpin |
 | `Ctrl+Shift+D` | Run dev script… |
 | `Ctrl+Shift+A` | Attach the session here / detach |
