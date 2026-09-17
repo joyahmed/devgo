@@ -61,6 +61,7 @@ The GitHub lane lists every repository you own through the GitHub CLI. It needs 
 - **Clone**: `Clone into…` on a row picks a workspace and clones there; the new project appears in its lane as soon as the scan sees it.
 - **Groups**: put repos into named groups (`Add to group…`) so the ones you touch weekly sit above the rest. The ungrouped rest stays under one line at the bottom.
 - **Branches**: the branch chip on a row opens the repo's branches; pick one and it opens on GitHub.
+- **Traffic**: `Traffic (14 days)` on a row shows the views, clones and referrers GitHub shows a repository's owner, read through `gh api` when you ask and kept for the session; the row then carries the two totals.
 - **Live search**, off until you turn it on, is the one place a keystroke reaches the network.
 
 ## 🖥️ Servers
