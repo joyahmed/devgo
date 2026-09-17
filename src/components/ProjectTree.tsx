@@ -416,6 +416,8 @@ const ProjectTree = ({
 	onRepoContextMenu,
 	onShowLocal,
 	onRepoBranches,
+	onRepoCursor,
+	trafficByRepo,
 	cloneJobs,
 	onGroupContextMenu,
 	servers,
@@ -457,6 +459,7 @@ const ProjectTree = ({
 		setServerCursor(null);
 		setFolderCursor(null);
 		onServerCursor?.(null);
+		onRepoCursor?.(null);
 	};
 	useEffect(clearCursors, [selected]);
 	const folderKey = (s: Server, f: RemoteFolder) => `${s.id}:${f.path}`;
@@ -628,6 +631,7 @@ const ProjectTree = ({
 	const selectRepo = (r: GithubRepo) => {
 		clearCursors();
 		setRepoCursor(r.full_name);
+		onRepoCursor?.(r);
 	};
 	const selectServer = (s: Server) => {
 		clearCursors();
@@ -847,6 +851,7 @@ const ProjectTree = ({
 				onOpenBranches: (r: GithubRepo, x: number, y: number) =>
 					onRepoBranches?.(r, x, y),
 				jobs: cloneJobs,
+				traffic: trafficByRepo,
 				onGroupContextMenu,
 				onAddMenu: onGithubAddMenu,
 				searchInHeading: githubSearchInHeading,

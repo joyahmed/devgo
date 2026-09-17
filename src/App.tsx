@@ -25,6 +25,7 @@ import ServerForm from './components/ServerForm';
 import SetupSheet from './components/SetupSheet';
 import StatusBar from './components/StatusBar';
 import TitleBar from './components/TitleBar';
+import TrafficPopover from './components/TrafficPopover';
 import FileSystems from './components/FileSystems';
 import ToastProvider, { useToast } from './components/Toast';
 import { useAttach } from './hooks/useAttach';
@@ -37,6 +38,7 @@ import { useProjects } from './hooks/useProjects';
 import { useServers } from './hooks/useServers';
 import { useServerSetup } from './hooks/useServerSetup';
 import { useTargets } from './hooks/useTargets';
+import { useTraffic } from './hooks/useTraffic';
 import { useWorkspaces } from './hooks/useWorkspaces';
 import { useRuntime } from './hooks/useRuntime';
 import { useWsl } from './hooks/useWsl';
@@ -159,6 +161,11 @@ const AppInner = () => {
 	// the attach view: one pane under the lanes; a project's session or a
 	// server's, and detach never kills
 	const attach = useAttach(e => toast(showError(e)));
+	// a repo's 14-day traffic, the owner's numbers: read on the click, kept
+	// for the session, never on a pass. the refusal is a toast
+	const traffic = useTraffic(e => toast(showError(e), 'error'));
+	// the repo under the cursor, for the palette's traffic entry
+	const [repoCursor, setRepoCursor] = useState<GithubRepo | null>(null);
 	const attachProject = (p: Project) =>
 		attach.open({ kind: 'project', project: p }, p.name);
 	const attachServer = (s: Server) =>
@@ -731,6 +738,14 @@ const AppInner = () => {
 				.catch(e => toast(showError(e), 'error'));
 		return [
 			{ label: 'Open on GitHub', hint: 'Enter', onClick: () => handleOpenRepo(repo) },
+			// the owner's numbers, on demand: gh asks GitHub when this is clicked
+			// and at no other time
+			{
+				label: 'Traffic (14 days)',
+				disabled: !github.status?.login,
+				hint: github.status?.login ? 'gh api' : 'gh is not logged in',
+				onClick: () => traffic.open(repo, repoMenu?.x, repoMenu?.y)
+			},
 			'separator',
 			// not on disk yet: the door to getting it here. disabled, not
 			// hidden, with no workspace to land in, and it says so
@@ -1316,6 +1331,20 @@ const AppInner = () => {
 				disabled: !github.status?.login,
 				run: () => setAddRepoOpen(true)
 			},
+			...(repoCursor
+				? [
+						{
+							id: 'github.traffic',
+							title: `GitHub: traffic for ${repoCursor.full_name}`,
+							subtitle: github.status?.login
+								? '14 days of views and clones, the owner only'
+								: 'gh is not logged in',
+							keywords: ['gh', 'views', 'clones', 'insights', 'referrers'],
+							disabled: !github.status?.login,
+							run: () => traffic.open(repoCursor)
+						}
+					]
+				: []),
 			{
 				id: 'github.profile',
 				title: 'GitHub: open profile',
@@ -2605,6 +2634,8 @@ const AppInner = () => {
 								onRepoContextMenu: (r: GithubRepo, x: number, y: number) =>
 									setRepoMenu({ repo: r, x, y }),
 								onShowLocal: showLocal,
+								onRepoCursor: setRepoCursor,
+								trafficByRepo: traffic.byRepo,
 								cloneJobs: clone.jobs,
 								onGroupContextMenu: (name: string, x: number, y: number) =>
 									setGroupHeaderMenu({ name, x, y }),
@@ -2649,6 +2680,7 @@ const AppInner = () => {
 			)}
 
 			<AttachPane {...{ attach }} />
+			<TrafficPopover {...{ traffic }} />
 
 			<StatusBar
 				{...{

@@ -80,6 +80,7 @@ const RepoRow = ({
 	isCursor,
 	localPath,
 	job,
+	traffic,
 	login,
 	i,
 	gone,
@@ -174,6 +175,16 @@ const RepoRow = ({
 						{repo.default_branch}
 					</span>
 				)}
+				{/* the owner's numbers, while this session holds them: read on
+				    the row's traffic entry, never on a pass */}
+				{traffic && (
+					<span
+						className='text-11 text-text-muted shrink-0'
+						title={`14 days: ${traffic.views.count} views (${traffic.views.uniques} unique) · ${traffic.clones.count} clones (${traffic.clones.uniques} unique)`}
+					>
+						{traffic.views.count} views · {traffic.clones.count} clones
+					</span>
+				)}
 				{repo.stars !== null && repo.stars > 0 && (
 					<span className='text-13 text-text-muted shrink-0' title='Stars'>
 						★ {compactCount(repo.stars)}
@@ -215,6 +226,7 @@ const GithubLane = ({
 	onShowLocal,
 	onOpenBranches,
 	jobs,
+	traffic,
 	onGroupContextMenu,
 	onAddMenu,
 	searchInHeading = true,
@@ -278,6 +290,7 @@ const GithubLane = ({
 				isCursor: cursor === repo.full_name,
 				localPath: local[repo.full_name],
 				job: jobs?.get(repo.full_name),
+				traffic: traffic?.get(repo.full_name),
 				login,
 				i,
 				gone,

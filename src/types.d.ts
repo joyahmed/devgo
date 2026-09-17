@@ -702,6 +702,8 @@ interface GithubLaneProps {
 	onOpenBranches: (repo: GithubRepo, x: number, y: number) => void;
 	/// clones in flight or just finished, by full_name
 	jobs?: Map<string, CloneJob>;
+	/// the traffic this session read, by full_name: the row's meta
+	traffic?: Map<string, Traffic>;
 	/// right-click on a group heading: rename, move, delete
 	onGroupContextMenu?: (name: string, x: number, y: number) => void;
 	/// the + menu when the controls sit in the heading
@@ -752,6 +754,8 @@ interface RepoRowProps {
 	localPath?: string;
 	/// a clone in flight or just finished, shown in the time's slot
 	job?: CloneJob;
+	/// the owner's 14-day totals, while the session holds them
+	traffic?: Traffic;
 	/// the user: their own repos drop the owner/ prefix
 	login: string | null;
 	/// the row's place under its heading, for the zebra
@@ -1310,6 +1314,9 @@ interface ProjectTreeProps {
 	onShowLocal?: (path: string) => void;
 	/// the branch chip on a repo row: the popover at (x, y)
 	onRepoBranches?: (repo: GithubRepo, x: number, y: number) => void;
+	/// the repo under the cursor, or none: the palette follows it
+	onRepoCursor?: (repo: GithubRepo | null) => void;
+	trafficByRepo?: Map<string, Traffic>;
 	cloneJobs?: Map<string, CloneJob>;
 	onGroupContextMenu?: (name: string, x: number, y: number) => void;
 	/// the servers card. absent when there is no ssh client
