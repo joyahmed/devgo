@@ -158,6 +158,18 @@ bun tauri build    # release; the bundles land in src-tauri/target/release/bundl
 
 Issues are welcome.
 
+## 📜 History
+
+DevGo was not designed from a feature list. It is the layer that grew on top of how I already worked, and it has two roots.
+
+**The launcher line.** For a long time my "launcher" was a right-click. A few PowerShell scripts put *Open Ubuntu here* and *Open VS Code WSL here* on every folder in Explorer, and a profile of shortcuts — `dev`, `build`, `killdev`, `runpkg` — knew what to do inside a project. It worked until it didn't: a right-click needs you to find the folder first, and a shell function needs you already in it. Neither answers the actual question, *which project, and where does it live* — on the local disk, in a WSL distro, in a tmux session, in an editor. So in May 2026 I wrote [DevGo v1](https://github.com/joyahmed/devgo-winforms) in C# and WinForms: one window, every project, one keystroke. Two weeks later I started this rewrite in Tauri and Rust, partly to learn Rust properly, partly because the WinForms app could never be the Mac's launcher too.
+
+**The servers line.** Since 2023 I have run the systems I build. That means the boxes as well as the code: nginx, PM2, ports, Postgres, TLS, backups — first by hand, per site, then, when repeating it had become stupid, as scripts: provision a box, create a site, secure it, back the database up, find which process actually holds a port. That knowledge lived in a terminal and a folder of shell scripts, with nothing above it.
+
+**Where they meet.** In September 2026 the launcher learned the servers — every host in the ssh config became a row, Enter opened a tmux session on the box, the folders drilled down — and the same week the scripts learned to describe the box back to it: one script that prints the apps, ports and sites as JSON, one file that declares what can be done to them. That contract is in [`server/`](server/), and the app can install it on a box for you. DevGo is the layer above both lines: what you have, where it is, and the door to it.
+
+**How it was built.** In the open, one feature per commit, one branch per chapter, from 15 September 2026 on. Every chapter builds and runs on its own; the tree at any stage is a working app, and the commit log is the tutorial. Nothing in it was invented for the log — the rebuild compressed a workflow that already existed.
+
 ## 📄 Licence
 
 MIT — see [LICENSE](LICENSE).
