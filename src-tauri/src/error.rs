@@ -74,6 +74,11 @@ pub enum AppError {
     #[error("No such action: {0}")]
     ActionNotFound(String),
 
+    /// Traffic GitHub will not show us: the repository is not ours.
+    /// Phrased for the toast
+    #[error("{0}")]
+    TrafficRefused(String),
+
     /// An attach that cannot happen: the box's tmux is off, the pane is
     /// gone. Phrased for the toast
     #[error("{0}")]

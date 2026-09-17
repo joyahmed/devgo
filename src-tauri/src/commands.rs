@@ -225,6 +225,9 @@ pub struct AppState {
     /// Branch lists fetched from GitHub this session, by owner/name. In
     /// memory only, like git_cache, and for the same reason.
     pub github_branches: Mutex<HashMap<String, Vec<String>>>,
+    /// Traffic read from GitHub this session, by owner/name, with the
+    /// time it was read. In memory only; nothing fills it but a click.
+    pub github_traffic: Mutex<HashMap<String, github::Traffic>>,
     pub servers_store: Mutex<ServersStore>,
     pub servers_cache: Mutex<ListingCache>,
     /// The attach view's open panes: a pty each, in memory only
@@ -1864,6 +1867,43 @@ pub async fn get_github_branches(
         .map_err(lock_err)?
         .insert(full_name, branches.clone());
     Ok(branches)
+}
+
+/// The 14-day traffic of one GitHub row, the numbers only its owner is
+/// shown: three gh api calls on the click, never in a pass, and the
+/// answer kept for the session. A second look inside the hour is served
+/// from github_traffic; force, or an older answer, asks again.
+#[tauri::command]
+pub async fn get_repo_traffic(
+    full_name: String,
+    force: bool,
+    state: State<'_, AppState>,
+) -> Result<github::Traffic, AppError> {
+    let now = crate::services::preferences::now_secs();
+    if !force {
+        if let Some(cached) = state
+            .github_traffic
+            .lock()
+            .map_err(lock_err)?
+            .get(&full_name)
+        {
+            if !github::traffic_is_stale(cached.fetched_at, now) {
+                return Ok(cached.clone());
+            }
+        }
+    }
+    let key = full_name.clone();
+    let traffic = tauri::async_runtime::spawn_blocking(move || {
+        github::traffic(&key, now)
+    })
+    .await
+    .map_err(|e| AppError::Lock(e.to_string()))??;
+    state
+        .github_traffic
+        .lock()
+        .map_err(lock_err)?
+        .insert(full_name, traffic.clone());
+    Ok(traffic)
 }
 
 /// Refresh from GitHub on a clone's own popover: the live list from the

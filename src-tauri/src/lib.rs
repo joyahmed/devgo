@@ -343,6 +343,9 @@ pub fn run() {
                 github_branches: std::sync::Mutex::new(
                     std::collections::HashMap::new(),
                 ),
+                github_traffic: std::sync::Mutex::new(
+                    std::collections::HashMap::new(),
+                ),
                 servers_store: std::sync::Mutex::new(servers_store),
                 servers_cache: std::sync::Mutex::new(servers_cache),
                 ptys: std::sync::Mutex::new(Default::default()),
@@ -595,6 +598,7 @@ pub fn run() {
             commands::pty_close,
             commands::get_github_branches,
             commands::refresh_remote_branches_github,
+            commands::get_repo_traffic,
             commands::get_github_repos,
             commands::get_github_status,
             commands::refresh_github_repos,

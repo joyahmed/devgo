@@ -475,6 +475,115 @@ pub fn current_remotes<'a>(
     })
 }
 
+/// How old a traffic answer may be before the popover asks again. An
+/// hour: GitHub's own numbers move by the day, and a second look in the
+/// same sitting should not cost three more calls.
+pub const TRAFFIC_STALE_SECS: u64 = 60 * 60;
+
+/// One day of views or clones, as GitHub counts it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct TrafficDay {
+    /// RFC 3339, midnight UTC of the day
+    pub timestamp: String,
+    pub count: u64,
+    pub uniques: u64,
+}
+
+/// Fourteen days of one kind of traffic: the totals GitHub prints over
+/// its chart and the days under it. At most fourteen points; a day with
+/// nothing may be missing rather than zero.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct TrafficSeries {
+    pub count: u64,
+    pub uniques: u64,
+    pub days: Vec<TrafficDay>,
+}
+
+/// One referring site, top ten by count.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Referrer {
+    pub referrer: String,
+    pub count: u64,
+    pub uniques: u64,
+}
+
+/// What the Insights page shows the owner, for one repository, fetched
+/// when asked and remembered for the session with the time it was read.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct Traffic {
+    pub full_name: String,
+    pub fetched_at: u64,
+    pub views: TrafficSeries,
+    pub clones: TrafficSeries,
+    pub referrers: Vec<Referrer>,
+}
+
+// the shape of …/traffic/views and …/traffic/clones: the same document
+// with the day list under its own name in each
+#[derive(Deserialize)]
+struct GhTraffic {
+    count: u64,
+    uniques: u64,
+    #[serde(default, alias = "views", alias = "clones")]
+    days: Vec<TrafficDay>,
+}
+
+/// One …/traffic/views or …/traffic/clones document.
+pub fn parse_traffic_series(text: &str) -> Result<TrafficSeries, AppError> {
+    let raw: GhTraffic = serde_json::from_str(text)?;
+    Ok(TrafficSeries {
+        count: raw.count,
+        uniques: raw.uniques,
+        days: raw.days,
+    })
+}
+
+/// The …/traffic/popular/referrers list, as gh prints it.
+pub fn parse_referrers(text: &str) -> Result<Vec<Referrer>, AppError> {
+    Ok(serde_json::from_str(text)?)
+}
+
+/// gh's word for a repository whose traffic is not ours to see, turned
+/// into a sentence. The API answers 403 to anyone without push access,
+/// and gh prints the body and then "gh: Must have push access to
+/// repository (HTTP 403)"; the person wants one line, not both.
+pub fn traffic_refusal(err: &str, full_name: &str) -> Option<String> {
+    err.contains("HTTP 403").then(|| {
+        format!(
+            "Traffic for {full_name} is only shown to the repository's owner"
+        )
+    })
+}
+
+/// The staleness rule for a traffic answer, an hour instead of six.
+pub fn traffic_is_stale(fetched_at: u64, now: u64) -> bool {
+    fetched_at == 0 || now.saturating_sub(fetched_at) > TRAFFIC_STALE_SECS
+}
+
+/// A repository's 14-day traffic: three gh api calls, on the click and
+/// never in a pass. A 403 is the owner refusal; anything else gh said
+/// passes through as it is.
+pub fn traffic(full_name: &str, now: u64) -> Result<Traffic, AppError> {
+    let ask = |tail: &str| {
+        gh(&["api", &format!("repos/{full_name}/traffic/{tail}")]).map_err(
+            |e| match traffic_refusal(&e.to_string(), full_name) {
+                Some(line) => AppError::TrafficRefused(line),
+                None => e,
+            },
+        )
+    };
+    let views = parse_traffic_series(&ask("views?per=day")?)?;
+    let clones = parse_traffic_series(&ask("clones?per=day")?)?;
+    let referrers = parse_referrers(&ask("popular/referrers")?)?;
+    Ok(Traffic {
+        full_name: full_name.to_string(),
+        fetched_at: now,
+        views,
+        clones,
+        referrers,
+    })
+}
+
 /// The two clone urls a row offers, built from full_name rather than
 /// parsed back out of url: the same fact, and this one is a format.
 pub fn clone_urls(full_name: &str) -> (String, String) {
