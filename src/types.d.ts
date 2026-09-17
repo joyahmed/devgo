@@ -1573,3 +1573,66 @@ interface AttachState {
 interface AttachPaneProps {
 	attach: AttachState;
 }
+
+/// one day of views or clones, as GitHub counts it
+interface TrafficDay {
+	timestamp: string;
+	count: number;
+	uniques: number;
+}
+
+/// fourteen days of one kind of traffic: the totals and the days
+interface TrafficSeries {
+	count: number;
+	uniques: number;
+	/// at most fourteen; a quiet day may be missing rather than zero
+	days: TrafficDay[];
+}
+
+interface Referrer {
+	referrer: string;
+	count: number;
+	uniques: number;
+}
+
+/// what the Insights page shows the owner, for one repository
+interface Traffic {
+	full_name: string;
+	/// unix seconds of the read; an hour old is asked again
+	fetched_at: number;
+	views: TrafficSeries;
+	clones: TrafficSeries;
+	referrers: Referrer[];
+}
+
+/// the traffic popover: the repo and where it opens. no anchor means
+/// the palette asked and it sits at the top, centred
+interface TrafficAnchor {
+	repo: GithubRepo;
+	x: number | null;
+	y: number | null;
+}
+
+/// what useTraffic hands out; named because ambient types cannot import
+interface TrafficState {
+	/// every answer this session, by full_name: the row's meta reads it
+	byRepo: Map<string, Traffic>;
+	/// repos with a fetch in flight
+	loading: Set<string>;
+	popover: TrafficAnchor | null;
+	/// the popover for a repo; rust answers from its cache inside the hour
+	open: (repo: GithubRepo, x?: number, y?: number) => void;
+	/// asks again for the open popover's repo, cache or not
+	refresh: () => void;
+	close: () => void;
+}
+
+interface TrafficPopoverProps {
+	traffic: TrafficState;
+}
+
+/// one stat tile in the popover: a series under its name
+interface TrafficTileProps {
+	label: string;
+	series: TrafficSeries;
+}
