@@ -805,6 +805,14 @@ const AppInner = () => {
 	// a target with no WSL form cannot open a WSL project; the row disables
 	// it instead of letting the launch fail after the click
 	const selectionIsWsl = selected?.file_system === 'WSL';
+	// the default agent's key, the other agent's key, or none: the palette
+	// and the row menu say the same thing the footer does
+	const agentHint = (id: string) =>
+		id === targets.defaults.agent
+			? prettyKeys(shortcutFor('openAgent'))
+			: id === targets.otherAgent?.id
+				? prettyKeys(shortcutFor('openAgentAlt'))
+				: undefined;
 
 	const revealInExplorer = (p: Project) => {
 		invoke('reveal_in_explorer', { path: p.full_path }).catch(e =>
@@ -1250,6 +1258,7 @@ const AppInner = () => {
 			...targets.agents.map(t => ({
 				id: `open.agent.${t.id}`,
 				title: `Open in ${t.name}`,
+				hint: agentHint(t.id),
 				subtitle: p ? `${p.name}, in your terminal` : 'Select a project first',
 				keywords: ['agent', 'ai', 'claude', 'codex', t.name.toLowerCase()],
 				disabled: !p || (selectionIsWsl ? !t.wsl_executable : !t.executable),
@@ -1750,9 +1759,7 @@ const AppInner = () => {
 							: isMac
 								? 'not found on this Mac'
 								: 'not found on Windows'
-						: t.id === targets.defaults.agent
-							? hint('openAgent')
-							: undefined,
+						: agentHint(t.id),
 					disabled: missing,
 					onClick: () => openAgent(p, t.id).catch(e => toast(showError(e)))
 				};
@@ -1905,6 +1912,12 @@ const AppInner = () => {
 			if (fire('openTerminal', () => handleOpenTerminal())) return;
 			if (fire('openBoth', handleOpenBoth)) return;
 			if (targets.agents.length > 0 && fire('openAgent', () => handleOpenAgent()))
+				return;
+			// one agent only: the key has nothing to open and falls through
+			if (
+				targets.otherAgent &&
+				fire('openAgentAlt', () => handleOpenAgent(targets.otherAgent?.id))
+			)
 				return;
 			if (fire('revealExplorer', () => revealInExplorer(selected))) return;
 			if (fire('copyWinPath', () => copyWindowsPath(selected))) return;
@@ -2690,6 +2703,7 @@ const AppInner = () => {
 					terminals: targets.terminals,
 					agents: targets.agents,
 					defaults: targets.defaults,
+					otherAgentId: targets.otherAgent?.id,
 					onEditor: handleOpenEditor,
 					onTerminal: handleOpenTerminal,
 					onAgent: handleOpenAgent,

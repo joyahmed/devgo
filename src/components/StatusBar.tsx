@@ -36,9 +36,10 @@ const TargetGroup = ({
 		</span>
 		{items.map(t => {
 			const isDefault = t.id === defaultId;
+			// the group's key is the default's; an item may carry one of its own
+			const key = t.shortcut ?? (isDefault ? shortcut : undefined);
 			const title =
-				t.blocked ??
-				(isDefault ? `${t.title ?? t.name} — ${shortcut}` : (t.title ?? t.name));
+				t.blocked ?? (key ? `${t.title ?? t.name} — ${key}` : (t.title ?? t.name));
 			return (
 				<Button
 					key={t.id}
@@ -52,7 +53,7 @@ const TargetGroup = ({
 					title={title}
 				>
 					<span className='truncate text-11 leading-none'>{t.name}</span>
-					{isDefault && <Kbd>{shortcut}</Kbd>}
+					{key && <Kbd>{key}</Kbd>}
 				</Button>
 			);
 		})}
@@ -72,6 +73,7 @@ const StatusBar = ({
 	terminals,
 	agents,
 	defaults,
+	otherAgentId,
 	onEditor,
 	onTerminal,
 	onAgent,
@@ -142,7 +144,12 @@ const StatusBar = ({
 					? [
 							{
 								label: 'Agent',
-								items: choices(agents),
+								// the other agent carries its own key beside the default's
+								items: choices(agents).map(c =>
+									c.id === otherAgentId
+										? { ...c, shortcut: prettyKeys(shortcutFor('openAgentAlt')) }
+										: c
+								),
 								defaultId: defaults.agent,
 								shortcut: prettyKeys(shortcutFor('openAgent')),
 								onPick: onAgent,

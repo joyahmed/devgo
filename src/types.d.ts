@@ -208,6 +208,8 @@ interface TargetChoice {
 	name: string;
 	title?: string;
 	blocked?: string;
+	/// a key of its own, shown the way the default's is
+	shortcut?: string;
 }
 
 /// a server row's local hosts: every terminal target by id, then psmux
@@ -494,6 +496,7 @@ type ShortcutId =
 	| 'openTerminal'
 	| 'openBoth'
 	| 'openAgent'
+	| 'openAgentAlt'
 	| 'revealExplorer'
 	| 'copyWinPath'
 	| 'copyWslPath'
@@ -585,6 +588,8 @@ interface StatusBarProps {
 	/// coding agents: the group is absent entirely when none is detected
 	agents: LaunchTarget[];
 	defaults: Record<string, string>;
+	/// the agent the alt key opens; its button shows that key
+	otherAgentId?: string;
 	onEditor: (targetId?: string) => void;
 	onAgent: (targetId?: string) => void;
 	onTerminal: (targetId?: string) => void;
@@ -906,6 +911,8 @@ interface TargetRegistry {
 	terminals: LaunchTarget[];
 	agents: LaunchTarget[];
 	defaults: Record<string, string>;
+	/// the first agent that is not the default: the one the alt key opens
+	otherAgent?: LaunchTarget;
 	addTarget: (target: Omit<LaunchTarget, 'id'>) => Promise<void>;
 	detect: () => Promise<DetectedTarget[]>;
 	addDetected: (id: string) => Promise<void>;

@@ -105,6 +105,15 @@ export const SHORTCUTS: Shortcut[] = [
 		group: 'Project',
 		needsSelection: true
 	},
+	// the second agent: the WSL form of Claude Code beside the Windows one
+	// is what a WSL project needs, and the default's key never reached it
+	{
+		id: 'openAgentAlt',
+		keys: 'Ctrl+Alt+Shift+Enter',
+		label: 'Open in the other agent',
+		group: 'Project',
+		needsSelection: true
+	},
 	{
 		id: 'revealExplorer',
 		keys: 'Ctrl+Shift+E',
