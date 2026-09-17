@@ -780,8 +780,8 @@ mod tests {
     fn wsl_project(name: &str, workspace: &str) -> Project {
         Project::new(
             name.into(),
-            format!(r"\\wsl.localhost\Ubuntu\home\joy\{workspace}\{name}"),
-            format!(r"\\wsl.localhost\Ubuntu\home\joy\{workspace}"),
+            format!(r"\\wsl.localhost\Ubuntu\home\user\{workspace}\{name}"),
+            format!(r"\\wsl.localhost\Ubuntu\home\user\{workspace}"),
             "WSL".into(),
         )
     }
@@ -853,7 +853,7 @@ mod tests {
     }
     #[cfg(not(windows))]
     fn local_path(rest: &str) -> String {
-        format!("/Users/joy/{rest}")
+        format!("/Users/user/{rest}")
     }
 
     // a project on this platform's local filesystem, for the tests that
@@ -881,8 +881,8 @@ mod tests {
     fn the_session_name_is_sanitised_and_unique_per_project_path() {
         let dotted = Project::new(
             "my.app:2".into(),
-            r"\\wsl.localhost\Ubuntu\home\joy\work\my.app".into(),
-            r"\\wsl.localhost\Ubuntu\home\joy\work".into(),
+            r"\\wsl.localhost\Ubuntu\home\user\work\my.app".into(),
+            r"\\wsl.localhost\Ubuntu\home\user\work".into(),
             "WSL".into(),
         );
         let session = tmux_session_name(&dotted);
@@ -899,8 +899,8 @@ mod tests {
         // the same directory under another spelling is the same session
         let shouted = Project::new(
             "api".into(),
-            r"//WSL.LOCALHOST/Ubuntu/home/joy/work/api".into(),
-            r"//WSL.LOCALHOST/Ubuntu/home/joy/work".into(),
+            r"//WSL.LOCALHOST/Ubuntu/home/user/work/api".into(),
+            r"//WSL.LOCALHOST/Ubuntu/home/user/work".into(),
             "WSL".into(),
         );
         assert_eq!(tmux_session_name(&work), tmux_session_name(&shouted));
@@ -923,13 +923,13 @@ mod tests {
             run_args_template: None,
             wsl_run_args_template: None,
         };
-        let windows_path = r"\\wsl.localhost\Ubuntu\home\joy\api";
+        let windows_path = r"\\wsl.localhost\Ubuntu\home\user\api";
         let (_, args) = every
-            .resolve(windows_path, Some(("Ubuntu", "/home/joy/api")))
+            .resolve(windows_path, Some(("Ubuntu", "/home/user/api")))
             .unwrap();
         assert_eq!(
             args,
-            format!("Ubuntu /home/joy/api {windows_path} {{script}}")
+            format!("Ubuntu /home/user/api {windows_path} {{script}}")
         );
 
         // the other half: the launcher fills it with a file it really wrote.
@@ -1125,10 +1125,10 @@ mod tests {
     fn a_project_path_with_shell_characters_is_not_expanded() {
         let script = build_tmux_script(
             "app-deadbeef",
-            "/home/joy/back$up",
+            "/home/user/back$up",
             &tmux_with(&["code"]),
         );
-        assert!(script.contains("-c '/home/joy/back$up'"), "{script}");
+        assert!(script.contains("-c '/home/user/back$up'"), "{script}");
     }
 
     #[test]
@@ -1168,9 +1168,9 @@ mod tests {
             enabled: false,
             window_names: vec!["code".into()],
         };
-        let script = build_tmux_script("api", "/home/joy/api", &off);
+        let script = build_tmux_script("api", "/home/user/api", &off);
         assert!(!script.contains("tmux"), "{script}");
-        assert!(script.contains("cd '/home/joy/api'"), "{script}");
+        assert!(script.contains("cd '/home/user/api'"), "{script}");
         assert!(script.contains(r#"exec "${SHELL:-bash}" -l"#), "{script}");
     }
 
@@ -1217,10 +1217,10 @@ mod tests {
         let shipped = TmuxConfig::default();
         assert!(shipped.enabled, "tmux on, or every install loses it");
         assert_eq!(shipped.window_names, ["code", "agents", "git"]);
-        let script = build_tmux_script("api", "/home/joy/api", &shipped);
+        let script = build_tmux_script("api", "/home/user/api", &shipped);
         let mut cursor = 0;
         for name in &shipped.window_names {
-            let needle = format!("-n '{name}' -c '/home/joy/api'");
+            let needle = format!("-n '{name}' -c '/home/user/api'");
             let at = script[cursor..]
                 .find(&needle)
                 .unwrap_or_else(|| panic!("{name} missing or out of order"));
@@ -1496,7 +1496,7 @@ mod tests {
     fn a_psmux_session_for_a_server_runs_the_line_in_its_window() {
         let line = "ssh -t box tmux new-session -A -s devgo";
         let script =
-            build_psmux_command_script("ssh-box", r"C:\Users\joy", line);
+            build_psmux_command_script("ssh-box", r"C:\Users\user", line);
         assert!(
             script.contains(&format!(
                 "psmux.exe new-session -d -s 'ssh-box' -n 'ssh' '{line}'"
@@ -1529,7 +1529,7 @@ mod tests {
     fn home() -> Project {
         Project::new(
             "box".into(),
-            r"C:\Users\joy".into(),
+            r"C:\Users\user".into(),
             String::new(),
             crate::services::scanner::LOCAL_FS.into(),
         )
@@ -1561,7 +1561,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(exe, "wt");
-        assert_eq!(args, format!(r#"-d "C:\Users\joy" {SSH}"#));
+        assert_eq!(args, format!(r#"-d "C:\Users\user" {SSH}"#));
     }
 
     // the psmux host is the session form: the script in the seam holds
@@ -1937,8 +1937,8 @@ mod tests {
     #[test]
     fn the_mac_script_is_the_wsl_script_with_a_preamble() {
         let tmux = tmux_with(&["code", "agents"]);
-        let wsl = build_tmux_script("app-deadbeef", "/Users/joy/app", &tmux);
-        let mac = build_mac_script("app-deadbeef", "/Users/joy/app", &tmux);
+        let wsl = build_tmux_script("app-deadbeef", "/Users/user/app", &tmux);
+        let mac = build_mac_script("app-deadbeef", "/Users/user/app", &tmux);
 
         assert!(wsl.starts_with("#!/usr/bin/env bash\n"), "{wsl}");
         assert!(
@@ -1966,7 +1966,7 @@ mod tests {
     fn a_mac_without_tmux_gets_a_plain_shell_and_the_install_command() {
         let script = build_mac_script(
             "app-deadbeef",
-            "/Users/joy/app",
+            "/Users/user/app",
             &tmux_with(&["code"]),
         );
 
@@ -1980,7 +1980,7 @@ mod tests {
 
         let bail = &script[check..first_call];
         assert!(bail.contains("brew install tmux"), "{bail}");
-        assert!(bail.contains("cd '/Users/joy/app' || exit 1"), "{bail}");
+        assert!(bail.contains("cd '/Users/user/app' || exit 1"), "{bail}");
         assert!(bail.contains(r#"exec "${SHELL:-bash}" -l"#), "{bail}");
         assert_eq!(script.matches("DevGo: tmux is not installed").count(), 1);
 
@@ -1990,9 +1990,12 @@ mod tests {
             enabled: false,
             window_names: vec!["code".into()],
         };
-        let script = build_mac_script("app-deadbeef", "/Users/joy/app", &off);
+        let script = build_mac_script("app-deadbeef", "/Users/user/app", &off);
         assert!(!script.contains("tmux"), "{script}");
-        assert!(script.contains("cd '/Users/joy/app' || exit 1"), "{script}");
+        assert!(
+            script.contains("cd '/Users/user/app' || exit 1"),
+            "{script}"
+        );
         assert!(script.starts_with(MAC_PREAMBLE), "{script}");
     }
 
@@ -2001,8 +2004,8 @@ mod tests {
     // reopened. every occurrence of the path is the quoted form
     #[test]
     fn a_mac_script_quotes_a_hostile_path_as_one_word() {
-        let path = format!("/Users/joy/{HOSTILE_DIR}");
-        let quoted = r#"'/Users/joy/My Projects/it'\''s here'"#;
+        let path = format!("/Users/user/{HOSTILE_DIR}");
+        let quoted = r#"'/Users/user/My Projects/it'\''s here'"#;
 
         let session =
             build_mac_script("app-deadbeef", &path, &tmux_with(&["code"]));
@@ -2070,7 +2073,7 @@ mod tests {
         assert!(on_disk.contains("tmux new-session -d -s "), "{on_disk}");
         assert!(on_disk.contains("-n 'code'"), "{on_disk}");
         assert!(
-            on_disk.contains("-c '/Users/joy/work/placeholder'"),
+            on_disk.contains("-c '/Users/user/work/placeholder'"),
             "the project's own path, unconverted: {on_disk}"
         );
         let mode = std::fs::metadata(&expected).unwrap().permissions().mode();

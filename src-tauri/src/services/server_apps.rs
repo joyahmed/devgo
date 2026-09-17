@@ -610,7 +610,7 @@ mod tests {
            {"pm2": "shop-web", "pid": 1, "status": "online", "restarts": 3, "uptime": 10, "cwd": "/var/www/shop/apps/web", "node": "v20.19.6", "ports": [3008], "memory_mb": 120},
            {"pm2": "shop-api", "pid": 2, "status": "online", "restarts": 0, "uptime": 10, "cwd": "/var/www/shop/apps/api", "node": "v20.19.6", "ports": [3009], "memory_mb": 90}],
          "site": {"file": "shop", "domains": ["shop.example.com"], "ssl": true, "upstreams": [], "aliases": [], "web_port": 3008, "api_port": 3009},
-         "git": {"remote": "git@github.com:joyahmed/shop.git", "repo": "joyahmed/shop", "branch": "main", "head": "abc1234", "committed": "2026-09-01", "subject": "deploy"},
+         "git": {"remote": "git@github.com:user/shop.git", "repo": "user/shop", "branch": "main", "head": "abc1234", "committed": "2026-09-01", "subject": "deploy"},
          "env_files": [".env", "apps/api/.env"], "database": {"engine": "postgres", "host": "127.0.0.1", "port": 5432, "name": "shop"},
          "pm": "pnpm", "ecosystem": "ecosystem.config.js"},
         {"name": "blog", "dir": "/var/www/blog", "kind": "mono", "processes": [],
@@ -622,7 +622,7 @@ mod tests {
     }"#;
 
     const ACTIONS: &str = r#"{
-      "schema": 1, "scripts_dir": "/home/joy/scripts",
+      "schema": 1, "scripts_dir": "/home/user/scripts",
       "server": [
         {"id": "nginx-test", "label": "nginx -t", "kind": "run", "root": true, "command": "sudo nginx -t"},
         {"id": "new-site", "label": "New nginx site…", "kind": "pretype", "root": true, "command": "sudo ~/scripts/new-site.sh <app> <domain> <port> --dry-run"},
@@ -693,7 +693,7 @@ mod tests {
         assert_eq!(shop["domain"].as_deref(), Some("shop.example.com"));
         assert_eq!(shop["api_port"].as_deref(), Some("3009"));
         assert_eq!(shop["db"].as_deref(), Some("shop"));
-        assert_eq!(shop["repo"].as_deref(), Some("joyahmed/shop"));
+        assert_eq!(shop["repo"].as_deref(), Some("user/shop"));
         assert_eq!(shop["pm"].as_deref(), Some("pnpm"));
         assert_eq!(shop["eco"].as_deref(), Some("ecosystem.config.js"));
         let blog = placeholders(&i.apps[1]);
@@ -740,19 +740,19 @@ mod tests {
             cmd.contains("|| cat /var/www/server/scripts/devgo-actions.json")
         );
         let stdout = format!(
-            "/home/joy\n/var/www/shop/\n{INVENTORY_MARK}\n{INVENTORY}\n{ACTIONS_MARK}\n{ACTIONS}\n"
+            "/home/user\n/var/www/shop/\n{INVENTORY_MARK}\n{INVENTORY}\n{ACTIONS_MARK}\n{ACTIONS}\n"
         );
         let p = split(&stdout);
-        assert_eq!(p.listing, "/home/joy\n/var/www/shop/\n");
+        assert_eq!(p.listing, "/home/user\n/var/www/shop/\n");
         assert_eq!(p.inventory.unwrap().unwrap().apps.len(), 3);
         assert_eq!(p.actions.unwrap().unwrap().app.len(), 5);
         // a box without the scripts: the marks, nothing after them
         let bare =
-            split(&format!("/home/joy\n{INVENTORY_MARK}\n{ACTIONS_MARK}\n"));
-        assert_eq!(bare.listing, "/home/joy\n");
+            split(&format!("/home/user\n{INVENTORY_MARK}\n{ACTIONS_MARK}\n"));
+        assert_eq!(bare.listing, "/home/user\n");
         assert!(bare.inventory.is_none() && bare.actions.is_none());
         // no marks at all
-        assert_eq!(split("/home/joy\n").listing, "/home/joy\n");
+        assert_eq!(split("/home/user\n").listing, "/home/user\n");
         // garbage where json should be is an error carried, not a panic
         let bad = split(&format!("{INVENTORY_MARK}\nnope\n{ACTIONS_MARK}\n"));
         assert!(bad.inventory.unwrap().is_err());

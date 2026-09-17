@@ -838,19 +838,19 @@ mod tests {
     fn wsl_form_decides_whether_a_target_can_open_wsl() {
         let code = CANDIDATES.iter().find(|c| c.id == "cursor").unwrap();
         let t = to_target(code);
-        assert!(t.resolve("x", Some(("Ubuntu", "/home/joy"))).is_some());
+        assert!(t.resolve("x", Some(("Ubuntu", "/home/user"))).is_some());
 
         let subl = CANDIDATES.iter().find(|c| c.id == "sublime").unwrap();
         let t = to_target(subl);
-        assert!(t.resolve("x", Some(("Ubuntu", "/home/joy"))).is_none());
+        assert!(t.resolve("x", Some(("Ubuntu", "/home/user"))).is_none());
         assert!(t.resolve(r"G:\dev", None).is_some(), "still opens Windows");
 
         // a third form: the program crosses with its own flag
         let zed = CANDIDATES.iter().find(|c| c.id == "zed").unwrap();
         let (_, args) = to_target(zed)
-            .resolve("x", Some(("Ubuntu", "/home/joy/p")))
+            .resolve("x", Some(("Ubuntu", "/home/user/p")))
             .unwrap();
-        assert_eq!(args, "--wsl Ubuntu \"/home/joy/p\"");
+        assert_eq!(args, "--wsl Ubuntu \"/home/user/p\"");
     }
 
     #[test]

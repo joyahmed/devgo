@@ -408,7 +408,7 @@ mod tests {
             name: "box".into(),
             alias: Some("box".into()),
             host: "203.0.113.7".into(),
-            user: Some("joy".into()),
+            user: Some("user".into()),
             port: Some(9999),
             identity: None,
             default_path: None,
@@ -430,14 +430,14 @@ mod tests {
     fn listing_lines_become_folders_attributed_to_their_root() {
         let roots = vec!["~/projects".to_string(), "/var/www".to_string()];
         let text =
-            "/home/joy/projects/api/\n/var/www/shop/\n/var/www/blog/\n\n";
-        let f = parse_listing(text, &roots, Some("/home/joy"));
+            "/home/user/projects/api/\n/var/www/shop/\n/var/www/blog/\n\n";
+        let f = parse_listing(text, &roots, Some("/home/user"));
         assert_eq!(f.len(), 3);
         assert_eq!(
             f[0],
             RemoteFolder {
                 name: "api".into(),
-                path: "/home/joy/projects/api".into(),
+                path: "/home/user/projects/api".into(),
                 root: "~/projects".into()
             }
         );
@@ -521,11 +521,11 @@ mod tests {
         manual.alias = None;
         assert_eq!(
             zed_remote_url(&manual, "/var/www/shop"),
-            "ssh://joy@203.0.113.7:9999/var/www/shop"
+            "ssh://user@203.0.113.7:9999/var/www/shop"
         );
         assert_eq!(
             vscode_remote_args(&manual, "/x"),
-            "--remote ssh-remote+joy@203.0.113.7 \"/x\""
+            "--remote ssh-remote+user@203.0.113.7 \"/x\""
         );
     }
 

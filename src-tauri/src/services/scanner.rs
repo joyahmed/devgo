@@ -414,7 +414,7 @@ mod tests {
     #[test]
     fn extracts_distro_from_wsl_paths() {
         assert_eq!(
-            distro_of(r"\\wsl.localhost\Ubuntu-26.04\home\joy").as_deref(),
+            distro_of(r"\\wsl.localhost\Ubuntu-26.04\home\user").as_deref(),
             Some("Ubuntu-26.04")
         );
         assert_eq!(distro_of(r"\\wsl$\Debian\home").as_deref(), Some("Debian"));
@@ -425,7 +425,7 @@ mod tests {
     #[test]
     fn stopped_distro_is_unavailable_without_touching_the_path() {
         let outcome = scan_workspace(
-            r"\\wsl.localhost\Ubuntu-26.04\home\joy",
+            r"\\wsl.localhost\Ubuntu-26.04\home\user",
             &[],
             false,
             &[],

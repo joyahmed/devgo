@@ -230,7 +230,7 @@ mod tests {
             name: "box".into(),
             alias: Some("box".into()),
             host: "203.0.113.7".into(),
-            user: Some("joy".into()),
+            user: Some("user".into()),
             port: Some(9999),
             identity: Some("~/.ssh/id".into()),
             default_path: None,
@@ -260,7 +260,7 @@ mod tests {
         s.session = Some("work".into());
         assert_eq!(
             s.ssh_target(),
-            ["-p", "9999", "-i", "\"~/.ssh/id\"", "joy@203.0.113.7"]
+            ["-p", "9999", "-i", "\"~/.ssh/id\"", "user@203.0.113.7"]
         );
         assert!(s.ssh_command().contains("-s work"));
         s.port = Some(22);
@@ -281,7 +281,7 @@ mod tests {
         assert_eq!(boxy().scp_prefix(), "box:");
         let mut s = boxy();
         s.alias = None;
-        assert_eq!(s.scp_prefix(), "joy@203.0.113.7:");
+        assert_eq!(s.scp_prefix(), "user@203.0.113.7:");
     }
 
     #[test]
@@ -303,7 +303,7 @@ mod tests {
 
         // a path set by hand survives a re-import
         let mut mine = store.get("box").unwrap();
-        mine.default_path = Some("/home/joy/projects".into());
+        mine.default_path = Some("/home/user/projects".into());
         store.update(mine).unwrap();
         let mut fresh = boxy();
         fresh.port = Some(2222);
@@ -311,7 +311,7 @@ mod tests {
         assert_eq!((a, u), (0, 1));
         let after = store.get("box").unwrap();
         assert_eq!(after.port, Some(2222));
-        assert_eq!(after.default_path.as_deref(), Some("/home/joy/projects"));
+        assert_eq!(after.default_path.as_deref(), Some("/home/user/projects"));
 
         let reopened = ServersStore::new(dir).unwrap();
         assert_eq!(reopened.list().len(), 1);

@@ -251,14 +251,14 @@ mod tests {
     fn wsl_projects_use_the_remote_uri() {
         let (exe, args) = vscode()
             .resolve(
-                r"\\wsl.localhost\Ubuntu\home\joy\app",
-                Some(("Ubuntu", "/home/joy/app")),
+                r"\\wsl.localhost\Ubuntu\home\user\app",
+                Some(("Ubuntu", "/home/user/app")),
             )
             .unwrap();
         assert_eq!(exe, "code");
         assert_eq!(
             args,
-            "--folder-uri vscode-remote://wsl+Ubuntu/home/joy/app"
+            "--folder-uri vscode-remote://wsl+Ubuntu/home/user/app"
         );
     }
 
@@ -302,8 +302,8 @@ mod tests {
         );
         let (_, wsl_args) = wt
             .resolve(
-                r"\\wsl.localhost\Ubuntu\home\joy\app",
-                Some(("Ubuntu", "/home/joy/app")),
+                r"\\wsl.localhost\Ubuntu\home\user\app",
+                Some(("Ubuntu", "/home/user/app")),
             )
             .unwrap();
         assert!(wsl_args.contains("{script}"), "{wsl_args}");
@@ -362,9 +362,9 @@ mod tests {
         assert_eq!(args, r#"-d "G:\dev\app" bun run dev"#);
 
         let (_, args) = wt
-            .resolve_run("x", Some(("Ubuntu", "/home/joy/app")), "bun run dev")
+            .resolve_run("x", Some(("Ubuntu", "/home/user/app")), "bun run dev")
             .unwrap();
-        assert!(args.contains(r#"--cd "/home/joy/app""#));
+        assert!(args.contains(r#"--cd "/home/user/app""#));
         assert!(args.ends_with("\"bun run dev\\; exec bash\""), "{args}");
     }
 
@@ -387,25 +387,28 @@ mod tests {
             assert!(t.wsl_args_template.is_none(), "no wsl on a mac: {}", t.id);
             assert!(t.wsl_run_args_template.is_none(), "{}", t.id);
             assert!(
-                t.resolve("/Users/joy/app", Some(("Ubuntu", "/home/joy/app")))
-                    .is_none(),
+                t.resolve(
+                    "/Users/user/app",
+                    Some(("Ubuntu", "/home/user/app"))
+                )
+                .is_none(),
                 "a mac target refuses a wsl project rather than guessing: {}",
                 t.id
             );
         }
 
-        let (exe, args) = vscode().resolve("/Users/joy/app", None).unwrap();
+        let (exe, args) = vscode().resolve("/Users/user/app", None).unwrap();
         assert_eq!(exe, "code");
-        assert_eq!(args, r#""/Users/joy/app""#);
+        assert_eq!(args, r#""/Users/user/app""#);
 
         let terminal = seeded.iter().find(|t| t.id == "terminal").unwrap();
-        let (exe, args) = terminal.resolve("/Users/joy/app", None).unwrap();
+        let (exe, args) = terminal.resolve("/Users/user/app", None).unwrap();
         assert_eq!(exe, "open");
         assert_eq!(args, r#"-a Terminal "{script}""#);
         assert_eq!(args, MAC_TERMINAL_ARGS);
 
         let (_, run) = terminal
-            .resolve_run("/Users/joy/app", None, "bun dev")
+            .resolve_run("/Users/user/app", None, "bun dev")
             .unwrap();
         assert_eq!(run, MAC_TERMINAL_RUN_ARGS);
         assert!(run.contains("{script}"), "the command rides in the file");

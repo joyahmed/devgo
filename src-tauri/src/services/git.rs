@@ -396,43 +396,43 @@ mod tests {
     #[test]
     fn branch_urls_follow_the_host() {
         assert_eq!(
-            branch_url("https://github.com/joy/app", "feat/x"),
-            "https://github.com/joy/app/tree/feat/x"
+            branch_url("https://github.com/user/app", "feat/x"),
+            "https://github.com/user/app/tree/feat/x"
         );
         assert_eq!(
-            branch_url("https://gitlab.com/joy/app", "main"),
-            "https://gitlab.com/joy/app/-/tree/main"
+            branch_url("https://gitlab.com/user/app", "main"),
+            "https://gitlab.com/user/app/-/tree/main"
         );
         assert_eq!(
-            branch_url("https://bitbucket.org/joy/app", "main"),
-            "https://bitbucket.org/joy/app/branch/main"
+            branch_url("https://bitbucket.org/user/app", "main"),
+            "https://bitbucket.org/user/app/branch/main"
         );
         assert_eq!(
-            branch_url("https://codeberg.org/joy/app/", "main"),
-            "https://codeberg.org/joy/app/tree/main",
+            branch_url("https://codeberg.org/user/app/", "main"),
+            "https://codeberg.org/user/app/tree/main",
             "a trailing slash on the root does not double up"
         );
         assert_eq!(
-            branch_url("https://git.example.com/joy/app", "main"),
-            "https://git.example.com/joy/app",
+            branch_url("https://git.example.com/user/app", "main"),
+            "https://git.example.com/user/app",
             "an unknown host opens the repo root rather than guessing"
         );
     }
 
     #[test]
     fn wsl_script_escapes_quotes_in_paths() {
-        let script = wsl_script(&["/home/joy/it's".to_string()]);
-        assert!(script.contains(r"'/home/joy/it'\''s'"), "got: {script}");
+        let script = wsl_script(&["/home/user/it's".to_string()]);
+        assert!(script.contains(r"'/home/user/it'\''s'"), "got: {script}");
     }
 
     #[test]
     fn parses_batched_wsl_output() {
         let mut map = HashMap::new();
         map.insert(
-            "/home/joy/a".to_string(),
-            r"\\wsl.localhost\D\home\joy\a".to_string(),
+            "/home/user/a".to_string(),
+            r"\\wsl.localhost\D\home\user\a".to_string(),
         );
-        let text = "\u{0}PROJECT\u{0}/home/joy/a\u{0}# branch.head main\n1 .M x\n\
+        let text = "\u{0}PROJECT\u{0}/home/user/a\u{0}# branch.head main\n1 .M x\n\
                     \u{0}REMOTE\u{0}git@github.com:o/r.git\n\u{0}COMMIT\u{0}1700000000\n";
         let out = parse_wsl_output(text, &map);
         assert_eq!(out.len(), 1);

@@ -163,7 +163,7 @@ mod tests {
     #[test]
     fn a_stopped_distro_contributes_nothing_and_is_never_probed() {
         let projects = vec![
-            project("app", "//wsl.localhost/Ubuntu/home/joy/app"),
+            project("app", "//wsl.localhost/Ubuntu/home/user/app"),
             project("tool", "G:/dev/tool"),
         ];
         let live = collect(&projects, &[]);

@@ -1,5 +1,6 @@
-# a v* tag builds the installers and drafts the github release; joy
-# publishes the draft. run workflow from a tag does the same by hand.
+# a v* tag builds the installers and drafts the github release; the
+# maintainer publishes the draft. run workflow from a tag does the same
+# by hand.
 # unsigned on both platforms on purpose: there is no certificate, and
 # the readme tells the user what the os will say.
 name: release

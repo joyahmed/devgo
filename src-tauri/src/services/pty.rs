@@ -273,9 +273,9 @@ mod tests {
             name: "box".into(),
             alias: None,
             host: "203.0.113.7".into(),
-            user: Some("joy".into()),
+            user: Some("user".into()),
             port: Some(2222),
-            identity: Some("C:\\Users\\joy\\.ssh\\id_ed25519".into()),
+            identity: Some("C:\\Users\\user\\.ssh\\id_ed25519".into()),
             default_path: None,
             tmux,
             session: session.map(String::from),
@@ -299,7 +299,7 @@ mod tests {
 
     #[test]
     fn a_wsl_project_attaches_inside_its_running_distro() {
-        let p = project("app", "//wsl.localhost/Ubuntu/home/joy/app");
+        let p = project("app", "//wsl.localhost/Ubuntu/home/user/app");
         let line = project_line(&p, &["ubuntu".into()]).unwrap();
         assert_eq!(line.exe, "wsl");
         assert_eq!(
@@ -312,7 +312,7 @@ mod tests {
 
     #[test]
     fn a_stopped_distro_is_refused_not_booted() {
-        let p = project("app", "//wsl.localhost/Ubuntu/home/joy/app");
+        let p = project("app", "//wsl.localhost/Ubuntu/home/user/app");
         match project_line(&p, &[]) {
             Err(AppError::WslNotRunning(d)) => assert_eq!(d, "Ubuntu"),
             other => panic!("{other:?}"),
@@ -330,8 +330,8 @@ mod tests {
                 "-p",
                 "2222",
                 "-i",
-                "C:\\Users\\joy\\.ssh\\id_ed25519",
-                "joy@203.0.113.7",
+                "C:\\Users\\user\\.ssh\\id_ed25519",
+                "user@203.0.113.7",
                 "tmux",
                 "new-session",
                 "-A",

@@ -170,11 +170,13 @@ mod tests {
     #[test]
     fn a_workspace_inside_another_is_refused_either_way_round() {
         let mut s = store("nested-child");
-        s.add(r"\\wsl.localhost\Ubuntu\home\joy\projects\03_ai")
+        s.add(r"\\wsl.localhost\Ubuntu\home\user\projects\03_ai")
             .unwrap();
         assert!(
-            s.add(r"\\wsl.localhost\Ubuntu\home\joy\projects\03_ai\palimpsest")
-                .is_err(),
+            s.add(
+                r"\\wsl.localhost\Ubuntu\home\user\projects\03_ai\palimpsest"
+            )
+            .is_err(),
             "a child of an existing workspace must be refused"
         );
 

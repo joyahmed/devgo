@@ -181,7 +181,7 @@ export const useServers = (onError?: (e: unknown) => void): ServersState => {
 	// keeps its server, and a query shows the hits under every server that
 	// has one, expanded or not. groups come in the roots' order, not ls's
 	// (ls -d sorts every matched path together, so /etc/* came out above
-	// /home/joy/* the moment /etc was a root); under a folder that is open
+	// /home/user/* the moment /etc was a root); under a folder that is open
 	// its children follow, one step deeper each level
 	const q = query.trim().toLowerCase();
 	const visible = servers.flatMap((server): VisibleServer[] => {

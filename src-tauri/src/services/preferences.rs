@@ -591,7 +591,7 @@ mod tests {
     #[test]
     fn retain_known_keeps_workspaces_not_read_live() {
         let mut s = store("retain-cached");
-        let wsl = r"\\wsl.localhost\Ubuntu\home\joy\projects\api";
+        let wsl = r"\\wsl.localhost\Ubuntu\home\user\projects\api";
         s.record_launch(wsl).unwrap();
         s.toggle_pin(wsl).unwrap();
         s.record_launch(r"G:\ws\here").unwrap();

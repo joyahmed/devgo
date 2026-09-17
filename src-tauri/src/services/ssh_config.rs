@@ -104,15 +104,15 @@ mod tests {
 
 Host box
     HostName 203.0.113.7
-    User joy
+    User user
     Port 9999
-    IdentityFile ~/.ssh/id_ed25519_office
+    IdentityFile ~/.ssh/id_ed25519
     IdentitiesOnly yes
 
 # the tunnel
 Host box-db
     HostName 203.0.113.7
-    User joy
+    User user
     Port 9999
     LocalForward 15432 localhost:5432
 
@@ -140,9 +140,9 @@ Host a b
         assert_eq!(names, ["lanbox", "box", "box-db", "a", "b"]);
         let b = by_alias(&s, "box");
         assert_eq!(b.host, "203.0.113.7");
-        assert_eq!(b.user.as_deref(), Some("joy"));
+        assert_eq!(b.user.as_deref(), Some("user"));
         assert_eq!(b.port, Some(9999));
-        assert_eq!(b.identity.as_deref(), Some("~/.ssh/id_ed25519_office"));
+        assert_eq!(b.identity.as_deref(), Some("~/.ssh/id_ed25519"));
         assert!(!b.tunnel);
         assert!(by_alias(&s, "box-db").tunnel, "LocalForward marks a tunnel");
         assert_eq!(by_alias(&s, "lanbox").host, "lanbox");

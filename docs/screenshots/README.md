@@ -10,11 +10,11 @@ window born see-through at the transparency knob. Neon theme. Server rows are na
 
 | file | what it shows |
 |---|---|
-| `windows/01-four-lanes.png` | WSL · Windows · GitHub (groups + the ungrouped tail) · Servers with `zetta` expanded: its top-level folders, the app rows with domain and ports |
+| `windows/01-four-lanes.png` | WSL · Windows · GitHub (groups + the ungrouped tail) · Servers with a server expanded: its top-level folders, the app rows with domain and ports |
 | `windows/02-app-actions.png` | Right-click on the `erp` app: the actions the server declares, in sections |
 | `windows/03-nginx-form.png` | *New site…* — a form action, the exact line it will type |
 | `windows/04-palette.png` | The command palette filtered to `server` |
-| `windows/05-server-actions.png` | Right-click on the `zetta` server row: the terminals, the folder asks, then the box's own actions in sections (Box · pm2 · Backups · nginx · DNS · Database), the copy lines, Edit… |
+| `windows/05-server-actions.png` | Right-click on a server row: the terminals, the folder asks, then the box's own actions in sections (Box · pm2 · Backups · nginx · DNS · Database), the copy lines, Edit… |
 | `windows/10-settings-workspaces.png` | Settings › Workspaces |
 | `windows/11-settings-editors-terminals.png` | Settings › Editors & Terminals |
 | `windows/12-settings-tmux-psmux.png` | Settings › tmux / psmux |
@@ -47,5 +47,5 @@ scripts/shoot.ps1 -Out docs/screenshots/windows/01-four-lanes.png
 
 | file | what it shows |
 |---|---|
-| `mac/01-three-lanes.png` | Mac · GitHub · Servers with `zetta` expanded |
-| `mac/01b-three-lanes-collapsed.png` | The same, `zetta` collapsed |
+| `mac/01-three-lanes.png` | Mac · GitHub · Servers with a server expanded |
+| `mac/01b-three-lanes-collapsed.png` | The same, the server collapsed |

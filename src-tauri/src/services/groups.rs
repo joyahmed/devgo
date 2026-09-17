@@ -142,11 +142,11 @@ mod tests {
 
     #[test]
     fn assign_creates_then_is_idempotent() {
-        let groups = assign(vec![], "acme", "joyahmed/notes").unwrap();
-        assert_eq!(groups, vec![g("acme", &["joyahmed/notes"])]);
-        let again = assign(groups.clone(), "acme", "joyahmed/notes").unwrap();
+        let groups = assign(vec![], "acme", "user/notes").unwrap();
+        assert_eq!(groups, vec![g("acme", &["user/notes"])]);
+        let again = assign(groups.clone(), "acme", "user/notes").unwrap();
         assert_eq!(again, groups, "assigning twice is one membership");
-        let more = assign(again, "ACME", "joyahmed/cloud").unwrap();
+        let more = assign(again, "ACME", "user/cloud").unwrap();
         assert_eq!(
             more[0].repos.len(),
             2,

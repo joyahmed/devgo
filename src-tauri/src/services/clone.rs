@@ -327,37 +327,37 @@ mod tests {
     #[test]
     fn a_local_workspace_clones_with_the_local_git() {
         let p = plan(
-            "/Users/joy/Projects/",
+            "/Users/user/Projects/",
             "joyahmed/devgo",
             "devgo",
             Protocol::Ssh,
         );
-        assert_eq!(p.dest, "/Users/joy/Projects/devgo");
+        assert_eq!(p.dest, "/Users/user/Projects/devgo");
         assert_eq!(p.distro, None);
-        assert_eq!(p.git_dest, "/Users/joy/Projects/devgo");
+        assert_eq!(p.git_dest, "/Users/user/Projects/devgo");
     }
 
     #[cfg(windows)]
     #[test]
     fn a_wsl_workspace_clones_inside_the_distro_at_the_linux_path() {
         let p = plan(
-            r"\\wsl.localhost\Ubuntu-26.04\home\joy\projects\01_turbo",
-            "joyahmed/notes",
+            r"\\wsl.localhost\Ubuntu-26.04\home\user\projects\01_turbo",
+            "user/notes",
             "notes",
             Protocol::Ssh,
         );
         assert_eq!(
             p.dest,
-            r"\\wsl.localhost\Ubuntu-26.04\home\joy\projects\01_turbo\notes"
+            r"\\wsl.localhost\Ubuntu-26.04\home\user\projects\01_turbo\notes"
         );
         assert_eq!(p.distro.as_deref(), Some("Ubuntu-26.04"));
-        assert_eq!(p.git_dest, "/home/joy/projects/01_turbo/notes");
+        assert_eq!(p.git_dest, "/home/user/projects/01_turbo/notes");
     }
 
     #[test]
     fn a_stopped_distro_is_refused_not_booted() {
         let p = plan(
-            r"\\wsl.localhost\Ubuntu-26.04\home\joy\p",
+            r"\\wsl.localhost\Ubuntu-26.04\home\user\p",
             "o/r",
             "r",
             Protocol::Https,

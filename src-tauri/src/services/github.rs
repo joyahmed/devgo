@@ -598,23 +598,23 @@ mod tests {
     use super::*;
 
     const SAMPLE: &str = r#"[
-      {"defaultBranchRef":{"name":"main"},"isArchived":false,"isPrivate":true,"name":"notes","owner":{"id":"x","login":"joyahmed"},"updatedAt":"2026-09-11T18:48:35Z","url":"https://github.com/joyahmed/notes"},
-      {"defaultBranchRef":{"name":"master"},"isArchived":true,"isPrivate":false,"name":"old-thing","owner":{"id":"y","login":"joyahmed007"},"updatedAt":"2021-01-01T00:00:00Z","url":"https://github.com/joyahmed007/old-thing"},
-      {"defaultBranchRef":null,"isArchived":false,"isPrivate":true,"name":"empty","owner":{"id":"x","login":"joyahmed"},"updatedAt":"2026-01-01T00:00:00Z","url":"https://github.com/joyahmed/empty"}
+      {"defaultBranchRef":{"name":"main"},"isArchived":false,"isPrivate":true,"name":"notes","owner":{"id":"x","login":"user"},"updatedAt":"2026-09-11T18:48:35Z","url":"https://github.com/user/notes"},
+      {"defaultBranchRef":{"name":"master"},"isArchived":true,"isPrivate":false,"name":"old-thing","owner":{"id":"y","login":"acme"},"updatedAt":"2021-01-01T00:00:00Z","url":"https://github.com/acme/old-thing"},
+      {"defaultBranchRef":null,"isArchived":false,"isPrivate":true,"name":"empty","owner":{"id":"x","login":"user"},"updatedAt":"2026-01-01T00:00:00Z","url":"https://github.com/user/empty"}
     ]"#;
 
     #[test]
     fn parses_user_and_org_repos() {
         let repos = parse_repos(SAMPLE).unwrap();
         assert_eq!(repos.len(), 3);
-        assert_eq!(repos[0].full_name, "joyahmed/notes");
-        assert_eq!(repos[0].owner, "joyahmed");
+        assert_eq!(repos[0].full_name, "user/notes");
+        assert_eq!(repos[0].owner, "user");
         assert!(repos[0].private);
         assert!(!repos[0].archived);
         assert_eq!(repos[0].default_branch.as_deref(), Some("main"));
 
         assert_eq!(
-            repos[1].full_name, "joyahmed007/old-thing",
+            repos[1].full_name, "acme/old-thing",
             "an org repo keeps its org as owner"
         );
         assert!(repos[1].archived);
@@ -656,13 +656,13 @@ mod tests {
     fn local_matches_pair_rows_with_disk_projects() {
         let repos = parse_repos(SAMPLE).unwrap();
         let remotes = [
-            (r"G:\01_tauri\notes", "https://github.com/JoyAhmed/notes/"),
+            (r"G:\01_tauri\notes", "https://github.com/User/notes/"),
             (r"G:\misc\unrelated", "https://gitlab.com/x/y"),
         ];
         let local =
             local_matches(&repos, remotes.iter().map(|(p, r)| (*p, *r)));
         assert_eq!(local.len(), 1);
-        assert_eq!(local["joyahmed/notes"], r"G:\01_tauri\notes");
+        assert_eq!(local["user/notes"], r"G:\01_tauri\notes");
     }
 
     #[test]
@@ -681,11 +681,11 @@ mod tests {
         let git: HashMap<String, GitInfo> = [
             (
                 here.to_string(),
-                info(here, "https://github.com/joyahmed/notes"),
+                info(here, "https://github.com/user/notes"),
             ),
             (
                 gone.to_string(),
-                info(gone, "https://github.com/joyahmed/empty"),
+                info(gone, "https://github.com/user/empty"),
             ),
         ]
         .into_iter()
@@ -699,12 +699,12 @@ mod tests {
         )];
 
         let remotes: Vec<_> = current_remotes(&listed, &git).collect();
-        assert_eq!(remotes, vec![(here, "https://github.com/joyahmed/notes")]);
+        assert_eq!(remotes, vec![(here, "https://github.com/user/notes")]);
 
         let repos = parse_repos(SAMPLE).unwrap();
         let local = local_matches(&repos, current_remotes(&listed, &git));
-        assert!(local.contains_key("joyahmed/notes"));
-        assert!(!local.contains_key("joyahmed/empty"), "clone is back");
+        assert!(local.contains_key("user/notes"));
+        assert!(!local.contains_key("user/empty"), "clone is back");
     }
 
     #[test]
@@ -730,8 +730,8 @@ mod tests {
         store
             .store(GithubCache {
                 fetched_at: 42,
-                login: Some("joyahmed".into()),
-                orgs: vec!["joyahmed007".into()],
+                login: Some("user".into()),
+                orgs: vec!["acme".into()],
                 repos: parse_repos(SAMPLE).unwrap(),
             })
             .unwrap();
