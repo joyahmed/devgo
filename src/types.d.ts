@@ -1088,6 +1088,8 @@ interface ServersLaneProps {
 		y: number
 	) => void;
 	onRootContextMenu: (server: Server, root: string, x: number, y: number) => void;
+	/// set up this box: the note under a server with no inventory offers it
+	onSetup: (server: Server) => void;
 	/// from the card's box the arrows walk the servers and folders alone
 	onArrow: (dir: 1 | -1) => void;
 	onEnter: () => void;
@@ -1314,6 +1316,7 @@ interface ProjectTreeProps {
 	/// the server under the cursor, or none: the footer follows it
 	onServerCursor?: (server: Server | null) => void;
 	onServerContextMenu?: (server: Server, x: number, y: number) => void;
+	onServerSetup?: (server: Server) => void;
 	onServersAddMenu?: (x: number, y: number) => void;
 	onServersHeadingContextMenu?: (x: number, y: number) => void;
 	/// a folder on a server: Enter is a terminal there
@@ -1475,4 +1478,42 @@ interface ActionFormProps {
 	/// send the composed line; preview = with the action's preview word
 	onRun: (values: Record<string, string>, preview: boolean) => Promise<void>;
 	onDone: () => void;
+}
+
+/// set up this box: what plan_server_setup found under ~/scripts for each
+/// file the app carries. missing is installed on confirm; same needs
+/// nothing; differs is the user's own and stays
+type SetupFileStatus = 'missing' | 'same' | 'differs';
+
+interface SetupFile {
+	name: string;
+	status: SetupFileStatus;
+	bytes: number;
+	install: boolean;
+}
+
+interface SetupPlan {
+	dir: string;
+	files: SetupFile[];
+}
+
+/// the sheet's state: which server, and the plan once the probe answers
+interface SetupRequest {
+	server: Server;
+	plan: SetupPlan | null;
+}
+
+interface ServerSetupState {
+	request: SetupRequest | null;
+	/// the probe or the write is in flight
+	busy: boolean;
+	/// the look: one ssh, then the sheet
+	open: (server: Server) => void;
+	/// the write, then the row's refresh; resolves with the count installed
+	confirm: () => Promise<void>;
+	close: () => void;
+}
+
+interface SetupSheetProps {
+	setup: ServerSetupState;
 }
