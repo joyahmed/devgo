@@ -166,6 +166,7 @@ DevGo was built one chapter at a time, and every chapter is a branch: the tree a
 ```powershell
 git checkout NN.name    # e.g. git checkout 05.launcher — chapter 05's app, and its text
 ```
+
 ## 📜 History
 
 DevGo was not designed from a feature list. It is the layer that grew on top of how I already worked, and it has two roots.
