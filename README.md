@@ -73,7 +73,7 @@ When the box carries a script at `~/scripts/devgo-inventory.sh`, the same call b
 
 Some actions are **forms**: *New site…* asks for the name, the domain, the port, the type (`PROXY · STATIC`), www and HTTPS, and shows the exact line it composes as you type. *Preview* runs it with `--dry-run` so the script prints what it would do and changes nothing; the other button runs it for real.
 
-Teaching a box to describe itself is three files, and [`server/README.md`](server/README.md) is the contract: `server/devgo-inventory.sh` (a bash inventory for a typical Linux box: pm2 and docker processes, nginx sites, git, the lockfile), `server/devgo-actions.example.json` (the actions above, with placeholders, a local tunnel and the *New site…* form, to copy and edit) and `server/site-new.sh` (the script that form calls). `scp` them into `~/scripts/` on the server, `chmod +x`, press ↻ on the row. Every key of both JSON documents is documented there, with what the app does with it.
+Teaching a box to describe itself is three files, and [`server/README.md`](server/README.md) is the contract: `server/devgo-inventory.sh` (a bash inventory for a typical Linux box: pm2 and docker processes, nginx sites, git, the lockfile), `server/devgo-actions.example.json` (the actions above, with placeholders, a local tunnel and the *New site…* form, to copy and edit) and `server/site-new.sh` (the script that form calls). The app carries them: right-click the server, *Set up this box…*, and one ssh puts the ones the box lacks into `~/scripts/` and lists its apps. A file already there that differs is yours and is left alone. Or `scp` them by hand, `chmod +x`, press ↻ on the row. Every key of both JSON documents is documented there, with what the app does with it.
 
 ## ⚙️ Settings
 
@@ -147,7 +147,6 @@ bun tauri build    # release; the bundles land in src-tauri/target/release/bundl
 
 ## 🗺️ Next
 
-- **Set up this box.** The app will carry the `server/` scripts and install them on a server from its menu, so a box's apps and actions need no copy by hand.
 - **Linux.** The crate builds for it; a tested Linux build once it has been run there.
 - **More server actions** in the example set, as people ask for them.
 

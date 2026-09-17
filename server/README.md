@@ -26,6 +26,10 @@ Nothing runs on launch, on focus, or on a timer. One `ssh`, on your click.
 
 ### Install
 
+The app carries these three files. Right-click the server row, **Set up this box…**: one ssh reads what `~/scripts/` already holds and the sheet says, per file, *will be installed*, *already there* or *yours, kept as it is*; **Install** writes the missing ones on the stdin of one more ssh (`mkdir -p`, an `awk` that splits them into files, `chmod +x` on the scripts, `chmod 600` on the actions file) and then refreshes the row. A file that is on the box and differs from the shipped one is never overwritten — your own inventory or a hand-edited actions file wins; delete it there first if you want the shipped one.
+
+By hand, the same thing is two `scp` lines:
+
 ```sh
 scp server/devgo-inventory.sh server/site-new.sh <alias>:~/scripts/
 scp server/devgo-actions.example.json <alias>:~/scripts/devgo-actions.json
