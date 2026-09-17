@@ -21,6 +21,7 @@ import { laneGrid, MID_QUERY, WIDE_QUERY } from './components/rowStyles';
 import ScanPicker from './components/ScanPicker';
 import SearchBox from './components/SearchBox';
 import ServerForm from './components/ServerForm';
+import SetupSheet from './components/SetupSheet';
 import StatusBar from './components/StatusBar';
 import TitleBar from './components/TitleBar';
 import FileSystems from './components/FileSystems';
@@ -32,6 +33,7 @@ import { useMaximized } from './hooks/useMaximized';
 import { useMediaQuery } from './hooks/useMediaQuery';
 import { useProjects } from './hooks/useProjects';
 import { useServers } from './hooks/useServers';
+import { useServerSetup } from './hooks/useServerSetup';
 import { useTargets } from './hooks/useTargets';
 import { useWorkspaces } from './hooks/useWorkspaces';
 import { useRuntime } from './hooks/useRuntime';
@@ -144,6 +146,13 @@ const AppInner = () => {
 	const { toast } = useToast();
 	// the machines you ssh into: its own file, no network
 	const servers = useServers(e => toast(showError(e)));
+	// set up this box: the files the app carries, onto a server, then ↻
+	const setup = useServerSetup(
+		servers.listFolders,
+		(s, n) =>
+			toast(`Installed ${n} file${n === 1 ? '' : 's'} on ${s.name}. Listing its apps…`, 'success'),
+		e => toast(showError(e))
+	);
 	// one registry: a second useTargets in Settings would leave the row stale
 	// after an add until the next mount
 	const targets = useTargets();
@@ -1115,6 +1124,11 @@ const AppInner = () => {
 			onClick: () => servers.listFolders(s.id).catch(e => toast(showError(e)))
 		},
 		{ label: 'List another folder at top level…', onClick: () => setRootPrompt(s) },
+		{
+			label: 'Set up this box…',
+			hint: 'the inventory and actions, into ~/scripts',
+			onClick: () => setup.open(s)
+		},
 		...serverActionEntries(s),
 		'separator',
 		{ label: 'Copy ssh command', onClick: () => copyServerLine(s, 0) },
@@ -1335,6 +1349,13 @@ const AppInner = () => {
 						: 'Attach a tmux session on the box from now on',
 					keywords: ['server', 'tmux', 'shell', 'session', s.name.toLowerCase()],
 					run: () => setServerTmux(s, !s.tmux)
+				},
+				{
+					id: `server.setup.${s.id}`,
+					title: `Server: set up ${s.name}`,
+					subtitle: 'The inventory script and the actions file, into ~/scripts; yours are kept',
+					keywords: ['server', 'setup', 'install', 'inventory', 'scripts', s.name.toLowerCase()],
+					run: () => setup.open(s)
 				}
 			]),
 			// the server-level actions a box declares, not the per-app ones:
@@ -2315,6 +2336,8 @@ const AppInner = () => {
 				}}
 			/>
 
+			<SetupSheet {...{ setup }} />
+
 			<ConfirmDialog
 				{...{
 					open: removeIndex !== null,
@@ -2518,6 +2541,7 @@ const AppInner = () => {
 								onServerCursor: (s: Server | null) => setServerCursorId(s?.id ?? null),
 								onServerContextMenu: (s: Server, x: number, y: number) =>
 									setServerMenu({ server: s, x, y }),
+								onServerSetup: setup.open,
 								onServersAddMenu: (x: number, y: number) =>
 									setServersAddMenu({ x, y }),
 								onServersHeadingContextMenu: (x: number, y: number) =>

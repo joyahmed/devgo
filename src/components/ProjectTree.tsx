@@ -427,6 +427,7 @@ const ProjectTree = ({
 	onFolderOpen,
 	onFolderContextMenu,
 	onRootContextMenu,
+	onServerSetup,
 	showHints,
 	launchingPath,
 	localFs,
@@ -876,6 +877,7 @@ const ProjectTree = ({
 					onFolderContextMenu?.(s, f, x, y),
 				onRootContextMenu: (s: Server, root: string, x: number, y: number) =>
 					onRootContextMenu?.(s, root, x, y),
+				onSetup: (s: Server) => onServerSetup?.(s),
 				onArrow: (dir: 1 | -1) => navigate(dir, 'servers'),
 				onEnter: () => openServerRow()
 			}}

@@ -319,6 +319,7 @@ const ServersLane = ({
 	onOpenFolder,
 	onFolderContextMenu,
 	onRootContextMenu,
+	onSetup,
 	onArrow,
 	onEnter
 }: ServersLaneProps) => {
@@ -394,15 +395,25 @@ const ServersLane = ({
 					<div className={`${note} text-text-muted`}>Listing…</div>
 				)}
 				{/* the apps come from a script on the box. a box without it still
-				    lists its folders; say what would give it apps, once, quietly */}
+				    lists its folders; say what would give it apps, once, quietly,
+				    and offer the install the app carries */}
 				{l && l.up && !l.inventory && !l.inventory_error && (
 					<div
-						className={`${note} text-text-muted`}
+						className={`${note} text-text-muted flex items-center gap-2 flex-wrap`}
 						title='a script on the box, in ~/scripts, that lists its apps as json'
 					>
-						No inventory on this box.{' '}
-						<span className='font-mono'>~/scripts/devgo-inventory.sh</span>{' '}
-						would list its apps.
+						<span>
+							No inventory on this box.{' '}
+							<span className='font-mono'>~/scripts/devgo-inventory.sh</span>{' '}
+							would list its apps.
+						</span>
+						<Button
+							variant='ghost'
+							className='text-11 text-accent hover:bg-transparent px-1'
+							onClick={() => onSetup(s)}
+						>
+							Set up this box…
+						</Button>
 					</div>
 				)}
 				{l?.inventory_error && (
