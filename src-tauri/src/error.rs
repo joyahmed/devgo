@@ -74,6 +74,11 @@ pub enum AppError {
     #[error("No such action: {0}")]
     ActionNotFound(String),
 
+    /// An attach that cannot happen: the box's tmux is off, the pane is
+    /// gone. Phrased for the toast
+    #[error("{0}")]
+    AttachRefused(String),
+
     #[error(
         "{0} is the only one of its kind — add another before removing it"
     )]

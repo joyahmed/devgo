@@ -24,9 +24,9 @@ const TMUX_LIST: &str = "tmux ls -F '#S' 2>/dev/null";
 // windows, native tmux on a mac. both answer the same -F '#S' and
 // -t =name forms, so the list and kill code below is shared
 #[cfg(windows)]
-const LOCAL_MUX: &str = "psmux.exe";
+pub(crate) const LOCAL_MUX: &str = "psmux.exe";
 #[cfg(not(windows))]
-const LOCAL_MUX: &str = "tmux";
+pub(crate) const LOCAL_MUX: &str = "tmux";
 
 /// The projects, by full_path, that have a live session.
 pub fn collect(projects: &[Project], running: &[String]) -> Vec<String> {

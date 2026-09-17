@@ -1,7 +1,8 @@
 use serde::Serialize;
 use std::collections::HashMap;
 use std::sync::Mutex;
-use tauri::{Manager, State};
+use tauri::ipc::{Channel, InvokeResponseBody};
+use tauri::{Emitter, Manager, State};
 
 use crate::error::AppError;
 use crate::models::target::{LaunchTarget, TargetKind};
@@ -17,6 +18,7 @@ use crate::services::launcher;
 #[cfg(windows)]
 use crate::services::platform::Quiet;
 use crate::services::platform::{wsl, wsl_watch, RuntimeInfo};
+use crate::services::pty;
 use crate::services::scanner::LOCAL_FS;
 use crate::services::scanner::{ScanOutcome, UnavailableReason};
 use crate::services::server_folders::{
@@ -225,6 +227,8 @@ pub struct AppState {
     pub github_branches: Mutex<HashMap<String, Vec<String>>>,
     pub servers_store: Mutex<ServersStore>,
     pub servers_cache: Mutex<ListingCache>,
+    /// The attach view's open panes: a pty each, in memory only
+    pub ptys: Mutex<pty::Registry>,
 }
 
 #[tauri::command]
@@ -855,6 +859,101 @@ pub async fn get_live_sessions(projects: Vec<Project>) -> Vec<String> {
 pub fn kill_session(project: Project) -> Result<(), AppError> {
     let running = running_for(std::slice::from_ref(&project));
     crate::services::sessions::kill(&project, &running)
+}
+
+// the attach view: a pty whose child is the multiplexer client for one
+// session. the bytes it prints go down the channel the pane handed over;
+// its end is an event, since by then the channel may be gone
+
+#[derive(Serialize, Clone)]
+pub struct AttachOpened {
+    pub id: String,
+    pub line: String,
+    pub session: String,
+    pub place: String,
+}
+
+#[derive(Serialize, Clone)]
+pub struct PtyExit {
+    pub id: String,
+    pub code: u32,
+}
+
+#[tauri::command]
+pub fn pty_open(
+    target: pty::AttachTarget,
+    cols: u16,
+    rows: u16,
+    on_data: Channel<InvokeResponseBody>,
+    app: tauri::AppHandle,
+    state: State<AppState>,
+) -> Result<AttachOpened, AppError> {
+    let line = match target {
+        pty::AttachTarget::Project { project } => {
+            let running = running_for(std::slice::from_ref(&project));
+            pty::project_line(&project, &running)?
+        }
+        pty::AttachTarget::Server { id } => {
+            let server = state
+                .servers_store
+                .lock()
+                .map_err(lock_err)?
+                .get(&id)
+                .ok_or_else(|| AppError::ServerNotFound(id.clone()))?;
+            pty::server_line(&server)?
+        }
+    };
+    let id = state.ptys.lock().map_err(lock_err)?.open(
+        &line,
+        cols,
+        rows,
+        move |bytes| {
+            let _ = on_data.send(InvokeResponseBody::Raw(bytes));
+        },
+        move |id, code| {
+            if let Some(s) = app.try_state::<AppState>() {
+                if let Ok(mut ptys) = s.ptys.lock() {
+                    ptys.forget(&id);
+                }
+            }
+            let _ = app.emit("devgo://pty-exit", PtyExit { id, code });
+        },
+    )?;
+    Ok(AttachOpened {
+        id,
+        line: line.display(),
+        session: line.session,
+        place: line.place,
+    })
+}
+
+#[tauri::command]
+pub fn pty_write(
+    id: String,
+    data: String,
+    state: State<AppState>,
+) -> Result<(), AppError> {
+    state
+        .ptys
+        .lock()
+        .map_err(lock_err)?
+        .write(&id, data.as_bytes())
+}
+
+#[tauri::command]
+pub fn pty_resize(
+    id: String,
+    cols: u16,
+    rows: u16,
+    state: State<AppState>,
+) -> Result<(), AppError> {
+    state.ptys.lock().map_err(lock_err)?.resize(&id, cols, rows)
+}
+
+// detach: the client ends, the session stays
+#[tauri::command]
+pub fn pty_close(id: String, state: State<AppState>) -> Result<(), AppError> {
+    state.ptys.lock().map_err(lock_err)?.close(&id)
 }
 
 // servers: the rows, the edits, the import, and the one launch. nothing

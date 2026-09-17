@@ -345,6 +345,7 @@ pub fn run() {
                 ),
                 servers_store: std::sync::Mutex::new(servers_store),
                 servers_cache: std::sync::Mutex::new(servers_cache),
+                ptys: std::sync::Mutex::new(Default::default()),
             });
 
             // the window is built here, not by the config: transparent is
@@ -588,6 +589,10 @@ pub fn run() {
             commands::remove_server_root,
             commands::open_agent,
             commands::kill_session,
+            commands::pty_open,
+            commands::pty_write,
+            commands::pty_resize,
+            commands::pty_close,
             commands::get_github_branches,
             commands::refresh_remote_branches_github,
             commands::get_github_repos,

@@ -11,6 +11,7 @@ pub mod launcher;
 pub mod platform;
 pub mod preferences;
 pub mod project_cache;
+pub mod pty;
 pub mod scanner;
 pub mod scripts;
 pub mod server_apps;
