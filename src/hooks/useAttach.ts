@@ -87,10 +87,19 @@ export const useAttach = (onError: (e: unknown) => void): AttachState => {
 				let id: string | null = null;
 				// an exit that lands before pty_open has answered with the id
 				const exits = new Map<string, number>();
+				// the client's last bytes can land after its exit (a big chunk
+				// rides a fetch, the event an eval), and a multiplexer's last
+				// word is to leave the alternate screen: the line waits a beat
+				// and leaves it first, so it is not wiped
 				const ended = (code: number) => {
 					id = null;
-					term.write(`\r\n\x1b[2m[detached · exit ${code}]\x1b[0m`);
 					patch({ status: 'ended', code });
+					setTimeout(() => {
+						if (!gone)
+							term.write(
+								`\x1b[?1049l\r\n\x1b[2m[detached · exit ${code}]\x1b[0m`
+							);
+					}, 150);
 				};
 
 				const channel = new Channel<ArrayBuffer>();
