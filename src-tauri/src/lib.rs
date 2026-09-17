@@ -581,6 +581,8 @@ pub fn run() {
             commands::open_server_folder_in,
             commands::run_server_action,
             commands::compose_server_action,
+            commands::plan_server_setup,
+            commands::apply_server_setup,
             commands::list_server_dir,
             commands::add_server_root,
             commands::remove_server_root,

@@ -68,6 +68,8 @@ pub enum AppError {
     /// with, a local line with a shell character. Phrased for the toast.
     #[error("{0}")]
     ActionRefused(String),
+    #[error("{0}")]
+    SetupRefused(String),
 
     #[error("No such action: {0}")]
     ActionNotFound(String),

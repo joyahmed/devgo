@@ -22,6 +22,7 @@ use crate::services::scanner::{ScanOutcome, UnavailableReason};
 use crate::services::server_folders::{
     self, ListingCache, RemoteFolder, ServerListing,
 };
+use crate::services::server_setup;
 use crate::services::servers::{Server, ServersStore};
 use crate::services::ssh_config;
 use crate::services::GithubStore;
@@ -1253,6 +1254,72 @@ pub fn compose_server_action(
         .ok_or("Not an app in the inventory")?;
     fill(&line, &placeholders(entry))
         .ok_or_else(|| "This app lacks something the line needs".to_string())
+}
+
+// set up this box, the look: one ssh reads what the box already holds
+// under the directory, and the plan says which of the carried files are
+// missing (installed on confirm), the same (nothing to do) or the user's
+// own (kept). dir is ~/scripts unless a scratch directory is named
+#[tauri::command]
+pub async fn plan_server_setup(
+    id: String,
+    dir: Option<String>,
+    app: tauri::AppHandle,
+) -> Result<server_setup::SetupPlan, AppError> {
+    let server = {
+        let h = app.state::<AppState>();
+        let s = h.servers_store.lock().map_err(lock_err)?.get(&id);
+        s.ok_or_else(|| AppError::ServerNotFound(id.clone()))?
+    };
+    let dir = dir.unwrap_or_else(|| server_setup::DIR.to_string());
+    server_setup::check_dir(&dir).map_err(AppError::SetupRefused)?;
+    let probe = server_setup::probe_command(&dir);
+    let out = tauri::async_runtime::spawn_blocking(move || {
+        server_folders::read_remote(&server, &probe)
+    })
+    .await
+    .map_err(lock_err)?
+    .map_err(AppError::LaunchFailed)?;
+    Ok(server_setup::plan(&dir, &server_setup::parse_probe(&out)))
+}
+
+// set up this box, the write: the named files, which the plan said were
+// missing, on the stdin of one ssh that splits them into the directory
+// and sets their modes. nothing else on the box is touched; the caller
+// refreshes the row after, which is what shows the apps
+#[tauri::command]
+pub async fn apply_server_setup(
+    id: String,
+    dir: Option<String>,
+    names: Vec<String>,
+    app: tauri::AppHandle,
+) -> Result<usize, AppError> {
+    let server = {
+        let h = app.state::<AppState>();
+        let s = h.servers_store.lock().map_err(lock_err)?.get(&id);
+        s.ok_or_else(|| AppError::ServerNotFound(id.clone()))?
+    };
+    let dir = dir.unwrap_or_else(|| server_setup::DIR.to_string());
+    server_setup::check_dir(&dir).map_err(AppError::SetupRefused)?;
+    let known: Vec<String> = server_setup::bundled()
+        .iter()
+        .filter(|b| names.contains(&b.name.to_string()))
+        .map(|b| b.name.to_string())
+        .collect();
+    if known.is_empty() {
+        return Err(AppError::SetupRefused(
+            "Nothing to install: every file is already on the box".into(),
+        ));
+    }
+    let line = server_setup::put_command(&dir, &known);
+    let input = server_setup::put_input(&known);
+    tauri::async_runtime::spawn_blocking(move || {
+        server_folders::put_remote(&server, &line, &input)
+    })
+    .await
+    .map_err(lock_err)?
+    .map_err(AppError::LaunchFailed)?;
+    Ok(known.len())
 }
 
 // the children of one folder: the drill-down, one ssh on the click, cached
