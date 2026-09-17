@@ -1489,10 +1489,11 @@ const AppInner = () => {
 			proj('openEditor', 'Open in editor', ['code', 'edit'], launchEditor),
 			proj('openTerminal', 'Open terminal', ['term', 'shell', 'wt'], launchTerminal),
 			proj('openBoth', 'Open both', ['launch'], handleLaunch),
-			// the attach view's doors: every live session by name, every
-			// server's box session, and the way out while a pane is open
+			// the attach view's doors: every live session by name (under the
+			// same switch as the chip), every server's box session, and the
+			// way out while a pane is open
 			...projects
-				.filter(x => sessions.has(x.full_path))
+				.filter(x => tmuxOn && sessions.has(x.full_path))
 				.map(x => ({
 					id: `attach.project.${x.full_path}`,
 					title: `Attach: ${x.name}`,
@@ -1828,7 +1829,7 @@ const AppInner = () => {
 				fire('attach', () => {
 					if (attach.pane) attach.detach();
 					else if (serverSel) attachServer(serverSel);
-					else if (selected && sessions.has(selected.full_path))
+					else if (selected && tmuxOn && sessions.has(selected.full_path))
 						attachProject(selected);
 					else toast('Select a row with a live session first', 'info');
 				})
@@ -1890,7 +1891,7 @@ const AppInner = () => {
 		};
 		window.addEventListener('keydown', handler);
 		return () => window.removeEventListener('keydown', handler);
-	}, [selected, workspaces, git, serverSel, sessions, attach.pane]);
+	}, [selected, workspaces, git, serverSel, sessions, tmuxOn, attach.pane]);
 
 	return (
 		// the radius belongs to a floating window; flush with the screen it
