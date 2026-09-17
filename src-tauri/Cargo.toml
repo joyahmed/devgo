@@ -25,6 +25,7 @@ tauri-plugin-dialog = "2"
 tauri-plugin-shell = "2"
 thiserror = "2.0.20"
 tauri-plugin-global-shortcut = "2"
+portable-pty = "0.9.0"
 
 
 # size leaning: a launcher's exe is read from disk on every cold start and
