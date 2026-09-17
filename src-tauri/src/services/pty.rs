@@ -247,4 +247,140 @@ impl Registry {
     pub fn forget(&mut self, id: &str) {
         self.panes.remove(id);
     }
+
+    #[cfg(test)]
+    fn len(&self) -> usize {
+        self.panes.len()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn project(name: &str, full_path: &str) -> Project {
+        let fs = if full_path.starts_with("//wsl") {
+            "WSL"
+        } else {
+            LOCAL_FS
+        };
+        Project::new(name.into(), full_path.into(), String::new(), fs.into())
+    }
+
+    fn server(tmux: bool, session: Option<&str>) -> Server {
+        Server {
+            id: "box".into(),
+            name: "box".into(),
+            alias: None,
+            host: "203.0.113.7".into(),
+            user: Some("joy".into()),
+            port: Some(2222),
+            identity: Some("C:\\Users\\joy\\.ssh\\id_ed25519".into()),
+            default_path: None,
+            tmux,
+            session: session.map(String::from),
+            tunnel: false,
+            source: "manual".into(),
+            roots: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn a_local_project_attaches_through_the_platforms_multiplexer() {
+        let p = project("app", "G:/dev/app");
+        let line = project_line(&p, &[]).unwrap();
+        let session = tmux_session_name(&p);
+        assert_eq!(line.exe, LOCAL_MUX);
+        assert_eq!(line.args, ["attach", "-t", &format!("={session}")]);
+        assert_eq!(line.session, session);
+        assert!(line.place.ends_with(LOCAL_FS), "{}", line.place);
+        assert_eq!(line.display(), format!("{LOCAL_MUX} attach -t ={session}"));
+    }
+
+    #[test]
+    fn a_wsl_project_attaches_inside_its_running_distro() {
+        let p = project("app", "//wsl.localhost/Ubuntu/home/joy/app");
+        let line = project_line(&p, &["ubuntu".into()]).unwrap();
+        assert_eq!(line.exe, "wsl");
+        assert_eq!(
+            line.args[..6],
+            ["-d", "Ubuntu", "-e", "tmux", "attach", "-t"]
+        );
+        assert!(line.args[6].starts_with("=app-"), "{:?}", line.args);
+        assert_eq!(line.place, "tmux in Ubuntu");
+    }
+
+    #[test]
+    fn a_stopped_distro_is_refused_not_booted() {
+        let p = project("app", "//wsl.localhost/Ubuntu/home/joy/app");
+        match project_line(&p, &[]) {
+            Err(AppError::WslNotRunning(d)) => assert_eq!(d, "Ubuntu"),
+            other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_server_attaches_or_creates_its_session_with_the_key_bare() {
+        let line = server_line(&server(true, None)).unwrap();
+        assert_eq!(line.exe, "ssh");
+        assert_eq!(
+            line.args,
+            [
+                "-t",
+                "-p",
+                "2222",
+                "-i",
+                "C:\\Users\\joy\\.ssh\\id_ed25519",
+                "joy@203.0.113.7",
+                "tmux",
+                "new-session",
+                "-A",
+                "-s",
+                "devgo"
+            ]
+        );
+        assert_eq!(line.session, "devgo");
+        assert_eq!(line.place, "tmux on box");
+        let named = server_line(&server(true, Some("work"))).unwrap();
+        assert_eq!(named.args.last().unwrap(), "work");
+    }
+
+    #[test]
+    fn a_server_with_tmux_off_has_nothing_to_attach() {
+        match server_line(&server(false, None)) {
+            Err(AppError::AttachRefused(m)) => {
+                assert!(m.contains("box"), "{m}")
+            }
+            other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn an_unknown_pane_is_refused_everywhere() {
+        let mut reg = Registry::default();
+        assert!(reg.write("pty-9", b"x").is_err());
+        assert!(reg.resize("pty-9", 80, 24).is_err());
+        assert!(reg.close("pty-9").is_err());
+        reg.forget("pty-9");
+        assert_eq!(reg.len(), 0);
+    }
+
+    // a real pty, a program that does not exist: the spawn fails, no
+    // thread starts, and the registry holds nothing
+    #[test]
+    fn a_missing_program_is_a_launch_failure_and_leaves_no_pane() {
+        let mut reg = Registry::default();
+        let line = AttachLine {
+            exe: "devgo-no-such-program-75".into(),
+            args: vec!["attach".into()],
+            session: "x".into(),
+            place: "nowhere".into(),
+        };
+        let result = reg.open(&line, 80, 24, |_| {}, |_, _| {});
+        assert!(
+            matches!(result, Err(AppError::LaunchFailed(_))),
+            "{result:?}"
+        );
+        assert_eq!(reg.len(), 0);
+    }
 }
