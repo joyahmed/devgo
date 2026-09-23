@@ -1,9 +1,12 @@
 [package]
 name = "devgo"
 version = "1.0.0"
-description = "A Tauri App"
-authors = ["you"]
+description = "Every project on your machine, your GitHub, your servers - one keystroke to where you work."
+authors = ["Joy Ahmed <joy_ahmed_007@yahoo.com>"]
 edition = "2021"
+license = "MIT"
+homepage = "https://github.com/joyahmed/devgo"
+repository = "https://github.com/joyahmed/devgo"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

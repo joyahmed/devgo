@@ -45,6 +45,17 @@
 				"installerIcon": "icons/icon.ico",
 				"uninstallerIcon": "icons/icon.ico"
 			}
+		},
+		"category": "DeveloperTool",
+		"publisher": "Joy Ahmed",
+		"homepage": "https://github.com/joyahmed/devgo",
+		"license": "MIT",
+		"shortDescription": "One keystroke to where you work.",
+		"longDescription": "A launcher for a developer's projects. Point it at the folders that hold them, on every filesystem the machine can see, and it lists every project, finds one in a few keystrokes, and opens it in the editor, terminal or agent you already use.",
+		"linux": {
+			"deb": {
+				"section": "devel"
+			}
 		}
 	}
 }
