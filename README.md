@@ -19,7 +19,7 @@
 
 A launcher for a developer's projects. Point it at the folders that hold them, on every filesystem the machine can see, and it lists every project, finds one in a few keystrokes, and opens it in the editor, terminal or agent you already use. It is not an editor, a terminal or a git client. It opens the door and gets out of the way.
 
-Cross-platform. On Windows that means the local drives and the WSL distros. On a Mac it means the local disk. On Linux it means the local disk too, and it has been run there - Ubuntu 24.04, 2026-09-23: it builds from the same crate, its tests pass, the `.deb` installs and the lanes work. The one gap is the terminal lane, which carries no Linux terminal yet. Beside those, the GitHub account you are logged into and the servers in your ssh config get a lane of their own.
+Cross-platform. On Windows that means the local drives and the WSL distros. On a Mac it means the local disk. On Linux it means the local disk too, and it has been run there - Ubuntu 24.04, 2026-09-23: it builds from the same crate, its tests pass, the `.deb` installs and the lanes work. Beside those, the GitHub account you are logged into and the servers in your ssh config get a lane of their own.
 
 ![DevGo on Windows: the four lanes](docs/screenshots/windows/01-four-lanes.png)
 
@@ -162,7 +162,6 @@ scripts/build-linux.sh --deps --install
 
 ## 🗺️ Next
 
-- **Linux terminals.** The launch targets know the Mac and Windows terminals; a Linux box running `gnome-terminal`, `konsole`, `xfce4-terminal`, `tilix`, `foot` or `xterm` matches none of them, so the terminal key has nothing to open. Everything else on Linux works.
 - **More server actions** in the example set, as people ask for them.
 
 Issues are welcome.

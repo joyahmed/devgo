@@ -1,6 +1,6 @@
 [package]
 name = "devgo"
-version = "1.1.0"
+version = "1.1.1"
 description = "Every project on your machine, your GitHub, your servers - one keystroke to where you work."
 authors = ["Joy Ahmed <joy_ahmed_007@yahoo.com>"]
 edition = "2021"
