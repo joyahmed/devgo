@@ -134,6 +134,8 @@ Builds are unsigned on both platforms. Download from [Releases](https://github.c
 
 **macOS**: `DevGo_<version>_aarch64.dmg` (3.7 MB). Drag `DevGo.app` to Applications. On macOS 15+ open it once, then System Settings › Privacy & Security › *Open Anyway*; older, right-click › Open; if it says "is damaged": `xattr -cr /Applications/DevGo.app`. Copied straight out of the build tree it needs none of that on the machine that built it.
 
+**Linux**: `DevGo_<version>_amd64.deb`. `sudo dpkg -i DevGo_<version>_amd64.deb`, then run `DevGo`. It depends on `libwebkit2gtk-4.1-0`, `libgtk-3-0` and `libayatana-appindicator3-1`, which a desktop Ubuntu already has. Built on 24.04; the terminal lane has no Linux target yet (see [Next](#-next)).
+
 Optional, for the lanes that want them: `gh` (GitHub), `ssh` (Servers), `psmux` on Windows or `tmux` in the distro and on the Mac.
 
 **From source**: Rust stable and bun.
