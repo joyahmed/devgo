@@ -1,6 +1,6 @@
 import Button from './Button';
 import LaneHeading from './LaneHeading';
-import { card, laneBody, row, rowFlat, rowIndented, zebra } from './rowStyles';
+import { card, laneBody, row, rowFlat, zebra } from './rowStyles';
 import SearchBox from './SearchBox';
 import { isEtc } from '../etcCuration';
 import { appStatus } from '../serverApps';
@@ -141,7 +141,13 @@ const ServerRow = ({
 			}}
 			title={rowTitle(server, showDetails)}
 		>
-			<div className={`${rowIndented} border-l-border`}>
+			{/* one step LEFT of the root headings (pl-10), which are themselves one
+			    step left of their rows (folderPad 64): 16 -> 40 -> 64, an even 24px
+			    ladder. not rowIndented - that is pl-10, which put the server level
+			    with its own children, and rowInner's gap-4 then pushed its name
+			    right of theirs so the tree read inside-out. gap-2 matches the
+			    folder rows so every chevron in the lane shares a column. */}
+			<div className='w-full flex items-center gap-2 text-15 pl-4 pr-4 border-l border-l-border'>
 				<Button
 					variant='ghost'
 					className={`text-11 leading-none w-4 p-0 hover:bg-transparent shrink-0 ${

@@ -1164,12 +1164,12 @@ const Settings = ({
 				open,
 				side: 'right' as const,
 				onClose,
-				width: 'w-[min(760px,94vw)]',
+				width: 'w-[min(808px,94vw)]',
 				z: 40 as const
 			}}
 		>
 			<div className='flex-1 min-h-0 flex overflow-hidden'>
-				<nav className='w-44 shrink-0 border-r border-border bg-bg-primary/40 p-2 flex flex-col gap-1'>
+				<nav className='w-56 shrink-0 border-r border-border bg-bg-primary/40 p-2 flex flex-col gap-1'>
 					<h3 className='text-18 font-bold text-text-primary px-2 py-2'>
 						Settings
 					</h3>
