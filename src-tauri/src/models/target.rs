@@ -242,21 +242,21 @@ pub fn defaults() -> Vec<LaunchTarget> {
 /// with none gets no terminal row rather than one that cannot run.
 #[cfg(target_os = "linux")]
 pub fn defaults() -> Vec<LaunchTarget> {
-	let mut out = vec![LaunchTarget {
-		id: "vscode".into(),
-		name: "VS Code".into(),
-		kind: TargetKind::Editor,
-		executable: "code".into(),
-		args_template: "\"{path}\"".into(),
-		wsl_executable: None,
-		wsl_args_template: None,
-		run_args_template: None,
-		wsl_run_args_template: None,
-	}];
-	if let Some(t) = crate::services::editors::first_terminal() {
-		out.push(t);
-	}
-	out
+    let mut out = vec![LaunchTarget {
+        id: "vscode".into(),
+        name: "VS Code".into(),
+        kind: TargetKind::Editor,
+        executable: "code".into(),
+        args_template: "\"{path}\"".into(),
+        wsl_executable: None,
+        wsl_args_template: None,
+        run_args_template: None,
+        wsl_run_args_template: None,
+    }];
+    if let Some(t) = crate::services::editors::first_terminal() {
+        out.push(t);
+    }
+    out
 }
 
 #[cfg(test)]
@@ -408,7 +408,7 @@ mod tests {
     // no way to take a command, so both forms go through {script} and
     // neither mentions {path} or {command}; the launcher's files carry those
     #[cfg(not(windows))]
-	#[cfg(target_os = "macos")]
+    #[cfg(target_os = "macos")]
     #[test]
     fn the_mac_defaults_open_terminal_through_a_script() {
         let seeded = defaults();

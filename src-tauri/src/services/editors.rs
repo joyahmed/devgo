@@ -854,20 +854,20 @@ fn path_lookup(names: &[&str]) -> HashMap<String, String> {
 /// cannot run.
 #[cfg(target_os = "linux")]
 pub fn first_terminal() -> Option<LaunchTarget> {
-	let names: Vec<&str> = CANDIDATES
-		.iter()
-		.filter(|c| c.kind == TargetKind::Terminal && !c.exe.is_empty())
-		.map(|c| c.exe)
-		.collect();
-	let found = path_lookup(&names);
-	CANDIDATES
-		.iter()
-		.find(|c| {
-			c.kind == TargetKind::Terminal
-				&& !c.exe.is_empty()
-				&& found.contains_key(&c.exe.to_lowercase())
-		})
-		.map(to_target)
+    let names: Vec<&str> = CANDIDATES
+        .iter()
+        .filter(|c| c.kind == TargetKind::Terminal && !c.exe.is_empty())
+        .map(|c| c.exe)
+        .collect();
+    let found = path_lookup(&names);
+    CANDIDATES
+        .iter()
+        .find(|c| {
+            c.kind == TargetKind::Terminal
+                && !c.exe.is_empty()
+                && found.contains_key(&c.exe.to_lowercase())
+        })
+        .map(to_target)
 }
 
 /// Is this executable resolvable? A full path the user typed, or one
