@@ -11,7 +11,7 @@
 <p align="center">
   <a href="https://github.com/joyahmed/devgo/actions/workflows/ci.yml"><img src="https://github.com/joyahmed/devgo/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://github.com/joyahmed/devgo/releases"><img src="https://img.shields.io/github/v/release/joyahmed/devgo?include_prereleases&label=release" alt="Release"></a>
-  <img src="https://img.shields.io/badge/platforms-Windows%20%C2%B7%20WSL%20%C2%B7%20macOS-0ea5e9" alt="Windows · WSL · macOS">
+  <img src="https://img.shields.io/badge/platforms-Windows%20%C2%B7%20WSL%20%C2%B7%20macOS%20%C2%B7%20Linux-0ea5e9" alt="Windows · WSL · macOS · Linux">
   <img src="https://img.shields.io/badge/Tauri-2-24c8db?logo=tauri&logoColor=white" alt="Tauri 2">
   <img src="https://img.shields.io/badge/Rust-stable-dea584?logo=rust&logoColor=black" alt="Rust">
   <img src="https://img.shields.io/badge/React-19-61dafb?logo=react&logoColor=black" alt="React 19">
@@ -19,7 +19,7 @@
 
 A launcher for a developer's projects. Point it at the folders that hold them, on every filesystem the machine can see, and it lists every project, finds one in a few keystrokes, and opens it in the editor, terminal or agent you already use. It is not an editor, a terminal or a git client. It opens the door and gets out of the way.
 
-Cross-platform. On Windows that means the local drives and the WSL distros. On a Mac it means the local disk. Linux builds from the same crate but has not been run yet, for lack of time, so treat it as untested. Beside those, the GitHub account you are logged into and the servers in your ssh config get a lane of their own.
+Cross-platform. On Windows that means the local drives and the WSL distros. On a Mac it means the local disk. On Linux it means the local disk too, and it has been run there - Ubuntu 24.04, 2026-09-23: it builds from the same crate, its tests pass, the `.deb` installs and the lanes work. The one gap is the terminal lane, which carries no Linux terminal yet. Beside those, the GitHub account you are logged into and the servers in your ssh config get a lane of their own.
 
 ![DevGo on Windows: the four lanes](docs/screenshots/windows/01-four-lanes.png)
 
@@ -144,6 +144,12 @@ bun tauri dev      # dev build with hot reload
 bun tauri build    # release; the bundles land in src-tauri/target/release/bundle/
 ```
 
+On **Linux** those two lines are not enough on their own: tauri links against webkit2gtk and gtk, and a box without their `-dev` packages fails deep in a cargo build with a pkg-config error that names a `.pc` file rather than a package. `scripts/build-linux.sh` carries the list and checks it first - it prints the exact `apt install` line and builds nothing when something is missing, or takes `--deps` to install them itself and `--install` to `dpkg -i` the result.
+
+```bash
+scripts/build-linux.sh --deps --install
+```
+
 `bun run build` runs the contrast gate, `tsc` and Vite; `cargo test` in `src-tauri` runs the Rust tests. CI runs both on every push and pull request, and the tag build runs them on each platform before it bundles.
 
 ## 🧭 Platform notes
@@ -154,7 +160,7 @@ bun tauri build    # release; the bundles land in src-tauri/target/release/bundl
 
 ## 🗺️ Next
 
-- **Linux.** The crate builds for it; a tested Linux build once it has been run there.
+- **Linux terminals.** The launch targets know the Mac and Windows terminals; a Linux box running `gnome-terminal`, `konsole`, `xfce4-terminal`, `tilix`, `foot` or `xterm` matches none of them, so the terminal key has nothing to open. Everything else on Linux works.
 - **More server actions** in the example set, as people ask for them.
 
 Issues are welcome.
