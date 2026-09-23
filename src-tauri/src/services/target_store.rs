@@ -358,11 +358,24 @@ mod tests {
         // the migration is a windows story, so only there is psmux checked
         #[cfg(windows)]
         assert_eq!(s.get("wt").unwrap().args_template, WT_ARGS);
-        #[cfg(not(windows))]
+        #[cfg(target_os = "macos")]
         assert_eq!(
             s.get("terminal").unwrap().args_template,
             crate::models::target::MAC_TERMINAL_ARGS
         );
+        // linux seeds whichever emulator the box has, or none - but it must
+        // never seed the mac one. it did until 2026-09-23: defaults() was
+        // cfg(not(windows)), so a linux install got `open -a Terminal`, and
+        // the terminal key failed silently because `open` on linux is
+        // xdg-open and rejects -a. this is that regression, pinned.
+        #[cfg(target_os = "linux")]
+        for t in s.list() {
+            assert_ne!(
+                t.executable, "open",
+                "linux seeded the mac terminal: {}",
+                t.id
+            );
+        }
         assert!(!dir.join("targets.json.pre-psmux").exists());
     }
 

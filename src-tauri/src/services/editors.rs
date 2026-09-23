@@ -446,6 +446,89 @@ const CANDIDATES: &[Candidate] = &[
         wsl_run_args: None,
         app: Some("Alacritty"),
     },
+    // the linux terminal emulators. none of the rows above match a stock
+    // gnome or kde box: Terminal.app and iTerm2 are mac bundles, and
+    // ghostty/wezterm/kitty/alacritty are installs a distro does not ship.
+    // without these a linux machine detects NO terminal at all, so the
+    // terminal key has nothing to open. on a mac none of them are on PATH
+    // and the rows never fire, which is why they sit in the shared table.
+    Candidate {
+        id: "gnome-terminal",
+        name: "GNOME Terminal",
+        kind: TargetKind::Terminal,
+        exe: "gnome-terminal",
+        args: "--working-directory \"{path}\"",
+        wsl_args: None,
+        run_args: Some("--working-directory \"{path}\" -- bash -lc {command}"),
+        wsl_run_args: None,
+        app: None,
+    },
+    Candidate {
+        id: "konsole",
+        name: "Konsole",
+        kind: TargetKind::Terminal,
+        exe: "konsole",
+        args: "--workdir \"{path}\"",
+        wsl_args: None,
+        run_args: Some("--workdir \"{path}\" -e bash -lc {command}"),
+        wsl_run_args: None,
+        app: None,
+    },
+    Candidate {
+        id: "xfce4-terminal",
+        name: "Xfce Terminal",
+        kind: TargetKind::Terminal,
+        exe: "xfce4-terminal",
+        args: "--working-directory=\"{path}\"",
+        wsl_args: None,
+        run_args: Some("--working-directory=\"{path}\" -x bash -lc {command}"),
+        wsl_run_args: None,
+        app: None,
+    },
+    Candidate {
+        id: "tilix",
+        name: "Tilix",
+        kind: TargetKind::Terminal,
+        exe: "tilix",
+        args: "--working-directory=\"{path}\"",
+        wsl_args: None,
+        run_args: Some("--working-directory=\"{path}\" -e bash -lc {command}"),
+        wsl_run_args: None,
+        app: None,
+    },
+    Candidate {
+        id: "foot",
+        name: "foot",
+        kind: TargetKind::Terminal,
+        exe: "foot",
+        args: "--working-directory=\"{path}\"",
+        wsl_args: None,
+        run_args: Some("--working-directory=\"{path}\" bash -lc {command}"),
+        wsl_run_args: None,
+        app: None,
+    },
+    Candidate {
+        id: "terminator",
+        name: "Terminator",
+        kind: TargetKind::Terminal,
+        exe: "terminator",
+        args: "--working-directory=\"{path}\"",
+        wsl_args: None,
+        run_args: Some("--working-directory=\"{path}\" -x bash -lc {command}"),
+        wsl_run_args: None,
+        app: None,
+    },
+    Candidate {
+        id: "xterm",
+        name: "xterm",
+        kind: TargetKind::Terminal,
+        exe: "xterm",
+        args: "-e bash -lc 'cd \"{path}\" && exec bash -l'",
+        wsl_args: None,
+        run_args: Some("-e bash -lc {command}"),
+        wsl_run_args: None,
+        app: None,
+    },
 ];
 
 /// Coding-agent CLIs, on the Windows side and inside each running distro,
@@ -762,6 +845,31 @@ fn path_lookup(names: &[&str]) -> HashMap<String, String> {
     found
 }
 
+/// The first terminal on PATH, in the order the table lists them.
+///
+/// Linux seeds its registry with this rather than a constant, because there
+/// is no one terminal every distro ships: gnome has gnome-terminal, kde has
+/// konsole, a wlroots box may have only foot. A machine with none gets no
+/// terminal row at all, which is honest - better than a row whose command
+/// cannot run.
+#[cfg(target_os = "linux")]
+pub fn first_terminal() -> Option<LaunchTarget> {
+	let names: Vec<&str> = CANDIDATES
+		.iter()
+		.filter(|c| c.kind == TargetKind::Terminal && !c.exe.is_empty())
+		.map(|c| c.exe)
+		.collect();
+	let found = path_lookup(&names);
+	CANDIDATES
+		.iter()
+		.find(|c| {
+			c.kind == TargetKind::Terminal
+				&& !c.exe.is_empty()
+				&& found.contains_key(&c.exe.to_lowercase())
+		})
+		.map(to_target)
+}
+
 /// Is this executable resolvable? A full path the user typed, or one
 /// `locate` resolved inside a bundle, is checked directly: the PATH lookup
 /// only searches PATH and would call it missing.
@@ -875,17 +983,26 @@ mod tests {
         assert!(!is_on_path("devgo-definitely-not-a-real-program"));
     }
 
-    // a mac has no second filesystem, so no candidate may claim a wsl form:
-    // one that did would make launch_target accept a \\wsl.localhost path
-    // and spawn wsl, which does not exist here. and every row carries its
-    // bundle name, because that is what installed means on a mac
+    // neither a mac nor a linux box has a second filesystem, so no candidate
+    // may claim a wsl form: one that did would make launch_target accept a
+    // \\wsl.localhost path and spawn wsl, which does not exist here.
+    //
+    // the bundle rule USED to be "every row has one", which was true while
+    // this table was mac-only. it now also carries the linux emulators, which
+    // are found on PATH and have no bundle. the invariant that actually
+    // matters is that a row can be found at all - locate() tries the exe then
+    // the bundle, so a row with neither is dead weight nobody can launch.
     #[cfg(not(windows))]
     #[test]
-    fn mac_candidates_have_no_wsl_form_and_every_app_has_a_bundle() {
+    fn no_candidate_claims_a_wsl_form_and_every_row_is_detectable() {
         for c in CANDIDATES {
             assert!(c.wsl_args.is_none(), "{}", c.id);
             assert!(c.wsl_run_args.is_none(), "{}", c.id);
-            assert!(c.app.is_some(), "{} has no bundle name", c.id);
+            assert!(
+                !c.exe.is_empty() || c.app.is_some(),
+                "{} has neither a cli nor a bundle, so it can never be detected",
+                c.id
+            );
             assert!(
                 !c.exe.is_empty() || c.args.starts_with("-a "),
                 "a row without a cli is launched through open: {}",

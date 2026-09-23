@@ -201,7 +201,14 @@ pub fn defaults() -> Vec<LaunchTarget> {
 /// what is certainly there, detect the rest. No WSL forms, and the ids are
 /// the platform's own (`terminal`, not `wt`), so a prefs file carried
 /// across machines names a target that exists.
-#[cfg(not(windows))]
+/// ⚠️ macOS only. Its terminal row is `open -a Terminal`, a mac command -
+/// this used to be `cfg(not(windows))`, so a LINUX install was seeded with
+/// the mac registry and its terminal key silently ran `open -a Terminal`
+/// (on Ubuntu `open` is xdg-open via alternatives, which rejects `-a`).
+/// Detection was never the problem: Terminal.app has no `exe` and is found
+/// through app_bundle(), which looks under /Applications and correctly
+/// finds nothing on Linux. The registry seed was the whole bug.
+#[cfg(target_os = "macos")]
 pub fn defaults() -> Vec<LaunchTarget> {
     vec![
         LaunchTarget {
@@ -228,6 +235,28 @@ pub fn defaults() -> Vec<LaunchTarget> {
             wsl_run_args_template: None,
         },
     ]
+}
+
+/// Linux: the editor row is the same, and the terminal is whichever
+/// emulator this box actually has - see editors::first_terminal. A machine
+/// with none gets no terminal row rather than one that cannot run.
+#[cfg(target_os = "linux")]
+pub fn defaults() -> Vec<LaunchTarget> {
+	let mut out = vec![LaunchTarget {
+		id: "vscode".into(),
+		name: "VS Code".into(),
+		kind: TargetKind::Editor,
+		executable: "code".into(),
+		args_template: "\"{path}\"".into(),
+		wsl_executable: None,
+		wsl_args_template: None,
+		run_args_template: None,
+		wsl_run_args_template: None,
+	}];
+	if let Some(t) = crate::services::editors::first_terminal() {
+		out.push(t);
+	}
+	out
 }
 
 #[cfg(test)]
@@ -379,6 +408,7 @@ mod tests {
     // no way to take a command, so both forms go through {script} and
     // neither mentions {path} or {command}; the launcher's files carry those
     #[cfg(not(windows))]
+	#[cfg(target_os = "macos")]
     #[test]
     fn the_mac_defaults_open_terminal_through_a_script() {
         let seeded = defaults();
