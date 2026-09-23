@@ -49,3 +49,28 @@ scripts/shoot.ps1 -Out docs/screenshots/windows/01-four-lanes.png
 |---|---|
 | `mac/01-three-lanes.png` | Mac · GitHub · Servers with a server expanded |
 | `mac/01b-three-lanes-collapsed.png` | The same, the server collapsed |
+
+## Linux
+
+1920×972, knob 0 %, `import` (ImageMagick), over an X11 session — no wallpaper behind it, so this
+one is opaque rather than see-through like the other two.
+
+| file | what it shows |
+|---|---|
+| `linux/01-three-lanes.png` | Linux · GitHub · Servers with a server expanded: its top-level folders and the `/var/www` app rows with domain and ports |
+
+The first Linux run, 2026-09-23, on Ubuntu 24.04. There is no WSL lane here, so Linux is three
+lanes like the Mac. ⚠️ The frame shows the app working, not Linux finished: the **terminal lane
+is empty on Linux** — the candidate list carries no `gnome-terminal`, `konsole`, `xfce4-terminal`,
+`tilix`, `foot` or `xterm`, and its macOS Terminal entry passes its PATH check here because
+`/usr/bin/open` is `xdg-open` on Ubuntu. Editor, agent, GitHub and Servers are what is real in
+this picture.
+
+### How to retake
+
+No CDP here — this is the installed release build, captured straight off X:
+
+```bash
+xwininfo -root -tree | grep '"DevGo"'      # the window id of the 1920x972 one
+import -window <id> docs/screenshots/linux/01-three-lanes.png
+```
