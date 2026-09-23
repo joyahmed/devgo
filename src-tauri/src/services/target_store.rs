@@ -220,11 +220,20 @@ mod tests {
     }
 
     #[test]
-    fn seeds_vscode_and_windows_terminal() {
+    fn seeds_vscode_and_a_terminal() {
         let s = store("seed");
         assert_eq!(count_of(&s, TargetKind::Editor), 1);
-        assert_eq!(count_of(&s, TargetKind::Terminal), 1);
         assert_eq!(s.get("vscode").unwrap().name, "VS Code");
+
+        // windows and macos seed a constant (wt, Terminal.app), so the count
+        // is exactly one. linux has no terminal every distro ships, so it
+        // seeds whichever emulator the machine has - and a machine with none,
+        // like a bare CI runner, correctly gets no terminal row. asserting 1
+        // here passed on a workstation and failed in CI for that reason.
+        #[cfg(not(target_os = "linux"))]
+        assert_eq!(count_of(&s, TargetKind::Terminal), 1);
+        #[cfg(target_os = "linux")]
+        assert!(count_of(&s, TargetKind::Terminal) <= 1);
     }
 
     /// A truncated or hand-edited empty file must not leave the user with no
