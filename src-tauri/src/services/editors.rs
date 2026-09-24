@@ -45,8 +45,7 @@ struct Candidate {
 
 // the VS Code family does the crossing itself
 #[cfg(windows)]
-const REMOTE_URI: &str =
-    "--folder-uri vscode-remote://wsl+{distro}{linux_path}";
+const REMOTE_URI: &str = crate::models::target::VSCODE_WSL_ARGS;
 
 /// Editors and terminals worth looking for on the Windows side, roughly in
 /// the order a WSL-first developer is likely to have them. `vscode` and `wt`
@@ -932,6 +931,80 @@ mod tests {
         ids.sort_unstable();
         ids.dedup();
         assert_eq!(ids.len(), before, "duplicate id in the candidate table");
+    }
+
+    // is every occurrence of `seam` inside a double-quoted stretch of the
+    // template? nothing in the crate splits a resolved line itself - cmd /c
+    // and sh -c do - and both keep a quoted word whole however many spaces
+    // are in it. outside the quotes the same value is several arguments
+    fn quoted_everywhere(template: &str, seam: &str) -> bool {
+        let (bytes, needle) = (template.as_bytes(), seam.as_bytes());
+        let mut inside = false;
+        let mut i = 0;
+        while i < bytes.len() {
+            if bytes[i] == b'"' {
+                inside = !inside;
+            } else if bytes[i..].starts_with(needle) {
+                if !inside {
+                    return false;
+                }
+                i += needle.len();
+                continue;
+            }
+            i += 1;
+        }
+        true
+    }
+
+    /// A project under `G:\01_tauri\my project`, a temp directory under
+    /// `C:\Users\Joy Ahmed`, a distro home at `/home/joy/my project`: every
+    /// one of them is one argument only while the template quotes the seam.
+    /// {command} is deliberately not in the list - a command is shell syntax
+    /// the user typed, and quoting it would run the whole line as a program.
+    #[test]
+    fn every_shipped_template_quotes_the_path_and_script_seams() {
+        use crate::models::target::{
+            MAC_TERMINAL_ARGS, MAC_TERMINAL_RUN_ARGS, VSCODE_WSL_ARGS, WT_ARGS,
+            WT_ARGS_PRE_PSMUX, WT_RUN_ARGS, WT_RUN_ARGS_PRE, WT_WSL_RUN_ARGS,
+            WT_WSL_RUN_ARGS_PRE,
+        };
+        let mut templates: Vec<String> = vec![
+            WT_ARGS.into(),
+            WT_ARGS_PRE_PSMUX.into(),
+            WT_RUN_ARGS.into(),
+            WT_RUN_ARGS_PRE.into(),
+            WT_WSL_RUN_ARGS.into(),
+            WT_WSL_RUN_ARGS_PRE.into(),
+            VSCODE_WSL_ARGS.into(),
+            MAC_TERMINAL_ARGS.into(),
+            MAC_TERMINAL_RUN_ARGS.into(),
+            distro_target("nvim", "Neovim", "Ubuntu")
+                .wsl_args_template
+                .unwrap(),
+        ];
+        templates
+            .extend(LINUX_TERMINAL_ARGS.iter().map(|(_, a)| a.to_string()));
+        for c in CANDIDATES {
+            templates.push(c.args.to_string());
+            templates.extend(c.wsl_args.map(str::to_string));
+            templates.extend(c.run_args.map(str::to_string));
+            templates.extend(c.wsl_run_args.map(str::to_string));
+        }
+        for t in crate::models::target::defaults() {
+            templates.push(t.args_template);
+            templates.extend(t.wsl_args_template);
+            templates.extend(t.run_args_template);
+            templates.extend(t.wsl_run_args_template);
+        }
+
+        for template in &templates {
+            for seam in ["{path}", "{script}", "{linux_path}"] {
+                assert!(
+                    quoted_everywhere(template, seam),
+                    "{seam} is bare, so a space in it splits the line: {template}"
+                );
+            }
+        }
     }
 
     /// A detected VS Code or Windows Terminal is the seeded one: same id, so

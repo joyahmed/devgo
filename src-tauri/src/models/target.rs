@@ -109,6 +109,18 @@ impl LaunchTarget {
     }
 }
 
+/// VS Code's WSL form: the remote URI, in quotes. Unquoted it was three
+/// arguments for `/home/joy/my project` — the shell that splits the line
+/// cut the URI at the space, VS Code opened `/home/joy/my` and treated
+/// `project` as a file, and nothing said so. VSCODE_WSL_ARGS_PRE is the
+/// bare form every earlier install carries; the store rewrites it once,
+/// with a backup. A const because editors::detect offers the same bytes to
+/// every VS Code fork.
+pub const VSCODE_WSL_ARGS: &str =
+    "--folder-uri \"vscode-remote://wsl+{distro}{linux_path}\"";
+pub const VSCODE_WSL_ARGS_PRE: &str =
+    "--folder-uri vscode-remote://wsl+{distro}{linux_path}";
+
 /// Windows Terminal's arguments for a Windows project. {script} is the
 /// seam the WSL form already uses: the launcher writes a PowerShell script
 /// that brings the project's psmux session up. -NoExit because the script
@@ -175,9 +187,7 @@ pub fn defaults() -> Vec<LaunchTarget> {
             wsl_executable: None,
             // VS Code speaks WSL natively through a remote URI, so it does not
             // need `wsl` in front of it.
-            wsl_args_template: Some(
-                "--folder-uri vscode-remote://wsl+{distro}{linux_path}".into(),
-            ),
+            wsl_args_template: Some(VSCODE_WSL_ARGS.into()),
             // an editor is not a place to run a dev command
             run_args_template: None,
             wsl_run_args_template: None,
@@ -287,8 +297,57 @@ mod tests {
         assert_eq!(exe, "code");
         assert_eq!(
             args,
-            "--folder-uri vscode-remote://wsl+Ubuntu/home/user/app"
+            "--folder-uri \"vscode-remote://wsl+Ubuntu/home/user/app\""
         );
+    }
+
+    /// `G:\01_tauri\my project\app` is an ordinary directory, and the line a
+    /// template resolves to is split by a real shell. The space survives
+    /// only because the quotes round {path} do.
+    #[test]
+    fn a_project_path_with_a_space_stays_one_quoted_argument() {
+        let (_, args) = vscode().resolve("/home/joy/my project", None).unwrap();
+        assert_eq!(args, "\"/home/joy/my project\"");
+        let (_, args) = vscode()
+            .resolve(r"G:\01_tauri\my project\app", None)
+            .unwrap();
+        assert_eq!(args, "\"G:\\01_tauri\\my project\\app\"");
+    }
+
+    /// The same on the WSL side, where the remote URI carries the path with
+    /// no separator in front of it: bare, `/home/joy/my project` made
+    /// `--folder-uri`, `…wsl+Ubuntu/home/joy/my` and `project` — three
+    /// arguments, the wrong directory, and no error anywhere.
+    #[cfg(windows)]
+    #[test]
+    fn a_wsl_path_with_a_space_stays_one_quoted_argument() {
+        let (_, args) = vscode()
+            .resolve("x", Some(("Ubuntu", "/home/joy/my project")))
+            .unwrap();
+        assert_eq!(
+            args,
+            "--folder-uri \"vscode-remote://wsl+Ubuntu/home/joy/my project\""
+        );
+
+        let wt = defaults().into_iter().find(|t| t.id == "wt").unwrap();
+        let (_, run) = wt
+            .resolve_run(
+                "x",
+                Some(("Ubuntu", "/home/joy/my project")),
+                "bun dev",
+            )
+            .unwrap();
+        assert!(run.contains("--cd \"/home/joy/my project\""), "{run}");
+    }
+
+    /// `&`, an apostrophe and a parenthesis are legal in a directory name on
+    /// every platform, and each of them ends a word for one shell or
+    /// another. Inside the template's quotes none of them does.
+    #[test]
+    fn a_path_with_shell_punctuation_stays_inside_the_quotes() {
+        let hostile = "/home/joy/rnd (a & b)'s";
+        let (_, args) = vscode().resolve(hostile, None).unwrap();
+        assert_eq!(args, format!("\"{hostile}\""));
     }
 
     /// A Linux-only editor needs `wsl` in front, which is what wsl_executable

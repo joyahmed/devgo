@@ -3,8 +3,9 @@ use std::path::PathBuf;
 
 use crate::error::AppError;
 use crate::models::target::{
-    defaults, LaunchTarget, TargetKind, WT_ARGS, WT_ARGS_PRE_PSMUX,
-    WT_RUN_ARGS, WT_RUN_ARGS_PRE, WT_WSL_RUN_ARGS, WT_WSL_RUN_ARGS_PRE,
+    defaults, LaunchTarget, TargetKind, VSCODE_WSL_ARGS, VSCODE_WSL_ARGS_PRE,
+    WT_ARGS, WT_ARGS_PRE_PSMUX, WT_RUN_ARGS, WT_RUN_ARGS_PRE, WT_WSL_RUN_ARGS,
+    WT_WSL_RUN_ARGS_PRE,
 };
 
 /// Editors and terminals, persisted together.
@@ -44,6 +45,7 @@ impl TargetStore {
         store.adopt_psmux_template()?;
         store.adopt_run_template()?;
         store.adopt_wt_semicolon_escape()?;
+        store.adopt_remote_uri_quotes()?;
         Ok(store)
     }
 
@@ -106,6 +108,34 @@ impl TargetStore {
         }
         self.targets[pos].wsl_run_args_template =
             Some(WT_WSL_RUN_ARGS.to_string());
+        self.save()
+    }
+
+    /// The remote URI was bare, so a distro path with a space became three
+    /// arguments and VS Code opened the part before it. Not keyed to an id:
+    /// every VS Code fork detection offers carries the same bytes, so the
+    /// old form is what identifies a row nobody edited.
+    fn adopt_remote_uri_quotes(&mut self) -> Result<(), AppError> {
+        let stale: Vec<usize> = self
+            .targets
+            .iter()
+            .enumerate()
+            .filter(|(_, t)| {
+                t.wsl_args_template.as_deref() == Some(VSCODE_WSL_ARGS_PRE)
+            })
+            .map(|(i, _)| i)
+            .collect();
+        if stale.is_empty() {
+            return Ok(());
+        }
+        if self.file_path.exists() {
+            let backup = format!("{}.pre-uri-quote", self.file_path.display());
+            fs::copy(&self.file_path, backup)?;
+        }
+        for pos in stale {
+            self.targets[pos].wsl_args_template =
+                Some(VSCODE_WSL_ARGS.to_string());
+        }
         self.save()
     }
 
@@ -325,6 +355,43 @@ mod tests {
         );
     }
 
+    /// The bare remote URI is on every install that predates the quotes,
+    /// and on every VS Code fork the user added from detection, so the
+    /// rewrite goes by template rather than by id.
+    #[test]
+    fn an_install_with_a_bare_remote_uri_gets_the_quotes_and_a_backup() {
+        let dir = std::env::temp_dir().join("devgo-targets-uri-quote");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let original = pre_psmux_json(WT_ARGS_PRE_PSMUX);
+        fs::write(dir.join("targets.json"), &original).unwrap();
+
+        let s = TargetStore::new(dir.clone()).unwrap();
+        assert_eq!(
+            s.get("vscode").unwrap().wsl_args_template.as_deref(),
+            Some(VSCODE_WSL_ARGS)
+        );
+        assert!(dir.join("targets.json.pre-uri-quote").exists());
+
+        // persisted, and a second load has nothing left to adopt
+        let reloaded = TargetStore::new(dir.clone()).unwrap();
+        assert_eq!(
+            reloaded.get("vscode").unwrap().wsl_args_template.as_deref(),
+            Some(VSCODE_WSL_ARGS)
+        );
+
+        // a fork the user added by hand is the same template, so it moves too
+        let mut custom = editor("My Code");
+        custom.wsl_args_template = Some(VSCODE_WSL_ARGS_PRE.into());
+        let mut s = TargetStore::new(dir.clone()).unwrap();
+        s.add(custom).unwrap();
+        let s = TargetStore::new(dir).unwrap();
+        assert_eq!(
+            s.get("my-code").unwrap().wsl_args_template.as_deref(),
+            Some(VSCODE_WSL_ARGS)
+        );
+    }
+
     /// Matching on the id alone would overwrite a template the user wrote
     /// to "fix" something they never asked about.
     #[test]
@@ -386,6 +453,7 @@ mod tests {
             );
         }
         assert!(!dir.join("targets.json.pre-psmux").exists());
+        assert!(!dir.join("targets.json.pre-uri-quote").exists());
     }
 
     #[test]

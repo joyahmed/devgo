@@ -996,6 +996,64 @@ mod tests {
         assert!(!script_path.exists(), "{}", script_path.display());
     }
 
+    // a directory name carrying every character that ends a word for one
+    // shell or another: a space, an ampersand, an apostrophe, parentheses
+    const SPLIT_BAIT_DIR: &str = "devgo probe (a & b)'s";
+
+    // writes `landed` at the substituted {path}, through the same double
+    // quotes every shipped template puts round the seam. split wrong, the
+    // redirect goes somewhere else and the file never appears
+    #[cfg(windows)]
+    fn shell_write_to_path() -> String {
+        "/c echo landed > \"{path}\"".to_string()
+    }
+    #[cfg(not(windows))]
+    fn shell_write_to_path() -> String {
+        r#"-c "echo landed > \"{path}\"""#.to_string()
+    }
+
+    /// Nothing in the crate splits the resolved line: cmd /c on Windows and
+    /// sh -c elsewhere do, and both honour the quotes. This is the claim end
+    /// to end — a real spawn, a path with a space in it, and the file where
+    /// the template said to put it.
+    #[test]
+    fn a_path_with_a_space_reaches_the_target_as_one_argument() {
+        let dir = std::env::temp_dir().join(SPLIT_BAIT_DIR);
+        std::fs::create_dir_all(&dir).unwrap();
+        let marker = dir.join("landed.txt");
+        let _ = std::fs::remove_file(&marker);
+
+        let project = Project::new(
+            "probe".into(),
+            marker.to_string_lossy().into_owned(),
+            dir.to_string_lossy().into_owned(),
+            crate::services::scanner::LOCAL_FS.into(),
+        );
+        let probe = LaunchTarget {
+            id: "probe".into(),
+            name: "Probe".into(),
+            kind: TargetKind::Terminal,
+            executable: SHELL.into(),
+            args_template: shell_write_to_path(),
+            wsl_executable: None,
+            wsl_args_template: None,
+            run_args_template: None,
+            wsl_run_args_template: None,
+        };
+        launch_target(&probe, &project, &no_distro(), &tmux_with(&["code"]))
+            .unwrap();
+
+        let written = || std::fs::metadata(&marker).map_or(0, |m| m.len());
+        for _ in 0..40 {
+            if written() > 0 {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        assert!(written() > 0, "{} never appeared", marker.display());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     #[test]
     fn a_custom_window_list_produces_exactly_those_windows_in_order() {
         let names = ["editor", "logs", "db", "shell"];
