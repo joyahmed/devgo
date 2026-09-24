@@ -39,15 +39,26 @@ fn lock_err<E: std::fmt::Display>(e: E) -> AppError {
 
 // the os underneath, in one place. every door this file opens to the
 // desktop (the browser, the file manager, the user's home, the startup
-// log) is a windows shape and a mac shape, decided here once per concern.
-// not a cfg! at each call site: four stand-in servers read USERPROFILE,
-// and a fifth would have been the one that forgot the mac
+// log) is a windows shape, a mac shape and a linux shape, decided here
+// once per concern. not a cfg! at each call site: four stand-in servers
+// read USERPROFILE, and a fifth would have been the one that forgot the mac
 
-// the local side's name in a sentence: "install it on windows"
+// the local side's name in a sentence: "install it on windows". spelled
+// per os, not not(macos): that said "Windows" on a linux box
 #[cfg(target_os = "macos")]
 const LOCAL_OS: &str = "macOS";
-#[cfg(not(target_os = "macos"))]
+#[cfg(target_os = "linux")]
+const LOCAL_OS: &str = "Linux";
+#[cfg(windows)]
 const LOCAL_OS: &str = "Windows";
+
+// the desktop's own door opener. `open` is a mac program; on linux the
+// same job is xdg-open's, and `open` there is an alternatives symlink to
+// it at best, missing at worst, and takes none of open's flags
+#[cfg(target_os = "macos")]
+const OPENER: &str = "open";
+#[cfg(target_os = "linux")]
+const OPENER: &str = "xdg-open";
 
 // the user's home: where a terminal opens when the thing launched is a
 // server rather than a folder
@@ -67,13 +78,30 @@ fn home_stand_in(name: &str) -> Project {
 }
 
 // %LOCALAPPDATA%\DevGo on windows, ~/Library/Logs/DevGo on a mac (where
-// console.app looks); None when the environment does not say
+// console.app looks), $XDG_STATE_HOME/DevGo on linux; None when the
+// environment does not say
 #[cfg(windows)]
 fn startup_log_dir() -> Option<std::path::PathBuf> {
     let local = std::env::var("LOCALAPPDATA").ok()?;
     Some(std::path::Path::new(&local).join("DevGo"))
 }
-#[cfg(not(windows))]
+#[cfg(target_os = "linux")]
+fn startup_log_dir() -> Option<std::path::PathBuf> {
+    // the spec's own rule: an empty value counts as unset
+    if let Some(state) =
+        std::env::var_os("XDG_STATE_HOME").filter(|s| !s.is_empty())
+    {
+        return Some(std::path::Path::new(&state).join("DevGo"));
+    }
+    let home = std::env::var("HOME").ok()?;
+    Some(
+        std::path::Path::new(&home)
+            .join(".local")
+            .join("state")
+            .join("DevGo"),
+    )
+}
+#[cfg(target_os = "macos")]
 fn startup_log_dir() -> Option<std::path::PathBuf> {
     let home = std::env::var("HOME").ok()?;
     Some(
@@ -87,7 +115,7 @@ fn startup_log_dir() -> Option<std::path::PathBuf> {
 /// Hand an https:// url to the default browser, and nothing else. On
 /// Windows `start` is a cmd builtin, so it needs a shell; the empty "" is
 /// the window title argument, which start would otherwise steal the URL
-/// for. On a Mac `open` is a program and takes the URL as it is.
+/// for. Elsewhere the opener is a program and takes the URL as it is.
 fn open_in_browser(url: &str) -> Result<(), AppError> {
     if !url.starts_with("https://") {
         return Err(AppError::BadUrl(url.to_string()));
@@ -98,35 +126,58 @@ fn open_in_browser(url: &str) -> Result<(), AppError> {
         .args(["/c", "start", "", url])
         .spawn();
     #[cfg(not(windows))]
-    let spawned = std::process::Command::new("open").arg(url).spawn();
+    let spawned = std::process::Command::new(OPENER).arg(url).spawn();
     spawned.map_err(|e| AppError::LaunchFailed(format!("{url}: {e}")))?;
     Ok(())
 }
 
-/// Show a path in the file manager: Explorer on Windows, Finder on a Mac.
+/// What this platform's file manager is handed to show a path: Explorer
+/// on Windows, Finder on a Mac, xdg-open's handler on Linux.
+///
 /// `select` is Finder's -R, open the parent with the item highlighted,
-/// which is what reveal means there; Explorer has no such switch a UNC
-/// path survives, so on Windows both shapes open the folder itself. Not
-/// awaited: explorer.exe exits 1 even on success, so only a failure to
-/// launch the file manager at all is an error.
-fn reveal_path(path: &str, select: bool) -> Result<(), AppError> {
+/// which is what reveal means there. Explorer has no such switch a UNC
+/// path survives, so on Windows both shapes open the folder itself; Linux
+/// has no portable "select this item" at all — xdg-open refuses -R — so a
+/// select opens the containing folder. Pure, so each platform's line is
+/// pinned by a test rather than by a spawn.
+fn reveal_command(path: &str, select: bool) -> (&'static str, Vec<String>) {
     #[cfg(windows)]
-    let (program, spawned) = {
+    {
         let _ = select;
-        (
-            "explorer",
-            std::process::Command::new("explorer").arg(path).spawn(),
-        )
-    };
-    #[cfg(not(windows))]
-    let (program, spawned) = {
-        let mut cmd = std::process::Command::new("open");
+        ("explorer", vec![path.to_string()])
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let mut args = Vec::new();
         if select {
-            cmd.arg("-R");
+            args.push("-R".to_string());
         }
-        ("open", cmd.arg(path).spawn())
-    };
-    spawned.map_err(|e| AppError::LaunchFailed(format!("{program}: {e}")))?;
+        args.push(path.to_string());
+        (OPENER, args)
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let target = if select {
+            std::path::Path::new(path)
+                .parent()
+                .map(|p| p.to_string_lossy().into_owned())
+                .unwrap_or_else(|| path.to_string())
+        } else {
+            path.to_string()
+        };
+        (OPENER, vec![target])
+    }
+}
+
+/// Show a path in the file manager. Not awaited: explorer.exe exits 1
+/// even on success, so only a failure to launch the file manager at all
+/// is an error.
+fn reveal_path(path: &str, select: bool) -> Result<(), AppError> {
+    let (program, args) = reveal_command(path, select);
+    std::process::Command::new(program)
+        .args(&args)
+        .spawn()
+        .map_err(|e| AppError::LaunchFailed(format!("{program}: {e}")))?;
     Ok(())
 }
 
@@ -2591,6 +2642,72 @@ mod tests {
             workspace.to_string(),
             "Windows".to_string(),
         )
+    }
+
+    // the reveal twin of the seeded-terminal regression in target_store:
+    // this was cfg(not(windows)) until 2026-09-25, so a linux box ran
+    // `open -R <path>`, and `open` on linux is xdg-open, which rejects -R
+    // and left the reveal key doing nothing at all. it must be xdg-open,
+    // and never a switch xdg-open refuses
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn linux_reveals_through_xdg_open_and_never_with_r() {
+        let (program, args) = reveal_command("/home/user/work/app", true);
+        assert_eq!(program, "xdg-open");
+        assert_eq!(
+            args,
+            vec!["/home/user/work".to_string()],
+            "the containing folder: linux cannot highlight an item"
+        );
+        let (program, args) = reveal_command("/home/user/work/app", false);
+        assert_eq!(program, "xdg-open");
+        assert_eq!(args, vec!["/home/user/work/app".to_string()]);
+    }
+
+    // -R belongs to finder alone, and only to the select shape
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn a_mac_reveals_with_open_dash_r() {
+        let (program, args) = reveal_command("/Users/user/app", true);
+        assert_eq!(program, "open");
+        assert_eq!(args, vec!["-R".to_string(), "/Users/user/app".to_string()]);
+        let (_, args) = reveal_command("/Users/user/app", false);
+        assert_eq!(args, vec!["/Users/user/app".to_string()]);
+    }
+
+    // explorer has no select switch a unc path survives, so both shapes
+    // open the folder itself
+    #[cfg(windows)]
+    #[test]
+    fn windows_reveals_the_folder_itself_either_way() {
+        let unc = r"\\wsl.localhost\Ubuntu\home\user\app";
+        let (program, args) = reveal_command(unc, true);
+        assert_eq!(program, "explorer");
+        assert_eq!(args, vec![unc.to_string()]);
+        assert_eq!(reveal_command(unc, false).1, vec![unc.to_string()]);
+    }
+
+    // the word that lands in "Install it on {os}"; it read Windows on a
+    // linux box while this was cfg(not(target_os = "macos"))
+    #[test]
+    fn the_local_os_is_this_machine_s_own_name() {
+        #[cfg(target_os = "linux")]
+        assert_eq!(LOCAL_OS, "Linux");
+        #[cfg(target_os = "macos")]
+        assert_eq!(LOCAL_OS, "macOS");
+        #[cfg(windows)]
+        assert_eq!(LOCAL_OS, "Windows");
+    }
+
+    // ~/Library/Logs is a mac folder; linux keeps its state under XDG
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn the_startup_log_dir_is_never_a_mac_library_folder() {
+        if let Some(dir) = startup_log_dir() {
+            let dir = dir.to_string_lossy().into_owned();
+            assert!(!dir.contains("Library"), "{dir}");
+            assert!(dir.ends_with("DevGo"), "{dir}");
+        }
     }
 
     #[test]
