@@ -86,6 +86,8 @@ bun install && bun run tauri build
 
 `src-tauri/target/release/bundle/macos/devgo.app` and `dmg/devgo_<version>_aarch64.dmg`. Unsigned, by decision. The one README line: **macOS 15+: open it once, then System Settings › Privacy & Security › *Open Anyway*; older: right-click › Open; if it says "is damaged": `xattr -cr /Applications/devgo.app`.** Copied straight out of the build tree it needs none of that on the machine that built it.
 
+⚠️ True at this branch's tip, and the `xattr -cr` half is advice I have since withdrawn. It clears the quarantine attribute, which skips Gatekeeper rather than answering it, so the app opens and a malformed bundle stays hidden. "is damaged" was never the unsigned-app case at all: until `426e38c` on `main` the `.app` carried the Rust linker's ad-hoc signature with no sealed resources, and that fails verification outright. Setting `bundle.macOS.signingIdentity: "-"` makes the bundler write `Contents/_CodeSignature`, so the refusal should be the ordinary unidentified-developer one that *Open Anyway* clears. Follow the README, not this line.
+
 ## 55.8 — Verify (on the Mac)
 
 Run on Apple silicon, macOS 26.
