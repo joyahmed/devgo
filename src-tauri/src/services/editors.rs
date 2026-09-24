@@ -737,6 +737,17 @@ fn bundle_form(c: &Candidate, app: &str, bundle: &Path) -> LaunchTarget {
     target
 }
 
+/// What detection makes of a bundle, by candidate id — the same row a
+/// fresh `locate` would hand back for it. `TargetStore` repairs a ghostty
+/// row written before the `open` form by reading its replacement here, so
+/// the repaired row and a detected one cannot drift apart. None when no
+/// row answers to that id, which is every id on windows: no windows row
+/// has a bundle.
+pub fn bundle_target(id: &str, bundle: &Path) -> Option<LaunchTarget> {
+    let c = CANDIDATES.iter().find(|c| c.id == id)?;
+    Some(bundle_form(c, c.app?, bundle))
+}
+
 /// Everything installed, as targets ready to be added. `running` is passed
 /// in so a caller that already paid for `wsl -l --running` does not pay
 /// twice; only those distros are asked. On a Mac it is empty and the
@@ -942,6 +953,32 @@ pub fn is_on_path(exe: &str) -> bool {
         return direct.is_file();
     }
     !path_lookup(&[exe]).is_empty()
+}
+
+/// Is this executable a path that is there, but is not a program? The one
+/// people hit is a directory: the folder gets typed into the field
+/// instead of the binary inside it, and `is_on_path` says the same "not
+/// installed" it says for a typo, which sends them looking for an install
+/// they already have. Only a full path can be asked; a bare name is
+/// PATH's business.
+pub fn exists_but_not_a_program(exe: &str) -> bool {
+    let direct = Path::new(exe);
+    direct.is_absolute() && direct.exists() && !runnable(direct)
+}
+
+// windows decides by extension, so being a file is the whole question
+#[cfg(windows)]
+fn runnable(path: &Path) -> bool {
+    path.is_file()
+}
+
+// a unix program is a file with an execute bit; without one the shell
+// answers "permission denied" on a stderr nobody reads
+#[cfg(not(windows))]
+fn runnable(path: &Path) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+    path.metadata()
+        .is_ok_and(|m| m.is_file() && m.permissions().mode() & 0o111 != 0)
 }
 
 #[cfg(test)]

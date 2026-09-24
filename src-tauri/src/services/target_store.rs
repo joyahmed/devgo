@@ -1,5 +1,5 @@
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::error::AppError;
 use crate::models::target::{
@@ -47,6 +47,7 @@ impl TargetStore {
         store.adopt_run_template()?;
         store.adopt_wt_semicolon_escape()?;
         store.adopt_remote_uri_quotes()?;
+        store.adopt_mac_ghostty_bundle()?;
         store.adopt_linux_session_script()?;
         store.adopt_linux_terminal_row()?;
         Ok(store)
@@ -142,6 +143,65 @@ impl TargetStore {
         self.save()
     }
 
+    /// A mac that added Ghostty before 5565a4e carries the binary inside
+    /// the bundle, and that binary is the gui: handed a command it opens a
+    /// window and throws it away. Detection writes `open -na` now, and
+    /// nothing was written for the machines that already had the old row —
+    /// worse, `adopt_linux_session_script` below recognises exactly that
+    /// row and puts the {script} seam on its args, so the upgrade turns a
+    /// window that at least opened into a key that does nothing at all.
+    /// The regression is ours to make, so it is ours to repair.
+    ///
+    /// It runs before the session script so one migration touches the row
+    /// and one backup is written, but the key accepts both arg lines, so
+    /// either order finds it: those two are the only ones detection has
+    /// ever written here.
+    ///
+    /// macOS-only, the other migration that has to ask: a path into
+    /// `Ghostty.app` on any other machine came from someone else's, and
+    /// on linux the same id is the cli on PATH, which takes the command
+    /// perfectly well. The work stays in `replace_bundled_ghostty`, which
+    /// every platform compiles and the tests drive directly.
+    fn adopt_mac_ghostty_bundle(&mut self) -> Result<(), AppError> {
+        if !cfg!(target_os = "macos") {
+            return Ok(());
+        }
+        let bundle = self
+            .targets
+            .iter()
+            .find(|t| bundled_ghostty(t))
+            .and_then(|t| ghostty_bundle(&t.executable));
+        self.replace_bundled_ghostty(bundle.and_then(|b| {
+            crate::services::editors::bundle_target("ghostty", &b)
+        }))
+    }
+
+    /// Swap the stale ghostty row for `replacement`, the row detection
+    /// gives that same bundle now. No replacement is no repair rather than
+    /// a removal: a bundle that has since been deleted leaves a dead row
+    /// either way, and a migration that invents a line is worse than one
+    /// that does nothing. Same shape as the adoptions above, a backup
+    /// first.
+    fn replace_bundled_ghostty(
+        &mut self,
+        replacement: Option<LaunchTarget>,
+    ) -> Result<(), AppError> {
+        let Some(replacement) = replacement else {
+            return Ok(());
+        };
+        let Some(pos) = self.targets.iter().position(bundled_ghostty) else {
+            return Ok(());
+        };
+        if self.file_path.exists() {
+            let backup =
+                format!("{}.pre-mac-ghostty", self.file_path.display());
+            fs::copy(&self.file_path, backup)?;
+        }
+        // in place, so the terminal keeps the position it had
+        self.targets[pos] = replacement;
+        self.save()
+    }
+
     /// The linux terminals shipped without the session seam, so an install
     /// from v1.1.0 or v1.1.1 opens a bare shell where a fresh one opens the
     /// tmux session. Keyed on the id AND the exact old bytes, not one of
@@ -181,10 +241,11 @@ impl TargetStore {
     /// nothing at all, silently, ever since. c5e279c fixed what a fresh
     /// install seeds and nothing for a machine already carrying the row.
     ///
-    /// The one migration here that has to ask what platform it is on: the
-    /// others are safe everywhere because their bytes cannot appear off
-    /// their own platform, and these bytes are exactly what a mac is
-    /// supposed to have. The work itself stays in `replace_mac_terminal`,
+    /// One of the two migrations here that have to ask what platform they
+    /// are on: the rest are safe everywhere because their bytes cannot
+    /// appear off their own platform, and these bytes are exactly what a
+    /// mac is supposed to have. The work itself stays in
+    /// `replace_mac_terminal`,
     /// which every platform can compile and the tests drive directly.
     fn adopt_linux_terminal_row(&mut self) -> Result<(), AppError> {
         if !cfg!(target_os = "linux") {
@@ -296,6 +357,36 @@ fn local_terminal() -> Option<LaunchTarget> {
 #[cfg(not(target_os = "linux"))]
 fn local_terminal() -> Option<LaunchTarget> {
     None
+}
+
+/// A ghostty row the app itself wrote against the binary inside the
+/// bundle. Three parts: the id, an executable ending in the bundle's own
+/// `Contents/MacOS/ghostty`, and one of the two arg lines detection has
+/// ever written for this row — the pre-seam form and the seam.
+///
+/// The executable is what says nobody edited the row: it is a path the
+/// app derived from the filesystem, not something a person types, and it
+/// is also the half that is broken. The arg line is what says the whole
+/// row can be replaced: flags are the field people do tune, and a user
+/// who tuned theirs keeps it. That row still opens a bare window, which
+/// is what they will report; rewriting their line to guess at what they
+/// meant is the worse of the two.
+fn bundled_ghostty(t: &LaunchTarget) -> bool {
+    let Some((_, pre, seam)) = LINUX_ARGS_PRE_TMUX
+        .iter()
+        .find(|(id, _, _)| *id == "ghostty")
+    else {
+        return false;
+    };
+    t.id == "ghostty"
+        && t.executable.ends_with("Contents/MacOS/ghostty")
+        && (t.args_template == *pre || t.args_template == *seam)
+}
+
+/// The bundle a stored executable points into: `Ghostty.app` from
+/// `Ghostty.app/Contents/MacOS/ghostty`.
+fn ghostty_bundle(exe: &str) -> Option<PathBuf> {
+    Path::new(exe).ancestors().nth(3).map(Path::to_path_buf)
 }
 
 /// Derive an id from a display name, disambiguating against what exists.
@@ -777,6 +868,195 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
     }
 
+    /// A targets.json as a mac carries it once the user added Ghostty from
+    /// detection: the binary inside the bundle, and the arg line of the
+    /// day. The run form is the one every ghostty row has shipped with.
+    fn mac_ghostty_json(args: &str) -> String {
+        format!(
+            r#"[
+  {{"id":"vscode","name":"VS Code","kind":"editor","executable":"code",
+   "args_template":"\"{{path}}\"","wsl_executable":null,
+   "wsl_args_template":null,"run_args_template":null,
+   "wsl_run_args_template":null}},
+  {{"id":"ghostty","name":"Ghostty","kind":"terminal",
+   "executable":"/Applications/Ghostty.app/Contents/MacOS/ghostty",
+   "args_template":"{}","wsl_executable":null,"wsl_args_template":null,
+   "run_args_template":"--working-directory=\"{{path}}\" -e {{command}}",
+   "wsl_run_args_template":null}}
+]"#,
+            args.replace('"', "\\\"")
+        )
+    }
+
+    // the two arg lines detection has written for a ghostty row: the form
+    // v1.1.x shipped, and the one the session script leaves behind
+    fn ghostty_args() -> (&'static str, &'static str) {
+        let (_, pre, seam) = LINUX_ARGS_PRE_TMUX
+            .iter()
+            .find(|(id, _, _)| *id == "ghostty")
+            .unwrap();
+        (pre, seam)
+    }
+
+    // what detection gives a ghostty bundle now. spelled out because a
+    // windows compiler has no such row to read; the test below holds
+    // these bytes against editors' own, where the row exists
+    fn open_ghostty() -> LaunchTarget {
+        LaunchTarget {
+            id: "ghostty".into(),
+            name: "Ghostty".into(),
+            kind: TargetKind::Terminal,
+            executable: "open".into(),
+            args_template: "-na \"Ghostty\" --args \
+                 --working-directory=\"{path}\" -e bash \"{script}\""
+                .into(),
+            wsl_executable: None,
+            wsl_args_template: None,
+            run_args_template: Some(
+                "-na \"Ghostty\" --args --working-directory=\"{path}\" \
+                 -e {command}"
+                    .into(),
+            ),
+            wsl_run_args_template: None,
+        }
+    }
+
+    /// A store on a fresh directory with the mac ghostty rows dropped in
+    /// behind it, the shape `mac_seeded_store` uses: the migration fires
+    /// inside `new()` on a mac only, so the repair is driven by hand and
+    /// the seam is exercised on every platform it compiles on.
+    fn mac_ghostty_store(name: &str, args: &str) -> (TargetStore, PathBuf) {
+        let dir = std::env::temp_dir().join(format!("devgo-targets-{name}"));
+        let _ = fs::remove_dir_all(&dir);
+        let mut s = TargetStore::new(dir.clone()).unwrap();
+        s.targets = serde_json::from_str(&mac_ghostty_json(args)).unwrap();
+        s.save().unwrap();
+        (s, dir)
+    }
+
+    /// The whole repair. A mac that added Ghostty before 5565a4e points at
+    /// the binary inside the bundle, which opens a window and drops the
+    /// command; our own session-script migration then puts the {script}
+    /// seam on it, and shift+enter goes from a bare window to nothing at
+    /// all. It lands on the row detection writes today.
+    #[test]
+    fn a_mac_ghostty_row_written_before_the_open_form_is_repaired() {
+        let (mut s, dir) = mac_ghostty_store("ghostty-pre", ghostty_args().0);
+        let original = fs::read_to_string(dir.join("targets.json")).unwrap();
+        let backup = dir.join("targets.json.pre-mac-ghostty");
+
+        s.replace_bundled_ghostty(Some(open_ghostty())).unwrap();
+        let row = s.get("ghostty").unwrap();
+        assert_eq!(row.executable, "open");
+        assert_eq!(row.args_template, open_ghostty().args_template);
+        assert!(row.args_template.contains("{script}"), "or no script runs");
+        assert_eq!(
+            row.run_args_template.as_deref(),
+            open_ghostty().run_args_template.as_deref()
+        );
+        assert_eq!(s.list()[1].id, "ghostty", "and sits where it sat");
+        assert_eq!(s.get("vscode").unwrap().name, "VS Code");
+        assert_eq!(
+            fs::read_to_string(&backup).unwrap(),
+            original,
+            "the pre-migration file is kept verbatim"
+        );
+        assert!(
+            !dir.join("targets.json.bak").exists(),
+            "a migration is not a parse failure"
+        );
+
+        // persisted, and a second load leaves the backup alone
+        let reloaded = TargetStore::new(dir.clone()).unwrap();
+        assert_eq!(reloaded.get("ghostty").unwrap().executable, "open");
+        assert_eq!(fs::read_to_string(&backup).unwrap(), original);
+
+        // the repaired bytes are editors', not a second spelling of them.
+        // a windows table has no ghostty row to answer with
+        if let Some(t) = crate::services::editors::bundle_target(
+            "ghostty",
+            Path::new("/Applications/Ghostty.app"),
+        ) {
+            assert_eq!(t.executable, open_ghostty().executable);
+            assert_eq!(t.args_template, open_ghostty().args_template);
+            assert_eq!(
+                t.run_args_template.as_deref(),
+                open_ghostty().run_args_template.as_deref()
+            );
+        }
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// The order question. `adopt_linux_session_script` recognises the
+    /// same row and rewrites its args; run it first and the row carries
+    /// the seam instead of the pre-seam bytes. The key takes both, so
+    /// neither order can hide the row from the repair.
+    #[test]
+    fn a_ghostty_row_the_session_script_already_touched_is_still_repaired() {
+        let (mut s, dir) = mac_ghostty_store("ghostty-seam", ghostty_args().1);
+        s.replace_bundled_ghostty(Some(open_ghostty())).unwrap();
+        assert_eq!(s.get("ghostty").unwrap().executable, "open");
+        assert!(dir.join("targets.json.pre-mac-ghostty").exists());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// On linux ghostty is the cli on PATH and takes the command exactly
+    /// as the row spells it. The executable is half the key for this
+    /// reason: nothing outside a mac bundle is ours to rewrite.
+    #[test]
+    fn a_ghostty_on_path_is_not_a_bundle_row() {
+        let (mut s, dir) = mac_ghostty_store("ghostty-path", ghostty_args().1);
+        s.targets[1].executable = "ghostty".into();
+        s.save().unwrap();
+
+        s.replace_bundled_ghostty(Some(open_ghostty())).unwrap();
+        assert_eq!(s.get("ghostty").unwrap().executable, "ghostty");
+        assert!(!dir.join("targets.json.pre-mac-ghostty").exists());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// A user who tuned the flags owns the line. Their row still opens a
+    /// bare window, which is a thing they can see and report; a migration
+    /// guessing at what `--font-size=14` was for is not.
+    #[test]
+    fn a_hand_edited_ghostty_row_is_left_alone() {
+        let custom = "--working-directory=\"{path}\" --font-size=14";
+        let (mut s, dir) = mac_ghostty_store("ghostty-custom", custom);
+        s.replace_bundled_ghostty(Some(open_ghostty())).unwrap();
+        assert_eq!(s.get("ghostty").unwrap().args_template, custom);
+        assert!(!dir.join("targets.json.pre-mac-ghostty").exists());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// The registration, on the platform that decides it. Only a mac has
+    /// an in-bundle ghostty to repair; the same file on linux or windows
+    /// came from someone else's machine.
+    #[test]
+    fn only_macos_repairs_the_bundled_ghostty_row_on_load() {
+        let dir = std::env::temp_dir().join("devgo-targets-ghostty-load");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let original = mac_ghostty_json(ghostty_args().0);
+        fs::write(dir.join("targets.json"), &original).unwrap();
+
+        let s = TargetStore::new(dir.clone()).unwrap();
+        let row = s.get("ghostty").unwrap();
+        assert_eq!(s.get("vscode").unwrap().name, "VS Code");
+        let backup = dir.join("targets.json.pre-mac-ghostty");
+        #[cfg(target_os = "macos")]
+        {
+            assert_eq!(row.executable, "open");
+            assert_eq!(row.args_template, open_ghostty().args_template);
+            assert_eq!(fs::read_to_string(&backup).unwrap(), original);
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            assert!(row.executable.ends_with("Contents/MacOS/ghostty"));
+            assert!(!backup.exists());
+        }
+        let _ = fs::remove_dir_all(&dir);
+    }
+
     /// A .pre-psmux of a file seeded a millisecond ago would be noise that
     /// makes the real backups harder to trust.
     #[test]
@@ -810,6 +1090,7 @@ mod tests {
         assert!(!dir.join("targets.json.pre-uri-quote").exists());
         assert!(!dir.join("targets.json.pre-linux-tmux").exists());
         assert!(!dir.join("targets.json.pre-linux-terminal").exists());
+        assert!(!dir.join("targets.json.pre-mac-ghostty").exists());
     }
 
     #[test]

@@ -604,6 +604,34 @@ fn record_launch(state: &AppState, project: &Project) -> Result<(), AppError> {
         .map_err(AppError::Lock)
 }
 
+/// Refuse a project whose folder is no longer there.
+///
+/// The list outlives the directory: move or delete a project and it stays
+/// on screen until the next scan. Nothing downstream looks — a template
+/// resolves {path} to a string and the shell hands it over — so the
+/// emulator was given a working directory that does not exist, fell back
+/// to the home directory, and opened there saying nothing. Wrong place,
+/// silently, which is the pair the launcher refuses everywhere else.
+///
+/// Here rather than in `launch_target`: this is the boundary a project
+/// arrives at from the list, and it is the list that is stale. The
+/// launcher's other callers pass a stand-in for the home directory (a
+/// server is not a folder), which is not a thing that goes missing.
+///
+/// A WSL project is not asked. The answer would cost a distro boot, and
+/// DevGo boots one because you launched, never because it wondered.
+fn require_project_dir(project: &Project) -> Result<(), AppError> {
+    if crate::services::scanner::distro_of(&project.full_path).is_some()
+        || std::path::Path::new(&project.full_path).is_dir()
+    {
+        return Ok(());
+    }
+    Err(AppError::ProjectMissing(
+        project.name.clone(),
+        project.full_path.clone(),
+    ))
+}
+
 /// Pick the target to launch: the caller's explicit choice, else the saved
 /// default, else the first of that kind. The last fallback matters — a default
 /// pointing at a target the user has since deleted must not break launching.
@@ -635,6 +663,7 @@ pub fn open_editor(
     target_id: Option<String>,
     state: State<AppState>,
 ) -> Result<(), AppError> {
+    require_project_dir(&project)?;
     let info = state.runtime_info.lock().map_err(lock_err)?.clone();
     // the guard dies on this line: resolve_target locks pref_store itself
     let tmux = state.pref_store.lock().map_err(lock_err)?.tmux_config();
@@ -649,6 +678,7 @@ pub fn open_terminal(
     target_id: Option<String>,
     state: State<AppState>,
 ) -> Result<(), AppError> {
+    require_project_dir(&project)?;
     let info = state.runtime_info.lock().map_err(lock_err)?.clone();
     // read at launch, not cached: the next launch reconciles a changed list
     let tmux = state.pref_store.lock().map_err(lock_err)?.tmux_config();
@@ -664,6 +694,7 @@ pub fn launch_project_default(
     editor_id: Option<String>,
     terminal_id: Option<String>,
 ) -> Result<(), AppError> {
+    require_project_dir(project)?;
     let info = state.runtime_info.lock().map_err(lock_err)?.clone();
     let tmux = state.pref_store.lock().map_err(lock_err)?.tmux_config();
     let editor = resolve_target(state, TargetKind::Editor, editor_id)?;
@@ -840,6 +871,7 @@ pub fn run_script(
     command: String,
     state: State<AppState>,
 ) -> Result<(), AppError> {
+    require_project_dir(&project)?;
     let info = state.runtime_info.lock().map_err(lock_err)?.clone();
     let terminal = resolve_target(&state, TargetKind::Terminal, None)?;
     crate::services::scripts::run(&project, &command, &terminal, &info)?;
@@ -856,6 +888,7 @@ pub fn open_agent(
     target_id: Option<String>,
     state: State<AppState>,
 ) -> Result<(), AppError> {
+    require_project_dir(&project)?;
     let agent = resolve_target(&state, TargetKind::Agent, target_id)?;
     let on_wsl =
         crate::services::scanner::distro_of(&project.full_path).is_some();
@@ -2707,6 +2740,66 @@ mod tests {
             let dir = dir.to_string_lossy().into_owned();
             assert!(!dir.contains("Library"), "{dir}");
             assert!(dir.ends_with("DevGo"), "{dir}");
+        }
+    }
+
+    /// Move or delete a project and it stays on screen until the next
+    /// scan. Shift+enter on that row opened a tmux session in the home
+    /// directory and said nothing at all — the wrong place, silently.
+    /// Found on linux with a real keypress.
+    #[test]
+    fn a_project_whose_folder_is_gone_is_refused_by_name_and_path() {
+        let dir = temp("missing-project");
+        let here = Project::new(
+            "here".into(),
+            dir.to_string_lossy().into_owned(),
+            dir.to_string_lossy().into_owned(),
+            LOCAL_FS.into(),
+        );
+        assert!(require_project_dir(&here).is_ok());
+
+        let gone_path = dir.join("deleted-yesterday");
+        let gone = Project::new(
+            "gone".into(),
+            gone_path.to_string_lossy().into_owned(),
+            dir.to_string_lossy().into_owned(),
+            LOCAL_FS.into(),
+        );
+        let err = require_project_dir(&gone).unwrap_err();
+        let AppError::ProjectMissing(ref name, ref path) = err else {
+            panic!("expected ProjectMissing, got {err:?}");
+        };
+        assert_eq!(name, "gone");
+        assert_eq!(path, &gone_path.to_string_lossy().into_owned());
+        // the toast has to name the folder, or "it was moved" is a riddle
+        assert!(err.to_string().contains("deleted-yesterday"), "{err}");
+
+        // a file where the folder was is not a project either
+        std::fs::write(&gone_path, "").unwrap();
+        assert!(matches!(
+            require_project_dir(&gone),
+            Err(AppError::ProjectMissing(..))
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A WSL project is never asked. Reading a path inside a stopped
+    /// distro is what boots it, and DevGo boots one because you launched,
+    /// never because it wondered — so the check has to skip these whether
+    /// or not the distro exists at all.
+    #[test]
+    fn a_wsl_project_is_not_stat_ed_and_not_refused() {
+        for path in [
+            r"\\wsl.localhost\Ubuntu\home\user\work\api",
+            r"\\wsl$\Debian\home\user\work\api",
+        ] {
+            let p = Project::new(
+                "api".into(),
+                path.into(),
+                path.into(),
+                "WSL".into(),
+            );
+            assert!(require_project_dir(&p).is_ok(), "{path}");
         }
     }
 

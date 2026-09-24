@@ -68,8 +68,16 @@ pub(crate) fn spawn_raw(exe: &str, args: &str) -> Result<(), AppError> {
     // missing editor "launched" fine: a console flashed, Ok came back, and a
     // frecency launch was recorded. wsl is exempt: the program it runs lives
     // inside the distro, where a windows PATH lookup means nothing
-    if exe != "wsl" && !super::editors::is_on_path(exe) {
-        return Err(AppError::TargetNotInstalled(exe.to_string()));
+    if exe != "wsl" {
+        // a path that is there but is not a program is a different
+        // mistake from one that is not there, and "not installed" of a
+        // folder sends the user looking for an install
+        if super::editors::exists_but_not_a_program(exe) {
+            return Err(AppError::TargetNotRunnable(exe.to_string()));
+        }
+        if !super::editors::is_on_path(exe) {
+            return Err(AppError::TargetNotInstalled(exe.to_string()));
+        }
     }
 
     let mut cmd = shell_command(exe, args);
@@ -170,8 +178,14 @@ pub fn launch_target(
         let (t, p) = (target.name.clone(), project.name.clone());
         if is_wsl(project) {
             AppError::TargetCannotOpenWsl(t, p)
-        } else {
+        } else if cfg!(windows) && target.wsl_args_template.is_some() {
+            // the wsl sentence needs both halves: a machine that has wsl,
+            // and a row saying it lives in one. a distro editor on
+            // windows is all it was ever about, and on linux it told
+            // someone their kitty runs inside a wsl they do not have
             AppError::TargetWslOnly(t, p)
+        } else {
+            AppError::TargetHasNoLine(t, p)
         }
     })?;
 
@@ -1936,6 +1950,171 @@ mod tests {
             matches!(err, AppError::TargetNotInstalled(ref e) if e == "devgo-no-such-editor"),
             "expected TargetNotInstalled, got {err:?}"
         );
+    }
+
+    /// A folder in the executable field is a real mistake — the project
+    /// folder dropped in instead of the binary — and it used to answer
+    /// "/tmp is not installed, or not on PATH", which sends the user
+    /// looking for an install of a directory they can see.
+    #[test]
+    fn an_executable_that_is_a_folder_is_not_reported_as_missing() {
+        let dir = std::env::temp_dir().join("devgo-not-a-program");
+        std::fs::create_dir_all(&dir).unwrap();
+        let folder = dir.to_string_lossy().into_owned();
+
+        let err = spawn_raw(&folder, "").unwrap_err();
+        assert!(
+            matches!(err, AppError::TargetNotRunnable(ref e) if *e == folder),
+            "expected TargetNotRunnable, got {err:?}"
+        );
+        assert!(!err.to_string().contains("not installed"), "{err}");
+
+        // and the other half of the distinction still says what it said
+        let err = spawn_raw("devgo-no-such-program", "").unwrap_err();
+        assert!(matches!(err, AppError::TargetNotInstalled(_)), "{err:?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A kitty row with an empty args template on linux was told it "runs
+    /// inside WSL, so it cannot open the Windows project" — a message
+    /// reasoning about a platform that machine does not have. The empty
+    /// template means one thing only when the row has a WSL form to run
+    /// in instead.
+    #[test]
+    fn a_row_with_no_launch_line_says_so_instead_of_blaming_wsl() {
+        let project = local_project("project", "some");
+        let mut bare = LaunchTarget {
+            id: "kitty".into(),
+            name: "Kitty".into(),
+            kind: TargetKind::Terminal,
+            executable: "kitty".into(),
+            args_template: String::new(),
+            wsl_executable: None,
+            wsl_args_template: None,
+            run_args_template: None,
+            wsl_run_args_template: None,
+        };
+        let err = launch_target(&bare, &project, &no_distro(), &tmux_with(&[]))
+            .unwrap_err();
+        assert!(
+            matches!(err, AppError::TargetHasNoLine(ref t, ref p)
+                if t == "Kitty" && p == "project"),
+            "{err:?}"
+        );
+        assert!(!err.to_string().contains("WSL"), "{err}");
+
+        // the sentence it replaced is still right where both halves hold:
+        // a machine that has wsl, and a row saying it lives in one
+        bare.wsl_args_template =
+            Some("-d {distro} --cd \"{linux_path}\"".into());
+        let err = launch_target(&bare, &project, &no_distro(), &tmux_with(&[]))
+            .unwrap_err();
+        if cfg!(windows) {
+            assert!(matches!(err, AppError::TargetWslOnly(..)), "{err:?}");
+        } else {
+            assert!(matches!(err, AppError::TargetHasNoLine(..)), "{err:?}");
+        }
+    }
+
+    /// What the shell between DevGo and the target makes of a project
+    /// path, run rather than reasoned about. Every template puts {path}
+    /// inside double quotes, and there the two platforms part: `sh -c`
+    /// expands `$name` and runs `` `cmd` `` and `$(cmd)` before the
+    /// emulator is ever started, `cmd /c` does neither. `%VAR%` is the
+    /// one cmd does expand, quotes or no quotes — a different character,
+    /// and the only one that bites on Windows.
+    #[test]
+    fn the_shell_expands_a_dollar_and_a_backtick_on_unix_only() {
+        let say = |args: &str| {
+            let out = shell_command("echo", args).output().unwrap();
+            String::from_utf8_lossy(&out.stdout).trim().to_string()
+        };
+
+        if cfg!(windows) {
+            assert_eq!(say("\"a$(echo hi)b\""), "\"a$(echo hi)b\"");
+            assert_eq!(say("\"a`echo hi`b\""), "\"a`echo hi`b\"");
+            assert_eq!(say("\"a${HOME}b\""), "\"a${HOME}b\"");
+            // the character cmd does read, quotes or no quotes. a folder
+            // may legally be called `100%PATH%`, and that one is the
+            // windows exposure - not the two above
+            assert!(
+                say("\"a%COMSPEC%b\"").to_lowercase().contains("cmd.exe"),
+                "cmd expands a percent inside the quotes"
+            );
+        } else {
+            assert_eq!(say("\"a$(echo hi)b\""), "ahib");
+            assert_eq!(say("\"a`echo hi`b\""), "ahib", "backticks fire too");
+            assert_eq!(say("\"a${DEVGO_NOT_SET}b\""), "ab");
+        }
+    }
+
+    /// The other half, and the reason a linux tester found the right cwd
+    /// in a directory called ``tick`id` ``: a {script} template's working
+    /// directory is not the mangled argument, it is the script's own `cd`,
+    /// and that one is single-quoted and wholly literal. The expansion
+    /// still happened — it went into an argument nothing reads.
+    #[test]
+    fn a_session_script_lands_in_the_directory_the_flag_could_not_hold() {
+        let hostile = "/home/joy/tick`id`$(id)";
+        let quoted = format!("'{hostile}'");
+
+        let tmux =
+            build_tmux_script("app-deadbeef", hostile, &tmux_with(&["code"]));
+        assert!(tmux.contains(&format!("-c {quoted}")), "{tmux}");
+        assert_eq!(
+            tmux.matches(hostile).count(),
+            tmux.matches(&quoted).count(),
+            "the path appears only inside its quotes: {tmux}"
+        );
+
+        let mac = build_mac_script("app-deadbeef", hostile, &tmux_with(&[]));
+        assert!(mac.contains(&format!("-c {quoted}")), "{mac}");
+        let off = TmuxConfig {
+            enabled: false,
+            window_names: vec![],
+        };
+        let bail = build_mac_script("app-deadbeef", hostile, &off);
+        assert!(bail.contains(&format!("cd {quoted} || exit 1")), "{bail}");
+        let run = build_mac_run_script(hostile, "bun dev");
+        assert!(run.contains(&format!("cd {quoted} || exit 1")), "{run}");
+
+        // and the windows twin, where the shell never read the characters
+        // in the first place
+        let ps = build_psmux_script(
+            "app-deadbeef",
+            r"G:\dev\tick`id`$env:PATH",
+            &tmux_with(&["code"]),
+        );
+        assert!(ps.contains(r"'G:\dev\tick`id`$env:PATH'"), "{ps}");
+    }
+
+    /// Where it does bite. A template with no {script} has nothing to put
+    /// the directory right afterwards, so on unix the mangled argument IS
+    /// the working directory — and the substitution ran to produce it.
+    /// This is the exposure, pinned as exposure: closing it needs a real
+    /// argv splitter instead of a shell, which is a different change.
+    #[test]
+    fn a_template_without_a_session_script_hands_the_path_to_the_shell() {
+        let bare = LaunchTarget {
+            id: "bare".into(),
+            name: "Bare".into(),
+            kind: TargetKind::Terminal,
+            executable: "kitty".into(),
+            args_template: "--directory \"{path}\"".into(),
+            wsl_executable: None,
+            wsl_args_template: None,
+            run_args_template: Some("--directory \"{path}\" {command}".into()),
+            wsl_run_args_template: None,
+        };
+        let hostile = "/home/joy/tick`id`";
+        let (_, args) = bare.resolve(hostile, None).unwrap();
+        assert_eq!(args, format!("--directory \"{hostile}\""));
+        assert!(!args.contains("{script}"), "nothing follows to fix it");
+
+        // the {command} run path is the same line: a mac emulator taking
+        // a command directly, and every linux one
+        let (_, run) = bare.resolve_run(hostile, None, "bun dev").unwrap();
+        assert_eq!(run, format!("--directory \"{hostile}\" bun dev"));
     }
 
     /// End-to-end proof that a template survives into a real process.

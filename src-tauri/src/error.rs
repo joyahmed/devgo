@@ -18,6 +18,19 @@ pub enum AppError {
     #[error("{0} is not installed, or not on PATH. Detect editors in Settings, or fix the executable")]
     TargetNotInstalled(String),
 
+    /// The executable is there — it is just not a program: a folder, or a
+    /// file with no execute bit. "not installed" of a path the user can
+    /// see in their file manager sends them looking for an install they
+    /// already have.
+    #[error("{0} is there, but it is not a program DevGo can run — a folder, or a file with no execute permission. Point the executable at the program itself")]
+    TargetNotRunnable(String),
+
+    /// The project's folder is gone. The list outlives the directory, and
+    /// nothing downstream looks, so the terminal opened in the home
+    /// directory and said nothing.
+    #[error("{0} is no longer at {1} — it was moved or deleted. Refresh to update the list")]
+    ProjectMissing(String, String),
+
     #[error("Failed to launch: {0}")]
     LaunchFailed(String),
 
@@ -96,6 +109,12 @@ pub enum AppError {
 
     #[error("{0} runs inside WSL, so it cannot open the Windows project {1}")]
     TargetWslOnly(String, String),
+
+    /// An empty args template and no WSL form either: the row has no way
+    /// of opening anything. TargetWslOnly used to answer for this too,
+    /// and told a linux user their kitty runs inside WSL.
+    #[error("{0} has no arguments template, so it cannot open {1}. Give it one in Settings")]
+    TargetHasNoLine(String, String),
 
     #[error("{0} has no run template, so it cannot run a command")]
     TargetCannotRun(String),
