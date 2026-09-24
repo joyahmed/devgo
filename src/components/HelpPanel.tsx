@@ -10,7 +10,9 @@ import Button from './Button';
 export const HelpSection = ({ title, children }: HelpSectionProps) => (
 	<div>
 		<h4 className='text-15 font-semibold text-text-primary mb-1'>{title}</h4>
-		<div className='text-13 text-text-secondary flex flex-col gap-2'>
+		{/* help is prose and stops at a reading measure: the panel is wide
+		    for the rows in the other panels, not for these sentences */}
+		<div className='text-13 text-text-secondary flex flex-col gap-2 max-w-[76ch]'>
 			{children}
 		</div>
 	</div>

@@ -32,7 +32,7 @@ const AboutPanel = () => {
 						<span className='font-mono text-15 text-text-muted'>v{version}</span>
 					)}
 				</h4>
-				<p className='text-13 text-text-secondary'>
+				<p className='text-13 text-text-secondary max-w-[76ch]'>
 					A cross-platform project launcher: Windows and WSL, macOS, and
 					Linux. The installers are unsigned. Built by Joy Ahmed with
 					Tauri, Rust and React.

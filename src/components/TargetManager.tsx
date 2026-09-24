@@ -69,6 +69,9 @@ const PLACEHOLDERS = [
 ];
 
 const heading = 'text-15 font-semibold text-text-primary mb-2';
+// the reading measure Settings holds its explaining lines to. the rows
+// below take the panel's width; a sentence does not need it
+const hint = 'text-13 text-text-muted max-w-[76ch]';
 const field =
 	'w-full px-2 py-1.5 bg-bg-panel border border-border-strong rounded-control text-13 font-mono text-text-primary outline-none focus:border-accent';
 const badge = 'text-11 rounded-control px-1 border';
@@ -292,7 +295,7 @@ const TargetManager = ({
 					</Button>
 				</div>
 				{scanHint ? (
-					<p className='text-13 text-text-muted'>{scanHint}</p>
+					<p className={hint}>{scanHint}</p>
 				) : (
 					<ul className='list-none flex flex-col gap-1.5'>
 						{(found ?? []).map(d => (
@@ -351,7 +354,7 @@ const TargetManager = ({
 						/>
 					))}
 
-					<p className='text-11 text-text-muted leading-relaxed'>
+					<p className='text-11 text-text-muted leading-relaxed max-w-[76ch]'>
 						Placeholders:{' '}
 						{PLACEHOLDERS.map(({ code, note }) => (
 							<span key={code}>

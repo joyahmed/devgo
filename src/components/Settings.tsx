@@ -30,6 +30,14 @@ import WorkspaceManager from './WorkspaceManager';
 const LAST_PANEL = 'devgo.settingsPanel';
 
 const heading = 'text-15 font-semibold text-text-primary mb-2';
+// the explaining line under a heading, held to a reading measure. the panel
+// is wide for the rows that need it — a template, a path — and a sentence
+// the full width of it is a worse read, not a better one
+const hint = 'text-13 text-text-muted max-w-[76ch]';
+// the same measure in the boxes' own monospace: a list of folder or window
+// names stops where the sentence above it does
+const namesBox =
+	'w-full max-w-[68ch] h-32 px-3 py-2 bg-bg-panel border border-border-strong rounded-control font-mono text-13 text-text-primary outline-none focus:border-accent resize-none';
 
 const MODIFIER_KEYS = new Set(['Control', 'Alt', 'Shift', 'Meta']);
 const NAV_KEYS: Record<string, string> = {
@@ -99,7 +107,7 @@ const ShortcutTable = ({
 		<div className='flex flex-col gap-5'>
 			<div>
 				<h4 className={heading}>Summon</h4>
-				<div className='flex items-center justify-between gap-3 py-1 text-15'>
+				<div className='flex items-center justify-between gap-3 py-1 text-15 max-w-[76ch]'>
 					<span className='text-text-secondary'>
 						Show / hide DevGo from anywhere
 					</span>
@@ -112,7 +120,7 @@ const ShortcutTable = ({
 						</Button>
 					</span>
 				</div>
-				<p className='text-13 text-text-muted mt-1'>
+				<p className={`${hint} mt-1`}>
 					Click Rebind, then press the combination — it needs a modifier (
 					{isMac ? 'Cmd / Opt / Shift / Ctrl' : 'Ctrl / Alt / Shift / Super'}
 					). If another app owns the keys, the old binding stays.
@@ -122,23 +130,29 @@ const ShortcutTable = ({
 			{groups.map(g => (
 				<div key={g}>
 					<h4 className={heading}>{g}</h4>
-					{SHORTCUTS.filter(s => s.group === g && isAvailable(s)).map(s => (
-						<div
-							key={s.id}
-							className='flex items-center justify-between py-1 text-15'
-						>
-							<span className='text-text-secondary'>
-								{labelFor(s.id)}
-								{s.needsSelection && (
-									<span className='text-text-muted text-13'>
-										{' '}
-										· needs a selection
-									</span>
-								)}
-							</span>
-							<Kbd>{prettyKeys(s.keys)}</Kbd>
-						</div>
-					))}
+					{/* two columns once the panel is at its full width: a key half
+					    a panel away from its label is a longer read than two short
+					    rows side by side. below that the panel is on 94vw and one
+					    column is all there is room for */}
+					<div className='grid grid-cols-1 lg:grid-cols-2 gap-x-8'>
+						{SHORTCUTS.filter(s => s.group === g && isAvailable(s)).map(s => (
+							<div
+								key={s.id}
+								className='flex items-center justify-between gap-3 py-1 text-15'
+							>
+								<span className='text-text-secondary'>
+									{labelFor(s.id)}
+									{s.needsSelection && (
+										<span className='text-text-muted text-13'>
+											{' '}
+											· needs a selection
+										</span>
+									)}
+								</span>
+								<Kbd>{prettyKeys(s.keys)}</Kbd>
+							</div>
+						))}
+					</div>
 				</div>
 			))}
 		</div>
@@ -190,7 +204,7 @@ const ScanningPanel = ({ onSaved, onError }: ScanningPanelProps) => {
 		<div className='flex flex-col gap-5'>
 			<div>
 				<h4 className={heading}>Scan depth</h4>
-				<p className='text-13 text-text-muted mb-2'>
+				<p className={`${hint} mb-2`}>
 					How many folder levels deep to look for projects. 1 keeps the
 					original scan (every immediate child). Higher also surfaces nested
 					projects — a monorepo's{' '}
@@ -214,13 +228,13 @@ const ScanningPanel = ({ onSaved, onError }: ScanningPanelProps) => {
 			</div>
 			<div>
 				<h4 className={heading}>Ignore folders</h4>
-				<p className='text-13 text-text-muted mb-2'>
+				<p className={`${hint} mb-2`}>
 					Folder names to skip while scanning, one per line — on top of the
 					hidden dotfolders that are always skipped. Matched by name,
 					case-insensitive.
 				</p>
 				<textarea
-					className='w-full h-32 px-3 py-2 bg-bg-panel border border-border-strong rounded-control font-mono text-13 text-text-primary outline-none focus:border-accent resize-none'
+					className={namesBox}
 					placeholder={'node_modules\narchive\nvendor'}
 					value={text ?? ''}
 					onChange={e => setText(e.target.value)}
@@ -297,7 +311,7 @@ const TmuxPanel = ({ onError }: TmuxPanelProps) => {
 			    under a disabled feature is a promise the app is not keeping */}
 			<div>
 				<h4 className={heading}>{isWindows ? 'Use tmux / psmux' : 'Use tmux'}</h4>
-				<p className='text-13 text-text-muted mb-2'>
+				<p className={`${hint} mb-2`}>
 					On, a terminal launch opens a session with the windows below
 					{isWindows
 						? ' — tmux inside the distro for a WSL project, psmux for a Windows project'
@@ -310,7 +324,7 @@ const TmuxPanel = ({ onError }: TmuxPanelProps) => {
 				    windows port and exists nowhere else, and tmux is not
 				    installed the same way on a mac and on debian */}
 				{isWindows ? (
-					<p className='text-13 text-text-muted mb-2'>
+					<p className={`${hint} mb-2`}>
 						psmux is a tmux for Windows and is installed separately:{' '}
 						<code className='text-text-secondary'>
 							winget install marlocarlo.psmux
@@ -319,7 +333,7 @@ const TmuxPanel = ({ onError }: TmuxPanelProps) => {
 						says so.
 					</p>
 				) : (
-					<p className='text-13 text-text-muted mb-2'>
+					<p className={`${hint} mb-2`}>
 						tmux is installed separately:{' '}
 						<code className='text-text-secondary'>
 							{isMac ? 'brew install tmux' : 'sudo apt install tmux'}
@@ -343,14 +357,14 @@ const TmuxPanel = ({ onError }: TmuxPanelProps) => {
 			</div>
 			<div className={enabled ? '' : 'opacity-50'}>
 				<h4 className={heading}>Windows</h4>
-				<p className='text-13 text-text-muted mb-2'>
+				<p className={`${hint} mb-2`}>
 					One name per line, in order; the first is the window you land in.
 					Existing windows are left alone — one you opened by hand, or
 					renamed, survives every relaunch, and nothing here is ever killed
 					or pruned. Leave the box empty for a single plain window.
 				</p>
 				<textarea
-					className='w-full h-32 px-3 py-2 bg-bg-panel border border-border-strong rounded-control font-mono text-13 text-text-primary outline-none focus:border-accent resize-none'
+					className={namesBox}
 					placeholder={'code\nagents\ngit'}
 					value={text ?? ''}
 					onChange={e => setText(e.target.value)}
@@ -440,7 +454,7 @@ const GithubPanel = ({ github, onError }: GithubPanelProps) => {
 				>
 					{statusLine}
 				</p>
-				<p className='text-13 text-text-muted mt-2'>
+				<p className={`${hint} mt-2`}>
 					DevGo lists your repositories through{' '}
 					<code className='text-text-secondary'>gh</code> and stores no token
 					of its own: <code className='text-text-secondary'>gh auth login</code>{' '}
@@ -453,12 +467,12 @@ const GithubPanel = ({ github, onError }: GithubPanelProps) => {
 
 			<div>
 				<h4 className={heading}>Organisations</h4>
-				<p className='text-13 text-text-muted mb-2'>
+				<p className={`${hint} mb-2`}>
 					Your own repositories are always listed. Tick the organisations to
 					list beside them; all of them are ticked until you change it.
 				</p>
 				{known.length === 0 ? (
-					<p className='text-13 text-text-muted italic'>
+					<p className={`${hint} italic`}>
 						{cache && cache.fetched_at > 0
 							? 'You are not a member of any organisation.'
 							: 'Refresh once to discover your organisations.'}
@@ -496,7 +510,7 @@ const GithubPanel = ({ github, onError }: GithubPanelProps) => {
 
 			<div>
 				<h4 className={heading}>Search all of GitHub as you type</h4>
-				<p className='text-13 text-text-muted mb-2'>
+				<p className={`${hint} mb-2`}>
 					Off, the GitHub box matches your cached list instantly and never
 					touches the network. On, it also asks GitHub, any owner, once you
 					have typed three characters and paused for a moment; the hits appear
@@ -523,7 +537,7 @@ const GithubPanel = ({ github, onError }: GithubPanelProps) => {
 
 			<div>
 				<h4 className={heading}>Cache</h4>
-				<p className='text-13 text-text-muted mb-2'>{cacheLine}</p>
+				<p className={`${hint} mb-2`}>{cacheLine}</p>
 				<Button
 					onClick={github.refresh}
 					disabled={!status?.login || github.refreshing}
@@ -695,7 +709,7 @@ const AppearancePanel = ({ showHints, onToggleHints }: AppearancePanelProps) => 
 		<div className='flex flex-col gap-5'>
 			<div>
 			<h4 className={heading}>Theme</h4>
-			<div className='grid grid-cols-2 gap-2.5'>
+			<div className='grid grid-cols-2 lg:grid-cols-3 gap-2.5'>
 				{THEMES.map(t => (
 					<Button
 						key={t.id}
@@ -724,7 +738,7 @@ const AppearancePanel = ({ showHints, onToggleHints }: AppearancePanelProps) => 
 			</div>
 			<div>
 				<h4 className={heading}>Text size</h4>
-				<p className='text-13 text-text-muted mb-2'>
+				<p className={`${hint} mb-2`}>
 					The whole window, in steps: the same as{' '}
 					<span className='font-mono'>{prettyKeys(shortcutFor('textBigger'))}</span>{' '}
 					and{' '}
@@ -736,7 +750,7 @@ const AppearancePanel = ({ showHints, onToggleHints }: AppearancePanelProps) => 
 			</div>
 			<div>
 				<h4 className={heading}>Transparency</h4>
-				<p className='text-13 text-text-muted mb-2'>
+				<p className={`${hint} mb-2`}>
 					How much of what is behind the window shows through: sharp, in
 					the theme's own colour, no system blur. Every surface follows it;
 					text, icons and borders stay solid. Type a number or step it;
@@ -747,20 +761,20 @@ const AppearancePanel = ({ showHints, onToggleHints }: AppearancePanelProps) => 
 					{...{ value: transparency, onChange: previewTransparency }}
 				/>
 				{born === false && knob > 0 && (
-					<p className='text-13 text-text-muted mt-2'>
+					<p className={`${hint} mt-2`}>
 						Saved. DevGo opened opaque this time, so the window goes
 						see-through on the next launch — a see-through window holds
 						about 30 MB more, and an opaque one is not asked to.
 					</p>
 				)}
 				{born === true && knob === 0 && (
-					<p className='text-13 text-text-muted mt-2'>
+					<p className={`${hint} mt-2`}>
 						Opaque. The memory a see-through window holds is given back on
 						the next launch.
 					</p>
 				)}
 				{osEffects === false && born === true && knob > 0 && (
-					<p className='text-13 text-text-muted mt-2'>
+					<p className={`${hint} mt-2`}>
 						Windows' <em>Transparency effects</em> is off (Settings ›
 						Personalization › Colors). If the ground turns black instead of
 						see-through, that switch is why.
@@ -769,7 +783,7 @@ const AppearancePanel = ({ showHints, onToggleHints }: AppearancePanelProps) => 
 			</div>
 			<div>
 				<h4 className={heading}>Hint words</h4>
-				<p className='text-13 text-text-muted mb-2'>
+				<p className={`${hint} mb-2`}>
 					<em>recent</em> and <em>frequent</em> on project rows. Off by
 					default: the frecency sort already puts those projects first, and
 					the word was one more thing on every row.
@@ -856,7 +870,7 @@ const ConfigPanel = ({ onChanged, onError }: ConfigPanelProps) => {
 			{sections.map(s => (
 				<div key={s.title}>
 					<h4 className={heading}>{s.title}</h4>
-					<p className='text-13 text-text-muted mb-3'>{s.text}</p>
+					<p className={`${hint} mb-3`}>{s.text}</p>
 					<div className='flex gap-2'>
 						{s.actions.map(a => (
 							<Button key={a.label} onClick={a.onClick}>
@@ -926,7 +940,7 @@ const ServersPanel = ({
 		<div className='flex flex-col gap-5'>
 			<div>
 				<h4 className={heading}>Machines</h4>
-				<p className='text-13 text-text-muted mb-3'>
+				<p className={`${hint} mb-3`}>
 					Each row is a machine you SSH into. Enter opens a terminal on it, in
 					a tmux session that survives when the switch is on. DevGo stores the
 					alias or host and a key <em>path</em>, never a password;{' '}
@@ -944,7 +958,7 @@ const ServersPanel = ({
 					</p>
 				)}
 				{servers.servers.length === 0 ? (
-					<p className='text-13 text-text-muted italic mb-3'>None yet.</p>
+					<p className={`${hint} italic mb-3`}>None yet.</p>
 				) : (
 					<div className='flex flex-col gap-1 mb-3'>
 						{servers.servers.map(s => (
@@ -1006,7 +1020,7 @@ const ServersPanel = ({
 
 			<div>
 				<h4 className={heading}>Show connection details in the lane</h4>
-				<p className='text-13 text-text-muted mb-2'>
+				<p className={`${hint} mb-2`}>
 					Off, a server row is its name. On, the row also prints user@host
 					and the port, as the row menu's <em>Show connection details</em>{' '}
 					does.
@@ -1169,7 +1183,7 @@ const Settings = ({
 				open,
 				side: 'right' as const,
 				onClose,
-				width: 'w-[min(808px,94vw)]',
+				width: 'w-[min(960px,94vw)]',
 				z: 40 as const
 			}}
 		>
