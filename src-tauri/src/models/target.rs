@@ -404,6 +404,26 @@ mod tests {
         assert!(vscode().resolve("x", None).is_some());
     }
 
+    /// The linux twin: the seed is whichever emulator the box has, and it
+    /// has to carry the session seam. Without it launch_target writes no
+    /// script, and a fresh install gets the bare shell this work removed -
+    /// on the one platform where tmux is a package away.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn the_seeded_linux_terminal_asks_for_a_session_script() {
+        let seeded = defaults();
+        assert_eq!(seeded[0].id, "vscode", "the editor is seeded first");
+        for t in seeded.iter().filter(|t| t.kind == TargetKind::Terminal) {
+            assert!(t.args_template.contains("{script}"), "{}", t.id);
+            assert!(t.wsl_args_template.is_none(), "no wsl here: {}", t.id);
+            assert_ne!(t.executable, "open", "the mac door: {}", t.id);
+            // xterm is the one row with no directory flag; the script cds
+            let (_, args) = t.resolve("/home/user/app", None).unwrap();
+            assert!(!args.contains("{path}"), "the path is filled: {args}");
+            assert!(args.contains("{script}"), "the launcher fills: {args}");
+        }
+    }
+
     // the mac twin of the seeded-terminal test. terminal.app has no -d and
     // no way to take a command, so both forms go through {script} and
     // neither mentions {path} or {command}; the launcher's files carry those

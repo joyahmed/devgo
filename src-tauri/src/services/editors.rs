@@ -400,14 +400,22 @@ const CANDIDATES: &[Candidate] = &[
         wsl_run_args: None,
         app: Some("iTerm"),
     },
-    // -e takes the rest of the line as the command; the tab closes when it
-    // exits, which is ghostty's own rule
+    // the four emulators a mac and a linux box can both have. each opens
+    // the session script the way its own cli spells "run this": -e for
+    // ghostty and alacritty, start -- for wezterm, bare trailing words for
+    // kitty. every one of them wants that part last, so the working
+    // directory goes first - it is what the shell lands in when the script
+    // finds no tmux. bash "{script}", not the file alone: a /tmp mounted
+    // noexec would refuse the file
+    //
+    // ghostty's -e takes the rest of the line as the command; the tab
+    // closes when it exits, which is ghostty's own rule
     Candidate {
         id: "ghostty",
         name: "Ghostty",
         kind: TargetKind::Terminal,
         exe: "ghostty",
-        args: "--working-directory=\"{path}\"",
+        args: "--working-directory=\"{path}\" -e bash \"{script}\"",
         wsl_args: None,
         run_args: Some("--working-directory=\"{path}\" -e {command}"),
         wsl_run_args: None,
@@ -418,7 +426,7 @@ const CANDIDATES: &[Candidate] = &[
         name: "WezTerm",
         kind: TargetKind::Terminal,
         exe: "wezterm",
-        args: "start --cwd \"{path}\"",
+        args: "start --cwd \"{path}\" -- bash \"{script}\"",
         wsl_args: None,
         run_args: Some("start --cwd \"{path}\" -- {command}"),
         wsl_run_args: None,
@@ -429,7 +437,7 @@ const CANDIDATES: &[Candidate] = &[
         name: "Kitty",
         kind: TargetKind::Terminal,
         exe: "kitty",
-        args: "--directory \"{path}\"",
+        args: "--directory \"{path}\" bash \"{script}\"",
         wsl_args: None,
         run_args: Some("--directory \"{path}\" {command}"),
         wsl_run_args: None,
@@ -440,7 +448,7 @@ const CANDIDATES: &[Candidate] = &[
         name: "Alacritty",
         kind: TargetKind::Terminal,
         exe: "alacritty",
-        args: "--working-directory \"{path}\"",
+        args: "--working-directory \"{path}\" -e bash \"{script}\"",
         wsl_args: None,
         run_args: Some("--working-directory \"{path}\" -e {command}"),
         wsl_run_args: None,
@@ -452,12 +460,19 @@ const CANDIDATES: &[Candidate] = &[
     // without these a linux machine detects NO terminal at all, so the
     // terminal key has nothing to open. on a mac none of them are on PATH
     // and the rows never fire, which is why they sit in the shared table.
+    //
+    // each carries the {script} seam too, and tmux is the one multiplexer
+    // that IS native here: without it a linux launch opened a bare shell
+    // while windows and a mac both got the three named windows. the flag
+    // differs per emulator and a wrong one fails silently, so each is the
+    // one its own man page documents, and it is always last
     Candidate {
         id: "gnome-terminal",
         name: "GNOME Terminal",
         kind: TargetKind::Terminal,
         exe: "gnome-terminal",
-        args: "--working-directory \"{path}\"",
+        // -- and not -e: -e is deprecated and reads the rest as one string
+        args: "--working-directory \"{path}\" -- bash \"{script}\"",
         wsl_args: None,
         run_args: Some("--working-directory \"{path}\" -- bash -lc {command}"),
         wsl_run_args: None,
@@ -468,7 +483,8 @@ const CANDIDATES: &[Candidate] = &[
         name: "Konsole",
         kind: TargetKind::Terminal,
         exe: "konsole",
-        args: "--workdir \"{path}\"",
+        // -e catches every following argument, so nothing may follow it
+        args: "--workdir \"{path}\" -e bash \"{script}\"",
         wsl_args: None,
         run_args: Some("--workdir \"{path}\" -e bash -lc {command}"),
         wsl_run_args: None,
@@ -479,7 +495,8 @@ const CANDIDATES: &[Candidate] = &[
         name: "Xfce Terminal",
         kind: TargetKind::Terminal,
         exe: "xfce4-terminal",
-        args: "--working-directory=\"{path}\"",
+        // -x is the remainder of the line; -e would be one string to parse
+        args: "--working-directory=\"{path}\" -x bash \"{script}\"",
         wsl_args: None,
         run_args: Some("--working-directory=\"{path}\" -x bash -lc {command}"),
         wsl_run_args: None,
@@ -490,7 +507,8 @@ const CANDIDATES: &[Candidate] = &[
         name: "Tilix",
         kind: TargetKind::Terminal,
         exe: "tilix",
-        args: "--working-directory=\"{path}\"",
+        // -e runs all text after it, so the man page calls it the last one
+        args: "--working-directory=\"{path}\" -e bash \"{script}\"",
         wsl_args: None,
         run_args: Some("--working-directory=\"{path}\" -e bash -lc {command}"),
         wsl_run_args: None,
@@ -501,7 +519,8 @@ const CANDIDATES: &[Candidate] = &[
         name: "foot",
         kind: TargetKind::Terminal,
         exe: "foot",
-        args: "--working-directory=\"{path}\"",
+        // foot takes the command as trailing words, with no flag at all
+        args: "--working-directory=\"{path}\" bash \"{script}\"",
         wsl_args: None,
         run_args: Some("--working-directory=\"{path}\" bash -lc {command}"),
         wsl_run_args: None,
@@ -512,7 +531,8 @@ const CANDIDATES: &[Candidate] = &[
         name: "Terminator",
         kind: TargetKind::Terminal,
         exe: "terminator",
-        args: "--working-directory=\"{path}\"",
+        // -x is the rest of the line; -e is a single command string
+        args: "--working-directory=\"{path}\" -x bash \"{script}\"",
         wsl_args: None,
         run_args: Some("--working-directory=\"{path}\" -x bash -lc {command}"),
         wsl_run_args: None,
@@ -523,7 +543,9 @@ const CANDIDATES: &[Candidate] = &[
         name: "xterm",
         kind: TargetKind::Terminal,
         exe: "xterm",
-        args: "-e bash -lc 'cd \"{path}\" && exec bash -l'",
+        // xterm has no working-directory flag, which is why the old form cd'd
+        // by hand; the script does its own cd, so -e is the whole line now
+        args: "-e bash \"{script}\"",
         wsl_args: None,
         run_args: Some("-e bash -lc {command}"),
         wsl_run_args: None,
@@ -1009,6 +1031,101 @@ mod tests {
                 c.id
             );
         }
+    }
+
+    // the session form of every terminal a linux box can have, pinned here
+    // as well as in the table: a linux-only row is invisible to a windows
+    // compiler, so these are the rules that run everywhere. the comparison
+    // against the table itself is the test below, where the rows exist
+    const LINUX_TERMINAL_ARGS: &[(&str, &str)] = &[
+        (
+            "ghostty",
+            "--working-directory=\"{path}\" -e bash \"{script}\"",
+        ),
+        ("wezterm", "start --cwd \"{path}\" -- bash \"{script}\""),
+        ("kitty", "--directory \"{path}\" bash \"{script}\""),
+        (
+            "alacritty",
+            "--working-directory \"{path}\" -e bash \"{script}\"",
+        ),
+        (
+            "gnome-terminal",
+            "--working-directory \"{path}\" -- bash \"{script}\"",
+        ),
+        ("konsole", "--workdir \"{path}\" -e bash \"{script}\""),
+        (
+            "xfce4-terminal",
+            "--working-directory=\"{path}\" -x bash \"{script}\"",
+        ),
+        (
+            "tilix",
+            "--working-directory=\"{path}\" -e bash \"{script}\"",
+        ),
+        ("foot", "--working-directory=\"{path}\" bash \"{script}\""),
+        (
+            "terminator",
+            "--working-directory=\"{path}\" -x bash \"{script}\"",
+        ),
+        ("xterm", "-e bash \"{script}\""),
+    ];
+
+    /// tmux is the multiplexer linux ships, and linux was the platform that
+    /// never saw it: write_local_script only fires on a template carrying
+    /// {script}, so every one of these rows opened a bare shell. The command
+    /// flag is last in all of them because -e, -x and -- each swallow the
+    /// rest of the line, and the working directory stays in front, since
+    /// that is where a shell outliving the script sits.
+    #[test]
+    fn every_linux_terminal_runs_the_session_script_last() {
+        for (id, args) in LINUX_TERMINAL_ARGS {
+            assert!(args.contains("{script}"), "{id} opens a bare shell");
+            assert!(args.ends_with("bash \"{script}\""), "{id}: {args}");
+            // xterm is the one with no working-directory flag to keep
+            assert_eq!(args.contains("{path}"), *id != "xterm", "{id}: {args}");
+            for mac_only in ["open ", "-a ", "brew", "/Applications"] {
+                assert!(!args.contains(mac_only), "{id}: {mac_only}");
+            }
+        }
+        assert_eq!(LINUX_TERMINAL_ARGS.len(), 11);
+    }
+
+    // the same bytes as the table, and no terminal with a cli left without
+    // the seam - four of these rows are the mac's too, so a row dropped
+    // here is a bare shell on both
+    #[cfg(not(windows))]
+    #[test]
+    fn the_candidate_table_carries_exactly_those_terminal_forms() {
+        for (id, args) in LINUX_TERMINAL_ARGS {
+            let c = CANDIDATES
+                .iter()
+                .find(|c| c.id == *id)
+                .unwrap_or_else(|| panic!("{id} left the table"));
+            assert_eq!(&c.args, args, "{id}");
+        }
+        for c in CANDIDATES
+            .iter()
+            .filter(|c| c.kind == TargetKind::Terminal && !c.exe.is_empty())
+        {
+            assert!(
+                LINUX_TERMINAL_ARGS.iter().any(|(id, _)| *id == c.id),
+                "{} has a cli and no pinned session form",
+                c.id
+            );
+        }
+    }
+
+    // the path a fresh linux install really takes: defaults() seeds what
+    // this finds, so a row without the seam is a machine that never gets
+    // the named windows
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn the_terminal_linux_seeds_asks_for_a_session_script() {
+        let Some(t) = first_terminal() else {
+            return;
+        };
+        assert_eq!(t.kind, TargetKind::Terminal);
+        assert!(t.args_template.contains("{script}"), "{}", t.id);
+        assert!(t.wsl_args_template.is_none(), "{}", t.id);
     }
 
     // the three shapes locate can give a mac candidate, decided without
