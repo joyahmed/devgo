@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import { isMac, isWindows } from '../platform';
 import Button from './Button';
 
@@ -43,15 +44,28 @@ const RUN_FIELDS: { key: keyof TargetDraft; placeholder: string }[] = [
 ];
 
 // file managers only: blank means this one cannot select an item inside its
-// parent, and the folder itself opens
+// parent, and the folder itself opens. the windows example is Explorer's own
+// switch, which is what a manager written for Windows copies — Trove takes
+// the same /select, — and nothing on Linux has an equivalent, so that line
+// offers no example to copy
 const REVEAL_FIELDS: { key: keyof TargetDraft; placeholder: string }[] = [
 	{
 		key: 'reveal_args_template',
 		placeholder: isMac
 			? 'Reveal args — the item selected in its parent, e.g. -R "{path}"'
-			: 'Reveal args — the item selected in its parent; blank opens the folder'
+			: isWindows
+				? 'Reveal args — the item selected in its parent, e.g. /select,"{path}"'
+				: 'Reveal args — the item selected in its parent; blank opens the folder'
 	}
 ];
+
+// what the Browse button will show. windows names its programs by extension,
+// so the filter is real there; elsewhere an executable is any file, and a mac
+// .app is a directory a file dialog cannot pick — which is right, because a
+// bundle is not something DevGo can spawn, `open -a` is
+const EXE_FILTERS = isWindows
+	? [{ name: 'Programs', extensions: ['exe', 'cmd', 'bat', 'com'] }]
+	: undefined;
 
 // the form for one kind. wsl is a windows story: the wsl half has nothing
 // to describe on a mac or a linux box, and the fields stay in the draft
@@ -287,6 +301,17 @@ const TargetManager = ({
 				? 'Nothing new: everything found is already registered.'
 				: null;
 
+	// the executable is a path you find rather than a name you know, for the
+	// one kind no installer puts on PATH: a file manager. typing it is still
+	// there, and the store refuses a full path with no program at it either way
+	const browse = () =>
+		openDialog({ filters: EXE_FILTERS })
+			.then(picked => {
+				if (typeof picked === 'string')
+					setDraft(d => ({ ...d, executable: picked }));
+			})
+			.catch(e => onError(String(e)));
+
 	const submit = () => {
 		if (!draft.name.trim() || !draft.executable.trim()) {
 			onError('A target needs a name and an executable');
@@ -394,13 +419,19 @@ const TargetManager = ({
 					</div>
 
 					{fieldsFor(kind).map(({ key, placeholder }) => (
-						<input
-							key={key}
-							className={field}
-							placeholder={placeholder}
-							value={draft[key]}
-							onChange={e => setDraft({ ...draft, [key]: e.target.value })}
-						/>
+						<div key={key} className='flex gap-2'>
+							<input
+								className={field}
+								placeholder={placeholder}
+								value={draft[key]}
+								onChange={e => setDraft({ ...draft, [key]: e.target.value })}
+							/>
+							{key === 'executable' ? (
+								<Button className='shrink-0 text-13' onClick={browse}>
+									Browse…
+								</Button>
+							) : null}
+						</div>
 					))}
 
 					<p className='text-11 text-text-muted leading-relaxed max-w-[76ch]'>

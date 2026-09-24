@@ -67,6 +67,14 @@ pub enum AppError {
     #[error("A target with id {0} already exists")]
     TargetExists(String),
 
+    /// An executable given as a full path with no program at it: a typo, a
+    /// folder, a move. Caught when the target is added, because a full path
+    /// is the shape a file manager is registered with — no installer puts
+    /// one on PATH — and "not installed, or not on PATH" of a path the user
+    /// just typed sends them looking for an install they already have.
+    #[error("{0} is not there, or is not a program — check the path, or pick the executable with Browse")]
+    TargetPathMissing(String),
+
     #[error("No such editor or terminal: {0}")]
     TargetNotFound(String),
 

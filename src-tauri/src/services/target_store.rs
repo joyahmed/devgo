@@ -361,6 +361,9 @@ impl TargetStore {
         if self.targets.iter().any(|t| t.id == target.id) {
             return Err(AppError::TargetExists(target.id));
         }
+        if !is_a_program_there(&target.executable) {
+            return Err(AppError::TargetPathMissing(target.executable));
+        }
         self.targets.push(target.clone());
         self.save()?;
         Ok(target)
@@ -438,6 +441,20 @@ fn bundled_ghostty(t: &LaunchTarget) -> bool {
 /// `Ghostty.app/Contents/MacOS/ghostty`.
 fn ghostty_bundle(exe: &str) -> Option<PathBuf> {
     Path::new(exe).ancestors().nth(3).map(Path::to_path_buf)
+}
+
+/// Is this executable something a target can be added with?
+///
+/// Only a full path is asked. A bare name is PATH's business: PATH changes,
+/// and registering a target before installing the tool is a legitimate
+/// thing to do, so the check there belongs at launch. A full path is the
+/// other case — a file manager is registered with one, because no installer
+/// puts one on PATH — and a typo, a folder, or a program that has since
+/// moved is worth refusing now rather than at the first reveal. An empty
+/// executable is an agent, which is a command the terminal runs.
+fn is_a_program_there(exe: &str) -> bool {
+    let path = std::path::Path::new(exe);
+    !path.is_absolute() || path.is_file()
 }
 
 /// Derive an id from a display name, disambiguating against what exists.
@@ -533,6 +550,45 @@ mod tests {
         let mut s = store("slug");
         assert_eq!(s.add(editor("Sublime Text")).unwrap().id, "sublime-text");
         assert_eq!(s.add(editor("Sublime Text")).unwrap().id, "sublime-text-2");
+    }
+
+    /// The mistake a hand-added file manager invites: the executable is a
+    /// full path, typed or pasted, and a wrong one used to be accepted and
+    /// then reported at the first reveal as "not installed, or not on PATH",
+    /// which is the message for a missing install rather than a wrong path.
+    /// A bare name stays unchecked here — the tool may be installed later —
+    /// and so does an empty one, which is what an agent carries.
+    #[test]
+    fn refuses_a_full_path_with_no_program_at_it() {
+        let mut s = store("badpath");
+        let mut trove = editor("Trove");
+        trove.kind = TargetKind::FileManager;
+        trove.executable = if cfg!(windows) {
+            r"C:\Program Files\Trove\trove.exe".into()
+        } else {
+            "/opt/trove/trove".into()
+        };
+        assert!(matches!(s.add(trove), Err(AppError::TargetPathMissing(_))));
+
+        // the folder instead of the binary inside it, the same refusal
+        let mut folder = editor("Folder");
+        folder.executable = std::env::temp_dir().to_string_lossy().into_owned();
+        assert!(matches!(s.add(folder), Err(AppError::TargetPathMissing(_))));
+
+        // a bare name, and the empty executable an agent carries
+        assert!(s.add(editor("Cursor")).is_ok());
+        let mut agent = editor("Claude Code");
+        agent.kind = TargetKind::Agent;
+        agent.executable = String::new();
+        assert!(s.add(agent).is_ok());
+
+        // and the program this test is running as, which certainly exists
+        let mut real = editor("Real");
+        real.executable = std::env::current_exe()
+            .unwrap()
+            .to_string_lossy()
+            .into_owned();
+        assert!(s.add(real).is_ok());
     }
 
     #[test]
