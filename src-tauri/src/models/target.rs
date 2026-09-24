@@ -170,6 +170,73 @@ pub const MAC_TERMINAL_ARGS: &str = "-a Terminal \"{script}\"";
 #[cfg_attr(windows, allow(dead_code))]
 pub const MAC_TERMINAL_RUN_ARGS: &str = "-a Terminal \"{script}\"";
 
+/// Every terminal row as v1.1.0 and v1.1.1 shipped it, next to the form
+/// that carries the session script. The launcher only writes a script for
+/// a template asking for one, so an install from before the seam opened a
+/// bare shell in the right directory and said nothing — the upgrade, not
+/// the install, is what withheld the tmux session. The id is half the key
+/// because five of these shipped the same old bytes and each takes its own
+/// flag for the command; the other half is the old bytes themselves, so a
+/// template the user wrote is left alone. Ghostty, WezTerm, Kitty and
+/// Alacritty are a mac's rows too, and reach the same seam here.
+pub const LINUX_ARGS_PRE_TMUX: &[(&str, &str, &str)] = &[
+    (
+        "ghostty",
+        "--working-directory=\"{path}\"",
+        "--working-directory=\"{path}\" -e bash \"{script}\"",
+    ),
+    (
+        "wezterm",
+        "start --cwd \"{path}\"",
+        "start --cwd \"{path}\" -- bash \"{script}\"",
+    ),
+    (
+        "kitty",
+        "--directory \"{path}\"",
+        "--directory \"{path}\" bash \"{script}\"",
+    ),
+    (
+        "alacritty",
+        "--working-directory \"{path}\"",
+        "--working-directory \"{path}\" -e bash \"{script}\"",
+    ),
+    (
+        "gnome-terminal",
+        "--working-directory \"{path}\"",
+        "--working-directory \"{path}\" -- bash \"{script}\"",
+    ),
+    (
+        "konsole",
+        "--workdir \"{path}\"",
+        "--workdir \"{path}\" -e bash \"{script}\"",
+    ),
+    (
+        "xfce4-terminal",
+        "--working-directory=\"{path}\"",
+        "--working-directory=\"{path}\" -x bash \"{script}\"",
+    ),
+    (
+        "tilix",
+        "--working-directory=\"{path}\"",
+        "--working-directory=\"{path}\" -e bash \"{script}\"",
+    ),
+    (
+        "foot",
+        "--working-directory=\"{path}\"",
+        "--working-directory=\"{path}\" bash \"{script}\"",
+    ),
+    (
+        "terminator",
+        "--working-directory=\"{path}\"",
+        "--working-directory=\"{path}\" -x bash \"{script}\"",
+    ),
+    (
+        "xterm",
+        "-e bash -lc 'cd \"{path}\" && exec bash -l'",
+        "-e bash \"{script}\"",
+    ),
+];
+
 /// The registry every install starts with.
 ///
 /// VS Code and Windows Terminal only, because those are the two DevGo already

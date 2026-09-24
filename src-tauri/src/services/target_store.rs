@@ -3,9 +3,9 @@ use std::path::PathBuf;
 
 use crate::error::AppError;
 use crate::models::target::{
-    defaults, LaunchTarget, TargetKind, VSCODE_WSL_ARGS, VSCODE_WSL_ARGS_PRE,
-    WT_ARGS, WT_ARGS_PRE_PSMUX, WT_RUN_ARGS, WT_RUN_ARGS_PRE, WT_WSL_RUN_ARGS,
-    WT_WSL_RUN_ARGS_PRE,
+    defaults, LaunchTarget, TargetKind, LINUX_ARGS_PRE_TMUX, VSCODE_WSL_ARGS,
+    VSCODE_WSL_ARGS_PRE, WT_ARGS, WT_ARGS_PRE_PSMUX, WT_RUN_ARGS,
+    WT_RUN_ARGS_PRE, WT_WSL_RUN_ARGS, WT_WSL_RUN_ARGS_PRE,
 };
 
 /// Editors and terminals, persisted together.
@@ -46,6 +46,7 @@ impl TargetStore {
         store.adopt_run_template()?;
         store.adopt_wt_semicolon_escape()?;
         store.adopt_remote_uri_quotes()?;
+        store.adopt_linux_session_script()?;
         Ok(store)
     }
 
@@ -135,6 +136,38 @@ impl TargetStore {
         for pos in stale {
             self.targets[pos].wsl_args_template =
                 Some(VSCODE_WSL_ARGS.to_string());
+        }
+        self.save()
+    }
+
+    /// The linux terminals shipped without the session seam, so an install
+    /// from v1.1.0 or v1.1.1 opens a bare shell where a fresh one opens the
+    /// tmux session. Keyed on the id AND the exact old bytes, not one of
+    /// them: five emulators shipped the same old form and each takes a
+    /// different flag, so the id says which line to write, and the bytes
+    /// say nobody has edited this row. Same shape as the adoptions above -
+    /// a backup first, and only the forms the app itself wrote.
+    fn adopt_linux_session_script(&mut self) -> Result<(), AppError> {
+        let stale: Vec<(usize, &str)> = self
+            .targets
+            .iter()
+            .enumerate()
+            .filter_map(|(i, t)| {
+                LINUX_ARGS_PRE_TMUX
+                    .iter()
+                    .find(|(id, pre, _)| *id == t.id && *pre == t.args_template)
+                    .map(|(_, _, seam)| (i, *seam))
+            })
+            .collect();
+        if stale.is_empty() {
+            return Ok(());
+        }
+        if self.file_path.exists() {
+            let backup = format!("{}.pre-linux-tmux", self.file_path.display());
+            fs::copy(&self.file_path, backup)?;
+        }
+        for (pos, seam) in stale {
+            self.targets[pos].args_template = seam.to_string();
         }
         self.save()
     }
@@ -423,6 +456,107 @@ mod tests {
         );
     }
 
+    /// A targets.json as a linux install from before the seam wrote it: the
+    /// editor row, and whichever emulator the box happened to have.
+    fn pre_tmux_json(id: &str, args: &str) -> String {
+        format!(
+            r#"[
+  {{"id":"vscode","name":"VS Code","kind":"editor","executable":"code",
+   "args_template":"\"{{path}}\"","wsl_executable":null,
+   "wsl_args_template":null,"run_args_template":null,
+   "wsl_run_args_template":null}},
+  {{"id":"{id}","name":"{id}","kind":"terminal","executable":"{id}",
+   "args_template":"{}","wsl_executable":null,"wsl_args_template":null,
+   "run_args_template":"--working-directory \"{{path}}\" -- bash -lc {{command}}",
+   "wsl_run_args_template":null}}
+]"#,
+            args.replace('"', "\\\"")
+        )
+    }
+
+    /// The release was named for the tmux session and an upgrading linux
+    /// user never saw it: the launcher writes a session script only for a
+    /// template asking for one, so every pre-seam row opened a bare shell.
+    /// Each emulator lands on the form a fresh install seeds.
+    #[test]
+    fn an_install_from_before_the_linux_seam_gets_the_session_script() {
+        for (id, pre, seam) in LINUX_ARGS_PRE_TMUX {
+            let dir = std::env::temp_dir()
+                .join(format!("devgo-targets-pre-tmux-{id}"));
+            let _ = fs::remove_dir_all(&dir);
+            fs::create_dir_all(&dir).unwrap();
+            let original = pre_tmux_json(id, pre);
+            fs::write(dir.join("targets.json"), &original).unwrap();
+
+            let s = TargetStore::new(dir.clone()).unwrap();
+            assert_eq!(s.get(id).unwrap().args_template, *seam, "{id}");
+            assert_eq!(s.get("vscode").unwrap().name, "VS Code", "{id}");
+
+            // persisted, and a second load has nothing left to adopt, so
+            // the backup is still the file the migration found
+            let reloaded = TargetStore::new(dir.clone()).unwrap();
+            assert_eq!(reloaded.get(id).unwrap().args_template, *seam, "{id}");
+            assert_eq!(
+                fs::read_to_string(dir.join("targets.json.pre-linux-tmux"))
+                    .unwrap(),
+                original,
+                "{id}"
+            );
+            assert!(
+                !dir.join("targets.json.bak").exists(),
+                "a migration is not a parse failure: {id}"
+            );
+            let _ = fs::remove_dir_all(&dir);
+        }
+    }
+
+    /// The other half of the key. A row whose bytes are not the ones the
+    /// app wrote is the user's, and an emulator the table never heard of
+    /// takes a flag nobody here knows.
+    #[test]
+    fn a_hand_edited_linux_template_is_left_alone() {
+        let dir = std::env::temp_dir().join("devgo-targets-custom-linux");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let custom = "--working-directory \"{path}\" --hide-menubar";
+        fs::write(
+            dir.join("targets.json"),
+            pre_tmux_json("gnome-terminal", custom),
+        )
+        .unwrap();
+
+        let mut s = TargetStore::new(dir.clone()).unwrap();
+        assert_eq!(s.get("gnome-terminal").unwrap().args_template, custom);
+
+        let mut unknown = editor("My Term");
+        unknown.args_template = "--working-directory \"{path}\"".into();
+        s.add(unknown).unwrap();
+
+        let s = TargetStore::new(dir.clone()).unwrap();
+        assert_eq!(
+            s.get("my-term").unwrap().args_template,
+            "--working-directory \"{path}\"",
+            "the same old bytes under an id nobody can write a flag for"
+        );
+        assert!(!dir.join("targets.json.pre-linux-tmux").exists());
+    }
+
+    /// v1.2.0 seeded the seam itself, and a reinstall must not rewrite what
+    /// is already right.
+    #[test]
+    fn a_linux_row_that_already_has_the_seam_is_untouched() {
+        let dir = std::env::temp_dir().join("devgo-targets-seam-linux");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let seam = "--workdir \"{path}\" -e bash \"{script}\"";
+        fs::write(dir.join("targets.json"), pre_tmux_json("konsole", seam))
+            .unwrap();
+
+        let s = TargetStore::new(dir.clone()).unwrap();
+        assert_eq!(s.get("konsole").unwrap().args_template, seam);
+        assert!(!dir.join("targets.json.pre-linux-tmux").exists());
+    }
+
     /// A .pre-psmux of a file seeded a millisecond ago would be noise that
     /// makes the real backups harder to trust.
     #[test]
@@ -454,6 +588,7 @@ mod tests {
         }
         assert!(!dir.join("targets.json.pre-psmux").exists());
         assert!(!dir.join("targets.json.pre-uri-quote").exists());
+        assert!(!dir.join("targets.json.pre-linux-tmux").exists());
     }
 
     #[test]

@@ -645,6 +645,22 @@ fn app_bundle(app: &str) -> Option<PathBuf> {
         .find(|p| p.is_dir())
 }
 
+// foot is a wayland client and nothing else: on an X11 session it prints
+// "failed to connect to wayland; no compositor running?" and no window
+// appears, so a box whose first terminal is foot was seeded a key that
+// silently did nothing. it stays in the table because the same binary is
+// right under a compositor. footclient needs a `foot --server` in that
+// same session, so it is no door out and is not offered either
+fn usable_in_session(c: &Candidate, wayland: bool) -> bool {
+    c.id != "foot" || wayland
+}
+
+// is there a compositor? WAYLAND_DISPLAY is what one sets, and what foot
+// itself reads to decide
+fn wayland_session() -> bool {
+    std::env::var_os("WAYLAND_DISPLAY").is_some_and(|v| !v.is_empty())
+}
+
 // is this candidate installed, and how is it launched? in order: its cli
 // is on PATH, the cli form as the table spells it (the only rule that can
 // fire on windows, no windows row has an app; a mac row with no exe skips
@@ -711,8 +727,10 @@ pub fn detect(running: &[String]) -> Vec<DetectedTarget> {
         .collect();
     let found = path_lookup(&names);
 
+    let wayland = wayland_session();
     let mut out: Vec<DetectedTarget> = CANDIDATES
         .iter()
+        .filter(|c| usable_in_session(c, wayland))
         .filter_map(|c| locate(c, &found))
         .collect();
 
@@ -881,11 +899,13 @@ pub fn first_terminal() -> Option<LaunchTarget> {
         .map(|c| c.exe)
         .collect();
     let found = path_lookup(&names);
+    let wayland = wayland_session();
     CANDIDATES
         .iter()
         .find(|c| {
             c.kind == TargetKind::Terminal
                 && !c.exe.is_empty()
+                && usable_in_session(c, wayland)
                 && found.contains_key(&c.exe.to_lowercase())
         })
         .map(to_target)
@@ -964,9 +984,9 @@ mod tests {
     #[test]
     fn every_shipped_template_quotes_the_path_and_script_seams() {
         use crate::models::target::{
-            MAC_TERMINAL_ARGS, MAC_TERMINAL_RUN_ARGS, VSCODE_WSL_ARGS, WT_ARGS,
-            WT_ARGS_PRE_PSMUX, WT_RUN_ARGS, WT_RUN_ARGS_PRE, WT_WSL_RUN_ARGS,
-            WT_WSL_RUN_ARGS_PRE,
+            LINUX_ARGS_PRE_TMUX, MAC_TERMINAL_ARGS, MAC_TERMINAL_RUN_ARGS,
+            VSCODE_WSL_ARGS, WT_ARGS, WT_ARGS_PRE_PSMUX, WT_RUN_ARGS,
+            WT_RUN_ARGS_PRE, WT_WSL_RUN_ARGS, WT_WSL_RUN_ARGS_PRE,
         };
         let mut templates: Vec<String> = vec![
             WT_ARGS.into(),
@@ -984,6 +1004,10 @@ mod tests {
         ];
         templates
             .extend(LINUX_TERMINAL_ARGS.iter().map(|(_, a)| a.to_string()));
+        // the forms an upgrade reads as well as the ones it writes: a
+        // migration compares bytes, so a bare seam here is a bad match
+        templates
+            .extend(LINUX_ARGS_PRE_TMUX.iter().map(|(_, p, _)| p.to_string()));
         for c in CANDIDATES {
             templates.push(c.args.to_string());
             templates.extend(c.wsl_args.map(str::to_string));
@@ -1160,6 +1184,48 @@ mod tests {
             }
         }
         assert_eq!(LINUX_TERMINAL_ARGS.len(), 11);
+    }
+
+    /// An install from before the seam is migrated onto these same bytes,
+    /// so the two tables are one thing said twice and have to agree: an
+    /// upgrade landing anywhere else is a form the app never shipped.
+    #[test]
+    fn the_upgrade_lands_on_the_shipped_session_form() {
+        use crate::models::target::LINUX_ARGS_PRE_TMUX;
+        for (id, pre, seam) in LINUX_ARGS_PRE_TMUX {
+            let (_, args) = LINUX_TERMINAL_ARGS
+                .iter()
+                .find(|(p, _)| p == id)
+                .unwrap_or_else(|| panic!("{id} has no session form"));
+            assert_eq!(seam, args, "{id}");
+            assert!(!pre.contains("{script}"), "{id} was never bare");
+        }
+        assert_eq!(LINUX_ARGS_PRE_TMUX.len(), LINUX_TERMINAL_ARGS.len());
+    }
+
+    /// foot on X11 opens nothing and says so only on a stderr nobody
+    /// reads, so it is not offered and not seeded without a compositor.
+    /// Every other row is unconditional: a terminal that fails on a
+    /// desktop it cannot see is the only case this covers.
+    #[test]
+    fn foot_is_offered_only_in_a_wayland_session() {
+        let foot = Candidate {
+            id: "foot",
+            name: "foot",
+            kind: TargetKind::Terminal,
+            exe: "foot",
+            args: "--working-directory=\"{path}\" bash \"{script}\"",
+            wsl_args: None,
+            run_args: None,
+            wsl_run_args: None,
+            app: None,
+        };
+        assert!(!usable_in_session(&foot, false));
+        assert!(usable_in_session(&foot, true));
+        for c in CANDIDATES {
+            assert!(usable_in_session(c, true), "{}", c.id);
+            assert_eq!(usable_in_session(c, false), c.id != "foot", "{}", c.id);
+        }
     }
 
     // the same bytes as the table, and no terminal with a cli left without
