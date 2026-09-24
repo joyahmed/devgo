@@ -32,6 +32,14 @@ pub struct LaunchTarget {
     /// The same for a WSL project.
     #[serde(default)]
     pub wsl_run_args_template: Option<String>,
+    /// Arguments for showing a path with the item itself selected inside
+    /// its parent: Explorer's folder, Finder's -R. The reveal mode is to a
+    /// file manager what the run mode is to a terminal — one target, two
+    /// invocations — so it gets its own template rather than a second
+    /// target. `None` means this target has no way to select an item, which
+    /// is every Linux file manager, and the caller opens the parent folder.
+    #[serde(default)]
+    pub reveal_args_template: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -46,6 +54,34 @@ pub enum TargetKind {
     /// when Windows only); the terminal's run template does the launching
     /// and the args templates stay empty.
     Agent,
+    /// A file manager, opened at a folder. `args_template` opens the folder
+    /// itself and `reveal_args_template` selects it inside its parent; the
+    /// second is what "reveal" means, the first is what the app-data door
+    /// wants.
+    FileManager,
+}
+
+impl TargetKind {
+    /// Every kind, so the places that must cover all of them — the default
+    /// map, a portable config — cannot quietly miss one.
+    pub const ALL: [Self; 4] =
+        [Self::Editor, Self::Terminal, Self::Agent, Self::FileManager];
+
+    /// The name this kind travels under: the frontend's union, the key in
+    /// the default-target map, the field in a portable config. Not
+    /// `format!("{self:?}").to_lowercase()`, which the default map used to
+    /// build: serde renames to snake_case, so that spells FileManager
+    /// "filemanager" while the frontend says "file_manager", the lookup
+    /// misses, the "default" badge never appears and nothing errors. It was
+    /// right only while every variant was one word.
+    pub fn wire(self) -> &'static str {
+        match self {
+            Self::Editor => "editor",
+            Self::Terminal => "terminal",
+            Self::Agent => "agent",
+            Self::FileManager => "file_manager",
+        }
+    }
 }
 
 impl LaunchTarget {
@@ -70,6 +106,20 @@ impl LaunchTarget {
         command: &str,
     ) -> Option<(String, String)> {
         self.resolve_inner(windows_path, wsl, Some(command))
+    }
+
+    /// Resolve the reveal form: the item selected inside its parent.
+    ///
+    /// No WSL pair, unlike the two above: a WSL project is revealed through
+    /// its UNC path, which is already the Windows path the template takes.
+    /// `None` when the target has no selecting verb, and the caller opens
+    /// the parent folder instead of pretending it selected something.
+    pub fn resolve_reveal(&self, path: &str) -> Option<(String, String)> {
+        let template = self
+            .reveal_args_template
+            .as_deref()
+            .filter(|t| !t.is_empty())?;
+        Some((self.executable.clone(), template.replace("{path}", path)))
     }
 
     fn resolve_inner(
@@ -237,9 +287,10 @@ pub const LINUX_ARGS_PRE_TMUX: &[(&str, &str, &str)] = &[
 
 /// The registry every install starts with.
 ///
-/// VS Code and Windows Terminal only, because those are the two DevGo already
-/// hardcoded — seeding more would be guessing at what is installed, and an
-/// entry that fails to launch is worse than one the user added deliberately.
+/// VS Code, Windows Terminal and Explorer, because those three are the ones
+/// DevGo already hardcoded — seeding more would be guessing at what is
+/// installed, and an entry that fails to launch is worse than one the user
+/// added deliberately.
 #[cfg(windows)]
 pub fn defaults() -> Vec<LaunchTarget> {
     vec![
@@ -255,6 +306,7 @@ pub fn defaults() -> Vec<LaunchTarget> {
             wsl_args_template: Some(VSCODE_WSL_ARGS.into()),
             // an editor is not a place to run a dev command
             run_args_template: None,
+            reveal_args_template: None,
             wsl_run_args_template: None,
         },
         LaunchTarget {
@@ -266,7 +318,25 @@ pub fn defaults() -> Vec<LaunchTarget> {
             wsl_executable: None,
             wsl_args_template: Some("wsl -d {distro} bash \"{script}\"".into()),
             run_args_template: Some(WT_RUN_ARGS.into()),
+            reveal_args_template: None,
             wsl_run_args_template: Some(WT_WSL_RUN_ARGS.into()),
+        },
+        LaunchTarget {
+            id: "explorer".into(),
+            name: "File Explorer".into(),
+            kind: TargetKind::FileManager,
+            executable: "explorer".into(),
+            args_template: "\"{path}\"".into(),
+            wsl_executable: None,
+            // a WSL project is revealed through its UNC path, which is
+            // already {path}
+            wsl_args_template: None,
+            run_args_template: None,
+            // the folder itself, not /select: the switch exists, but the
+            // UNC path of a WSL project does not survive it, and those are
+            // half of what DevGo reveals
+            reveal_args_template: Some("\"{path}\"".into()),
+            wsl_run_args_template: None,
         },
     ]
 }
@@ -296,6 +366,7 @@ pub fn defaults() -> Vec<LaunchTarget> {
             wsl_args_template: None,
             // an editor is not a place to run a dev command
             run_args_template: None,
+            reveal_args_template: None,
             wsl_run_args_template: None,
         },
         LaunchTarget {
@@ -307,14 +378,33 @@ pub fn defaults() -> Vec<LaunchTarget> {
             wsl_executable: None,
             wsl_args_template: None,
             run_args_template: Some(MAC_TERMINAL_RUN_ARGS.into()),
+            reveal_args_template: None,
+            wsl_run_args_template: None,
+        },
+        LaunchTarget {
+            id: "finder".into(),
+            name: "Finder".into(),
+            kind: TargetKind::FileManager,
+            // no cli of its own, like Terminal.app: the door is open, and
+            // -a names the app so the row does what it says rather than
+            // whatever the desktop has registered for a folder
+            executable: "open".into(),
+            args_template: "-a Finder \"{path}\"".into(),
+            wsl_executable: None,
+            wsl_args_template: None,
+            run_args_template: None,
+            // -R: the parent window with the folder highlighted, the one
+            // reveal verb a file manager on any platform here really has
+            reveal_args_template: Some("-R \"{path}\"".into()),
             wsl_run_args_template: None,
         },
     ]
 }
 
-/// Linux: the editor row is the same, and the terminal is whichever
-/// emulator this box actually has - see editors::first_terminal. A machine
-/// with none gets no terminal row rather than one that cannot run.
+/// Linux: the editor row is the same, and the terminal and the file
+/// manager are whichever ones this box actually has - see
+/// editors::first_terminal and editors::first_file_manager. A machine with
+/// none gets no row rather than one that cannot run.
 #[cfg(target_os = "linux")]
 pub fn defaults() -> Vec<LaunchTarget> {
     let mut out = vec![LaunchTarget {
@@ -326,10 +416,14 @@ pub fn defaults() -> Vec<LaunchTarget> {
         wsl_executable: None,
         wsl_args_template: None,
         run_args_template: None,
+        reveal_args_template: None,
         wsl_run_args_template: None,
     }];
     if let Some(t) = crate::services::editors::first_terminal() {
         out.push(t);
+    }
+    if let Some(f) = crate::services::editors::first_file_manager() {
+        out.push(f);
     }
     out
 }
@@ -340,6 +434,111 @@ mod tests {
 
     fn vscode() -> LaunchTarget {
         defaults().into_iter().next().unwrap()
+    }
+
+    /// The key the default-target map is built with, and the string the
+    /// frontend's own union carries. `format!("{k:?}").to_lowercase()` built
+    /// that key and agreed with serde only while every variant was one word:
+    /// it spells FileManager "filemanager", the frontend says
+    /// "file_manager", the lookup misses, the "default" badge never appears
+    /// and nothing anywhere errors. Pinned in both directions so the next
+    /// two-word kind cannot repeat it.
+    #[test]
+    fn every_kinds_wire_name_is_the_one_serde_writes() {
+        for kind in TargetKind::ALL {
+            let json = serde_json::to_string(&kind).unwrap();
+            assert_eq!(json, format!("\"{}\"", kind.wire()), "{kind:?}");
+            let back: TargetKind = serde_json::from_str(&json).unwrap();
+            assert_eq!(back, kind, "{kind:?}");
+        }
+        assert_eq!(TargetKind::FileManager.wire(), "file_manager");
+        assert_ne!(
+            TargetKind::FileManager.wire(),
+            format!("{:?}", TargetKind::FileManager).to_lowercase(),
+            "the debug spelling is the trap, not the wire name"
+        );
+    }
+
+    /// Reveal has no hardcoded program left, so the kind has to be seeded or
+    /// the menu item does nothing: one row on windows and a mac, and on
+    /// linux whichever manager the box has - none is honest there, the same
+    /// as its terminal row. That row must never be `open`: on linux `open`
+    /// is xdg-open, which rejects the mac's -R, and seeding the mac registry
+    /// on linux is exactly how the terminal key was silently dead once.
+    #[test]
+    fn a_file_manager_is_seeded_and_is_never_the_mac_door_on_linux() {
+        let seeded = defaults();
+        let managers: Vec<&LaunchTarget> = seeded
+            .iter()
+            .filter(|t| t.kind == TargetKind::FileManager)
+            .collect();
+        #[cfg(not(target_os = "linux"))]
+        assert_eq!(managers.len(), 1, "one manager, not a guess at more");
+        #[cfg(target_os = "linux")]
+        assert!(managers.len() <= 1, "a box with none gets none");
+
+        for m in &managers {
+            // the folder form is what the app-data door uses and it always
+            // exists; a file manager has no wsl half of its own - a wsl
+            // project is revealed through its UNC path
+            let (exe, args) = m.resolve("/srv/work/app", None).unwrap();
+            assert!(!exe.is_empty(), "{}", m.id);
+            assert!(args.contains("\"/srv/work/app\""), "quoted: {args}");
+            assert!(!args.contains("{path}"), "filled: {args}");
+            assert!(m.wsl_args_template.is_none(), "{}", m.id);
+            assert!(m.run_args_template.is_none(), "not a terminal: {}", m.id);
+
+            #[cfg(target_os = "linux")]
+            {
+                assert_ne!(m.executable, "open", "the mac door: {}", m.id);
+                assert!(
+                    m.resolve_reveal("/srv/work/app").is_none(),
+                    "nothing on linux selects an item: {}",
+                    m.id
+                );
+            }
+            #[cfg(not(target_os = "linux"))]
+            {
+                let (_, args) = m.resolve_reveal("/srv/work/app").unwrap();
+                assert!(args.contains("/srv/work/app"), "{args}");
+                assert!(!args.contains("{path}"), "the path is filled: {args}");
+            }
+        }
+    }
+
+    /// The reveal form is the file manager's second invocation, the way the
+    /// run form is a terminal's: same target, same executable, other
+    /// template. A row without one refuses, and the caller opens the parent
+    /// rather than pretending it selected something.
+    #[test]
+    fn the_reveal_template_is_a_second_form_of_the_same_target() {
+        let mut trove = LaunchTarget {
+            id: "trove".into(),
+            name: "Trove".into(),
+            kind: TargetKind::FileManager,
+            executable: r"C:\Program Files\Trove\trove.exe".into(),
+            args_template: "\"{path}\"".into(),
+            wsl_executable: None,
+            wsl_args_template: None,
+            run_args_template: None,
+            reveal_args_template: Some("--select \"{path}\"".into()),
+            wsl_run_args_template: None,
+        };
+        let (exe, args) = trove.resolve_reveal(r"G:\01_tauri\my app").unwrap();
+        assert_eq!(exe, r"C:\Program Files\Trove\trove.exe");
+        assert_eq!(args, "--select \"G:\\01_tauri\\my app\"");
+        // and the folder form is untouched by it
+        assert_eq!(
+            trove.resolve(r"G:\01_tauri\my app", None).unwrap().1,
+            "\"G:\\01_tauri\\my app\""
+        );
+
+        trove.reveal_args_template = None;
+        assert!(trove.resolve_reveal("x").is_none());
+        // an empty string is what the Add form sends for a blank field, and
+        // it means the same as None rather than `trove ` with no path
+        trove.reveal_args_template = Some(String::new());
+        assert!(trove.resolve_reveal("x").is_none());
     }
 
     #[test]
@@ -430,6 +629,7 @@ mod tests {
                 "-d {distro} --cd \"{linux_path}\" -e hx .".into(),
             ),
             run_args_template: None,
+            reveal_args_template: None,
             wsl_run_args_template: None,
         };
         let (exe, args) = helix
@@ -478,6 +678,7 @@ mod tests {
             wsl_executable: None,
             wsl_args_template: None,
             run_args_template: None,
+            reveal_args_template: None,
             wsl_run_args_template: None,
         };
         assert!(notepad.resolve("x", Some(("Ubuntu", "/home"))).is_none());
@@ -499,6 +700,7 @@ mod tests {
                 "-d {distro} --cd \"{linux_path}\" -e nvim .".into(),
             ),
             run_args_template: None,
+            reveal_args_template: None,
             wsl_run_args_template: None,
         };
         assert!(nvim.resolve(r"G:\dev", None).is_none());
@@ -556,7 +758,11 @@ mod tests {
     #[test]
     fn the_mac_defaults_open_terminal_through_a_script() {
         let seeded = defaults();
-        assert_eq!(seeded.len(), 2, "vs code and terminal, nothing guessed");
+        assert_eq!(
+            seeded.len(),
+            3,
+            "vs code, terminal and finder, nothing guessed"
+        );
         for t in &seeded {
             assert!(t.wsl_args_template.is_none(), "no wsl on a mac: {}", t.id);
             assert!(t.wsl_run_args_template.is_none(), "{}", t.id);

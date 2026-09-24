@@ -36,6 +36,10 @@ struct Candidate {
     wsl_args: Option<&'static str>,
     run_args: Option<&'static str>,
     wsl_run_args: Option<&'static str>,
+    /// file managers only: how it selects an item inside its parent. None
+    /// everywhere else, and on linux, where no file manager has a portable
+    /// verb for it and the caller opens the parent folder
+    reveal_args: Option<&'static str>,
     /// mac only: the bundle name under /Applications. a mac app is installed
     /// by dragging it there and its cli is a separate step most people
     /// skip, so the bundle is the truth about installation. None on every
@@ -62,6 +66,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_args: Some(REMOTE_URI),
         run_args: None,
         wsl_run_args: None,
+        reveal_args: None,
         app: None,
     },
     Candidate {
@@ -73,6 +78,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_args: Some(REMOTE_URI),
         run_args: None,
         wsl_run_args: None,
+        reveal_args: None,
         app: None,
     },
     Candidate {
@@ -84,6 +90,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_args: Some(REMOTE_URI),
         run_args: None,
         wsl_run_args: None,
+        reveal_args: None,
         app: None,
     },
     Candidate {
@@ -95,6 +102,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_args: Some(REMOTE_URI),
         run_args: None,
         wsl_run_args: None,
+        reveal_args: None,
         app: None,
     },
     // zed's windows cli takes the distro as a flag and resolves the linux
@@ -109,6 +117,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_args: Some("--wsl {distro} \"{linux_path}\""),
         run_args: None,
         wsl_run_args: None,
+        reveal_args: None,
         app: None,
     },
     Candidate {
@@ -120,6 +129,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_args: None,
         run_args: None,
         wsl_run_args: None,
+        reveal_args: None,
         app: None,
     },
     Candidate {
@@ -131,6 +141,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_args: None,
         run_args: None,
         wsl_run_args: None,
+        reveal_args: None,
         app: None,
     },
     Candidate {
@@ -142,6 +153,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_args: None,
         run_args: None,
         wsl_run_args: None,
+        reveal_args: None,
         app: None,
     },
     Candidate {
@@ -153,6 +165,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_args: None,
         run_args: None,
         wsl_run_args: None,
+        reveal_args: None,
         app: None,
     },
     Candidate {
@@ -164,6 +177,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_args: None,
         run_args: None,
         wsl_run_args: None,
+        reveal_args: None,
         app: None,
     },
     Candidate {
@@ -175,6 +189,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_args: None,
         run_args: None,
         wsl_run_args: None,
+        reveal_args: None,
         app: None,
     },
     Candidate {
@@ -186,6 +201,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_args: None,
         run_args: None,
         wsl_run_args: None,
+        reveal_args: None,
         app: None,
     },
     // terminals open WSL projects through the tmux script, like the seed;
@@ -200,6 +216,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_args: Some("wsl -d {distro} bash \"{script}\""),
         run_args: Some(crate::models::target::WT_RUN_ARGS),
         wsl_run_args: Some(crate::models::target::WT_WSL_RUN_ARGS),
+        reveal_args: None,
         app: None,
     },
     Candidate {
@@ -213,6 +230,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_run_args: Some(
             "-e wsl -d {distro} --cd \"{linux_path}\" -e bash -lc \"{command}; exec bash\"",
         ),
+        reveal_args: None,
         app: None,
     },
     Candidate {
@@ -226,6 +244,23 @@ const CANDIDATES: &[Candidate] = &[
         wsl_run_args: Some(
             "start -- wsl -d {distro} --cd \"{linux_path}\" -e bash -lc \"{command}; exec bash\"",
         ),
+        reveal_args: None,
+        app: None,
+    },
+    // the one file manager windows certainly has, and the same bytes the
+    // seed carries. another one - trove, or anything installed by an
+    // msi - is added by hand with its full exe path: an installer puts
+    // nothing on PATH, so no table entry could ever find it
+    Candidate {
+        id: "explorer",
+        name: "File Explorer",
+        kind: TargetKind::FileManager,
+        exe: "explorer",
+        args: "\"{path}\"",
+        wsl_args: None,
+        run_args: None,
+        wsl_run_args: None,
+        reveal_args: Some("\"{path}\""),
         app: None,
     },
 ];
@@ -252,6 +287,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_args: None,
         run_args: None,
         wsl_run_args: None,
+        reveal_args: None,
         app: Some("Visual Studio Code"),
     },
     Candidate {
@@ -263,6 +299,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_args: None,
         run_args: None,
         wsl_run_args: None,
+        reveal_args: None,
         app: Some("Visual Studio Code - Insiders"),
     },
     Candidate {
@@ -274,6 +311,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_args: None,
         run_args: None,
         wsl_run_args: None,
+        reveal_args: None,
         app: Some("Cursor"),
     },
     Candidate {
@@ -285,6 +323,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_args: None,
         run_args: None,
         wsl_run_args: None,
+        reveal_args: None,
         app: Some("Windsurf"),
     },
     Candidate {
@@ -296,6 +335,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_args: None,
         run_args: None,
         wsl_run_args: None,
+        reveal_args: None,
         app: Some("Zed"),
     },
     Candidate {
@@ -307,6 +347,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_args: None,
         run_args: None,
         wsl_run_args: None,
+        reveal_args: None,
         app: Some("Sublime Text"),
     },
     Candidate {
@@ -318,6 +359,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_args: None,
         run_args: None,
         wsl_run_args: None,
+        reveal_args: None,
         app: Some("IntelliJ IDEA"),
     },
     Candidate {
@@ -329,6 +371,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_args: None,
         run_args: None,
         wsl_run_args: None,
+        reveal_args: None,
         app: Some("WebStorm"),
     },
     Candidate {
@@ -340,6 +383,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_args: None,
         run_args: None,
         wsl_run_args: None,
+        reveal_args: None,
         app: Some("PyCharm"),
     },
     Candidate {
@@ -351,6 +395,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_args: None,
         run_args: None,
         wsl_run_args: None,
+        reveal_args: None,
         app: Some("RustRover"),
     },
     Candidate {
@@ -362,6 +407,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_args: None,
         run_args: None,
         wsl_run_args: None,
+        reveal_args: None,
         app: Some("GoLand"),
     },
     Candidate {
@@ -373,6 +419,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_args: None,
         run_args: None,
         wsl_run_args: None,
+        reveal_args: None,
         app: Some("Fleet"),
     },
     // MAC_TERMINAL_ARGS shared with the seed, as wt shares WT_ARGS:
@@ -386,6 +433,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_args: None,
         run_args: Some(crate::models::target::MAC_TERMINAL_RUN_ARGS),
         wsl_run_args: None,
+        reveal_args: None,
         app: Some("Terminal"),
     },
     Candidate {
@@ -397,6 +445,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_args: None,
         run_args: Some("-a iTerm \"{script}\""),
         wsl_run_args: None,
+        reveal_args: None,
         app: Some("iTerm"),
     },
     // the four emulators a mac and a linux box can both have. each opens
@@ -429,6 +478,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_args: None,
         run_args: Some("--working-directory=\"{path}\" -e bash \"{script}\""),
         wsl_run_args: None,
+        reveal_args: None,
         app: Some("Ghostty"),
     },
     Candidate {
@@ -440,6 +490,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_args: None,
         run_args: Some("start --cwd \"{path}\" -- {command}"),
         wsl_run_args: None,
+        reveal_args: None,
         app: Some("WezTerm"),
     },
     Candidate {
@@ -451,6 +502,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_args: None,
         run_args: Some("--directory \"{path}\" {command}"),
         wsl_run_args: None,
+        reveal_args: None,
         app: Some("kitty"),
     },
     Candidate {
@@ -462,6 +514,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_args: None,
         run_args: Some("--working-directory \"{path}\" -e {command}"),
         wsl_run_args: None,
+        reveal_args: None,
         app: Some("Alacritty"),
     },
     // the linux terminal emulators. none of the rows above match a stock
@@ -486,6 +539,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_args: None,
         run_args: Some("--working-directory \"{path}\" -- bash -lc {command}"),
         wsl_run_args: None,
+        reveal_args: None,
         app: None,
     },
     Candidate {
@@ -498,6 +552,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_args: None,
         run_args: Some("--workdir \"{path}\" -e bash -lc {command}"),
         wsl_run_args: None,
+        reveal_args: None,
         app: None,
     },
     Candidate {
@@ -510,6 +565,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_args: None,
         run_args: Some("--working-directory=\"{path}\" -x bash -lc {command}"),
         wsl_run_args: None,
+        reveal_args: None,
         app: None,
     },
     Candidate {
@@ -522,6 +578,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_args: None,
         run_args: Some("--working-directory=\"{path}\" -e bash -lc {command}"),
         wsl_run_args: None,
+        reveal_args: None,
         app: None,
     },
     Candidate {
@@ -534,6 +591,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_args: None,
         run_args: Some("--working-directory=\"{path}\" bash -lc {command}"),
         wsl_run_args: None,
+        reveal_args: None,
         app: None,
     },
     Candidate {
@@ -546,6 +604,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_args: None,
         run_args: Some("--working-directory=\"{path}\" -x bash -lc {command}"),
         wsl_run_args: None,
+        reveal_args: None,
         app: None,
     },
     Candidate {
@@ -559,6 +618,112 @@ const CANDIDATES: &[Candidate] = &[
         wsl_args: None,
         run_args: Some("-e bash -lc {command}"),
         wsl_run_args: None,
+        reveal_args: None,
+        app: None,
+    },
+    // the file managers. finder is a bundle with no cli, like terminal.app,
+    // so its door is open and both forms are the seed's bytes; -R is
+    // the one reveal verb that selects an item, and nothing on linux has a
+    // portable equivalent (xdg-open refuses -R), so every row below it
+    // leaves reveal_args empty and the caller opens the parent folder.
+    //
+    // xdg-open first, because it is what devgo revealed with before this
+    // was configurable and it honours the desktop's own choice; the named
+    // managers sit under it so a box can be pointed straight at one
+    Candidate {
+        id: "finder",
+        name: "Finder",
+        kind: TargetKind::FileManager,
+        exe: "",
+        args: "-a Finder \"{path}\"",
+        wsl_args: None,
+        run_args: None,
+        wsl_run_args: None,
+        reveal_args: Some("-R \"{path}\""),
+        app: Some("Finder"),
+    },
+    Candidate {
+        id: "xdg-open",
+        name: "Default File Manager",
+        kind: TargetKind::FileManager,
+        exe: "xdg-open",
+        args: "\"{path}\"",
+        wsl_args: None,
+        run_args: None,
+        wsl_run_args: None,
+        reveal_args: None,
+        app: None,
+    },
+    Candidate {
+        id: "nautilus",
+        name: "Files",
+        kind: TargetKind::FileManager,
+        exe: "nautilus",
+        args: "\"{path}\"",
+        wsl_args: None,
+        run_args: None,
+        wsl_run_args: None,
+        reveal_args: None,
+        app: None,
+    },
+    Candidate {
+        id: "dolphin",
+        name: "Dolphin",
+        kind: TargetKind::FileManager,
+        exe: "dolphin",
+        args: "\"{path}\"",
+        wsl_args: None,
+        run_args: None,
+        wsl_run_args: None,
+        reveal_args: None,
+        app: None,
+    },
+    Candidate {
+        id: "nemo",
+        name: "Nemo",
+        kind: TargetKind::FileManager,
+        exe: "nemo",
+        args: "\"{path}\"",
+        wsl_args: None,
+        run_args: None,
+        wsl_run_args: None,
+        reveal_args: None,
+        app: None,
+    },
+    Candidate {
+        id: "thunar",
+        name: "Thunar",
+        kind: TargetKind::FileManager,
+        exe: "thunar",
+        args: "\"{path}\"",
+        wsl_args: None,
+        run_args: None,
+        wsl_run_args: None,
+        reveal_args: None,
+        app: None,
+    },
+    Candidate {
+        id: "caja",
+        name: "Caja",
+        kind: TargetKind::FileManager,
+        exe: "caja",
+        args: "\"{path}\"",
+        wsl_args: None,
+        run_args: None,
+        wsl_run_args: None,
+        reveal_args: None,
+        app: None,
+    },
+    Candidate {
+        id: "pcmanfm",
+        name: "PCManFM",
+        kind: TargetKind::FileManager,
+        exe: "pcmanfm",
+        args: "\"{path}\"",
+        wsl_args: None,
+        run_args: None,
+        wsl_run_args: None,
+        reveal_args: None,
         app: None,
     },
 ];
@@ -597,6 +762,7 @@ fn to_target(c: &Candidate) -> LaunchTarget {
         wsl_executable: None,
         wsl_args_template: c.wsl_args.map(str::to_string),
         run_args_template: c.run_args.map(str::to_string),
+        reveal_args_template: c.reveal_args.map(str::to_string),
         wsl_run_args_template: c.wsl_run_args.map(str::to_string),
     }
 }
@@ -617,6 +783,7 @@ fn distro_target(exe: &str, name: &str, distro: &str) -> LaunchTarget {
             "-d {{distro}} --cd \"{{linux_path}}\" -e {exe} ."
         )),
         run_args_template: None,
+        reveal_args_template: None,
         wsl_run_args_template: None,
     }
 }
@@ -641,6 +808,10 @@ fn app_dirs() -> Vec<PathBuf> {
         PathBuf::from("/Applications"),
         PathBuf::from("/System/Applications"),
         PathBuf::from("/System/Applications/Utilities"),
+        // finder is not an application anyone installs; it lives here, and
+        // without this directory its row could never be found again by
+        // someone who removed it
+        PathBuf::from("/System/Library/CoreServices"),
     ];
     if let Some(home) = std::env::var_os("HOME") {
         dirs.insert(1, PathBuf::from(home).join("Applications"));
@@ -738,12 +909,20 @@ fn bundle_form(c: &Candidate, app: &str, bundle: &Path) -> LaunchTarget {
     }
 
     let inside = bundle.join("Contents").join("MacOS").join(c.exe);
-    if c.kind == TargetKind::Terminal && inside.is_file() {
+    // a file manager is on this side of the rule for the same reason a
+    // terminal is: its second template is a flag on its own cli (-R, or
+    // whatever it spells select), and open -a cannot carry one
+    let has_second_form =
+        matches!(c.kind, TargetKind::Terminal | TargetKind::FileManager);
+    if has_second_form && inside.is_file() {
         target.executable = inside.to_string_lossy().into_owned();
     } else {
         target.executable = "open".to_string();
         target.args_template = format!("-a \"{app}\" \"{{path}}\"");
         target.run_args_template = None;
+        // open -a takes a path and nothing else: no command, and no way to
+        // select the item inside its parent
+        target.reveal_args_template = None;
     }
     target
 }
@@ -795,6 +974,7 @@ pub fn detect(running: &[String]) -> Vec<DetectedTarget> {
                 wsl_executable: None,
                 wsl_args_template: None,
                 run_args_template: None,
+                reveal_args_template: None,
                 wsl_run_args_template: None,
             },
             source: "path".to_string(),
@@ -815,6 +995,7 @@ pub fn detect(running: &[String]) -> Vec<DetectedTarget> {
                     wsl_executable: Some((*exe).to_string()),
                     wsl_args_template: Some(String::new()),
                     run_args_template: None,
+                    reveal_args_template: None,
                     wsl_run_args_template: None,
                 },
                 source: distro.clone(),
@@ -937,9 +1118,23 @@ fn path_lookup(names: &[&str]) -> HashMap<String, String> {
 /// cannot run.
 #[cfg(target_os = "linux")]
 pub fn first_terminal() -> Option<LaunchTarget> {
+    first_on_path(TargetKind::Terminal)
+}
+
+/// The file-manager twin, for the same reason: gnome has nautilus, kde has
+/// dolphin, and xdg-open — the row the table lists first — is what the
+/// desktop itself answers with. A box with none of them gets no row.
+#[cfg(target_os = "linux")]
+pub fn first_file_manager() -> Option<LaunchTarget> {
+    first_on_path(TargetKind::FileManager)
+}
+
+/// The first candidate of a kind whose cli is on PATH, in table order.
+#[cfg(target_os = "linux")]
+fn first_on_path(kind: TargetKind) -> Option<LaunchTarget> {
     let names: Vec<&str> = CANDIDATES
         .iter()
-        .filter(|c| c.kind == TargetKind::Terminal && !c.exe.is_empty())
+        .filter(|c| c.kind == kind && !c.exe.is_empty())
         .map(|c| c.exe)
         .collect();
     let found = path_lookup(&names);
@@ -947,7 +1142,7 @@ pub fn first_terminal() -> Option<LaunchTarget> {
     CANDIDATES
         .iter()
         .find(|c| {
-            c.kind == TargetKind::Terminal
+            c.kind == kind
                 && !c.exe.is_empty()
                 && usable_in_session(c, wayland)
                 && found.contains_key(&c.exe.to_lowercase())
@@ -1083,12 +1278,14 @@ mod tests {
             templates.extend(c.wsl_args.map(str::to_string));
             templates.extend(c.run_args.map(str::to_string));
             templates.extend(c.wsl_run_args.map(str::to_string));
+            templates.extend(c.reveal_args.map(str::to_string));
         }
         for t in crate::models::target::defaults() {
             templates.push(t.args_template);
             templates.extend(t.wsl_args_template);
             templates.extend(t.run_args_template);
             templates.extend(t.wsl_run_args_template);
+            templates.extend(t.reveal_args_template);
         }
 
         for template in &templates {
@@ -1124,6 +1321,7 @@ mod tests {
             assert_eq!(t.wsl_args_template, seed.wsl_args_template);
             assert_eq!(t.run_args_template, seed.run_args_template);
             assert_eq!(t.wsl_run_args_template, seed.wsl_run_args_template);
+            assert_eq!(t.reveal_args_template, seed.reveal_args_template);
         }
     }
 
@@ -1288,6 +1486,7 @@ mod tests {
             wsl_args: None,
             run_args: None,
             wsl_run_args: None,
+            reveal_args: None,
             app: None,
         };
         assert!(!usable_in_session(&foot, false));
@@ -1361,6 +1560,7 @@ mod tests {
             wsl_args: None,
             run_args: None,
             wsl_run_args: None,
+            reveal_args: None,
             app: Some("DevGo Ghost Editor That Does Not Exist"),
         };
         assert!(locate(&ghost, &HashMap::new()).is_none());
@@ -1382,6 +1582,7 @@ mod tests {
             wsl_args: None,
             run_args: Some("--working-directory \"{path}\" -e {command}"),
             wsl_run_args: None,
+            reveal_args: None,
             app: Some("Fake Term"),
         };
         let editor = Candidate {
@@ -1393,6 +1594,7 @@ mod tests {
             wsl_args: None,
             run_args: None,
             wsl_run_args: None,
+            reveal_args: None,
             app: Some("Fake Editor"),
         };
         let no_cli = Candidate {
@@ -1404,6 +1606,7 @@ mod tests {
             wsl_args: None,
             run_args: Some("-a \"Fake Editor\" \"{script}\""),
             wsl_run_args: None,
+            reveal_args: None,
             app: Some("Fake Editor"),
         };
 
@@ -1431,6 +1634,35 @@ mod tests {
             t.run_args_template.as_deref(),
             Some("-a \"Fake Editor\" \"{script}\"")
         );
+
+        // a file manager keeps the binary inside its bundle for the same
+        // reason a terminal does: its select flag is a flag on that cli, and
+        // open -a takes a path and nothing else. where there is no binary to
+        // keep, the reveal form goes with the cli it belonged to rather than
+        // staying behind as a line open would refuse
+        let manager = Candidate {
+            id: "fakefm",
+            name: "Fake Files",
+            kind: TargetKind::FileManager,
+            exe: "faketerm",
+            args: "\"{path}\"",
+            wsl_args: None,
+            run_args: None,
+            wsl_run_args: None,
+            reveal_args: Some("--select \"{path}\""),
+            app: Some("Fake Term"),
+        };
+        let t = bundle_form(&manager, "Fake Term", &root.join("Fake Term.app"));
+        assert_eq!(t.executable, bin.join("faketerm").to_string_lossy());
+        assert_eq!(
+            t.reveal_args_template.as_deref(),
+            Some("--select \"{path}\"")
+        );
+
+        let t = bundle_form(&manager, "Fake Editor", &editor_bundle);
+        assert_eq!(t.executable, "open");
+        assert_eq!(t.args_template, "-a \"Fake Editor\" \"{path}\"");
+        assert!(t.reveal_args_template.is_none(), "open -a cannot select");
 
         let _ = std::fs::remove_dir_all(&root);
     }

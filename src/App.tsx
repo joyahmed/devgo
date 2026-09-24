@@ -564,10 +564,7 @@ const AppInner = () => {
 		if (!done.ok) return toast(`Clone of ${name} failed: ${done.error}`, 'error');
 		toast(`Cloned ${name} into ${lastSegment(parentOf(done.dest))}`, 'success', {
 			label: 'Open',
-			onClick: () =>
-				invoke('reveal_in_explorer', { path: done.dest }).catch(e =>
-					toast(showError(e))
-				)
+			onClick: () => reveal(done.dest)
 		});
 		refresh().catch(() => {});
 	});
@@ -814,15 +811,34 @@ const AppInner = () => {
 				? prettyKeys(shortcutFor('openAgentAlt'))
 				: undefined;
 
-	const revealInExplorer = (p: Project) => {
-		invoke('reveal_in_explorer', { path: p.full_path }).catch(e =>
+	// one door for a project and for a bare workspace path. targetId names a
+	// file manager; none takes the default, which is Explorer or Finder until
+	// the user registers their own
+	const reveal = (path: string, targetId?: string) => {
+		invoke('reveal_in_explorer', { path, targetId: targetId ?? null }).catch(e =>
 			toast(showError(e))
 		);
 	};
-	// a workspace is a bare path; the same door takes it
-	const revealWorkspace = (ws: string) => {
-		invoke('reveal_in_explorer', { path: ws }).catch(e => toast(showError(e)));
-	};
+	const revealInExplorer = (p: Project) => reveal(p.full_path);
+	const revealWorkspace = (ws: string) => reveal(ws);
+
+	// the reveal rows of a menu: one while there is one manager, and one each
+	// once a second is registered — trove beside explorer
+	const revealItems = (path: string, keys?: string): MenuEntry[] =>
+		targets.fileManagers.length > 1
+			? targets.fileManagers.map(t => ({
+					label: `Reveal in ${t.name}`,
+					// the key opens the default one, so only that row claims it
+					hint: t.id === targets.defaults.file_manager ? keys : undefined,
+					onClick: () => reveal(path, t.id)
+				}))
+			: [
+					{
+						label: labelFor('revealExplorer'),
+						hint: keys,
+						onClick: () => reveal(path)
+					}
+				];
 
 	// secure context + user gesture, so no clipboard plugin needed
 	const copyText = async (text: string, label: string) => {
@@ -1274,8 +1290,8 @@ const AppInner = () => {
 			})),
 			{
 				id: 'settings.targets',
-				title: 'Settings: Editors & Terminals',
-				keywords: ['editor', 'terminal', 'vscode'],
+				title: 'Settings: Launch targets',
+				keywords: ['editor', 'terminal', 'agent', 'file manager', 'vscode'],
 				run: () => openSettings('targets')
 			},
 			{
@@ -1697,11 +1713,7 @@ const AppInner = () => {
 				hint: prettyKeys(shortcutFor('refresh')),
 				onClick: handleRefresh
 			},
-			{
-				label: labelFor('revealExplorer'),
-				hint: prettyKeys(shortcutFor('revealWorkspace')),
-				onClick: () => revealWorkspace(ws)
-			},
+			...revealItems(ws, prettyKeys(shortcutFor('revealWorkspace'))),
 			'separator',
 			{
 				label: 'Move up',
@@ -1779,11 +1791,7 @@ const AppInner = () => {
 					]
 				: []),
 			'separator',
-			{
-				label: labelFor('revealExplorer'),
-				hint: hint('revealExplorer'),
-				onClick: () => revealInExplorer(p)
-			},
+			...revealItems(p.full_path, hint('revealExplorer')),
 			{
 				label: labelFor('copyWinPath'),
 				hint: hint('copyWinPath'),

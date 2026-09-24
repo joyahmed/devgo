@@ -92,8 +92,26 @@ pub(crate) fn spawn_raw(exe: &str, args: &str) -> Result<(), AppError> {
 #[cfg(windows)]
 fn shell_command(exe: &str, args: &str) -> Command {
     let mut cmd = Command::new("cmd");
-    cmd.quiet().shell_line(format!("/c {exe} {args}"));
+    cmd.quiet().shell_line(cmd_line(exe, args));
     cmd
+}
+
+/// The line `cmd /c` is handed.
+///
+/// An exe that is a path the user typed can carry a space — `C:\Program
+/// Files\Trove\trove.exe` is where an installer puts things — and cmd reads
+/// the first word as the program, so such a target launched `C:\Program`
+/// and said nothing. Quoting the exe alone is not enough: cmd then strips
+/// the first quote of the line and the last, so the pair round the whole
+/// line is what puts them back. Only for an exe that needs it, so every
+/// line that works today is still the same bytes.
+#[cfg(windows)]
+fn cmd_line(exe: &str, args: &str) -> String {
+    if exe.contains(' ') {
+        format!("/c \"\"{exe}\" {args}\"")
+    } else {
+        format!("/c {exe} {args}")
+    }
 }
 
 // the shell that splits a template's line on a mac: /bin/sh -c, with the
@@ -872,6 +890,65 @@ mod tests {
         }
     }
 
+    /// The one way to register a program no installer puts on PATH is an
+    /// absolute exe path, and the ones installers write have a space in
+    /// them. cmd reads the first word of the line as the program, so
+    /// `C:\Program Files\Trove\trove.exe` launched `C:\Program`, cmd printed
+    /// into a window nobody sees and spawn_raw still returned Ok. The outer
+    /// pair is cmd's own rule: with more than two quotes on the line it
+    /// strips the first and the last, so without it the exe's closing quote
+    /// would be the one eaten.
+    #[cfg(windows)]
+    #[test]
+    fn a_spaced_exe_path_is_quoted_for_cmd() {
+        let line =
+            cmd_line(r"C:\Program Files\Trove\trove.exe", r#""G:\dev\app""#);
+        assert_eq!(
+            line,
+            r#"/c ""C:\Program Files\Trove\trove.exe" "G:\dev\app"""#
+        );
+        // every line that worked before is still the same bytes
+        assert_eq!(
+            cmd_line("code", r#""G:\dev\app""#),
+            r#"/c code "G:\dev\app""#
+        );
+    }
+
+    /// The same line through the real cmd, not a string comparison: cmd's
+    /// quote rule is the whole reason for the outer pair, and only cmd can
+    /// say whether it was read the way this expects. Without it cmd answers
+    /// "'C:\Program' is not recognized", writes the empty file the
+    /// redirection created, and spawn_raw still returns Ok - the silent
+    /// failure a hand-registered Trove would have hit. The empty file is
+    /// what makes the assertion honest: the marker exists either way, and
+    /// only a program that really ran puts bytes in it.
+    #[cfg(windows)]
+    #[test]
+    fn a_spaced_exe_path_really_launches() {
+        let dir = std::env::temp_dir().join("devgo spaced exe");
+        std::fs::create_dir_all(&dir).unwrap();
+        let probe = dir.join("my probe.bat");
+        let marker = dir.join("landed.txt");
+        let _ = std::fs::remove_file(&marker);
+        std::fs::write(&probe, "@echo landed\r\n").unwrap();
+
+        spawn_raw(
+            &probe.to_string_lossy(),
+            &format!("> \"{}\"", marker.display()),
+        )
+        .unwrap();
+
+        let written = || std::fs::metadata(&marker).map_or(0, |m| m.len());
+        for _ in 0..40 {
+            if written() > 0 {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        assert!(written() > 0, "{} is empty", marker.display());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     fn wsl_project(name: &str, workspace: &str) -> Project {
         Project::new(
             name.into(),
@@ -1016,6 +1093,7 @@ mod tests {
                 "{distro} {linux_path} {path} {script}".into(),
             ),
             run_args_template: None,
+            reveal_args_template: None,
             wsl_run_args_template: None,
         };
         let windows_path = r"\\wsl.localhost\Ubuntu\home\user\api";
@@ -1041,6 +1119,7 @@ mod tests {
             wsl_executable: None,
             wsl_args_template: Some(shell_echo_to("{script}", &marker)),
             run_args_template: None,
+            reveal_args_template: None,
             wsl_run_args_template: None,
         };
         let project = wsl_project("placeholder", "work");
@@ -1077,6 +1156,7 @@ mod tests {
             wsl_executable: None,
             wsl_args_template: Some(shell_exit("")),
             run_args_template: None,
+            reveal_args_template: None,
             wsl_run_args_template: None,
         };
         launch_target(&plain, &project, &no_distro(), &tmux_with(&["code"]))
@@ -1127,6 +1207,7 @@ mod tests {
             wsl_executable: None,
             wsl_args_template: None,
             run_args_template: None,
+            reveal_args_template: None,
             wsl_run_args_template: None,
         };
         launch_target(&probe, &project, &no_distro(), &tmux_with(&["code"]))
@@ -1297,6 +1378,7 @@ mod tests {
             wsl_executable: None,
             wsl_args_template: Some(shell_exit(" {script}")),
             run_args_template: None,
+            reveal_args_template: None,
             wsl_run_args_template: None,
         };
         for project in [&here, &there] {
@@ -1794,6 +1876,7 @@ mod tests {
             wsl_executable: None,
             wsl_args_template: None,
             run_args_template: Some("{command}".into()),
+            reveal_args_template: None,
             wsl_run_args_template: Some("-d {distro} {command}".into()),
         };
         let home = local_project("box", "home");
@@ -1848,6 +1931,7 @@ mod tests {
             wsl_executable: None,
             wsl_args_template: None,
             run_args_template: None,
+            reveal_args_template: None,
             wsl_run_args_template: None,
         };
         let project = windows_project("placeholder", "work");
@@ -1911,6 +1995,7 @@ mod tests {
             wsl_executable: None,
             wsl_args_template: None,
             run_args_template: None,
+            reveal_args_template: None,
             wsl_run_args_template: None,
         };
         let project = local_project("env-scrub", "work");
@@ -1969,6 +2054,7 @@ mod tests {
             wsl_executable: None,
             wsl_args_template: None,
             run_args_template: None,
+            reveal_args_template: None,
             wsl_run_args_template: None,
         };
         launch_target(&plain, &project, &no_distro(), &tmux_with(&["code"]))
@@ -2014,6 +2100,7 @@ mod tests {
             wsl_executable: None,
             wsl_args_template: None,
             run_args_template: None,
+            reveal_args_template: None,
             wsl_run_args_template: None,
         };
         let project = local_project("project", "some");
@@ -2213,6 +2300,7 @@ mod tests {
             wsl_executable: None,
             wsl_args_template: None,
             run_args_template: None,
+            reveal_args_template: None,
             wsl_run_args_template: None,
         };
 
@@ -2413,6 +2501,7 @@ mod tests {
             wsl_executable: None,
             wsl_args_template: None,
             run_args_template: None,
+            reveal_args_template: None,
             wsl_run_args_template: None,
         };
 
@@ -2485,6 +2574,7 @@ mod tests {
             wsl_args_template: None,
             // the terminal.app shape: the file is the whole command line
             run_args_template: Some("-c \"{script}\"".into()),
+            reveal_args_template: None,
             wsl_run_args_template: None,
         };
         let project = Project::new(
@@ -2548,6 +2638,7 @@ mod tests {
             wsl_executable: None,
             wsl_args_template: None,
             run_args_template: Some("-c \"{command}\"".into()),
+            reveal_args_template: None,
             wsl_run_args_template: None,
         };
         launch_with_command(&terminal, &project, &no_distro(), "exit 0")

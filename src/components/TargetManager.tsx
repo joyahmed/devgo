@@ -2,7 +2,16 @@ import { useState } from 'react';
 import { isMac, isWindows } from '../platform';
 import Button from './Button';
 
-const KINDS: TargetKind[] = ['editor', 'terminal', 'agent'];
+const KINDS: TargetKind[] = ['editor', 'terminal', 'agent', 'file_manager'];
+
+// what the tabs and the headings call each kind: the wire name is snake_case
+// and nobody writes a button label that way
+const LABELS: Record<TargetKind, string> = {
+	editor: 'editor',
+	terminal: 'terminal',
+	agent: 'agent',
+	file_manager: 'file manager'
+};
 
 const BLANK: TargetDraft = {
 	name: '',
@@ -11,32 +20,9 @@ const BLANK: TargetDraft = {
 	wsl_executable: '',
 	wsl_args_template: '',
 	run_args_template: '',
-	wsl_run_args_template: ''
+	wsl_run_args_template: '',
+	reveal_args_template: ''
 };
-
-// wsl is a windows story: the wsl half of a target has nothing to describe
-// on a mac or a linux box, and the fields stay in the draft (blank) so the
-// struct the backend gets is one shape
-const FIELDS: { key: keyof TargetDraft; placeholder: string }[] = [
-	{ key: 'name', placeholder: 'Name — e.g. Cursor' },
-	{ key: 'executable', placeholder: 'Executable — e.g. cursor' },
-	{
-		key: 'args_template',
-		placeholder: isWindows ? 'Windows args — e.g. "{path}"' : 'Args — e.g. "{path}"'
-	},
-	...(isWindows
-		? [
-				{
-					key: 'wsl_executable' as const,
-					placeholder: 'WSL executable — blank if it speaks WSL itself'
-				},
-				{
-					key: 'wsl_args_template' as const,
-					placeholder: 'WSL args — blank means it cannot open WSL projects'
-				}
-			]
-		: [])
-];
 
 // terminals only: blank means the target cannot run dev scripts
 const RUN_FIELDS: { key: keyof TargetDraft; placeholder: string }[] = [
@@ -54,6 +40,59 @@ const RUN_FIELDS: { key: keyof TargetDraft; placeholder: string }[] = [
 				}
 			]
 		: [])
+];
+
+// file managers only: blank means this one cannot select an item inside its
+// parent, and the folder itself opens
+const REVEAL_FIELDS: { key: keyof TargetDraft; placeholder: string }[] = [
+	{
+		key: 'reveal_args_template',
+		placeholder: isMac
+			? 'Reveal args — the item selected in its parent, e.g. -R "{path}"'
+			: 'Reveal args — the item selected in its parent; blank opens the folder'
+	}
+];
+
+// the form for one kind. wsl is a windows story: the wsl half has nothing
+// to describe on a mac or a linux box, and the fields stay in the draft
+// (blank) so the struct the backend gets is one shape. a file manager has
+// no wsl half on any platform — a WSL project is revealed through its UNC
+// path, which is a windows path already — and it is the one kind usually
+// registered by its full exe path, because no installer puts one on PATH
+const fieldsFor = (
+	kind: TargetKind
+): { key: keyof TargetDraft; placeholder: string }[] => [
+	{
+		key: 'name',
+		placeholder: kind === 'file_manager' ? 'Name — e.g. Trove' : 'Name — e.g. Cursor'
+	},
+	{
+		key: 'executable',
+		placeholder:
+			kind === 'file_manager'
+				? isWindows
+					? 'Executable — a full path, e.g. C:\\Program Files\\Trove\\trove.exe'
+					: 'Executable — a command on PATH, or a full path'
+				: 'Executable — e.g. cursor'
+	},
+	{
+		key: 'args_template',
+		placeholder: isWindows ? 'Windows args — e.g. "{path}"' : 'Args — e.g. "{path}"'
+	},
+	...(isWindows && kind !== 'file_manager'
+		? [
+				{
+					key: 'wsl_executable' as const,
+					placeholder: 'WSL executable — blank if it speaks WSL itself'
+				},
+				{
+					key: 'wsl_args_template' as const,
+					placeholder: 'WSL args — blank means it cannot open WSL projects'
+				}
+			]
+		: []),
+	...(kind === 'terminal' ? RUN_FIELDS : []),
+	...(kind === 'file_manager' ? REVEAL_FIELDS : [])
 ];
 
 const PLACEHOLDERS = [
@@ -89,8 +128,11 @@ const TargetList = ({
 			// template is the target saying which half it cannot open. only
 			// windows has two halves, so only there do they say anything — on
 			// a mac or a linux box every row would be badged for a filesystem
-			// the machine does not have
+			// the machine does not have. an agent and a file manager have no
+			// halves to badge either: one is a command the terminal runs, the
+			// other takes a WSL project's UNC path as it stands
 			const agent = t.kind === 'agent';
+			const crosses = t.kind === 'editor' || t.kind === 'terminal';
 			const badges = [
 				{
 					show: t.id === defaultId,
@@ -98,13 +140,13 @@ const TargetList = ({
 					className: 'text-accent border-accent/40'
 				},
 				{
-					show: isWindows && !agent && !t.wsl_args_template,
+					show: isWindows && crosses && !t.wsl_args_template,
 					label: 'windows only',
 					className: 'text-text-muted border-border-strong',
 					title: 'No WSL configuration — this target cannot open WSL projects'
 				},
 				{
-					show: isWindows && !agent && !t.args_template,
+					show: isWindows && crosses && !t.args_template,
 					label: 'wsl only',
 					className: 'text-text-muted border-border-strong',
 					title: 'Runs inside a distro — this target cannot open Windows projects'
@@ -176,6 +218,7 @@ const TargetManager = ({
 	editors,
 	terminals,
 	agents,
+	fileManagers,
 	defaults,
 	onAdd,
 	onDetect,
@@ -200,7 +243,12 @@ const TargetManager = ({
 	const lists = [
 		{ kind: 'editor' as TargetKind, label: 'Editors', items: editors },
 		{ kind: 'terminal' as TargetKind, label: 'Terminals', items: terminals },
-		{ kind: 'agent' as TargetKind, label: 'Agents', items: agents }
+		{ kind: 'agent' as TargetKind, label: 'Agents', items: agents },
+		{
+			kind: 'file_manager' as TargetKind,
+			label: 'File managers',
+			items: fileManagers
+		}
 	];
 
 	const close = () => {
@@ -231,10 +279,10 @@ const TargetManager = ({
 	const scanHint =
 		found === null
 			? isMac
-				? 'Looks for installed editors, terminals and coding agents (Claude Code, Codex, OpenCode, Gemini CLI) on this Mac: on your login PATH, and in /Applications. An agent opens in your default terminal, in the project directory.'
+				? 'Looks for installed editors, terminals, file managers and coding agents (Claude Code, Codex, OpenCode, Gemini CLI) on this Mac: on your login PATH, and in /Applications. An agent opens in your default terminal, in the project directory.'
 				: isWindows
-					? 'Looks for installed editors, terminals and coding agents (Claude Code, Codex, OpenCode, Gemini CLI) on PATH, and for command-line editors and agents inside distros that are already running. It never starts a distro. An agent opens in your default terminal, in the project directory.'
-					: 'Looks for installed editors, terminals and coding agents (Claude Code, Codex, OpenCode, Gemini CLI) on your login PATH. An agent opens in your default terminal, in the project directory.'
+					? 'Looks for installed editors, terminals, file managers and coding agents (Claude Code, Codex, OpenCode, Gemini CLI) on PATH, and for command-line editors and agents inside distros that are already running. It never starts a distro. An agent opens in your default terminal, in the project directory.'
+					: 'Looks for installed editors, terminals, file managers and coding agents (Claude Code, Codex, OpenCode, Gemini CLI) on your login PATH. An agent opens in your default terminal, in the project directory.'
 			: found.length === 0
 				? 'Nothing new: everything found is already registered.'
 				: null;
@@ -256,7 +304,8 @@ const TargetManager = ({
 				wsl_executable: draft.wsl_executable.trim() || null,
 				wsl_args_template: draft.wsl_args_template.trim() || null,
 				run_args_template: draft.run_args_template.trim() || null,
-				wsl_run_args_template: draft.wsl_run_args_template.trim() || null
+				wsl_run_args_template: draft.wsl_run_args_template.trim() || null,
+				reveal_args_template: draft.reveal_args_template.trim() || null
 			})
 		).then(close);
 	};
@@ -339,12 +388,12 @@ const TargetManager = ({
 								aria-current={kind === k ? 'page' : undefined}
 								onClick={() => setKind(k)}
 							>
-								{k}
+								{LABELS[k]}
 							</Button>
 						))}
 					</div>
 
-					{[...FIELDS, ...(kind === 'terminal' ? RUN_FIELDS : [])].map(({ key, placeholder }) => (
+					{fieldsFor(kind).map(({ key, placeholder }) => (
 						<input
 							key={key}
 							className={field}
@@ -372,7 +421,7 @@ const TargetManager = ({
 				</div>
 			) : (
 				<Button className='self-start' onClick={() => setOpen(true)}>
-					Add editor or terminal
+					Add a target
 				</Button>
 			)}
 		</div>

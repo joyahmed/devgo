@@ -24,8 +24,13 @@ impl TargetStore {
         fs::create_dir_all(&app_data_dir)?;
 
         let file_path = app_data_dir.join("targets.json");
+        // whether this file was written by a version that knows what a file
+        // manager is: every row serialises reveal_args_template, so its
+        // absence dates the whole file. see adopt_file_manager_row
+        let mut knows_file_managers = true;
         let targets: Vec<LaunchTarget> = if file_path.exists() {
             let data = fs::read_to_string(&file_path)?;
+            knows_file_managers = data.contains("\"reveal_args_template\"");
             // a corrupt file goes to .bak, not under the next save
             super::config_io::parse_or_backup(&file_path, &data)
         } else {
@@ -50,7 +55,47 @@ impl TargetStore {
         store.adopt_mac_ghostty_bundle()?;
         store.adopt_linux_session_script()?;
         store.adopt_linux_terminal_row()?;
+        store.adopt_file_manager_row(knows_file_managers)?;
         Ok(store)
+    }
+
+    /// Reveal used to be a program name written into commands.rs; it is a
+    /// registered target now, so a registry from before that carries no row
+    /// of the kind and the reveal key would answer "no such target" on every
+    /// machine that already has DevGo. This seeds the platform's own row
+    /// into such a file, once.
+    ///
+    /// `knew` is how once is enforced, and it is read off the file rather
+    /// than kept anywhere: every row this version writes carries
+    /// `reveal_args_template`, so a file without the field predates the kind
+    /// and a file with it has been here before. That matters because zero
+    /// file managers is a legal registry - `remove` allows the last one to
+    /// go - and a migration that could not tell the two apart would put
+    /// Explorer back on the next launch, silently undoing the removal.
+    fn adopt_file_manager_row(&mut self, knew: bool) -> Result<(), AppError> {
+        if knew
+            || self
+                .targets
+                .iter()
+                .any(|t| t.kind == TargetKind::FileManager)
+        {
+            return Ok(());
+        }
+        // a linux box with no manager on PATH seeds none, and gets none
+        let Some(seed) = defaults()
+            .into_iter()
+            .find(|t| t.kind == TargetKind::FileManager)
+            .filter(|s| !self.targets.iter().any(|t| t.id == s.id))
+        else {
+            return Ok(());
+        };
+        if self.file_path.exists() {
+            let backup =
+                format!("{}.pre-file-manager", self.file_path.display());
+            fs::copy(&self.file_path, backup)?;
+        }
+        self.targets.push(seed);
+        self.save()
     }
 
     /// defaults() is read once, on first run, so a changed wt template
@@ -322,15 +367,21 @@ impl TargetStore {
     }
 
     /// Removing the last target of a kind is refused rather than silently
-    /// leaving a button that can never do anything.
+    /// leaving a button that can never do anything — for the two kinds a
+    /// machine must have.
     pub fn remove(&mut self, id: &str) -> Result<(), AppError> {
         let Some(pos) = self.targets.iter().position(|t| t.id == id) else {
             return Err(AppError::TargetNotFound(id.to_string()));
         };
         let kind = self.targets[pos].kind;
-        // zero agents is a valid machine; zero editors or terminals is a
-        // launcher with a button that can never do anything
-        if kind != TargetKind::Agent
+        // zero agents is a valid machine, and so is zero file managers: a
+        // linux box with neither nautilus nor xdg-open seeds no row at all,
+        // so the rule could only ever bind the platforms that happen to
+        // seed one. zero editors or terminals is a different thing - a
+        // launcher whose main button can never do anything
+        let optional =
+            matches!(kind, TargetKind::Agent | TargetKind::FileManager);
+        if !optional
             && self.targets.iter().filter(|t| t.kind == kind).count() == 1
         {
             return Err(AppError::LastTarget(self.targets[pos].name.clone()));
@@ -437,6 +488,7 @@ mod tests {
             wsl_executable: None,
             wsl_args_template: None,
             run_args_template: None,
+            reveal_args_template: None,
             wsl_run_args_template: None,
         }
     }
@@ -493,6 +545,63 @@ mod tests {
             s.remove("vscode").is_ok(),
             "second editor makes the first removable"
         );
+    }
+
+    /// An install from before file managers were a kind: its rows carry no
+    /// reveal_args_template at all, which is what dates the file, and the
+    /// platform's own manager is added once - without it the reveal key
+    /// would answer "no such target" on every machine that already has
+    /// DevGo. A registry this version wrote is left as it is, even when the
+    /// user has removed every file manager from it: that is a choice, and a
+    /// migration that could not tell it from a gap would undo it silently on
+    /// the next launch.
+    #[test]
+    fn an_old_registry_gains_a_file_manager_and_keeps_a_removal() {
+        let dir = std::env::temp_dir().join("devgo-targets-fm-adopt");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(
+            dir.join("targets.json"),
+            r#"[{"id":"vscode","name":"VS Code","kind":"editor",
+                 "executable":"code","args_template":"\"{path}\"",
+                 "wsl_executable":null,"wsl_args_template":null,
+                 "run_args_template":null,"wsl_run_args_template":null}]"#,
+        )
+        .unwrap();
+
+        let seeds_one =
+            defaults().iter().any(|t| t.kind == TargetKind::FileManager);
+        let mut store = TargetStore::new(dir.clone()).unwrap();
+        assert_eq!(
+            store.first_of(TargetKind::FileManager).is_some(),
+            seeds_one,
+            "the platform's own row, or none where none is seeded"
+        );
+
+        if let Some(fm) = store.first_of(TargetKind::FileManager) {
+            store.remove(&fm.id).unwrap();
+        }
+        let again = TargetStore::new(dir).unwrap();
+        assert!(
+            again.first_of(TargetKind::FileManager).is_none(),
+            "the file it wrote carries the field, so nothing is put back"
+        );
+    }
+
+    /// Agents and file managers are the two optional kinds: a linux box
+    /// with neither an emulator nor a manager on PATH seeds neither row, so
+    /// the rule could only ever bind the platforms that happen to seed one.
+    /// Nothing has a dead button either way - the reveal item says what is
+    /// missing at the moment it is used.
+    #[test]
+    fn the_last_file_manager_can_be_removed() {
+        let mut s = store("last-fm");
+        let Some(fm) = s.first_of(TargetKind::FileManager) else {
+            return; // a linux box with none seeded: nothing to remove
+        };
+        assert_eq!(count_of(&s, TargetKind::FileManager), 1);
+        assert!(s.remove(&fm.id).is_ok(), "the last one is the user's call");
+        assert_eq!(count_of(&s, TargetKind::FileManager), 0);
     }
 
     /// A targets.json as every install before psmux wrote it. The other
@@ -750,6 +859,7 @@ mod tests {
             wsl_executable: None,
             wsl_args_template: None,
             run_args_template: None,
+            reveal_args_template: None,
             wsl_run_args_template: None,
         }
     }

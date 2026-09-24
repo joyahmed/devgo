@@ -1082,13 +1082,14 @@ const Settings = ({
 		},
 		{
 			id: 'targets',
-			label: 'Editors & Terminals',
+			label: 'Launch targets',
 			render: () => (
 				<TargetManager
 					{...{
 						editors: targets.editors,
 						terminals: targets.terminals,
 						agents: targets.agents,
+						fileManagers: targets.fileManagers,
 						defaults: targets.defaults,
 						onAdd: targets.addTarget,
 						onDetect: targets.detect,

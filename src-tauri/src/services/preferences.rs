@@ -169,6 +169,8 @@ pub struct Preferences {
     #[serde(default)]
     pub default_agent: Option<String>,
     #[serde(default)]
+    pub default_file_manager: Option<String>,
+    #[serde(default)]
     pub scan_config: ScanConfig,
     /// Absent means the three windows that were hardcoded before this was
     /// configurable. `serde(default)` again keeps an older prefs.json out of
@@ -405,6 +407,7 @@ impl PreferencesStore {
             TargetKind::Editor => self.prefs.default_editor.clone(),
             TargetKind::Terminal => self.prefs.default_terminal.clone(),
             TargetKind::Agent => self.prefs.default_agent.clone(),
+            TargetKind::FileManager => self.prefs.default_file_manager.clone(),
         }
     }
 
@@ -422,6 +425,9 @@ impl PreferencesStore {
             }
             TargetKind::Agent => {
                 self.prefs.default_agent = Some(id.to_string())
+            }
+            TargetKind::FileManager => {
+                self.prefs.default_file_manager = Some(id.to_string())
             }
         }
         self.save()

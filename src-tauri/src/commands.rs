@@ -131,54 +131,48 @@ fn open_in_browser(url: &str) -> Result<(), AppError> {
     Ok(())
 }
 
-/// What this platform's file manager is handed to show a path: Explorer
-/// on Windows, Finder on a Mac, xdg-open's handler on Linux.
+/// The command line that shows a path in a file manager.
 ///
-/// `select` is Finder's -R, open the parent with the item highlighted,
-/// which is what reveal means there. Explorer has no such switch a UNC
-/// path survives, so on Windows both shapes open the folder itself; Linux
-/// has no portable "select this item" at all — xdg-open refuses -R — so a
-/// select opens the containing folder. Pure, so each platform's line is
-/// pinned by a test rather than by a spawn.
-fn reveal_command(path: &str, select: bool) -> (&'static str, Vec<String>) {
-    #[cfg(windows)]
-    {
-        let _ = select;
-        ("explorer", vec![path.to_string()])
+/// `select` asks for the item highlighted inside its parent, which is what
+/// reveal means; a target with no reveal template has no verb for it - no
+/// Linux file manager does, and Explorer's /select does not survive the UNC
+/// path a WSL project has - so it opens the containing folder instead, the
+/// closest honest thing. Pure, so each shape is pinned by a test rather
+/// than by a spawn.
+fn reveal_line(
+    target: &LaunchTarget,
+    path: &str,
+    select: bool,
+) -> Option<(String, String)> {
+    if !select {
+        return target.resolve(path, None);
     }
-    #[cfg(target_os = "macos")]
-    {
-        let mut args = Vec::new();
-        if select {
-            args.push("-R".to_string());
-        }
-        args.push(path.to_string());
-        (OPENER, args)
-    }
-    #[cfg(target_os = "linux")]
-    {
-        let target = if select {
-            std::path::Path::new(path)
-                .parent()
-                .map(|p| p.to_string_lossy().into_owned())
-                .unwrap_or_else(|| path.to_string())
-        } else {
-            path.to_string()
-        };
-        (OPENER, vec![target])
-    }
+    target.resolve_reveal(path).or_else(|| {
+        let parent = std::path::Path::new(path)
+            .parent()
+            .map(|p| p.to_string_lossy().into_owned())
+            .unwrap_or_else(|| path.to_string());
+        target.resolve(&parent, None)
+    })
 }
 
-/// Show a path in the file manager. Not awaited: explorer.exe exits 1
-/// even on success, so only a failure to launch the file manager at all
-/// is an error.
-fn reveal_path(path: &str, select: bool) -> Result<(), AppError> {
-    let (program, args) = reveal_command(path, select);
-    std::process::Command::new(program)
-        .args(&args)
-        .spawn()
-        .map_err(|e| AppError::LaunchFailed(format!("{program}: {e}")))?;
-    Ok(())
+/// Show a path in the file manager: the registered one, not a program name
+/// baked in here. Not awaited: explorer.exe exits 1 even on success, so
+/// only a failure to launch the file manager at all is an error.
+fn reveal_path(
+    state: &AppState,
+    path: &str,
+    select: bool,
+    target_id: Option<String>,
+) -> Result<(), AppError> {
+    let target = resolve_target(state, TargetKind::FileManager, target_id)?;
+    let (exe, args) = reveal_line(&target, path, select).ok_or_else(|| {
+        AppError::ActionRefused(format!(
+            "{} has no template for opening a folder",
+            target.name
+        ))
+    })?;
+    launcher::spawn_raw(&exe, &args)
 }
 
 /// Milliseconds since the process started: the startup budget's clock.
@@ -654,7 +648,7 @@ fn resolve_target(
     }
     store
         .first_of(kind)
-        .ok_or_else(|| AppError::TargetNotFound(format!("{kind:?}")))
+        .ok_or_else(|| AppError::TargetNotFound(kind.wire().to_string()))
 }
 
 #[tauri::command]
@@ -813,24 +807,26 @@ pub fn set_default_target(
 /// The id that would actually launch for each kind — the same fallback chain
 /// as `resolve_target`, so the UI's "default" badge cannot disagree with the
 /// button.
+///
+/// The key is `TargetKind::wire`, the name serde gives the kind, not the
+/// variant's Debug spelling: those agreed only while every kind was one
+/// word, and `file_manager` is where they part.
 #[tauri::command]
 pub fn get_default_targets(
     state: State<AppState>,
 ) -> Result<Vec<(String, String)>, AppError> {
     let prefs = state.pref_store.lock().map_err(lock_err)?;
     let store = state.target_store.lock().map_err(lock_err)?;
-    Ok(
-        [TargetKind::Editor, TargetKind::Terminal, TargetKind::Agent]
-            .into_iter()
-            .filter_map(|k| {
-                let id = prefs
-                    .default_target(k)
-                    .filter(|id| store.get(id).is_some())
-                    .or_else(|| store.first_of(k).map(|t| t.id))?;
-                Some((format!("{k:?}").to_lowercase(), id))
-            })
-            .collect(),
-    )
+    Ok(TargetKind::ALL
+        .into_iter()
+        .filter_map(|k| {
+            let id = prefs
+                .default_target(k)
+                .filter(|id| store.get(id).is_some())
+                .or_else(|| store.first_of(k).map(|t| t.id))?;
+            Some((k.wire().to_string(), id))
+        })
+        .collect())
 }
 
 /// Read git state for the current project list.
@@ -1744,6 +1740,14 @@ pub struct PortableConfig {
     pub targets: Vec<LaunchTarget>,
     pub default_editor: Option<String>,
     pub default_terminal: Option<String>,
+    /// The two kinds that arrived later, `serde(default)` for the same
+    /// reason scan_config has it. A default nobody wrote down here travels
+    /// in neither direction, silently, so every kind is listed and
+    /// `defaults()` is what import reads - one place to add the next one.
+    #[serde(default)]
+    pub default_agent: Option<String>,
+    #[serde(default)]
+    pub default_file_manager: Option<String>,
     pub summon_hotkey: String,
     // a missing field is a hard parse error, so a file exported before a
     // field existed would not import at all; scan_config had that bug since
@@ -1752,6 +1756,18 @@ pub struct PortableConfig {
     pub scan_config: crate::services::preferences::ScanConfig,
     #[serde(default)]
     pub tmux_config: crate::services::preferences::TmuxConfig,
+}
+
+impl PortableConfig {
+    /// Every default the file carries, paired with its kind.
+    fn defaults(&self) -> [(TargetKind, Option<String>); 4] {
+        [
+            (TargetKind::Editor, self.default_editor.clone()),
+            (TargetKind::Terminal, self.default_terminal.clone()),
+            (TargetKind::Agent, self.default_agent.clone()),
+            (TargetKind::FileManager, self.default_file_manager.clone()),
+        ]
+    }
 }
 
 // the backend writes the file; the frontend only picks where
@@ -1769,6 +1785,8 @@ pub fn export_config_to_file(
             targets,
             default_editor: prefs.default_target(TargetKind::Editor),
             default_terminal: prefs.default_target(TargetKind::Terminal),
+            default_agent: prefs.default_target(TargetKind::Agent),
+            default_file_manager: prefs.default_target(TargetKind::FileManager),
             summon_hotkey: prefs.summon_hotkey(),
             scan_config: prefs.scan_config(),
             tmux_config: prefs.tmux_config(),
@@ -1796,7 +1814,8 @@ pub fn import_config_from_file(
             let _ = ws.add(w);
         }
     }
-    let (editor, terminal) = {
+    let wanted = config.defaults();
+    let defaults: Vec<(TargetKind, String)> = {
         let mut store = state.target_store.lock().map_err(lock_err)?;
         for t in config.targets {
             if store.get(&t.id).is_none() {
@@ -1804,10 +1823,12 @@ pub fn import_config_from_file(
             }
         }
         // a default only for a target that exists here now
-        (
-            config.default_editor.filter(|id| store.get(id).is_some()),
-            config.default_terminal.filter(|id| store.get(id).is_some()),
-        )
+        wanted
+            .into_iter()
+            .filter_map(|(kind, id)| {
+                Some((kind, id.filter(|id| store.get(id).is_some())?))
+            })
+            .collect()
     };
     {
         let mut prefs = state.pref_store.lock().map_err(lock_err)?;
@@ -1819,14 +1840,9 @@ pub fn import_config_from_file(
         prefs
             .set_tmux_config(config.tmux_config)
             .map_err(AppError::Lock)?;
-        if let Some(id) = editor {
+        for (kind, id) in defaults {
             prefs
-                .set_default_target(TargetKind::Editor, &id)
-                .map_err(AppError::Lock)?;
-        }
-        if let Some(id) = terminal {
-            prefs
-                .set_default_target(TargetKind::Terminal, &id)
+                .set_default_target(kind, &id)
                 .map_err(AppError::Lock)?;
         }
     }
@@ -1857,13 +1873,19 @@ pub fn reset_cache(
     Ok(())
 }
 
-/// Open the folder in the file manager: Explorer, or Finder with the
-/// folder selected in its parent. The command keeps its name; the frontend
-/// relabels the button, not the door. Works for WSL projects too: the UNC
-/// path is what Explorer wants. Boots the distro, but the user asked.
+/// Open the folder in a file manager, with it selected in its parent where
+/// that is a thing the manager can do. The command keeps its name; the
+/// frontend relabels the button, not the door. `target_id` picks one file
+/// manager - the menu offers each registered one - and None takes the
+/// default. Works for WSL projects too: the UNC path is what Explorer
+/// wants. Boots the distro, but the user asked.
 #[tauri::command]
-pub fn reveal_in_explorer(path: String) -> Result<(), AppError> {
-    reveal_path(&path, true)
+pub fn reveal_in_explorer(
+    path: String,
+    target_id: Option<String>,
+    state: State<AppState>,
+) -> Result<(), AppError> {
+    reveal_path(&state, &path, true, target_id)
 }
 
 /// The path as WSL sees it. The Windows path is just full_path, which the
@@ -2051,8 +2073,10 @@ pub fn get_app_data_dir(state: State<AppState>) -> String {
 /// The same folder, in the file manager.
 #[tauri::command]
 pub fn reveal_app_data_dir(state: State<AppState>) -> Result<(), AppError> {
-    let dir = get_app_data_dir(state);
-    reveal_path(&dir, false)
+    // the folder itself, never selected in its parent: nobody asked to see
+    // where roaming keeps its subdirectories
+    let dir = get_app_data_dir(state.clone());
+    reveal_path(&state, &dir, false, None)
 }
 
 /// Open a repo in the browser: the repo root, or one branch of it.
@@ -2677,47 +2701,136 @@ mod tests {
         )
     }
 
+    /// A portable config carries one default per kind, and `defaults()` is
+    /// the single list import walks: a kind missing from it travels in
+    /// neither direction and nothing says so. The agent's default did
+    /// exactly that until the file manager arrived beside it.
+    #[test]
+    fn a_portable_config_round_trips_every_default() {
+        let config = PortableConfig {
+            workspaces: vec![r"G:\01_tauri".to_string()],
+            targets: crate::models::target::defaults(),
+            default_editor: Some("cursor".into()),
+            default_terminal: Some("wt".into()),
+            default_agent: Some("claude".into()),
+            default_file_manager: Some("trove".into()),
+            summon_hotkey: "Alt+Space".into(),
+            scan_config: Default::default(),
+            tmux_config: Default::default(),
+        };
+        let json = serde_json::to_string(&config).unwrap();
+        let back: PortableConfig = serde_json::from_str(&json).unwrap();
+        assert_eq!(
+            back.defaults(),
+            [
+                (TargetKind::Editor, Some("cursor".to_string())),
+                (TargetKind::Terminal, Some("wt".to_string())),
+                (TargetKind::Agent, Some("claude".to_string())),
+                (TargetKind::FileManager, Some("trove".to_string())),
+            ]
+        );
+        let kinds: Vec<TargetKind> =
+            back.defaults().into_iter().map(|(k, _)| k).collect();
+        assert_eq!(kinds, TargetKind::ALL.to_vec(), "every kind travels");
+
+        // and a file exported before the two later fields still imports,
+        // which is why they carry serde(default)
+        let old: PortableConfig = serde_json::from_str(
+            r#"{"workspaces":[],"targets":[],"default_editor":"vscode",
+                "default_terminal":null,"summon_hotkey":"Alt+Space"}"#,
+        )
+        .unwrap();
+        assert_eq!(old.default_editor.as_deref(), Some("vscode"));
+        assert_eq!(old.default_file_manager, None);
+        assert_eq!(old.default_agent, None);
+    }
+
+    // the seeded file manager of this platform, which is what reveal goes
+    // through now instead of a program name written into this file. None
+    // only on a linux box with no manager on PATH at all, the same machine
+    // that is seeded no terminal
+    fn file_manager() -> Option<LaunchTarget> {
+        crate::models::target::defaults()
+            .into_iter()
+            .find(|t| t.kind == TargetKind::FileManager)
+    }
+
     // the reveal twin of the seeded-terminal regression in target_store:
-    // this was cfg(not(windows)) until 2026-09-25, so a linux box ran
+    // reveal was cfg(not(windows)) until 2026-09-25, so a linux box ran
     // `open -R <path>`, and `open` on linux is xdg-open, which rejects -R
-    // and left the reveal key doing nothing at all. it must be xdg-open,
-    // and never a switch xdg-open refuses
+    // and left the reveal key doing nothing at all. it must never be a
+    // switch xdg-open refuses, and the empty reveal template is how that
+    // is said now: no linux manager can select an item, so the select
+    // shape opens the containing folder
     #[cfg(target_os = "linux")]
     #[test]
-    fn linux_reveals_through_xdg_open_and_never_with_r() {
-        let (program, args) = reveal_command("/home/user/work/app", true);
-        assert_eq!(program, "xdg-open");
+    fn linux_reveals_through_its_file_manager_and_never_with_r() {
+        let Some(fm) = file_manager() else {
+            return; // no manager on PATH: the box is seeded no row
+        };
+        assert_ne!(fm.executable, "open", "the mac door");
+        assert!(fm.reveal_args_template.is_none(), "no select verb here");
+
+        let (program, args) =
+            reveal_line(&fm, "/home/user/work/app", true).unwrap();
+        assert_eq!(program, fm.executable);
         assert_eq!(
-            args,
-            vec!["/home/user/work".to_string()],
+            args, "\"/home/user/work\"",
             "the containing folder: linux cannot highlight an item"
         );
-        let (program, args) = reveal_command("/home/user/work/app", false);
-        assert_eq!(program, "xdg-open");
-        assert_eq!(args, vec!["/home/user/work/app".to_string()]);
+        let (_, args) = reveal_line(&fm, "/home/user/work/app", false).unwrap();
+        assert_eq!(args, "\"/home/user/work/app\"");
     }
 
     // -R belongs to finder alone, and only to the select shape
     #[cfg(target_os = "macos")]
     #[test]
     fn a_mac_reveals_with_open_dash_r() {
-        let (program, args) = reveal_command("/Users/user/app", true);
+        let fm = file_manager().expect("a mac is seeded finder");
+        let (program, args) =
+            reveal_line(&fm, "/Users/user/app", true).unwrap();
         assert_eq!(program, "open");
-        assert_eq!(args, vec!["-R".to_string(), "/Users/user/app".to_string()]);
-        let (_, args) = reveal_command("/Users/user/app", false);
-        assert_eq!(args, vec!["/Users/user/app".to_string()]);
+        assert_eq!(args, "-R \"/Users/user/app\"");
+        let (_, args) = reveal_line(&fm, "/Users/user/app", false).unwrap();
+        assert_eq!(args, "-a Finder \"/Users/user/app\"");
     }
 
     // explorer has no select switch a unc path survives, so both shapes
-    // open the folder itself
+    // open the folder itself - and the path stays inside the quotes the
+    // template puts round it, which the old bare Command::args did for it
     #[cfg(windows)]
     #[test]
     fn windows_reveals_the_folder_itself_either_way() {
-        let unc = r"\\wsl.localhost\Ubuntu\home\user\app";
-        let (program, args) = reveal_command(unc, true);
+        let fm = file_manager().expect("windows is seeded explorer");
+        let unc = r"\\wsl.localhost\Ubuntu\home\user\my app";
+        let (program, args) = reveal_line(&fm, unc, true).unwrap();
         assert_eq!(program, "explorer");
-        assert_eq!(args, vec![unc.to_string()]);
-        assert_eq!(reveal_command(unc, false).1, vec![unc.to_string()]);
+        assert_eq!(args, format!("\"{unc}\""));
+        assert_eq!(
+            reveal_line(&fm, unc, false).unwrap().1,
+            format!("\"{unc}\"")
+        );
+    }
+
+    // a manager with no reveal template - every linux one, and a hand-added
+    // trove - opens the parent folder instead of being refused
+    #[test]
+    fn a_manager_with_no_reveal_template_opens_the_parent() {
+        let fm = LaunchTarget {
+            id: "trove".into(),
+            name: "Trove".into(),
+            kind: TargetKind::FileManager,
+            executable: "trove".into(),
+            args_template: "\"{path}\"".into(),
+            wsl_executable: None,
+            wsl_args_template: None,
+            run_args_template: None,
+            reveal_args_template: None,
+            wsl_run_args_template: None,
+        };
+        let (exe, args) = reveal_line(&fm, "/srv/work/app", true).unwrap();
+        assert_eq!(exe, "trove");
+        assert_eq!(args, "\"/srv/work\"");
     }
 
     // the word that lands in "Install it on {os}"; it read Windows on a

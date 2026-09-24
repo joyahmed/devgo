@@ -1,7 +1,8 @@
 import { invoke } from '@tauri-apps/api/core';
 import { useEffect, useState } from 'react';
 
-/// The registry of editors and terminals, plus which of each is default.
+/// The registry of editors, terminals, agents and file managers, plus
+/// which of each is default.
 ///
 /// Defaults are resolved on the Rust side and returned here rather than being
 /// read straight from prefs, because a default can point at a target the user
@@ -26,6 +27,7 @@ export const useTargets = (): TargetRegistry => {
 	const editors = targets.filter(t => t.kind === 'editor');
 	const terminals = targets.filter(t => t.kind === 'terminal');
 	const agents = targets.filter(t => t.kind === 'agent');
+	const fileManagers = targets.filter(t => t.kind === 'file_manager');
 	// the alt key's agent: the first one that is not the default
 	const otherAgent = agents.find(t => t.id !== defaults.agent);
 
@@ -59,6 +61,7 @@ export const useTargets = (): TargetRegistry => {
 		editors,
 		terminals,
 		agents,
+		fileManagers,
 		defaults,
 		otherAgent,
 		addTarget,

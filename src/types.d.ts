@@ -440,7 +440,9 @@ interface LastProject {
 	workspace: string;
 }
 
-type TargetKind = 'editor' | 'terminal' | 'agent';
+/// The names serde writes for Rust's TargetKind, which is why the file
+/// manager is `file_manager` and not `filemanager`.
+type TargetKind = 'editor' | 'terminal' | 'agent' | 'file_manager';
 
 /// An editor or terminal DevGo can launch into. Both share one shape because
 /// both are "a program plus how to hand it a directory". `string | null`, not
@@ -460,6 +462,10 @@ interface LaunchTarget {
 	/// first run_script.
 	run_args_template: string | null;
 	wsl_run_args_template: string | null;
+	/// file managers: `{path}` again, but selected inside its parent —
+	/// Finder's -R. null means the manager has no such verb, which is every
+	/// one on Linux, and the folder itself opens instead.
+	reveal_args_template: string | null;
 }
 
 /// A target DevGo found installed but has not registered. It is added back
@@ -591,7 +597,10 @@ interface SelectProps {
 }
 
 /// the footer: the launch groups, and the palette's door
-/// which default just fired; its button pulses once, the launch moment
+/// which default just fired; its button pulses once, the launch moment.
+/// its own union, not TargetKind: 'both' is no kind of target, and the file
+/// manager is no footer group — reveal is a menu item, and there is no
+/// button for it to pulse
 type LaunchKind = 'editor' | 'terminal' | 'both' | 'agent';
 
 interface Launching {
@@ -885,7 +894,8 @@ type TargetDraft = Record<
 	| 'wsl_executable'
 	| 'wsl_args_template'
 	| 'run_args_template'
-	| 'wsl_run_args_template',
+	| 'wsl_run_args_template'
+	| 'reveal_args_template',
 	string
 >;
 
@@ -931,6 +941,7 @@ interface TargetRegistry {
 	editors: LaunchTarget[];
 	terminals: LaunchTarget[];
 	agents: LaunchTarget[];
+	fileManagers: LaunchTarget[];
 	defaults: Record<string, string>;
 	/// the first agent that is not the default: the one the alt key opens
 	otherAgent?: LaunchTarget;
@@ -953,6 +964,7 @@ interface TargetManagerProps {
 	editors: LaunchTarget[];
 	terminals: LaunchTarget[];
 	agents: LaunchTarget[];
+	fileManagers: LaunchTarget[];
 	/// Kind → id of the target that would actually launch, resolved in Rust.
 	defaults: Record<string, string>;
 	onAdd: (t: Omit<LaunchTarget, 'id'>) => Promise<void>;
