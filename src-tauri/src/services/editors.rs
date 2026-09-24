@@ -689,18 +689,40 @@ fn locate(
     })
 }
 
+// ghostty's mac app is not the cli its linux row runs. the binary inside
+// the bundle is the gui: given -e bash "<script>" it opens a window and
+// drops the command, no error anywhere, so a mac with ghostty and no
+// ghostty on PATH did nothing at all. open -na runs the same line and the
+// script really starts. wezterm and kitty ship the real cli inside their
+// bundles and are verified working with it, so they keep it; alacritty's
+// cask is disabled and nobody can install it to say which group it is in,
+// so it keeps the form it shipped with rather than a guess
+fn bundle_binary_takes_a_command(c: &Candidate) -> bool {
+    c.id != "ghostty"
+}
+
 // the launch forms for a candidate whose bundle was found and whose cli
 // was not on PATH. a row with no cli (terminal.app, iterm2) is launched
 // through open and its args were written as the whole open line; a
-// terminal whose binary sits inside the bundle keeps its cli forms with
-// the binary's full path; anything else opens through open -a "<App>",
-// with no run form, open cannot carry one. pure, so a test hands it a
-// bundle of its own making instead of depending on /Applications
+// terminal whose in-bundle binary ignores a command gets the same cli
+// line handed to open instead; a terminal whose binary sits inside the
+// bundle keeps its cli forms with the binary's full path; anything else
+// opens through open -a "<App>", with no run form, open cannot carry one.
+// pure, so a test hands it a bundle of its own making instead of
+// depending on /Applications
 fn bundle_form(c: &Candidate, app: &str, bundle: &Path) -> LaunchTarget {
     let mut target = to_target(c);
 
     if c.exe.is_empty() {
         target.executable = "open".to_string();
+        return target;
+    }
+
+    if c.kind == TargetKind::Terminal && !bundle_binary_takes_a_command(c) {
+        target.executable = "open".to_string();
+        target.args_template = format!("-na \"{app}\" --args {}", c.args);
+        target.run_args_template =
+            c.run_args.map(|a| format!("-na \"{app}\" --args {a}"));
         return target;
     }
 
@@ -1363,5 +1385,220 @@ mod tests {
         );
 
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    // one of the four rows a mac and a linux box share, written out because
+    // a windows compiler has no such row to read; the test below holds
+    // these bytes against the real ones where they exist
+    fn shared_terminal(
+        id: &'static str,
+        name: &'static str,
+        app: &'static str,
+        args: &'static str,
+        run_args: &'static str,
+    ) -> Candidate {
+        Candidate {
+            id,
+            name,
+            kind: TargetKind::Terminal,
+            exe: id,
+            args,
+            wsl_args: None,
+            run_args: Some(run_args),
+            wsl_run_args: None,
+            app: Some(app),
+        }
+    }
+
+    fn ghostty_row() -> Candidate {
+        shared_terminal(
+            "ghostty",
+            "Ghostty",
+            "Ghostty",
+            "--working-directory=\"{path}\" -e bash \"{script}\"",
+            "--working-directory=\"{path}\" -e {command}",
+        )
+    }
+
+    // a bundle with its binary in place, so the in-bundle branch is the one
+    // the test has to beat rather than one a missing file already ruled out
+    fn fake_bundle(dir: &str, app: &str, exe: &str) -> PathBuf {
+        let root = std::env::temp_dir().join(dir);
+        let _ = std::fs::remove_dir_all(&root);
+        let bundle = root.join(format!("{app}.app"));
+        let bin = bundle.join("Contents").join("MacOS");
+        std::fs::create_dir_all(&bin).unwrap();
+        std::fs::write(bin.join(exe), "").unwrap();
+        bundle
+    }
+
+    /// Ghostty's mac app is not the cli its linux row runs: handed
+    /// `-e bash "<script>"` the binary inside the bundle opens a window and
+    /// throws the command away, with no error anywhere, so shift+enter on a
+    /// mac with no ghostty on PATH did nothing at all. `open -na` is the
+    /// form a tester watched start the script for real. The {script} seam
+    /// has to survive into it, too: the launcher writes no script for a
+    /// line that does not ask for one.
+    #[test]
+    fn a_ghostty_bundle_is_launched_through_open_and_not_its_own_binary() {
+        let c = ghostty_row();
+        let bundle = fake_bundle("devgo-editors-ghostty", "Ghostty", "ghostty");
+        let inside = bundle.join("Contents").join("MacOS").join("ghostty");
+        assert!(inside.is_file(), "the tempting branch is available");
+
+        let t = bundle_form(&c, "Ghostty", &bundle);
+        assert_eq!(t.executable, "open");
+        assert_ne!(t.executable, inside.to_string_lossy());
+
+        let (exe, args) = t.resolve("/Users/joy/my app", None).unwrap();
+        assert_eq!(exe, "open");
+        assert!(args.contains("{script}"), "no script would be written");
+        assert_eq!(
+            args.replace("{script}", "/tmp/devgo-1a2b3c4d.sh"),
+            "-na \"Ghostty\" --args --working-directory=\"/Users/joy/my app\" \
+             -e bash \"/tmp/devgo-1a2b3c4d.sh\""
+        );
+
+        // the run form goes the same way, or the command key would open a
+        // window and drop the command exactly as the session key did
+        let (_, run) = t
+            .resolve_run("/Users/joy/my app", None, "npm run dev")
+            .unwrap();
+        assert_eq!(
+            run,
+            "-na \"Ghostty\" --args \
+             --working-directory=\"/Users/joy/my app\" -e npm run dev"
+        );
+
+        let _ = std::fs::remove_dir_all(bundle.parent().unwrap());
+    }
+
+    /// WezTerm and Kitty were verified working through the binary inside
+    /// their bundles, so a later fix for a fifth emulator must not quietly
+    /// move them onto `open`. Alacritty is here as the honest unknown: its
+    /// cask was disabled for failing Gatekeeper, so nobody can install it
+    /// to find out which of the two it behaves like, and a row nobody can
+    /// test keeps the form it shipped with rather than a guess.
+    #[test]
+    fn wezterm_kitty_and_alacritty_keep_the_binary_in_their_bundles() {
+        let rows = [
+            shared_terminal(
+                "wezterm",
+                "WezTerm",
+                "WezTerm",
+                "start --cwd \"{path}\" -- bash \"{script}\"",
+                "start --cwd \"{path}\" -- {command}",
+            ),
+            shared_terminal(
+                "kitty",
+                "Kitty",
+                "kitty",
+                "--directory \"{path}\" bash \"{script}\"",
+                "--directory \"{path}\" {command}",
+            ),
+            shared_terminal(
+                "alacritty",
+                "Alacritty",
+                "Alacritty",
+                "--working-directory \"{path}\" -e bash \"{script}\"",
+                "--working-directory \"{path}\" -e {command}",
+            ),
+        ];
+        for c in &rows {
+            let app = c.app.unwrap();
+            let bundle =
+                fake_bundle(&format!("devgo-editors-{}", c.id), app, c.exe);
+            let inside = bundle.join("Contents").join("MacOS").join(c.exe);
+
+            let t = bundle_form(c, app, &bundle);
+            assert_eq!(t.executable, inside.to_string_lossy(), "{}", c.id);
+            assert_eq!(t.args_template, c.args, "{}", c.id);
+            assert_eq!(t.run_args_template.as_deref(), c.run_args, "{}", c.id);
+            assert!(!t.args_template.contains("open"), "{}", c.id);
+
+            let _ = std::fs::remove_dir_all(bundle.parent().unwrap());
+        }
+    }
+
+    /// The fix is the bundle form and nothing else. On linux ghostty is on
+    /// PATH, `locate` hands back the row itself, and the plain `-e` line is
+    /// the right one there — so the row, the session form pinned for every
+    /// platform, and the bytes an old install is migrated onto are all one
+    /// thing still, and none of them mentions `open`.
+    #[test]
+    fn the_ghostty_path_form_and_its_upgrade_are_untouched() {
+        use crate::models::target::LINUX_ARGS_PRE_TMUX;
+        let t = to_target(&ghostty_row());
+        assert_eq!(t.executable, "ghostty");
+        assert_eq!(
+            t.args_template,
+            "--working-directory=\"{path}\" -e bash \"{script}\""
+        );
+        for line in [Some(&t.args_template), t.run_args_template.as_ref()] {
+            let line = line.unwrap();
+            for mac_only in ["open ", "-na ", "--args ", "/Applications"] {
+                assert!(!line.contains(mac_only), "{mac_only}: {line}");
+            }
+        }
+        let (_, args) = LINUX_TERMINAL_ARGS
+            .iter()
+            .find(|(id, _)| *id == "ghostty")
+            .unwrap();
+        assert_eq!(*args, t.args_template);
+        let (_, _, seam) = LINUX_ARGS_PRE_TMUX
+            .iter()
+            .find(|(id, _, _)| *id == "ghostty")
+            .unwrap();
+        assert_eq!(*seam, t.args_template);
+    }
+
+    // the rows the three tests above stand in for are the table's own, and
+    // ghostty is the only row whose in-bundle binary is not trusted with a
+    // command - wezterm and kitty are verified working with it
+    #[cfg(not(windows))]
+    #[test]
+    fn those_stand_in_rows_are_the_table_rows() {
+        for stand_in in [
+            ghostty_row(),
+            shared_terminal(
+                "wezterm",
+                "WezTerm",
+                "WezTerm",
+                "start --cwd \"{path}\" -- bash \"{script}\"",
+                "start --cwd \"{path}\" -- {command}",
+            ),
+            shared_terminal(
+                "kitty",
+                "Kitty",
+                "kitty",
+                "--directory \"{path}\" bash \"{script}\"",
+                "--directory \"{path}\" {command}",
+            ),
+            shared_terminal(
+                "alacritty",
+                "Alacritty",
+                "Alacritty",
+                "--working-directory \"{path}\" -e bash \"{script}\"",
+                "--working-directory \"{path}\" -e {command}",
+            ),
+        ] {
+            let c = CANDIDATES
+                .iter()
+                .find(|c| c.id == stand_in.id)
+                .unwrap_or_else(|| panic!("{} left the table", stand_in.id));
+            assert_eq!(c.name, stand_in.name, "{}", c.id);
+            assert_eq!(c.exe, stand_in.exe, "{}", c.id);
+            assert_eq!(c.app, stand_in.app, "{}", c.id);
+            assert_eq!(c.args, stand_in.args, "{}", c.id);
+            assert_eq!(c.run_args, stand_in.run_args, "{}", c.id);
+        }
+        for c in CANDIDATES {
+            assert_eq!(
+                bundle_binary_takes_a_command(c),
+                c.id != "ghostty",
+                "{}",
+                c.id
+            );
+        }
     }
 }
