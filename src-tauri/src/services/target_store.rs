@@ -3,9 +3,10 @@ use std::path::PathBuf;
 
 use crate::error::AppError;
 use crate::models::target::{
-    defaults, LaunchTarget, TargetKind, LINUX_ARGS_PRE_TMUX, VSCODE_WSL_ARGS,
-    VSCODE_WSL_ARGS_PRE, WT_ARGS, WT_ARGS_PRE_PSMUX, WT_RUN_ARGS,
-    WT_RUN_ARGS_PRE, WT_WSL_RUN_ARGS, WT_WSL_RUN_ARGS_PRE,
+    defaults, LaunchTarget, TargetKind, LINUX_ARGS_PRE_TMUX, MAC_TERMINAL_ARGS,
+    MAC_TERMINAL_RUN_ARGS, VSCODE_WSL_ARGS, VSCODE_WSL_ARGS_PRE, WT_ARGS,
+    WT_ARGS_PRE_PSMUX, WT_RUN_ARGS, WT_RUN_ARGS_PRE, WT_WSL_RUN_ARGS,
+    WT_WSL_RUN_ARGS_PRE,
 };
 
 /// Editors and terminals, persisted together.
@@ -47,6 +48,7 @@ impl TargetStore {
         store.adopt_wt_semicolon_escape()?;
         store.adopt_remote_uri_quotes()?;
         store.adopt_linux_session_script()?;
+        store.adopt_linux_terminal_row()?;
         Ok(store)
     }
 
@@ -172,6 +174,63 @@ impl TargetStore {
         self.save()
     }
 
+    /// v1.1.0 seeded a linux install with the mac registry — defaults() was
+    /// cfg(not(windows)) until c5e279c — so such a machine carries the
+    /// Terminal.app row, and on linux `open` is xdg-open, which answers
+    /// `unexpected option '-a'` and exits 1. The terminal key has done
+    /// nothing at all, silently, ever since. c5e279c fixed what a fresh
+    /// install seeds and nothing for a machine already carrying the row.
+    ///
+    /// The one migration here that has to ask what platform it is on: the
+    /// others are safe everywhere because their bytes cannot appear off
+    /// their own platform, and these bytes are exactly what a mac is
+    /// supposed to have. The work itself stays in `replace_mac_terminal`,
+    /// which every platform can compile and the tests drive directly.
+    fn adopt_linux_terminal_row(&mut self) -> Result<(), AppError> {
+        if !cfg!(target_os = "linux") {
+            return Ok(());
+        }
+        self.replace_mac_terminal(local_terminal())
+    }
+
+    /// Swap the mac terminal row for `replacement`, or drop it when there
+    /// is none: a box with no emulator gets no terminal row, which is what
+    /// defaults() already does on linux and is honest — a placeholder that
+    /// cannot run is not. Keyed on the id, the executable AND both
+    /// templates, all four: one row shipped these bytes, so anything else
+    /// under that id is the user's. Same shape as the adoptions above, a
+    /// backup first.
+    fn replace_mac_terminal(
+        &mut self,
+        replacement: Option<LaunchTarget>,
+    ) -> Result<(), AppError> {
+        let Some(pos) = self.targets.iter().position(|t| {
+            t.id == "terminal"
+                && t.executable == "open"
+                && t.args_template == MAC_TERMINAL_ARGS
+                && t.run_args_template.as_deref() == Some(MAC_TERMINAL_RUN_ARGS)
+        }) else {
+            return Ok(());
+        };
+        if self.file_path.exists() {
+            let backup =
+                format!("{}.pre-linux-terminal", self.file_path.display());
+            fs::copy(&self.file_path, backup)?;
+        }
+        // an emulator the registry already lists would only be a second row
+        // under the same id
+        let replacement =
+            replacement.filter(|r| !self.targets.iter().any(|t| t.id == r.id));
+        match replacement {
+            // in place, so the terminal keeps the position it had
+            Some(found) => self.targets[pos] = found,
+            None => {
+                self.targets.remove(pos);
+            }
+        }
+        self.save()
+    }
+
     pub fn list(&self) -> Vec<LaunchTarget> {
         self.targets.clone()
     }
@@ -224,6 +283,19 @@ impl TargetStore {
         fs::write(&self.file_path, data)?;
         Ok(())
     }
+}
+
+/// Whichever emulator this box actually has, for the row the mac seed left
+/// behind. Only linux ever reaches it; the other platforms answer with a
+/// function that exists so the migration compiles everywhere it is called.
+#[cfg(target_os = "linux")]
+fn local_terminal() -> Option<LaunchTarget> {
+    crate::services::editors::first_terminal()
+}
+
+#[cfg(not(target_os = "linux"))]
+fn local_terminal() -> Option<LaunchTarget> {
+    None
 }
 
 /// Derive an id from a display name, disambiguating against what exists.
@@ -557,6 +629,154 @@ mod tests {
         assert!(!dir.join("targets.json.pre-linux-tmux").exists());
     }
 
+    /// A targets.json as a linux install from v1.1.0 carries it: the mac
+    /// registry, because defaults() was cfg(not(windows)) then. The editor
+    /// row is the one linux seeds today, byte for byte — `code "{path}"`,
+    /// no wsl forms — so the terminal is the only row that was ever wrong.
+    fn mac_seeded_json(args: &str) -> String {
+        format!(
+            r#"[
+  {{"id":"vscode","name":"VS Code","kind":"editor","executable":"code",
+   "args_template":"\"{{path}}\"","wsl_executable":null,
+   "wsl_args_template":null,"run_args_template":null,
+   "wsl_run_args_template":null}},
+  {{"id":"terminal","name":"Terminal","kind":"terminal","executable":"open",
+   "args_template":"{}","wsl_executable":null,"wsl_args_template":null,
+   "run_args_template":"-a Terminal \"{{script}}\"",
+   "wsl_run_args_template":null}}
+]"#,
+            args.replace('"', "\\\"")
+        )
+    }
+
+    fn emulator(id: &str) -> LaunchTarget {
+        LaunchTarget {
+            id: id.into(),
+            name: id.into(),
+            kind: TargetKind::Terminal,
+            executable: id.into(),
+            args_template: "--workdir \"{path}\" -e bash \"{script}\"".into(),
+            wsl_executable: None,
+            wsl_args_template: None,
+            run_args_template: None,
+            wsl_run_args_template: None,
+        }
+    }
+
+    /// A store on a fresh directory, with the v1.1.0 mac rows dropped in
+    /// behind it. The migration fires inside `new()` on linux only, so the
+    /// fixture goes in afterwards and the repair is driven by hand: that
+    /// way the seam is exercised on every platform it compiles on, not
+    /// only the one it runs on.
+    fn mac_seeded_store(name: &str, args: &str) -> (TargetStore, PathBuf) {
+        let dir = std::env::temp_dir().join(format!("devgo-targets-{name}"));
+        let _ = fs::remove_dir_all(&dir);
+        let mut s = TargetStore::new(dir.clone()).unwrap();
+        s.targets = serde_json::from_str(&mac_seeded_json(args)).unwrap();
+        s.save().unwrap();
+        (s, dir)
+    }
+
+    /// The whole repair: the row a linux box from v1.1.0 cannot launch
+    /// becomes the emulator it does have, in the place it already held.
+    #[test]
+    fn a_mac_seeded_linux_install_gets_the_emulator_this_box_has() {
+        let (mut s, dir) = mac_seeded_store("mac-row", MAC_TERMINAL_ARGS);
+        let original = fs::read_to_string(dir.join("targets.json")).unwrap();
+        let backup = dir.join("targets.json.pre-linux-terminal");
+
+        s.replace_mac_terminal(Some(emulator("konsole"))).unwrap();
+        assert!(s.get("terminal").is_none(), "the mac row is gone");
+        assert_eq!(s.list()[1].id, "konsole", "and sits where it sat");
+        assert_eq!(s.get("vscode").unwrap().name, "VS Code");
+        assert_eq!(
+            fs::read_to_string(&backup).unwrap(),
+            original,
+            "the pre-migration file is kept verbatim"
+        );
+        assert!(
+            !dir.join("targets.json.bak").exists(),
+            "a migration is not a parse failure"
+        );
+
+        // persisted, and a second load has nothing left to adopt, so the
+        // backup is still the file the migration found
+        let reloaded = TargetStore::new(dir.clone()).unwrap();
+        assert_eq!(reloaded.list()[1].id, "konsole");
+        assert_eq!(fs::read_to_string(&backup).unwrap(), original);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// A box with no emulator at all — a bare CI runner, a headless
+    /// server. defaults() gives such a machine no terminal row rather than
+    /// one that cannot run, and the repair says the same.
+    #[test]
+    fn a_box_with_no_emulator_drops_the_mac_row_rather_than_replacing_it() {
+        let (mut s, dir) = mac_seeded_store("mac-row-none", MAC_TERMINAL_ARGS);
+        s.replace_mac_terminal(None).unwrap();
+        assert!(s.get("terminal").is_none());
+        assert_eq!(s.list().len(), 1, "the editor row, and nothing invented");
+        assert!(dir.join("targets.json.pre-linux-terminal").exists());
+        assert_eq!(TargetStore::new(dir.clone()).unwrap().list().len(), 1);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// The emulator this box has can already be in the registry, added by
+    /// detection or by hand. Two rows under one id is worse than one.
+    #[test]
+    fn an_emulator_the_registry_already_lists_is_not_added_twice() {
+        let (mut s, dir) = mac_seeded_store("mac-row-dup", MAC_TERMINAL_ARGS);
+        s.add(emulator("konsole")).unwrap();
+        s.replace_mac_terminal(Some(emulator("konsole"))).unwrap();
+        assert!(s.get("terminal").is_none());
+        assert_eq!(s.list().iter().filter(|t| t.id == "konsole").count(), 1);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// A user who rewrote the row owns it — iTerm through `open` is a real
+    /// thing to want, and it is not the bytes v1.1.0 shipped.
+    #[test]
+    fn a_hand_edited_mac_terminal_row_is_left_alone() {
+        let custom = "-a iTerm \"{script}\"";
+        let (mut s, dir) = mac_seeded_store("mac-row-custom", custom);
+        s.replace_mac_terminal(Some(emulator("konsole"))).unwrap();
+        assert_eq!(s.get("terminal").unwrap().args_template, custom);
+        assert!(!dir.join("targets.json.pre-linux-terminal").exists());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// The registration, on the platform that decides it. A mac is
+    /// supposed to carry this row, and a windows file carrying it came
+    /// from someone else's machine: neither is ours to rewrite.
+    #[test]
+    fn only_linux_repairs_the_mac_terminal_row_on_load() {
+        let dir = std::env::temp_dir().join("devgo-targets-mac-row-load");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let original = mac_seeded_json(MAC_TERMINAL_ARGS);
+        fs::write(dir.join("targets.json"), &original).unwrap();
+
+        let s = TargetStore::new(dir.clone()).unwrap();
+        assert_eq!(s.get("vscode").unwrap().name, "VS Code");
+        #[cfg(target_os = "linux")]
+        {
+            for t in s.list() {
+                assert_ne!(t.executable, "open", "{}", t.id);
+            }
+            assert_eq!(
+                fs::read_to_string(dir.join("targets.json.pre-linux-terminal"))
+                    .unwrap(),
+                original
+            );
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            assert_eq!(s.get("terminal").unwrap().executable, "open");
+            assert!(!dir.join("targets.json.pre-linux-terminal").exists());
+        }
+        let _ = fs::remove_dir_all(&dir);
+    }
+
     /// A .pre-psmux of a file seeded a millisecond ago would be noise that
     /// makes the real backups harder to trust.
     #[test]
@@ -589,6 +809,7 @@ mod tests {
         assert!(!dir.join("targets.json.pre-psmux").exists());
         assert!(!dir.join("targets.json.pre-uri-quote").exists());
         assert!(!dir.join("targets.json.pre-linux-tmux").exists());
+        assert!(!dir.join("targets.json.pre-linux-terminal").exists());
     }
 
     #[test]

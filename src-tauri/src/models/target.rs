@@ -162,12 +162,10 @@ pub const WT_WSL_RUN_ARGS_PRE: &str =
 /// {script} is the same seam the two other forms use. No {path} in the
 /// line: the script cds itself. The run form is the same bytes because
 /// Terminal.app cannot take a command on its command line at all; {command}
-/// goes into a second file. Every reader is cfg(not(windows)); on Windows
-/// the constants compile and are never read. A const because editors must
-/// offer the same bytes.
-#[cfg_attr(windows, allow(dead_code))]
+/// goes into a second file. A const because editors must offer the same
+/// bytes — and because the store reads them on every platform to spot the
+/// row a linux install from v1.1.0 was wrongly seeded with.
 pub const MAC_TERMINAL_ARGS: &str = "-a Terminal \"{script}\"";
-#[cfg_attr(windows, allow(dead_code))]
 pub const MAC_TERMINAL_RUN_ARGS: &str = "-a Terminal \"{script}\"";
 
 /// Every terminal row as v1.1.0 and v1.1.1 shipped it, next to the form
