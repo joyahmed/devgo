@@ -46,6 +46,10 @@
 				"uninstallerIcon": "icons/icon.ico"
 			}
 		},
+		"macOS": {
+			"signingIdentity": "-",
+			"hardenedRuntime": false
+		},
 		"category": "DeveloperTool",
 		"publisher": "Joy Ahmed",
 		"homepage": "https://github.com/joyahmed/devgo",

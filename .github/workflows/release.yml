@@ -1,8 +1,13 @@
 # a v* tag builds the installers and drafts the github release; the
 # maintainer publishes the draft. run workflow from a tag does the same
 # by hand.
-# unsigned on every platform on purpose: there is no certificate, and
-# the readme tells the user what the os will say.
+# no certificate on any platform on purpose, and the readme tells the user
+# what the os will say. mac is the one place that still needs a signature:
+# the arm64 linker ad-hoc signs the binary, and a bundle whose executable is
+# signed but whose _CodeSignature is missing reads as "damaged", which has no
+# override. bundle.macOS.signingIdentity "-" makes the bundler codesign the
+# .app itself, so the seal is whole and gatekeeper says "unidentified
+# developer" instead.
 name: release
 
 on:
