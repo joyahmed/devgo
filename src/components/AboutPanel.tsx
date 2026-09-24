@@ -33,8 +33,8 @@ const AboutPanel = () => {
 					)}
 				</h4>
 				<p className='text-13 text-text-secondary'>
-					A cross-platform project launcher: Windows and WSL, macOS, and a
-					Linux build that has not been run yet. Built by Joy Ahmed with
+					A cross-platform project launcher: Windows and WSL, macOS, and
+					Linux. The installers are unsigned. Built by Joy Ahmed with
 					Tauri, Rust and React.
 				</p>
 			</div>
