@@ -26,7 +26,9 @@ const LIST_LIMIT: &str = "1000";
 // the install hint in the machine's own package manager's words
 #[cfg(target_os = "macos")]
 const NOT_INSTALLED: &str = "GitHub CLI (gh) is not installed or not on PATH. Install it with: brew install gh";
-#[cfg(not(target_os = "macos"))]
+#[cfg(target_os = "linux")]
+const NOT_INSTALLED: &str = "GitHub CLI (gh) is not installed or not on PATH. Install it with: sudo apt install gh";
+#[cfg(windows)]
 const NOT_INSTALLED: &str = "GitHub CLI (gh) is not installed or not on PATH. Install it with: winget install GitHub.cli";
 
 /// How old the cache may be before the lane's first open in a session

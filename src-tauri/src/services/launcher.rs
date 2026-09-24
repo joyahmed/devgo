@@ -443,9 +443,15 @@ fn build_mac_script(session: &str, path: &str, tmux: &TmuxConfig) -> String {
     let body = body.strip_prefix("#!/usr/bin/env bash\n").unwrap_or(&body);
 
     let bail = if tmux.enabled {
+        // the same generic bash runs on linux, where homebrew is not the
+        // answer; the install line follows the build, not the extension
+        #[cfg(target_os = "linux")]
+        let install = "sudo apt install tmux";
+        #[cfg(not(target_os = "linux"))]
+        let install = "brew install tmux";
         format!(
             r#"if ! command -v tmux >/dev/null 2>&1; then
-    echo 'DevGo: tmux is not installed, so this is a plain shell. For named windows: brew install tmux'
+    echo 'DevGo: tmux is not installed, so this is a plain shell. For named windows: {install}'
     cd {} || exit 1
     exec "${{SHELL:-bash}}" -l
 fi
@@ -1979,6 +1985,10 @@ mod tests {
         assert!(preamble < check && check < first_call, "{script}");
 
         let bail = &script[check..first_call];
+        // the advice follows the build: apt on linux, homebrew on a mac
+        #[cfg(target_os = "linux")]
+        assert!(bail.contains("sudo apt install tmux"), "{bail}");
+        #[cfg(not(target_os = "linux"))]
         assert!(bail.contains("brew install tmux"), "{bail}");
         assert!(bail.contains("cd '/Users/user/app' || exit 1"), "{bail}");
         assert!(bail.contains(r#"exec "${SHELL:-bash}" -l"#), "{bail}");
