@@ -1,7 +1,7 @@
 import { getVersion } from '@tauri-apps/api/app';
 import { invoke } from '@tauri-apps/api/core';
 import { useEffect, useState } from 'react';
-import { isMac } from '../platform';
+import { isWindows } from '../platform';
 import Button from './Button';
 import { Code, HelpSection } from './HelpPanel';
 
@@ -66,7 +66,7 @@ const AboutPanel = () => {
 				<p>
 					GitHub CLI (<Code>gh</Code>): MIT, by GitHub. Not bundled: DevGo
 					runs the copy you installed, and it holds your login.{' '}
-					{isMac ? 'tmux: by its authors' : 'psmux: by its author'}, not
+					{isWindows ? 'psmux: by its author' : 'tmux: by its authors'}, not
 					bundled. JetBrains Mono, bundled, under the SIL Open Font Licence. Tauri,
 					React and Tailwind under their own licences.
 				</p>

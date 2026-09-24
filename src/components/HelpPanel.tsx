@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { useEffect, useState } from 'react';
-import { isMac } from '../platform';
+import { isMac, isWindows } from '../platform';
 import { labelFor, prettyKeys, shortcutFor } from '../shortcuts';
 import Button from './Button';
 
@@ -23,16 +23,21 @@ export const Code = ({ children }: KbdProps) => (
 const key = (id: ShortcutId) => prettyKeys(shortcutFor(id));
 
 // the keys come from the table, so a rebinding shows up here without
-// anyone remembering to edit prose. a mac has no wsl: the section about
-// not booting one is dropped there, and the sentences that name it are
-// said without it, or the reader learns this help was written elsewhere
-const SECTIONS: { title: string; body: React.ReactNode; windowsOnly?: boolean }[] = [
+// anyone remembering to edit prose. only windows has wsl: the section
+// about not booting one is dropped elsewhere, and the sentences that name
+// it are said without it, or the reader learns this help was written
+// for another machine
+const SECTIONS: {
+	title: string;
+	body: React.ReactNode;
+	windowsOnly?: boolean;
+}[] = [
 	{
 		title: 'What DevGo is',
 		body: (
 			<p>
 				A launcher for your projects. Point it at the folders that hold them
-				{isMac ? '' : ', on a drive or inside a WSL distro,'} and it lists
+				{isWindows ? ', on a drive or inside a WSL distro,' : ''} and it lists
 				every project, finds one in a few keystrokes, and opens it in the
 				editor and terminal you already use. It is not an editor, a terminal
 				or a git client; it opens the door and gets out of the way.
@@ -74,40 +79,44 @@ const SECTIONS: { title: string; body: React.ReactNode; windowsOnly?: boolean }[
 			<p>
 				A target is a program plus how to hand it a directory. DevGo detects
 				the usual ones on this machine
-				{isMac ? '' : ' and inside each running distro'}; you can add your
+				{isWindows ? ' and inside each running distro' : ''}; you can add your
 				own in Settings › Editors &amp; Terminals with a template:{' '}
 				<Code>{'{path}'}</Code>
-				{isMac ? (
-					'.'
-				) : (
+				{isWindows ? (
 					<>
 						, <Code>{'{distro}'}</Code>, <Code>{'{linux_path}'}</Code>. A WSL
 						project opens where it lives: VS Code via Remote-WSL, a terminal
 						inside the distro in the project directory.
 					</>
+				) : (
+					'.'
 				)}
 			</p>
 		)
 	},
 	{
-		title: isMac ? 'tmux' : 'tmux / psmux',
+		title: isWindows ? 'tmux / psmux' : 'tmux',
 		body: (
 			<p>
 				With the multiplexer on, a terminal launch opens a named session with
 				the windows you listed
-				{isMac
-					? ''
-					: ': tmux inside the distro for a WSL project, psmux for a Windows one'}
+				{isWindows
+					? ': tmux inside the distro for a WSL project, psmux for a Windows one'
+					: ''}
 				. Close the terminal, close DevGo, come back: the session is still
 				there, and launching again reattaches.{' '}
-				{isMac ? (
-					<>
-						tmux is installed separately: <Code>brew install tmux</Code>.
-					</>
-				) : (
+				{isWindows ? (
 					<>
 						psmux is installed separately:{' '}
 						<Code>winget install marlocarlo.psmux</Code>.
+					</>
+				) : (
+					<>
+						tmux is installed separately:{' '}
+						<Code>
+							{isMac ? 'brew install tmux' : 'sudo apt install tmux'}
+						</Code>
+						.
 					</>
 				)}{' '}
 				Off, a launch is one plain shell.
@@ -185,7 +194,7 @@ const HelpPanel = ({ onError }: HelpPanelProps) => {
 
 	return (
 		<div className='flex flex-col gap-5'>
-			{SECTIONS.filter(s => !(isMac && s.windowsOnly)).map(s => (
+			{SECTIONS.filter(s => !(s.windowsOnly && !isWindows)).map(s => (
 				<HelpSection key={s.title} title={s.title}>
 					{s.body}
 				</HelpSection>

@@ -1,4 +1,4 @@
-import { isMac } from './platform';
+import { isLinux, isMac, isWindows } from './platform';
 
 /// Every keyboard binding in DevGo, declared once.
 ///
@@ -119,6 +119,7 @@ export const SHORTCUTS: Shortcut[] = [
 		keys: 'Ctrl+Shift+E',
 		label: 'Reveal in Explorer',
 		macLabel: 'Reveal in Finder',
+		linuxLabel: 'Reveal in file manager',
 		group: 'Project',
 		needsSelection: true
 	},
@@ -127,6 +128,7 @@ export const SHORTCUTS: Shortcut[] = [
 		keys: 'Ctrl+Shift+C',
 		label: 'Copy Windows path',
 		macLabel: 'Copy path',
+		linuxLabel: 'Copy path',
 		group: 'Project',
 		needsSelection: true
 	},
@@ -189,6 +191,7 @@ export const SHORTCUTS: Shortcut[] = [
 		keys: 'Ctrl+Alt+E',
 		label: 'Reveal workspace in Explorer',
 		macLabel: 'Reveal workspace in Finder',
+		linuxLabel: 'Reveal workspace in file manager',
 		group: 'Workspace',
 		needsSelection: true
 	},
@@ -216,12 +219,14 @@ export const shortcutFor = (id: ShortcutId): string =>
 export const labelFor = (id: ShortcutId): string => {
 	const s = SHORTCUTS.find(x => x.id === id);
 	if (!s) return '';
-	return (isMac && s.macLabel) || s.label;
+	return (isMac && s.macLabel) || (isLinux && s.linuxLabel) || s.label;
 };
 
 // does this binding mean anything on this desktop? a shortcut the table
-// declares but the desktop cannot honour must not be advertised
-export const isAvailable = (s: Shortcut): boolean => !(isMac && s.windowsOnly);
+// declares but the desktop cannot honour must not be advertised, and only
+// windows has the wsl side the windows-only ones speak to
+export const isAvailable = (s: Shortcut): boolean =>
+	!(s.windowsOnly && !isWindows);
 
 /// Does this event match a declared binding?
 ///

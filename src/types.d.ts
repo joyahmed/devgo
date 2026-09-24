@@ -524,8 +524,10 @@ interface Shortcut {
 	/// wrong: explorer is finder there, and a windows path is simply the
 	/// path. read through labelFor, never directly, so every menu agrees
 	macLabel?: string;
-	/// meaningless on a mac: there is no second filesystem to have a path
-	/// in. the menus and the settings panel drop it there (isAvailable)
+	/// the same, for linux: no explorer, no finder, and one filesystem
+	linuxLabel?: string;
+	/// only windows has a second filesystem to have a path in. the menus
+	/// and the settings panel drop it elsewhere (isAvailable)
 	windowsOnly?: boolean;
 	group: ShortcutGroup;
 	/// Requires a selected project to do anything.

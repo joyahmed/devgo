@@ -1,5 +1,14 @@
 // pure helpers for the github lane: no invoke, no react
 import { fuzzyScore } from './palette';
+import { isMac, isWindows } from './platform';
+
+// how you install gh here, in this desktop's own package manager. the lane
+// heading and the settings panel say the same line, so it is written once
+export const GH_INSTALL = isMac
+	? 'brew install gh'
+	: isWindows
+		? 'winget install GitHub.cli'
+		: 'sudo apt install gh';
 
 // rows the lane shows with an empty search box. a few hundred repos is
 // not a list, it is a search space: the default view is what you touched

@@ -43,7 +43,7 @@ import { useWorkspaces } from './hooks/useWorkspaces';
 import { useRuntime } from './hooks/useRuntime';
 import { useWsl } from './hooks/useWsl';
 import { lastSegment, parentOf } from './paths';
-import { isMac } from './platform';
+import { isMac, isWindows } from './platform';
 import {
 	appForFolder,
 	canFill,
@@ -835,7 +835,7 @@ const AppInner = () => {
 	};
 
 	const copyWindowsPath = (p: Project) =>
-		copyText(p.full_path, isMac ? 'path' : 'Windows path');
+		copyText(p.full_path, isWindows ? 'Windows path' : 'path');
 
 	const copyWslPath = async (p: Project) => {
 		try {
@@ -866,20 +866,19 @@ const AppInner = () => {
 	const serverSel = servers.servers.find(s => s.id === serverCursorId) ?? null;
 	// the local hosts a server row offers: every terminal target, then a
 	// psmux session and the default distro's own ssh, both through the
-	// default terminal. wsl is blocked with the reason and never booted
+	// default terminal. psmux and wsl are windows's, so they are offered
+	// there only; wsl is blocked with the reason and never booted
 	const distro = runtime.default_distro;
-	const wslBlocked = isMac
-		? 'No WSL on a Mac'
-		: !runtime.wsl_available || !distro
+	const wslBlocked =
+		!runtime.wsl_available || !distro
 			? 'No WSL distro on this machine'
 			: !wsl.distros.some(d => d.toLowerCase() === distro.toLowerCase())
 				? `${distro} is not running`
 				: undefined;
 	const serverHosts: ServerHost[] = [
 		...targets.terminals.map(t => ({ id: t.id, name: t.name, targetId: t.id })),
-		...(isMac
-			? []
-			: [
+		...(isWindows
+			? [
 					{
 						id: 'psmux',
 						name: 'psmux',
@@ -893,7 +892,8 @@ const AppInner = () => {
 						title: `ssh from inside ${distro ?? 'the default distro'}, with its own keys`,
 						blocked: wslBlocked
 					}
-				])
+				]
+			: [])
 	];
 	// no host is the default terminal, the row's enter
 	const openServer = (s: Server, host?: ServerHost) => {
@@ -1579,10 +1579,10 @@ const AppInner = () => {
 				revealInExplorer
 			),
 			proj('copyWinPath', labelFor('copyWinPath'), ['path', 'clipboard'], copyWindowsPath),
-			// a mac has no second filesystem to have a path in
-			...(isMac
-				? []
-				: [proj('copyWslPath', labelFor('copyWslPath'), ['path', 'linux'], copyWslPath)]),
+			// only windows has a second filesystem to have a path in
+			...(isWindows
+				? [proj('copyWslPath', labelFor('copyWslPath'), ['path', 'linux'], copyWslPath)]
+				: []),
 			proj(
 				'togglePin',
 				p && ranks.get(p.full_path)?.pinned ? 'Unpin project' : 'Pin project',
@@ -1758,7 +1758,9 @@ const AppInner = () => {
 							? 'no WSL form'
 							: isMac
 								? 'not found on this Mac'
-								: 'not found on Windows'
+								: isWindows
+									? 'not found on Windows'
+									: 'not found on this machine'
 						: agentHint(t.id),
 					disabled: missing,
 					onClick: () => openAgent(p, t.id).catch(e => toast(showError(e)))
@@ -1787,15 +1789,15 @@ const AppInner = () => {
 				hint: hint('copyWinPath'),
 				onClick: () => copyWindowsPath(p)
 			},
-			...(isMac
-				? []
-				: [
+			...(isWindows
+				? [
 						{
 							label: labelFor('copyWslPath'),
 							hint: hint('copyWslPath'),
 							onClick: () => copyWslPath(p)
 						} as MenuEntry
-					]),
+					]
+				: []),
 			'separator',
 			// the two that leave the row for somewhere else share a section
 			{
@@ -1921,7 +1923,7 @@ const AppInner = () => {
 				return;
 			if (fire('revealExplorer', () => revealInExplorer(selected))) return;
 			if (fire('copyWinPath', () => copyWindowsPath(selected))) return;
-			if (!isMac && fire('copyWslPath', () => copyWslPath(selected))) return;
+			if (isWindows && fire('copyWslPath', () => copyWslPath(selected))) return;
 			if (fire('runScript', () => openScripts(selected, 240, 200))) return;
 			if (
 				fire('openRemote', () => {

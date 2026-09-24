@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { isMac } from '../platform';
+import { isMac, isWindows } from '../platform';
 import Button from './Button';
 
 const KINDS: TargetKind[] = ['editor', 'terminal', 'agent'];
@@ -14,18 +14,18 @@ const BLANK: TargetDraft = {
 	wsl_run_args_template: ''
 };
 
-// the wsl half of a target has nothing to describe on a mac; the fields
-// stay in the draft (blank) so the struct the backend gets is one shape
+// wsl is a windows story: the wsl half of a target has nothing to describe
+// on a mac or a linux box, and the fields stay in the draft (blank) so the
+// struct the backend gets is one shape
 const FIELDS: { key: keyof TargetDraft; placeholder: string }[] = [
 	{ key: 'name', placeholder: 'Name — e.g. Cursor' },
 	{ key: 'executable', placeholder: 'Executable — e.g. cursor' },
 	{
 		key: 'args_template',
-		placeholder: isMac ? 'Args — e.g. "{path}"' : 'Windows args — e.g. "{path}"'
+		placeholder: isWindows ? 'Windows args — e.g. "{path}"' : 'Args — e.g. "{path}"'
 	},
-	...(isMac
-		? []
-		: [
+	...(isWindows
+		? [
 				{
 					key: 'wsl_executable' as const,
 					placeholder: 'WSL executable — blank if it speaks WSL itself'
@@ -34,35 +34,36 @@ const FIELDS: { key: keyof TargetDraft; placeholder: string }[] = [
 					key: 'wsl_args_template' as const,
 					placeholder: 'WSL args — blank means it cannot open WSL projects'
 				}
-			])
+			]
+		: [])
 ];
 
 // terminals only: blank means the target cannot run dev scripts
 const RUN_FIELDS: { key: keyof TargetDraft; placeholder: string }[] = [
 	{
 		key: 'run_args_template',
-		placeholder: isMac
-			? 'Run args — {command} in the project'
-			: 'Run args — {command} in a Windows project'
+		placeholder: isWindows
+			? 'Run args — {command} in a Windows project'
+			: 'Run args — {command} in the project'
 	},
-	...(isMac
-		? []
-		: [
+	...(isWindows
+		? [
 				{
 					key: 'wsl_run_args_template' as const,
 					placeholder: 'WSL run args — {command} in a WSL project'
 				}
-			])
+			]
+		: [])
 ];
 
 const PLACEHOLDERS = [
-	{ code: '{path}', note: isMac ? 'the project path,' : 'the Windows path' },
-	...(isMac
-		? []
-		: [
+	{ code: '{path}', note: isWindows ? 'the Windows path' : 'the project path,' },
+	...(isWindows
+		? [
 				{ code: '{distro}', note: 'and' },
 				{ code: '{linux_path}', note: 'for WSL,' }
-			]),
+			]
+		: []),
 	{ code: '{command}', note: 'in the run templates, and' },
 	{ code: '{script}', note: '— terminals only — the generated tmux session script' }
 ];
@@ -81,9 +82,11 @@ const TargetList = ({
 }: TargetListProps) => (
 	<div className='flex flex-col gap-1'>
 		{items.map(t => {
-			// The "windows only" badge reads the refusal straight off the model:
-			// a null WSL template is the target saying it cannot open WSL projects.
-			// an agent lives on one side or the other: say which
+			// the side badges read the refusal straight off the model: a null
+			// template is the target saying which half it cannot open. only
+			// windows has two halves, so only there do they say anything — on
+			// a mac or a linux box every row would be badged for a filesystem
+			// the machine does not have
 			const agent = t.kind === 'agent';
 			const badges = [
 				{
@@ -92,20 +95,19 @@ const TargetList = ({
 					className: 'text-accent border-accent/40'
 				},
 				{
-					show: !agent && !t.wsl_args_template,
+					show: isWindows && !agent && !t.wsl_args_template,
 					label: 'windows only',
 					className: 'text-text-muted border-border-strong',
 					title: 'No WSL configuration — this target cannot open WSL projects'
 				},
 				{
-					show: !agent && !t.args_template,
+					show: isWindows && !agent && !t.args_template,
 					label: 'wsl only',
 					className: 'text-text-muted border-border-strong',
 					title: 'Runs inside a distro — this target cannot open Windows projects'
 				},
-				// one side only on a mac, where the badge would label every row
 				{
-					show: agent && !isMac,
+					show: isWindows && agent,
 					label: t.wsl_executable ? 'in distro' : 'windows',
 					className: 'text-text-muted border-border-strong',
 					title: 'The side this agent is installed on'
@@ -227,7 +229,9 @@ const TargetManager = ({
 		found === null
 			? isMac
 				? 'Looks for installed editors, terminals and coding agents (Claude Code, Codex, OpenCode, Gemini CLI) on this Mac: on your login PATH, and in /Applications. An agent opens in your default terminal, in the project directory.'
-				: 'Looks for installed editors, terminals and coding agents (Claude Code, Codex, OpenCode, Gemini CLI) on PATH, and for command-line editors and agents inside distros that are already running. It never starts a distro. An agent opens in your default terminal, in the project directory.'
+				: isWindows
+					? 'Looks for installed editors, terminals and coding agents (Claude Code, Codex, OpenCode, Gemini CLI) on PATH, and for command-line editors and agents inside distros that are already running. It never starts a distro. An agent opens in your default terminal, in the project directory.'
+					: 'Looks for installed editors, terminals and coding agents (Claude Code, Codex, OpenCode, Gemini CLI) on your login PATH. An agent opens in your default terminal, in the project directory.'
 			: found.length === 0
 				? 'Nothing new: everything found is already registered.'
 				: null;

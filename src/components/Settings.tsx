@@ -1,8 +1,8 @@
 import { invoke } from '@tauri-apps/api/core';
 import { open as openDialog, save } from '@tauri-apps/plugin-dialog';
 import { useEffect, useState } from 'react';
-import { relativeTime } from '../github';
-import { isMac } from '../platform';
+import { GH_INSTALL, relativeTime } from '../github';
+import { isMac, isWindows } from '../platform';
 import {
 	isAvailable,
 	labelFor,
@@ -296,25 +296,20 @@ const TmuxPanel = ({ onError }: TmuxPanelProps) => {
 			{/* the switch first, and the list dims under it: a live text box
 			    under a disabled feature is a promise the app is not keeping */}
 			<div>
-				<h4 className={heading}>{isMac ? 'Use tmux' : 'Use tmux / psmux'}</h4>
+				<h4 className={heading}>{isWindows ? 'Use tmux / psmux' : 'Use tmux'}</h4>
 				<p className='text-13 text-text-muted mb-2'>
 					On, a terminal launch opens a session with the windows below
-					{isMac
-						? ' in tmux'
-						: ' — tmux inside the distro for a WSL project, psmux for a Windows project'}
+					{isWindows
+						? ' — tmux inside the distro for a WSL project, psmux for a Windows project'
+						: ' in tmux'}
 					. Off, it opens one plain shell in the project directory and starts
 					no multiplexer at all — the right answer if you only ever use one
 					tab.
 				</p>
 				{/* two install hints, not one with a swapped word: psmux is a
-				    windows port and does not exist on a mac */}
-				{isMac ? (
-					<p className='text-13 text-text-muted mb-2'>
-						tmux is installed separately:{' '}
-						<code className='text-text-secondary'>brew install tmux</code>.
-						Without it a launch falls back to a plain shell and says so.
-					</p>
-				) : (
+				    windows port and exists nowhere else, and tmux is not
+				    installed the same way on a mac and on debian */}
+				{isWindows ? (
 					<p className='text-13 text-text-muted mb-2'>
 						psmux is a tmux for Windows and is installed separately:{' '}
 						<code className='text-text-secondary'>
@@ -322,6 +317,14 @@ const TmuxPanel = ({ onError }: TmuxPanelProps) => {
 						</code>
 						. Without it a Windows launch falls back to a plain shell and
 						says so.
+					</p>
+				) : (
+					<p className='text-13 text-text-muted mb-2'>
+						tmux is installed separately:{' '}
+						<code className='text-text-secondary'>
+							{isMac ? 'brew install tmux' : 'sudo apt install tmux'}
+						</code>
+						. Without it a launch falls back to a plain shell and says so.
 					</p>
 				)}
 				<div className='flex items-center gap-2'>
@@ -416,7 +419,7 @@ const GithubPanel = ({ github, onError }: GithubPanelProps) => {
 	const statusLine = !status
 		? 'Checking for gh…'
 		: !status.installed
-			? `gh not found. Install it: ${isMac ? 'brew install gh' : 'winget install GitHub.cli'}`
+			? `gh not found. Install it: ${GH_INSTALL}`
 			: !status.login
 				? 'gh is installed but not logged in. Run: gh auth login'
 				: `gh ${status.version ?? ''} · logged in as ${status.login}`;
@@ -933,9 +936,11 @@ const ServersPanel = ({
 				{!servers.hasSsh && (
 					<p className='text-13 text-danger mb-3'>
 						No <code>ssh</code> client on PATH.{' '}
-						{isMac
-							? 'macOS ships one at /usr/bin/ssh, so something has stripped PATH.'
-							: 'Windows ships one under Settings › Apps › Optional features › OpenSSH Client.'}
+						{isWindows
+							? 'Windows ships one under Settings › Apps › Optional features › OpenSSH Client.'
+							: isMac
+								? 'macOS ships one at /usr/bin/ssh, so something has stripped PATH.'
+								: 'Install it with sudo apt install openssh-client.'}
 					</p>
 				)}
 				{servers.servers.length === 0 ? (
@@ -1083,7 +1088,7 @@ const Settings = ({
 		},
 		{
 			id: 'tmux',
-			label: isMac ? 'tmux' : 'tmux / psmux',
+			label: isWindows ? 'tmux / psmux' : 'tmux',
 			render: () => <TmuxPanel {...{ onError }} />
 		},
 		{

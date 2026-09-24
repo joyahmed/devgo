@@ -1,5 +1,4 @@
-import { compactCount, RECENT_LIMIT, relativeTime } from '../github';
-import { isMac } from '../platform';
+import { compactCount, GH_INSTALL, RECENT_LIMIT, relativeTime } from '../github';
 import Button from './Button';
 import GithubControls from './GithubControls';
 import LaneHeading from './LaneHeading';
@@ -37,7 +36,7 @@ const headerLine = (g: GithubState): string => {
 		return `${n} ${n === 1 ? 'repo' : 'repos'} · ${when}`;
 	}
 	if (g.status && !g.status.installed)
-		return `gh not found. Install: ${isMac ? 'brew install gh' : 'winget install GitHub.cli'}`;
+		return `gh not found. Install: ${GH_INSTALL}`;
 	if (g.status && !g.status.login) return 'not logged in. Run: gh auth login';
 	if (g.refreshing) return 'fetching your repos…';
 	return 'not loaded. Open to fetch your repos with gh';
