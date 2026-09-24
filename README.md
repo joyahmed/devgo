@@ -128,13 +128,15 @@ Every binding is declared once in `src/shortcuts.ts`; the handler, the footer hi
 
 ## 📦 Install
 
-Builds are unsigned on both platforms. Download from [Releases](https://github.com/joyahmed/devgo/releases); each one is built by GitHub Actions from a `v*` tag (`.github/workflows/release.yml`), so the installer on the page is the tag's tree, nothing more.
+Builds are unsigned on every platform. I hold no code-signing certificate, so Windows and macOS both stop the first launch and say they do not know who made it. Each has a way through, written under its own heading below. Download from [Releases](https://github.com/joyahmed/devgo/releases); each one is built by GitHub Actions from a `v*` tag (`.github/workflows/release.yml`), so the installer on the page is the tag's tree, nothing more.
 
 **Windows**: `DevGo_<version>_x64-setup.exe` (3 MB) installs per user into `%LOCALAPPDATA%\DevGo`, no admin. SmartScreen will say the publisher is unknown: *More info* › *Run anyway*. WebView2 is already on Windows 10 and 11; the installer fetches it if it is missing.
 
-**macOS**: `DevGo_<version>_aarch64.dmg` (3.7 MB). Drag `DevGo.app` to Applications. On macOS 15+ open it once, then System Settings › Privacy & Security › *Open Anyway*; older, right-click › Open; if it says "is damaged": `xattr -cr /Applications/DevGo.app`. Copied straight out of the build tree it needs none of that on the machine that built it.
+**macOS**: `DevGo_<version>_aarch64.dmg` (3.7 MB). Drag `DevGo.app` to Applications. Gatekeeper will refuse the first launch, because nothing identifies the developer. Open it once and let the refusal come up, then System Settings › Privacy & Security › *Open Anyway*; on macOS 14 and older, right-click › Open. Copied straight out of the build tree it needs none of that on the machine that built it.
 
-**Linux**: `DevGo_<version>_amd64.deb`. `sudo dpkg -i DevGo_<version>_amd64.deb`, then run `DevGo`. It depends on `libwebkit2gtk-4.1-0`, `libgtk-3-0` and `libayatana-appindicator3-1`, which a desktop Ubuntu already has. Built on 24.04. The terminal row is seeded with the first emulator on PATH, in the order ghostty, wezterm, kitty, alacritty, gnome-terminal, konsole, xfce4-terminal, tilix, foot, terminator, xterm, and Scan finds the others. A box with none of them installed gets no terminal row at all.
+If macOS instead says DevGo **is damaged and can't be opened**, that is a different thing and there is no *Open Anyway* on it. It means the bundle that shipped is malformed, not that anything is wrong with your Mac, and it is a bug I want to know about: please [open an issue](https://github.com/joyahmed/devgo/issues) with the release version and your macOS version. I used to tell people to clear the app's quarantine attribute when they saw it. That advice is gone: it skips the check rather than answering it, so the app opens and the bad bundle stays.
+
+**Linux**: `DevGo_<version>_amd64.deb`. `sudo dpkg -i DevGo_<version>_amd64.deb`, then run `DevGo`. The `.deb` is unsigned too and `dpkg -i` does not check signatures, so there is nothing here for you to click past. It depends on `libwebkit2gtk-4.1-0`, `libgtk-3-0` and `libayatana-appindicator3-1`, which a desktop Ubuntu already has. Built on 24.04. The terminal row is seeded with the first emulator on PATH, in the order ghostty, wezterm, kitty, alacritty, gnome-terminal, konsole, xfce4-terminal, tilix, foot, terminator, xterm, and Scan finds the others. A box with none of them installed gets no terminal row at all.
 
 Optional, for the lanes that want them: `gh` (GitHub), `ssh` (Servers), `psmux` on Windows or `tmux` in the distro and on the Mac.
 
