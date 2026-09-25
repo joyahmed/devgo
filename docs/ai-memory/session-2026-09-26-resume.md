@@ -350,3 +350,72 @@ agent's report and must be carried into the Alina hand-off.
 - **The ghostty migration SHOULD be in 1.2.2** — it repairs rows written by a *released* version, so
   landing it after the release leaves those users unreached for another cycle.
 - **Version stays `1.2.2`; manifests stay at `1.2.1`** until macOS and Linux are tested at Joy's bar.
+
+---
+
+## ⭐ Slice I — `c0e20ce`, the second-instance raise: my hypothesis was half right, and the real find was underneath
+
+I had guessed "showing a window is not activating the application". ⭐ **The opposite is true, and it
+is the key to the whole bug:** `set_focus` **IS** the activation — `makeKeyAndOrderFront` +
+`activateIgnoringOtherApps` on macOS (`tao/.../macos/util/async.rs:231-238`), `SetForegroundWindow`
+plus tao's alt-key `SendInput` hack on Windows (`tao/.../windows/window.rs:1500-1525`), so **the
+foreground-lock case was already handled** and needed nothing from us.
+
+⛔ **The defect is that `set_focus` SKIPS ITSELF and still returns `Ok(())`.** Both platforms guard it
+on *visible && !minimized*. So:
+- **minimized** → skipped on both platforms, and `window.show()` does not deminiaturize;
+- **macOS app hidden with ⌘H** → a hidden app's window reports `isVisible == false`, `window.show()`
+  does not unhide the *app*, so `set_focus` skips. **That is the reported symptom exactly**: the line
+  prints, nothing comes up.
+
+⭐ **AND THE REAL FIND, which is bigger than the bug: the raise had been written FOUR times and two
+copies had drifted.** `summon.rs` (the hotkey — which works) and the macOS `Reopen` arm did
+show → unminimize → focus. The **single-instance restore** and `tray.rs::show_window` did only
+show → focus. Nobody had the app-level unhide. They are one function now, `summon::raise_main`.
+⚠️ **The working copy was the evidence.** The in-repo corroboration was better than anything the
+Tauri docs said — two copies of one behaviour disagreeing is a diagnosis, not a style problem.
+
+Fault 1 (`if let` with no `else`) and fault 2 (`let _ =` on both `Result`s) were **not** the live
+cause but are why it was undiagnosable: an absent window did nothing and told nobody, and both errors
+were discarded. Both fixed regardless — they cost nothing and they buy the next diagnosis.
+
+**Tests:** 3 over `raise_failure` — silence on success, the failing step **named**, and **every**
+failure reported rather than only the first. ⚠️ **No test can catch the bug itself**, because
+`set_focus` returns `Ok` when it skips; they protect the **diagnostic**, and the agent said so rather
+than dressing them up. **287 passed** (284 → 287), clippy zero, fmt clean.
+
+⚠️ **No log facility exists in devgo** — no `log`, no `tracing`, no file helper. `eprintln!` with the
+existing `[DevGo] …` prefix, matching the six existing sites. ⭐ Trove gained a runtime log and it was
+"the entire diagnosis" (copurge's trove note); **devgo has nothing equivalent, and this bug is the
+argument for it.** Queue it.
+
+## ⛔ THE ONE RELEASE RISK THIS SESSION CREATED
+
+`summon.rs:50` — `#[cfg(target_os = "macos")] let app_unhide = err_of(app.show());` — **has never been
+compiled.** This is a Windows box; `cargo check --target aarch64-apple-darwin` fails in a C build
+dependency (`cc-rs: failed to find tool "cc"`), not in our code. `AppHandle::show()` was verified by
+**reading the vendored source** (`tauri-2.11.5/src/app.rs:1085-1094`, inside `shared_app_impl!`, which
+is applied to both `App<R>` and `AppHandle<R>`) — good evidence, **not a compile**.
+⛔ **Someone must run `cargo clippy --all-targets -- -D warnings` on a Mac before v1.2.2 builds**, or
+the mac build breaks at release time.
+
+## What a Mac must confirm, as actions with expected observations
+
+1. **⌘H case** (the hypothesised live cause): launch, ⌘H, switch apps, launch again → window comes to
+   the front **with keyboard focus**. Before: the line printed and nothing appeared.
+2. **Minimize case**: launch, yellow-button minimize, click another app, launch again → it comes **out
+   of the Dock** and focuses. Before: stayed in the Dock.
+3. **✕ path, regression check**: launch, ✕ (hides, app lives), click another app, launch again →
+   unchanged from before. Confirms the added `app.show()` disturbed nothing.
+4. **✕ while in native full screen**, then a second launch — `HIDE_AFTER_FULLSCREEN` (`lib.rs:491-520`)
+   hides on a delayed thread, so a second launch landing mid-transition is a timing window **nobody
+   has reasoned through from source**.
+
+## Queued, with reasons
+
+- ⛔ **`cargo clippy -D warnings` on a Mac** — blocks the release, one command.
+- ⛔ **`git cherry-pick 5069efb`** — permission layer, Joy's hand.
+- **A runtime log for devgo.** This bug had three silent failures stacked in five lines and no log to
+  write to. Trove's log was its entire diagnosis.
+- **Alina re-verifies the four ClonePicker defects** — per-defect click list in slice H.
+- **Defect 5 needs a real repro** before anyone touches it.
