@@ -4,11 +4,12 @@ import { relativeTime } from '../github';
 import { fuzzyScore } from '../palette';
 import { lastSegment, normalizePath } from '../paths';
 import Button from './Button';
+import Select from './Select';
 import { pickTone } from './rowStyles';
 
 // the last workspace used: a second batch usually goes where the first went
 const WS_KEY = 'devgo.cloneWorkspace';
-// the select's last entry: the os folder picker, which has its own new folder
+// the list's last entry: the os folder picker, which has its own new folder
 const PICK = '__pick__';
 
 // a path under one of the workspaces is scanned already; one outside
@@ -73,9 +74,15 @@ const ClonePicker = ({
 			})
 			.catch(e => setError(String(e)));
 	};
-	const into = [
+	const folders = [
 		...workspaces,
 		...(chosen !== null && !workspaces.includes(chosen) ? [chosen] : [])
+	];
+	// a folder by its name, the path behind it, and last the door back to
+	// the os picker
+	const into: SelectOption[] = [
+		...folders.map(w => ({ value: w, label: lastSegment(w), hint: w })),
+		{ value: PICK, label: 'Choose a folder…' }
 	];
 
 	const q = query.trim();
@@ -223,21 +230,15 @@ const ClonePicker = ({
 				</div>
 			) : (
 			<div className='flex items-center justify-between gap-3 mt-4'>
-				<label className='flex items-center gap-2 min-w-0 text-13 text-text-secondary'>
+				<label className='flex items-center gap-2 min-w-0 flex-1 text-13 text-text-secondary'>
 					<span className='shrink-0'>into</span>
-					<select
-						className='min-w-0 flex-1 px-2 py-1.5 bg-bg-panel border border-border-strong rounded-control text-13 text-text-primary outline-none focus:border-accent'
+					<Select
 						value={workspace}
-						onChange={e => pickInto(e.target.value)}
+						options={into}
+						onChange={pickInto}
+						label='into'
 						title={workspace}
-					>
-						{into.map(w => (
-							<option key={w} value={w}>
-								{lastSegment(w)} · {w}
-							</option>
-						))}
-						<option value={PICK}>Choose a folder…</option>
-					</select>
+					/>
 				</label>
 				{outside && (
 					<label

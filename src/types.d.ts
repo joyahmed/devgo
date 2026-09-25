@@ -571,6 +571,24 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
 	ref?: React.Ref<HTMLButtonElement>;
 }
 
+/// one row of the dropdown: the name, and the detail behind it — a folder
+/// and the path it is at. the name is what typing a letter matches
+interface SelectOption {
+	value: string;
+	label: string;
+	hint?: string;
+}
+
+interface SelectProps {
+	value: string;
+	options: SelectOption[];
+	onChange: (value: string) => void;
+	/// what the control is for, the word beside it: its accessible name,
+	/// since the visible text is the value
+	label: string;
+	title?: string;
+}
+
 /// the footer: the launch groups, and the palette's door
 /// which default just fired; its button pulses once, the launch moment
 type LaunchKind = 'editor' | 'terminal' | 'both' | 'agent';
