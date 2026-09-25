@@ -1010,7 +1010,7 @@ mod tests {
     }
 
     // THE invariant, with no literal in it: devgo has two independent
-    // readers of one PATH - editors::first_on_path, which is what the
+    // readers of one PATH - editors::binary_on_path, which is what the
     // detector resolved a name with, and this PATH line, which is what the
     // launched script resolves it with. when they disagree devgo reports
     // one binary and runs another, silently. so: put the same name in two
@@ -1030,7 +1030,7 @@ mod tests {
             .expect("join paths")
             .to_string_lossy()
             .into_owned();
-        let detected = crate::services::editors::first_on_path(&login, NAME)
+        let detected = crate::services::editors::binary_on_path(&login, NAME)
             .expect("the detector finds the probe");
         let detected_dir = detected.parent().expect("a parent").to_path_buf();
         assert_eq!(detected_dir, login_dir, "the detector takes the first hit");
@@ -1079,7 +1079,7 @@ mod tests {
             .expect("join paths")
             .to_string_lossy()
             .into_owned();
-        let detected = crate::services::editors::first_on_path(&login, NAME)
+        let detected = crate::services::editors::binary_on_path(&login, NAME)
             .expect("the detector finds the probe");
 
         // the environment a .command really opens in: the fallbacks' half

@@ -1341,7 +1341,7 @@ fn resolved_exe(target: &str) -> Option<String> {
 // windows under test only, for the same reason the mac preamble is: the
 // agreement it anchors has no windows half to run.
 #[cfg(any(not(windows), test))]
-pub(crate) fn first_on_path(path: &str, name: &str) -> Option<PathBuf> {
+pub(crate) fn binary_on_path(path: &str, name: &str) -> Option<PathBuf> {
     std::env::split_paths(path)
         .map(|d| d.join(name))
         .find(|p| p.is_file())
@@ -1366,7 +1366,7 @@ fn path_lookup(names: &[&str]) -> HashMap<String, String> {
         if name.is_empty() {
             continue;
         }
-        if let Some(hit) = first_on_path(&path, name) {
+        if let Some(hit) = binary_on_path(&path, name) {
             found
                 .entry(name.to_lowercase())
                 .or_insert_with(|| hit.to_string_lossy().into_owned());
