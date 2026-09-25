@@ -285,11 +285,12 @@ pub fn run() {
             single_instance::start_restore_listener(listener, move || {
                 let h = app_handle.clone();
                 let h2 = h.clone();
+                // the same raise the summon hotkey uses. this used to be its
+                // own two-call copy, and the copy had drifted: no unminimize,
+                // no app-level unhide, so the second copy printed its line
+                // and nothing came up
                 let _ = h.run_on_main_thread(move || {
-                    if let Some(window) = h2.get_webview_window("main") {
-                        let _ = window.show();
-                        let _ = window.set_focus();
-                    }
+                    summon::raise_main(&h2);
                 });
             });
 
@@ -661,11 +662,7 @@ fn on_run_event(app: &tauri::AppHandle, event: tauri::RunEvent) {
     match event {
         #[cfg(target_os = "macos")]
         tauri::RunEvent::Reopen { .. } => {
-            if let Some(window) = app.get_webview_window("main") {
-                let _ = window.show();
-                let _ = window.unminimize();
-                let _ = window.set_focus();
-            }
+            summon::raise_main(app);
         }
         tauri::RunEvent::Exit => {
             if let Some(state) = app.try_state::<AppState>() {

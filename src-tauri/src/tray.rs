@@ -96,10 +96,9 @@ pub fn refresh(app: &AppHandle) {
 }
 
 fn show_window(app: &AppHandle) {
-    if let Some(window) = app.get_webview_window("main") {
-        let _ = window.show();
-        let _ = window.set_focus();
-    }
+    // one raise for the whole app: the tray copy had drifted the same way
+    // the single-instance one had, and a minimized window never came back
+    crate::summon::raise_main(app);
 }
 
 // a click on the icon itself, as opposed to a menu line. left-up shows
