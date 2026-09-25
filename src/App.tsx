@@ -822,11 +822,28 @@ const AppInner = () => {
 	const revealInExplorer = (p: Project) => reveal(p.full_path);
 	const revealWorkspace = (ws: string) => reveal(ws);
 
+	// the default manager, when one is set and still registered. a default
+	// that names a deleted target resolves to undefined here and every caller
+	// falls back to what it said before
+	const defaultFileManager = targets.fileManagers.find(
+		t => t.id === targets.defaults.file_manager
+	);
+	// the label the reveal key and the palette carry: the static one says
+	// "Explorer" even when the user made trove the default, which is a lie
+	const revealLabel = defaultFileManager
+		? `Reveal in ${defaultFileManager.name}`
+		: labelFor('revealExplorer');
+
 	// the reveal rows of a menu: one while there is one manager, and one each
-	// once a second is registered — trove beside explorer
+	// once a second is registered — trove beside explorer. the default goes
+	// first so the row in the old single-row position is the one the key and
+	// the palette open; the rest keep their registration order
 	const revealItems = (path: string, keys?: string): MenuEntry[] =>
 		targets.fileManagers.length > 1
-			? targets.fileManagers.map(t => ({
+			? [
+					...(defaultFileManager ? [defaultFileManager] : []),
+					...targets.fileManagers.filter(t => t.id !== defaultFileManager?.id)
+				].map(t => ({
 					label: `Reveal in ${t.name}`,
 					// the key opens the default one, so only that row claims it
 					hint: t.id === targets.defaults.file_manager ? keys : undefined,
@@ -1590,7 +1607,7 @@ const AppInner = () => {
 			},
 			proj(
 				'revealExplorer',
-				labelFor('revealExplorer'),
+				revealLabel,
 				['folder', 'files', 'explorer', 'finder'],
 				revealInExplorer
 			),

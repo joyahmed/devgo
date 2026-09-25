@@ -188,7 +188,7 @@ const SECTIONS: {
 	}
 ];
 
-const HelpPanel = ({ onError }: HelpPanelProps) => {
+const HelpPanel = ({ onError, revealLabel }: HelpPanelProps) => {
 	const [dataDir, setDataDir] = useState<string | null>(null);
 	useEffect(() => {
 		invoke<string>('get_app_data_dir').then(setDataDir).catch(() => {});
@@ -218,7 +218,7 @@ const HelpPanel = ({ onError }: HelpPanelProps) => {
 							invoke('reveal_app_data_dir').catch(e => onError(String(e)))
 						}
 					>
-						{labelFor('revealExplorer')}
+						{revealLabel ?? labelFor('revealExplorer')}
 					</Button>
 				</div>
 			</HelpSection>

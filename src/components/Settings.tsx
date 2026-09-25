@@ -1064,6 +1064,13 @@ const Settings = ({
 	onImportSsh
 }: SettingsProps) => {
 
+	// help's reveal button opens the DEFAULT manager, so its label names that
+	// one; a default that is unset or points at a deleted target leaves the
+	// static "Reveal in Explorer" in place
+	const defaultManagerName = targets.fileManagers.find(
+		t => t.id === targets.defaults.file_manager
+	)?.name;
+
 	// The registry. A later chapter adds a panel by adding an object here; the
 	// nav, the persistence, Escape and the layout never learn what a panel holds.
 	const panels: SettingsPanel[] = [
@@ -1150,7 +1157,19 @@ const Settings = ({
 				/>
 			)
 		},
-		{ id: 'help', label: 'Help', render: () => <HelpPanel {...{ onError }} /> },
+		{
+			id: 'help',
+			label: 'Help',
+			render: () => (
+				<HelpPanel
+					{...{
+						onError,
+						revealLabel:
+							defaultManagerName && `Reveal in ${defaultManagerName}`
+					}}
+				/>
+			)
+		},
 		{ id: 'about', label: 'About', render: () => <AboutPanel /> }
 	];
 

@@ -825,6 +825,9 @@ interface HelpSectionProps {
 
 interface HelpPanelProps {
 	onError: (message: string) => void;
+	/// the button reveals the data folder in the DEFAULT manager, so it must
+	/// name that one; absent, the static "Reveal in Explorer" still applies
+	revealLabel?: string;
 }
 
 interface SettingsPanel {
