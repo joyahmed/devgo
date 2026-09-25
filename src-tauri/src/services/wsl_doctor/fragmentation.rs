@@ -677,4 +677,39 @@ mod tests {
         assert!(r.findings.is_empty());
         assert_eq!(r.readings, Readings::default());
     }
+
+    // the probe against a real distro. ignored because it depends on
+    // whether wsl happens to be up, and it shells to wsl.exe; run by hand
+    // with cargo test -- --ignored --nocapture real_fragmentation
+    #[cfg(windows)]
+    #[test]
+    #[ignore]
+    fn real_fragmentation_reads_on_this_machine() {
+        let r = report(None);
+        println!("distro = {:?} reason = {:?}", r.distro, r.reason);
+        println!("zones = {}", r.readings.zones.len());
+        for z in &r.readings.zones {
+            println!(
+                "  node {} {}: {} free, {} in high orders",
+                z.node,
+                z.name,
+                crate::services::wsl_doctor::human(z.free_bytes),
+                crate::services::wsl_doctor::human(z.high_order_bytes)
+            );
+        }
+        for f in &r.findings {
+            println!(
+                "  {:?}: {} | {} | {}",
+                f.severity, f.text, f.problem, f.fix
+            );
+        }
+        // one or the other, never both empty and never both present: a
+        // stopped VM must come back as a stated reason rather than silence,
+        // which is the whole contract of this call
+        assert_eq!(
+            r.reason.is_some(),
+            r.readings.zones.is_empty(),
+            "a report with no zones must say why, and one with zones must not"
+        );
+    }
 }

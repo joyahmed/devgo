@@ -1151,4 +1151,36 @@ instanceIdleTimeout=-1
         names.dedup();
         assert_eq!(names.len(), count);
     }
+
+    // the probe against this machine's own .wslconfig. ignored because the
+    // answer depends on whose box it runs on; run by hand with
+    // cargo test -- --ignored --nocapture real_wslconfig
+    #[cfg(windows)]
+    #[test]
+    #[ignore]
+    fn real_wslconfig_reads_on_this_machine() {
+        let r = report();
+        println!("path = {} (exists {})", r.path, r.exists);
+        println!(
+            "host = {} memory, {:?} processors",
+            r.host_memory_bytes.map(human).unwrap_or("?".into()),
+            r.host_processors
+        );
+        for f in &r.findings {
+            println!(
+                "  {:?} line {:?}: {} | {} | {}",
+                f.severity, f.line, f.text, f.problem, f.fix
+            );
+        }
+        // a path is named even when nothing is at it — "no file" is a fact
+        // about a path, so an empty one means USERPROFILE and HOME are both
+        // unset, which is a broken environment and not a healthy machine
+        assert!(!r.path.is_empty(), "no path to name");
+        // the memory read is process-free, so on Windows it cannot fail for
+        // an environmental reason. a None here is the kernel call failing
+        assert!(
+            r.host_memory_bytes.is_some(),
+            "GlobalMemoryStatusEx gave nothing"
+        );
+    }
 }
