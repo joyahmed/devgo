@@ -887,6 +887,9 @@ interface ShortcutTableProps {
 	/// the accelerator the backend actually bound
 	onSummonChanged: (hotkey: string) => void;
 	onError: (message: string) => void;
+	/// the default file manager's name, so the two reveal rows say what they
+	/// open; absent, their static "Explorer" wording still applies
+	fileManagerName?: string;
 }
 
 /// The add form's fields — all strings, because an input cannot hold null.

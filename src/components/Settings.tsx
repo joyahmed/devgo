@@ -79,9 +79,16 @@ const toAccelerator = (e: KeyboardEvent): string | null => {
 const ShortcutTable = ({
 	summonHotkey,
 	onSummonChanged,
-	onError
+	onError,
+	fileManagerName
 }: ShortcutTableProps) => {
 	const groups = [...new Set(SHORTCUTS.map(s => s.group))];
+	// both reveal keys pass no target and land on the default manager, so the
+	// table has to name it rather than keep saying Explorer at a trove user
+	const shortcutLabel = (id: ShortcutId) =>
+		fileManagerName && (id === 'revealExplorer' || id === 'revealWorkspace')
+			? labelFor(id).replace(/Explorer$/, fileManagerName)
+			: labelFor(id);
 	const [capturing, setCapturing] = useState(false);
 
 	// capture phase, so the keys pressed to choose a chord never reach the
@@ -141,7 +148,7 @@ const ShortcutTable = ({
 								className='flex items-center justify-between gap-3 py-1 text-15'
 							>
 								<span className='text-text-secondary'>
-									{labelFor(s.id)}
+									{shortcutLabel(s.id)}
 									{s.needsSelection && (
 										<span className='text-text-muted text-13'>
 											{' '}
@@ -1122,7 +1129,10 @@ const Settings = ({
 			id: 'shortcuts',
 			label: 'Shortcuts',
 			render: () => (
-				<ShortcutTable {...{ summonHotkey, onSummonChanged, onError }} />
+				<ShortcutTable
+					{...{ summonHotkey, onSummonChanged, onError }}
+					fileManagerName={defaultManagerName}
+				/>
 			)
 		},
 		{
