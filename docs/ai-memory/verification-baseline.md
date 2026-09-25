@@ -40,7 +40,7 @@ cd src-tauri && cargo test
 |---|---|---|
 | Frontend build | `bun run build` = `check:contrast && tsc && vite build` | **green**, 94 modules, 3.8s |
 | Contrast check | `bun run check:contrast` (inside `build`) | **green** — 6 palettes × 8 rules, 5 lane hues |
-| Rust tests | `cargo test` | **green** — **283 passed / 0 failed / 1 ignored** |
+| Rust tests | `cargo test` | **green** — **299 passed / 0 failed / 1 ignored** (283 when this baseline was first measured; +1 PATH agreement, +3 raise diagnostic, +12 runtime log) |
 
 ⭐ **No output-directory trap here, unlike a Next repo.** `vite build` writes `dist/`, which is
 **gitignored** and is read only by `tauri build`; `bun run dev` serves from vite on **:1420** and

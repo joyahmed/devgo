@@ -419,3 +419,80 @@ the mac build breaks at release time.
   write to. Trove's log was its entire diagnosis.
 - **Alina re-verifies the four ClonePicker defects** — per-defect click list in slice H.
 - **Defect 5 needs a real repro** before anyone touches it.
+
+---
+
+## ⭐ Slice J — `3bfee93`, devgo can finally say what happened
+
+**The argument, not the feature:** every defect tonight was a *silent* failure. `set_focus` declining
+and returning `Ok`. An `if let` with no `else`. The v1.2.1 PATH bug producing no output at all. There
+were **8 `eprintln!` sites** and stderr reaches **nobody** who launched from Finder, the Dock or a
+Start Menu shortcut — which is everyone. ⭐ **DevGo ships on three platforms and two of them cannot be
+reached for hands-on testing right now. A user can send a file; they cannot reliably describe what a
+window did.**
+
+- **No dependency.** `chrono`, `time`, `log`, `tracing` are all in `Cargo.lock` already — but only
+  through tauri, and promoting one is still a new direct dep and a feature surface, for 8 call sites
+  and one file. Hand-rolled in the style of `single_instance.rs`.
+- **`<app_data_dir>/devgo.log`**, from the *same* binding the stores get — the module never computes a
+  path of its own. **1 MiB, then rename to `devgo.log.old`, keeping exactly one.** ⭐ Chosen over
+  truncate-and-restart because **the cap is crossed at a moment uncorrelated with the incident**, so
+  truncating discards the history *before* the bug as often as not.
+- ⚠️ **Nothing in the module can panic** and every write is best-effort: a log that can take the app
+  down is worse than no log. **No lock file** — a lock is a thing a killed process holds forever,
+  which is the exact bug class this exists to diagnose. `O_APPEND` means two instances interleave
+  whole lines, never bytes within a line. **No worker thread, no buffer**, because a log that loses
+  the last line before a crash loses the line you wanted.
+- Timestamps: RFC 3339 **UTC** to the millisecond off `SystemTime`, calendar done as an integer era
+  calculation so there are no leap-year special cases to get wrong. UTC because the reader is whoever
+  receives the bug report; lexicographic order is chronological order.
+- **Both halves of the single-instance decision are recorded** — winner serving, loser handing off,
+  winner reading the word. ⭐ **A log with one half and not the other names which end broke.**
+
+⭐⭐ **PROVEN ON A REAL LAUNCH, not only by unit test.** Joy's v1.2.1 was running (PID 13288). A second
+copy built from this commit was launched, handed off, and **exited on its own**, leaving:
+
+```
+2026-09-25T21:14:58.594Z [DevGo] --- start: v1.2.1 windows x86_64 pid 2216 ---
+2026-09-25T21:14:58.596Z [DevGo] single instance: handed off to the instance on port 56028
+2026-09-25T21:14:58.596Z DevGo is already running; focusing the existing window.
+```
+
+**Nothing was killed and the running instance was not disturbed** beyond having its window raised.
+⚠️ The commit message was **amended** before pushing: it had said the app was never launched, which
+stopped being true. **299 passed** (287 → 299), clippy zero, fmt clean.
+
+⚠️ **One line still reaches stderr alone**: `win_taskbar::set_app_user_model_id` (`lib.rs:87`) runs
+*before* `init`, because the AUMID must be set before the first window exists while `app_data_dir` is
+only resolvable inside `setup`. It is `#[cfg(windows)]` — the one platform that can be watched
+directly — so no pre-init buffer was added.
+
+## ⭐ Slice K — `8dd7916`, chapter 78, and the unreviewed draft it replaces was wrong in EIGHT places
+
+⭐ **THE NUMBERING WAS SETTLED BY THE README'S OWN RULE, not by preference:** *"Every chapter is a
+branch."* The branch is `78.file-manager`, so the chapter is **78**, and the draft's `77-` was wrong —
+77 belongs to the unfinished `77.wsl-doctor`. The PATH-finding material has no branch of its own, so
+it is a **section** of 78, not a chapter.
+
+⛔ **What the draft got wrong, and why this is the valuable part:**
+1. numbered **77**; 2. named the **pre-rebase base** (`427ac49`, not `3c6a6c5`);
+3. ⭐ **an entire section on `Kbd.tsx` and the footer keys that is NOT ON THIS BRANCH** — that commit
+(`9deffdf`) was auto-dropped in the rebase as a duplicate patch-id of main's `e5ed762`, **and the
+draft noticed the duplication and kept the section anyway**; 4. warned the version would go backwards,
+against a file this branch never touches (`tauri.conf.json` reads **1.2.1**); 5. called clippy red on
+five sites when it is **zero**; 6. gave the test count as **259** against 287; 7. quoted the **pre-fix**
+`revealItems` and said a later chapter would fix it — **the fix is on this branch**; 8. named
+**`resolve_with_command`**, which **does not exist anywhere in the tree** (it is `resolve_run`).
+
+⭐ **An unreviewed draft that is ninety percent right is MORE dangerous than one that is obviously
+broken, because the ten percent reads with the same confidence as the rest.** This is the standing
+lesson from the four agents who died mid-slice: their output is a *draft*, and `✅WIP:` in a subject
+line does not make it reviewed.
+
+Verified by extracting all **201** backticked tokens from the finished chapter and grepping each
+across `src/` and `src-tauri/src/` — exactly one came back zero. Four of the eight were re-checked by
+hand here: `resolve_with_command` 0 hits / `resolve_run` 1, `Kbd.tsx` no diff against `origin/main`,
+`tauri.conf.json` 1.2.1.
+
+⚠️ **`docs/ai-memory/verification-baseline.md` updated** — it said 283 and a baseline that lies is
+worse than none.
