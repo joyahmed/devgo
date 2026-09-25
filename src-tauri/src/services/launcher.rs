@@ -460,25 +460,50 @@ fn sh_quote(value: &str) -> String {
 // hardcode. login_path() already asked the login shell for the real answer
 // and memoised it for the life of the process, so the resolved string is
 // pasted in here and the script pays nothing at launch — no `zsh -ilc` per
-// .command. appended, never prepended: this line can only ever widen the
-// PATH the script already had. single-quoted and concatenated onto the
-// closing double quote, because a path is not a place to trust $ and `.
-// empty is skipped: a trailing `:` is bash for "and the current
-// directory", a PATH entry nobody asked for
+// .command.
+//
+// the rule the order enforces: the script resolves what the detector
+// trusted, in the same order. editors::path_lookup walks login_path()'s
+// directories and takes the first hit; a script that put $PATH and
+// /usr/local/bin in front would, for any name living in both — a homebrew
+// `node` over an nvm one, a homebrew `python3` over a pyenv one — launch a
+// different file than the one devgo detected, silently. so login_path
+// leads and the old fallbacks trail it: they still widen the PATH for a
+// machine whose login shell answered with nothing useful, they just no
+// longer outrank it.
+//
+// brew shellenv stays, and not for PATH: login_path already carries
+// /opt/homebrew/bin on any mac whose .zprofile runs it, and the fallback
+// appends it regardless. what only shellenv sets is HOMEBREW_PREFIX,
+// HOMEBREW_CELLAR, MANPATH and INFOPATH, which a PATH string cannot
+// carry and some formulae read. it runs first so the PATH line's
+// prepend still wins.
+//
+// the value is single-quoted and concatenated onto the double-quoted
+// fallbacks, because a path is not a place to trust $ and `; adjacent
+// quoted segments are one bash word, so a directory with a space stays
+// one entry. empty is skipped whole: a leading `:` is bash for "and the
+// current directory", a PATH entry nobody asked for
 #[cfg(any(not(windows), test))]
 fn mac_preamble() -> String {
-    let resolved = super::platform::login_path();
-    let extra = if resolved.trim().is_empty() {
-        String::new()
-    } else {
-        format!(":{}", sh_quote(resolved.trim()))
-    };
+    let path_line = mac_path_line(&super::platform::login_path());
     format!(
         r#"#!/bin/bash
 [ -x /opt/homebrew/bin/brew ] && eval "$(/opt/homebrew/bin/brew shellenv)"
-export PATH="$PATH:/usr/local/bin"{extra}
+{path_line}
 "#
     )
+}
+
+// the PATH line alone, pure, so a test can hand it a login path instead of
+// waiting on the OnceLock'd login shell this process happens to have
+#[cfg(any(not(windows), test))]
+fn mac_path_line(login: &str) -> String {
+    let login = login.trim();
+    if login.is_empty() {
+        return r#"export PATH="$PATH:/usr/local/bin""#.to_string();
+    }
+    format!(r#"export PATH={}:"$PATH:/usr/local/bin""#, sh_quote(login))
 }
 
 // the tmux session script for a local project on a mac: the body is
@@ -888,6 +913,97 @@ mod tests {
             enabled: true,
             window_names: names.iter().map(|n| n.to_string()).collect(),
         }
+    }
+
+    // every caller below used to assert `script.starts_with(&mac_preamble())`,
+    // which is the generator compared with itself: it holds for any PATH
+    // order at all, which is how a script that disagreed with the detector
+    // shipped green. what a caller actually owes is the shape — shebang,
+    // brew's environment, then one PATH line whose hardcoded fallbacks
+    // TRAIL the resolved value instead of outranking it
+    fn assert_mac_preamble(script: &str) {
+        let mut lines = script.lines();
+        assert_eq!(lines.next(), Some("#!/bin/bash"), "{script}");
+        assert_eq!(
+            lines.next(),
+            Some(
+                r#"[ -x /opt/homebrew/bin/brew ] && eval "$(/opt/homebrew/bin/brew shellenv)""#
+            ),
+            "{script}"
+        );
+        let value = lines
+            .next()
+            .and_then(|l| l.strip_prefix("export PATH="))
+            .unwrap_or_else(|| panic!("no PATH line third: {script}"));
+        assert!(
+            value.ends_with(r#""$PATH:/usr/local/bin""#),
+            "the fallbacks trail the login path, they do not lead it: {script}"
+        );
+        assert!(
+            !value.starts_with(':'),
+            "a leading colon is the current directory: {script}"
+        );
+    }
+
+    // the invariant the whole preamble exists for: editors::path_lookup
+    // resolves a name by walking login_path()'s directories, first hit
+    // wins, so the script must search those same directories first or it
+    // launches a different `node` than the one devgo detected. /usr/local/bin
+    // is in both lists on a homebrew mac; the login one has to win
+    #[test]
+    fn the_script_searches_the_login_path_before_the_fallbacks() {
+        let line = mac_path_line("/Users/joy/.local/bin:/usr/local/bin");
+        let value = line
+            .strip_prefix("export PATH=")
+            .unwrap_or_else(|| panic!("not a PATH line: {line}"));
+        assert!(
+            value.starts_with("'/Users/joy/.local/bin"),
+            "the resolved path leads: {line}"
+        );
+        let login_at = value
+            .find("/Users/joy/.local/bin")
+            .unwrap_or_else(|| panic!("{line}"));
+        let fallback_at = value
+            .rfind("/usr/local/bin")
+            .unwrap_or_else(|| panic!("{line}"));
+        assert!(
+            login_at < fallback_at,
+            "the hardcoded /usr/local/bin shadows the detected one: {line}"
+        );
+        assert!(
+            value.ends_with(r#":"$PATH:/usr/local/bin""#),
+            "the old fallbacks are still there, behind: {line}"
+        );
+    }
+
+    // a login path nobody could resolve leaves the line exactly as it was
+    // before login_path was pasted in: no `:` with nothing in front of it,
+    // which bash reads as the current directory
+    #[test]
+    fn an_empty_login_path_leaves_no_stray_separator() {
+        let bare = r#"export PATH="$PATH:/usr/local/bin""#;
+        assert_eq!(mac_path_line(""), bare);
+        assert_eq!(mac_path_line("   \n"), bare);
+        assert!(!mac_path_line("").contains("=:"));
+        assert!(!mac_path_line("").contains("::"));
+    }
+
+    // a homebrew prefix under /Users/joy's mac or an nvm directory inside a
+    // folder with a space is one PATH entry, not two words: the value is
+    // single-quoted and butted up against the double-quoted fallbacks, and
+    // bash joins adjacent quoted segments into one word
+    #[test]
+    fn a_login_path_with_a_space_and_an_apostrophe_stays_one_word() {
+        assert_eq!(
+            mac_path_line("/opt/a b/bin:/Users/joy's mac/.local/bin"),
+            r#"export PATH='/opt/a b/bin:/Users/joy'\''s mac/.local/bin':"$PATH:/usr/local/bin""#
+        );
+        // and nothing the shell would expand survives unquoted
+        let line = mac_path_line("/x/$HOME/`whoami`/bin");
+        assert_eq!(
+            line,
+            r#"export PATH='/x/$HOME/`whoami`/bin':"$PATH:/usr/local/bin""#
+        );
     }
 
     /// The one way to register a program no installer puts on PATH is an
@@ -2354,7 +2470,7 @@ mod tests {
             "no mac lines leaked into the wsl script: {wsl}"
         );
 
-        assert!(mac.starts_with(&mac_preamble()), "{mac}");
+        assert_mac_preamble(&mac);
         assert!(mac.starts_with("#!/bin/bash\n"), "not env bash: {mac}");
         assert!(mac.contains(r#"eval "$(/opt/homebrew/bin/brew shellenv)""#));
         assert!(mac.contains("/usr/local/bin"), "an intel mac too: {mac}");
@@ -2408,7 +2524,7 @@ mod tests {
             script.contains("cd '/Users/user/app' || exit 1"),
             "{script}"
         );
-        assert!(script.starts_with(&mac_preamble()), "{script}");
+        assert_mac_preamble(&script);
     }
 
     // a directory with a space and an apostrophe reaches bash as one word,
@@ -2430,7 +2546,7 @@ mod tests {
         );
 
         let run = build_mac_run_script("app", &path, "bun dev");
-        assert!(run.starts_with(&mac_preamble()), "{run}");
+        assert_mac_preamble(&run);
         assert!(
             run.contains(&format!(
                 "cd {quoted} || exit 1\n\"${{SHELL:-bash}}\" -ic 'bun dev'\n"
@@ -2522,7 +2638,7 @@ mod tests {
 
         let on_disk = std::fs::read_to_string(&expected)
             .unwrap_or_else(|_| panic!("no script at {}", expected.display()));
-        assert!(on_disk.starts_with(&mac_preamble()), "{on_disk}");
+        assert_mac_preamble(&on_disk);
         assert!(on_disk.contains("tmux new-session -d -s "), "{on_disk}");
         assert!(on_disk.contains("-n 'code'"), "{on_disk}");
         assert!(
