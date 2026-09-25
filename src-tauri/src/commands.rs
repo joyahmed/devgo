@@ -748,7 +748,7 @@ pub fn add_detected_target(
     let found = editors::detect(&running)
         .into_iter()
         .find(|d| d.target.id == id)
-        .ok_or_else(|| AppError::TargetNotFound(id))?;
+        .ok_or(AppError::TargetNotFound(id))?;
 
     state
         .target_store

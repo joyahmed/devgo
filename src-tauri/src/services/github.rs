@@ -899,10 +899,13 @@ mod tests {
         assert!(traffic_is_stale(0, 1_000), "never read is stale");
         assert!(!traffic_is_stale(1_000, 1_000 + TRAFFIC_STALE_SECS));
         assert!(traffic_is_stale(1_000, 1_000 + TRAFFIC_STALE_SECS + 1));
-        assert!(
-            TRAFFIC_STALE_SECS < STALE_AFTER_SECS,
-            "sooner than the list"
-        );
+        // a real invariant between two consts, so hold it at compile time
+        const {
+            assert!(
+                TRAFFIC_STALE_SECS < STALE_AFTER_SECS,
+                "sooner than the list"
+            );
+        }
     }
 
     #[test]

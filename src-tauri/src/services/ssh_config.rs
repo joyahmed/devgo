@@ -23,9 +23,7 @@ pub fn parse(text: &str) -> Vec<Server> {
         if line.is_empty() || line.starts_with('#') {
             continue;
         }
-        let (key, value) = match line
-            .split_once(|c: char| c == ' ' || c == '\t' || c == '=')
-        {
+        let (key, value) = match line.split_once([' ', '\t', '=']) {
             Some((k, v)) => (k.trim(), v.trim().trim_start_matches('=').trim()),
             None => (line, ""),
         };
