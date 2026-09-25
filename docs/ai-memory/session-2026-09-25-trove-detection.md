@@ -6,6 +6,32 @@ Branch `78.file-manager`. Started clean at `9deffdf`.
 
 - **`d7b3108` ✅TARGETS: devgo finds trove through its start menu shortcut**
   - `src-tauri/src/services/editors.rs` +335, `src/components/TargetManager.tsx` +4/-2.
+- **`2872225` ✅DOCS: the session note for the trove detection slice** — this file.
+- **`9ed0263` ✅TARGETS: the start menu walk cannot wander off**
+  - `src-tauri/src/services/editors.rs` +90/-17. Closes both hardenings the reviewer
+    raised against `d7b3108`:
+  - `SHORTCUT_MAX_DEPTH = 8` (editors.rs:1184-1192); the walk stack is now
+    `Vec<(PathBuf, usize)>` (1200-1231) so depth rides with each entry rather than a
+    shared counter (a stack walk visits siblings between levels). Without it, a junction
+    pointing back at its own parent was an endless descent *inside `detect()`* — a hang
+    of target detection. A real installer's shortcut sits one or two folders down.
+  - PowerShell list building extracted to a pure `shortcut_script()` (1233-1257) so it is
+    testable without a spawn; `resolve_shortcuts` now one line calling it.
+  - Tests: `the_start_menu_walk_stops_at_a_fixed_depth` (derives the chain length from the
+    constant; `Near.lnk` inside the cap found, `Far.lnk` one past not) and
+    `a_shortcut_path_with_shell_characters_is_quoted_whole`
+    (`C:\Joy's Apps\$env Tools\Trove.lnk` — pins the exact `@('…','…')` list, quote
+    balance, only the real quote doubled, empty slice → `@()`).
+  - Gate re-run by the orchestrator: fmt pass, `cargo test` **264 passed / 0 failed /
+    1 ignored** (262 → +2), `bun run build` exit 0, clippy unchanged at the same 5
+    pre-existing sites.
+  - A total-entry cap was considered and **rejected** — a second counter threaded through
+    the loop for no gain over the depth bound.
+
+⚠️ **rust-analyzer reported a phantom `cannot find function shortcut_script` during this
+slice.** It was stale indexing: `cargo check --all-targets` after a `touch` exits 0 with
+zero errors, and `cargo test` compiles and runs 264. Trust cargo over the editor
+diagnostics in this crate.
 
 ## The bug, and why it was invisible
 
@@ -110,13 +136,18 @@ Temp test removed afterwards; file confirmed byte-identical, diffstat matched.
 - **`App Paths` reader in devgo** — a second, sturdier signal alongside the shortcut.
   Needs a registry dependency (`winreg`) in `src-tauri/Cargo.toml`, which the crate has
   never had. Tell trove-58 when it lands; they are waiting on that word.
-- **Two cheap hardenings deferred from this slice** (reviewer-raised, both theoretical,
-  neither observed): `find_shortcut` has no cycle detection, so a directory junction loop
-  under the Start Menu would hang the walk — add a depth cap; and add a unit test for a
-  shortcut path containing a quote, a space or a dollar sign to pin the PowerShell quoting.
+- ~~Two cheap hardenings deferred~~ — **DONE in `9ed0263`** (depth cap + quoting test).
 - **`resolve_shortcuts` line-pairing** is correct by reading (the `foreach` emits exactly
   one `Write-Output` per input on both the success and catch branches, so the `zip` cannot
-  shift) but was not proved with an adversarial multi-line TargetPath. Low risk, noted.
+  shift) but was not proved with an adversarial multi-line TargetPath. Low risk, still
+  open — the only way to prove it is a `.lnk` whose TargetPath contains a newline, which
+  needs a real `IWshShell`-written shortcut, so the existing tests stop short of it.
+- **Shortcut name matching is exact on the stem `Trove`** (case-insensitive). A future
+  `Trove 1.0.lnk` or `Trove (Beta).lnk` would NOT match and detection would silently stop
+  working. trove-58 has been told to say so before versioning the shortcut name; if they
+  do, widen the match rather than discovering it in the field.
+- **Nothing reads the shortcut's WorkingDirectory, icon or arguments** — only TargetPath,
+  then an `is_file()` gate. A shortcut pointing at a stub/launcher would register the stub.
 
 ## For the person
 
