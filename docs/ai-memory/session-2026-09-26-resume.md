@@ -496,3 +496,55 @@ hand here: `resolve_with_command` 0 hits / `resolve_run` 1, `Kbd.tsx` no diff ag
 
 ⚠️ **`docs/ai-memory/verification-baseline.md` updated** — it said 283 and a baseline that lies is
 worse than none.
+
+---
+
+## ⭐ Slice L — `5b76990`, "still opens folders in windows explorer. except one"
+
+Joy's report, live, against the app he actually runs. ⭐ **The answer was in a timestamp, and it was
+checked rather than assumed** — because "it's your old build" is the easiest wrong answer to give.
+
+`C:\Users\Joy\AppData\Local\DevGo\DevGo.exe`, **FileVersion 1.2.0**, built **2026-09-25 06:38:56**:
+
+| commit | time | in his build |
+|---|---|---|
+| `f8763dd` the file manager is a switchable target | 05:19 | ✅ |
+| `be73798` browse for the exe | 05:59 | ✅ |
+| `5ebb682` **the default file manager leads the reveal menu** | 23:21 | ❌ |
+| `8f8d399` **the rows that said explorer while opening trove** | 23:54 | ❌ |
+
+⭐ So his binary has file managers **as targets** but still lists them in **registration order with
+Explorer first**, and two rows literally say "Explorer" while opening Trove. **"Opens in Explorer,
+except one" is the exact signature of that build**, and §78.7 is what fixes it.
+
+⚠️ **A report about an old binary is still worth auditing the branch for** — and it found one:
+`App.tsx:866`, the single-manager context-menu row, used the **static** `labelFor('revealExplorer')`
+while opening whatever the backend resolved. With only Trove registered, the row **said Explorer and
+opened Trove**. It uses the effective-manager label now — the last seat still narrating Explorer,
+after the palette, shortcut table and Help were fixed in `8f8d399`.
+
+**Everything else was already right, and that is worth recording so it is not re-audited:** there are
+**zero hardcoded reveal paths** in the crate, `reveal_command()` was deleted in `f8763dd`, and every
+door goes through one resolver (`commands.rs:168`). The rows that name Explorer *explicitly* are the
+user choosing it; the seeded `explorer`/`finder` rows are the no-manager-registered fallback.
+
+⭐ **So the fix is two tests over the RULE, not over a call site** — which is the only kind that
+survives the next contributor:
+- `every_reveal_door_goes_through_the_registered_file_manager` — over every `.rs`: no file manager
+  spawned **by name**, **exactly one** line resolving `TargetKind::FileManager`, and every
+  `reveal`-named command calling `reveal_path(`.
+- `the_frontend_has_one_reveal_door_and_pins_no_manager` — over every `.ts`/`.tsx`: one
+  `invoke('reveal_in_explorer')`, and **no file pins a manager id**.
+
+⭐ **Both were proved to BITE** — throwaway files containing `Command::new("explorer")`, a bogus
+`reveal`-named command, and a pinned `targetId` each made the right claim fail, then were deleted. A
+rule test nobody has seen fail is a rule test nobody knows works. ⚠️ The `#[tauri::command]` attribute
+is assembled at runtime so the test does not match its own source text.
+
+**301 passed** (299 → 301), clippy zero, fmt/tsc/build clean.
+
+⛔ **The changed label has NO automated cover.** To confirm: remove every file manager but Trove, then
+right-click a project — the single row must read **Reveal in Trove** and open Trove.
+⚠️ **And a trap for whoever tests it:** `tauri dev` shares the `app.zetta.devgo` single-instance key
+with the installed copy, so **a dev run against a running install silently tests the INSTALLED
+binary.** Quit the installed one first or the test is worthless.
