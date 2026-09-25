@@ -144,10 +144,48 @@ Temp test removed afterwards; file confirmed byte-identical, diffstat matched.
   needs a real `IWshShell`-written shortcut, so the existing tests stop short of it.
 - **Shortcut name matching is exact on the stem `Trove`** (case-insensitive). A future
   `Trove 1.0.lnk` or `Trove (Beta).lnk` would NOT match and detection would silently stop
-  working. trove-58 has been told to say so before versioning the shortcut name; if they
-  do, widen the match rather than discovering it in the field.
+  working. **RESOLVED for now — see the verification below: the name is stable and
+  version-free by measurement, not intention.** Still the sharpest edge of the design if
+  it ever changes.
 - **Nothing reads the shortcut's WorkingDirectory, icon or arguments** — only TargetPath,
   then an `is_file()` gate. A shortcut pointing at a stub/launcher would register the stub.
+  Verified below that Trove's installer targets the real binary, not a stub.
+
+## Trove's installer verified against our contract (trove-58, Trove commit `244629f`)
+
+Checked against the **generated `installer.nsi`**, not intentions, before they committed:
+
+1. **`Trove.lnk` is stable and version-free.** `installer.nsi:901`
+   `CreateShortcut "$SMPROGRAMS\${PRODUCTNAME}.lnk"` with `:35 !define PRODUCTNAME "Trove"`.
+   `VERSION "0.1.0"` / `VERSIONWITHBUILD "0.1.0.0"` are separate defines, never
+   interpolated into the shortcut name. **No widening of our match needed.**
+2. **Unnested, depth 0.** `:65 !define STARTMENUFOLDER ""`, so the nesting branch at `:898`
+   is not taken and the bare `$SMPROGRAMS\Trove.lnk` at `:901` is. Our depth cap of 8 is
+   far clear.
+3. **`installMode: "currentUser"`** → `utils.nsh:4 SetShellVarContext current` →
+   `$SMPROGRAMS` is `%APPDATA%\Microsoft\Windows\Start Menu\Programs`, our primary path.
+4. **Target is `$INSTDIR\trove.exe`**, the real binary (`File` at `:638` after
+   `SetOutPath $INSTDIR` at `:629`). No launcher, no stub — our `is_file()` gate passes and
+   TargetPath follows the user's chosen install directory.
+
+**Root cause on their side, which explains ours:** there was never an installer at all.
+`bundle.active` was `false` with `targets: []` and the only build script was
+`tauri build --no-bundle`. That is exactly why this machine had a hand copy and no
+Uninstall key. Turning the bundler on was the whole fix — `MUI_PAGE_DIRECTORY` is
+unconditional in Tauri's stock NSIS template, gated only by `SkipIfPassive`. No forked
+template, no hook.
+
+⚠️ **The standing objection to guard: `installMode: "both"`.** trove-58 pinned
+`currentUser` explicitly (though it is already the schema default) *because it is now
+load-bearing for devgo*. `perMachine` would merely move the shortcut to `%ProgramData%`,
+which we also walk, so we would still resolve. But **`both`** adds
+`MULTIUSER_PAGE_INSTALLMODE` and makes the shell context a runtime choice — which Start
+Menu tree receives `Trove.lnk` would stop being knowable from config at all. **If anyone
+ever proposes `both` for Trove, that is the objection, and it is devgo's to raise.**
+
+**State of the world right now:** `Trove_0.1.0_x64-setup.exe` (2,058,467 bytes, 2m48s,
+exit 0) is **built but NOT run**. Until Joy runs it, devgo keeps resolving to the hand copy
+at `E:\Softwares\Trove\trove.exe` — which works identically. Nothing breaks either way.
 
 ## For the person
 
