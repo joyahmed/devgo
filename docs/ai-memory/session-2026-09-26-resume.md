@@ -80,3 +80,59 @@ not honour it, corrected 2026-09-26"). Nothing to do.
 Slice B: make the WSL doctor WIP (`03c0205`) actually compile and pass, or say precisely why it cannot.
 Then slice C: judge the ghostty WIP against the Terminal.app decision. Then chapter 78.
 `wsl.rs:202` clippy stays last — it conflicts with the doctor until the doctor lands.
+
+---
+
+## Slice B — ⭐ the WSL doctor draft was not broken at all, and now it is proven against a real machine
+
+⭐ **THE CORRECTION THAT MATTERS: `03c0205` compiles, and always did.** The WIP body says "never
+compiled, never tested" — that was honest about what was *known*, not a diagnosis. Measured on the
+doctor branch (`77.wsl-doctor`, based on `origin/main` `3c6a6c5`):
+
+- `cargo check --all-targets` → clean, no errors, no warnings
+- `cargo test` → **310 passed / 0 failed / 1 ignored** (main is 269 on the Mac; the doctor adds ~41)
+- `cargo fmt --check` → clean
+- `cargo clippy --all-targets` → **5 findings, all five PRE-EXISTING.** ⭐ **The doctor's 71KB adds
+  ZERO clippy findings.** The five are the same ones `6c0675b` fixes on `78.file-manager` plus
+  `wsl.rs:202`; this branch predates that fix. ⭐ And the count confirms the withdrawn Mac question:
+  3 in the lib pass + 5 in the lib-test pass with 3 duplicates = **5 unique**, not 6.
+
+⚠️ **But every one of its 46 tests was a fixture**, and this module's whole subject is what *real*
+`.wslconfig` files and *real* free lists say. A validator proven only against strings written beside
+it has not been proven. `d259725` adds two `#[ignore]`d probe tests — the shape `wsl_watch.rs:243`
+already established here — and **both were run on this box**:
+
+**`wslconfig::report()`** → `C:\Users\Joy\.wslconfig`, exists, host **63.9 GB / 24 processors**, and
+**zero findings**. ⭐ **Zero is the CORRECT answer and I checked why rather than trusting it.** The
+WORK-QUEUE says Joy's own `.wslconfig` "carries the scar — `pageReporting=true` sitting there ignored
+for weeks". **It does not, any more:** the file's own note dated 2026-07-22 records that key being
+*removed* after being verified rejected in both `[wsl2]` and `[experimental]`. What remains is
+`memory=32GB`, `processors=12`, `swap=16GB` under `[wsl2]` and `autoMemoryReclaim=gradual` under
+`[experimental]` — correct placement on **WSL 2.7.13**, so nothing to report. ⚠️ **The queue row's
+claim about that file is historical and reads as current.** No key is silently ignored on this box
+today, which means **this machine cannot demonstrate the validator's headline feature**; a deliberate
+bad fixture, or another box, is needed to show it working.
+
+**`fragmentation::report(None)`** → distro **`Ubuntu-26.04`**, reason `None`, **2 zones** parsed from
+the real `/proc/buddyinfo`: node 0 DMA32 3.8 GB free (3.8 GB high-order), node 0 Normal 26.5 GB free
+(26.3 GB high-order), largest free run order 10 (4.0 MB), dmesg checked for high-order allocation
+failures. ⭐ **So the exec bridge, the parse, the assessment and the advice all work end to end
+against a live VM — on this box, with no elevation and nothing started or stopped.** That is scope
+items (2) and (4) of the queue's WSL-doctor plan, the "read-only v0", **working**.
+
+⚠️ **A gap for whoever builds the panel, found by running it:** a healthy file yields `exists: true`
+with an **empty `findings` list**, so a panel that draws only findings shows a blank box for the
+common case. `ConfigReport` carries `path`, `exists` and the host numbers precisely so the panel can
+say "read 4 keys, all applied" — **do not let it render nothing.** Left as the panel's business, not
+changed inside another agent's slice.
+
+⛔ **There is no UI.** Only `src/types.d.ts` changed on the frontend; `wsl_config_report` and
+`wsl_fragmentation` are registered in `lib.rs` and **nothing calls them**. v0 is backend-only.
+
+**Commits on `77.wsl-doctor`:** `03c0205` (the saved draft), `d259725` (the probes).
+⛔ Branch not pushed; not merged into anything.
+
+## Next in this session
+
+Slice C: judge the ghostty WIP (`5069efb`) against Joy's Terminal.app decision — it may be correct
+work on a dormant path. Then chapter 78. `wsl.rs:202` clippy stays last, after the doctor lands.
