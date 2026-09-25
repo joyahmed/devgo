@@ -118,6 +118,30 @@ comparing the generated script against calling the same function again. They can
 `login_path()` returns, so they pin neither ordering, quoting, nor the empty-skip branch. **The gap
 the original bug came through is still open.**
 
+### ✅ Stream 2b — DONE, `5c1c764` (2026-09-26)
+
+`89b4d92` cherry-picked onto this branch (clean, `-n`) and its PATH order corrected:
+`export PATH={login}:"$PATH:/usr/local/bin"` — **login path LEADS**, old fallbacks trail. Empty login
+path emits exactly the pre-`89b4d92` line, no stray separator. Brew's `shellenv` KEPT — not for PATH
+(the login path already carries `/opt/homebrew/bin`) but because `HOMEBREW_PREFIX`, `CELLAR`,
+`REPOSITORY`, `MANPATH`, `INFOPATH` are not a PATH and nothing else sets them.
+
+Composition extracted to a pure `mac_path_line(login: &str) -> String` (`launcher.rs:484-493`) so it
+is testable with no shell spawn. Three new tests pin: login path leads; empty leaves no stray
+separator; a path with a space and an apostrophe stays one word. The four tautological
+`starts_with(&mac_preamble())` assertions now call `assert_mac_preamble()` (`launcher.rs:861-883`),
+which checks SHAPE independent of what `login_path()` returns.
+⭐ **Mutation-proved:** flipping the composition back to append-last **fails 5 tests**, three of which
+could not fail before. Reverted, file byte-identical.
+
+Gate: fmt ok · **267 passed / 0 failed / 1 ignored** (264 + 3) · clippy unchanged at the same 5 ·
+`bun run build` exit 0.
+
+⚠️ **CONSEQUENCE FOR THE REBASE — read before rebasing.** This branch now holds a MODIFIED copy of
+`89b4d92`, which also exists on `origin/main`. `launcher.rs` **will now conflict** where the earlier
+trial merge found it clean. **Resolution: take OURS** — ours is theirs plus the ordering fix. Do not
+take main's side, or the detector/launcher disagreement comes straight back.
+
 ### Stream 4 — `77.wsl-doctor` (new branch, see §3)
 
 ### Stream 5 — the 5 clippy errors (all pre-existing, none in files touched this session)
