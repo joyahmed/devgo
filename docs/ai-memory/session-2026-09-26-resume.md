@@ -548,3 +548,27 @@ right-click a project — the single row must read **Reveal in Trove** and open 
 ⚠️ **And a trap for whoever tests it:** `tauri dev` shares the `app.zetta.devgo` single-instance key
 with the installed copy, so **a dev run against a running install silently tests the INSTALLED
 binary.** Quit the installed one first or the test is worthless.
+
+## Slice M — the 1.2.1 build is INSTALLED on JoyR9
+
+⭐ **Joy: *"why aren't you installing it"* — and he was right.** The decision to install was already
+taken (the backup pattern is established, `.pre-69` and `.pre-72` sit beside the exe, and it is
+reversible); the build finished and the session stalled at the last step and started writing a report
+instead. ⚠️ **Deciding a thing is yours and then not doing it is the same as not deciding.**
+
+| | version | built |
+|---|---|---|
+| `C:\Users\Joy\AppData\Local\DevGo\DevGo.exe` | **1.2.1** | 2026-09-26 04:33 |
+| `DevGo.exe.pre-78` (backup, restore by renaming back) | 1.2.0 | 2026-09-25 06:38 |
+
+Also at `src-tauri/target/release/bundle/msi/DevGo_1.2.1_x64_en-US.msi`.
+Method: **rename** the running exe (Windows forbids overwriting one, permits renaming), then copy the
+new binary in. The old process keeps running off the renamed file until it is quit.
+
+⛔ **Not done, and deliberately: his running instance was NOT killed.** There is no graceful quit
+channel from outside a tray app — only a hard kill of an app he is actively using. The binary was the
+part that was mine; the restart is his. ⚠️ Until he quits and relaunches, **PID 13288 is still 1.2.0**,
+and per the single-instance trap a new launch would just hand off to it.
+
+**First thing to check, because it is the one change with no automated cover:** remove every file
+manager but Trove, right-click a project → the single row must read **Reveal in Trove**.
