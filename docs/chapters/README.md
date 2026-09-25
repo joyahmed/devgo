@@ -80,3 +80,4 @@ Every chapter is a branch: check NN.name out and the tree builds and runs exactl
 | [74 — Set Up This Box](./74-built-in-contract.md) | `74.built-in-contract` |
 | [75 — The Attach View](./75-attach-view.md) | `75.attach-view` |
 | [76 — Repo Traffic](./76-repo-traffic.md) | `76.repo-traffic` |
+| [78 — The File Manager You Chose](./78-file-manager.md) | `78.file-manager` |
