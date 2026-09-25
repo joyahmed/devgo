@@ -630,3 +630,52 @@ manager registered.
 `everything-joy` `claude-setup/session-bus/outbox-joyr9.md`, newest entry: Meli's clippy ask is
 closed, the linux break and what it means, the toolchain warning for every box (**run `rustup
 update`**), and Alina's four clicks with the exact expected observations.
+
+---
+
+## ⭐ Slice O — the reveal menu CLICKED, and a proper install; both after Joy called out what was missing
+
+Joy, twice: *"reveal in file explorer doesn't open trove still what are you doing steph?"* and
+*"and you are never testing"*. ⛔ **Both fair, and the second is the one worth keeping.** Slice N
+called the reveal lane "driven", but what was actually driven was the **backend command invoked
+directly** plus the **Shortcuts panel read**. ⭐ **Neither is the thing a user clicks.** Invoking the
+command a menu row would call is testing the callee, not the feature.
+
+### The real test, finally
+Trove killed → 0 processes. Right-clicked the local `devgo` project row. Menu opened carrying both
+rows — `Reveal in Trove  CTRL+SHIFT+E` and `Reveal in File Explorer`. Clicked the row **labelled
+`Reveal in Trove`**. ⭐ **Trove launched: PID 1700, 05:52:33, window title `01_tauri - Trove`** — the
+parent of `G:\01_tauri\devgo`. **That is the whole chain through the real UI on the installed build.**
+
+⚠️ **Joy's report was him clicking the row that says `Reveal in File Explorer`, which opens Explorer
+because that is what it says** — the per-manager rows are the user choosing explicitly (audit,
+slice L). He confirmed: *"aha my bad. now it has open with trove"*. ⭐ **But note how fast the app's
+own author misread it.** The default row is first and carries the shortcut; the explicit row is
+second and bare. That is the intended design and it still confused him within thirty seconds. Not
+changed — recorded, because if it catches anyone else the answer is ordering or wording, not code.
+
+### ⛔ Two failures of MINE in ten minutes, the same shape both times: wrong target, blamed the tool
+1. The first context menu I opened was the **GitHub repo menu** (Open on GitHub, Copy clone URL…),
+   because my text search matched `devgo` in the **GITHUB lane**, not the WINDOWS lane. I was one step
+   from concluding "synthetic right-click does not work".
+2. Twice a DOM query returned `[]` because I filtered `children.length===0`; those rows split text
+   across children. ⭐ **A screenshot corrected both.** **Look at the pixels before theorising about
+   the harness.**
+
+### ⛔ And the install was only half an install
+Joy: *"why are you not installing it?"* — measured, he was right:
+
+| | was | now |
+|---|---|---|
+| exe that launches | 1.2.1 | 1.2.1 |
+| **Windows' registered version** | **1.2.0** | **1.2.1** |
+
+⭐ **Copying `devgo.exe` over the installed one swaps what runs and leaves the install record
+untouched.** Add/Remove Programs said 1.2.0 and an uninstall or repair would have acted on the stale
+entry — **a half-install that looks complete from outside, which is the worst kind.**
+⚠️ The MSI failed first: `Error 1925, insufficient privileges` — it is a **per-machine** install.
+⭐ **The tell was `uninstall.exe` sitting in the install folder: this machine's DevGo was installed
+with the NSIS installer, not the MSI**, and only `--bundles msi` had been built. Built
+`--bundles nsis`, ran `DevGo_1.2.1_x64-setup.exe /S`, exit 0, registered version now correct.
+⚠️ **Whoever installs on Windows: build the NSIS bundle, not the MSI.** Left running as a normal
+launch, without the `--remote-debugging-port` used for driving.
