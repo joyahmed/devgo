@@ -914,7 +914,7 @@ mod tests {
             wsl_args_template: None,
             run_args_template: Some(
                 "-na \"Ghostty\" --args --working-directory=\"{path}\" \
-                 -e {command}"
+                 -e bash \"{script}\""
                     .into(),
             ),
             wsl_run_args_template: None,

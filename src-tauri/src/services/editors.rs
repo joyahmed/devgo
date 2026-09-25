@@ -409,6 +409,17 @@ const CANDIDATES: &[Candidate] = &[
     //
     // ghostty's -e takes the rest of the line as the command; the tab
     // closes when it exits, which is ghostty's own rule
+    //
+    // the run form carries {script}, not {command}, for the reason
+    // terminal.app's does: a bare `-e claude` is spawned with whatever
+    // PATH the app was launched with, and on a mac the row goes through
+    // `open`, which hands the line to launchservices and drops that PATH
+    // entirely - `claude` lives in ~/.local/bin and was not found. the
+    // {script} seam makes the launcher write the same devgo-run-*.command
+    // terminal.app gets, preamble and interactive shell included, so one
+    // script builder serves every terminal and there is one place to be
+    // wrong. the exec'd login shell at the end of that script also holds
+    // the tab open past the command, which ghostty's own rule would close
     Candidate {
         id: "ghostty",
         name: "Ghostty",
@@ -416,7 +427,7 @@ const CANDIDATES: &[Candidate] = &[
         exe: "ghostty",
         args: "--working-directory=\"{path}\" -e bash \"{script}\"",
         wsl_args: None,
-        run_args: Some("--working-directory=\"{path}\" -e {command}"),
+        run_args: Some("--working-directory=\"{path}\" -e bash \"{script}\""),
         wsl_run_args: None,
         app: Some("Ghostty"),
     },
@@ -1453,7 +1464,7 @@ mod tests {
             "Ghostty",
             "Ghostty",
             "--working-directory=\"{path}\" -e bash \"{script}\"",
-            "--working-directory=\"{path}\" -e {command}",
+            "--working-directory=\"{path}\" -e bash \"{script}\"",
         )
     }
 
@@ -1487,24 +1498,31 @@ mod tests {
         assert_eq!(t.executable, "open");
         assert_ne!(t.executable, inside.to_string_lossy());
 
-        let (exe, args) = t.resolve("/Users/joy/my app", None).unwrap();
+        let (exe, args) = t.resolve("/tmp/my app", None).unwrap();
         assert_eq!(exe, "open");
         assert!(args.contains("{script}"), "no script would be written");
         assert_eq!(
             args.replace("{script}", "/tmp/devgo-1a2b3c4d.sh"),
-            "-na \"Ghostty\" --args --working-directory=\"/Users/joy/my app\" \
+            "-na \"Ghostty\" --args --working-directory=\"/tmp/my app\" \
              -e bash \"/tmp/devgo-1a2b3c4d.sh\""
         );
 
         // the run form goes the same way, or the command key would open a
-        // window and drop the command exactly as the session key did
-        let (_, run) = t
-            .resolve_run("/Users/joy/my app", None, "npm run dev")
-            .unwrap();
+        // window and drop the command exactly as the session key did - and
+        // it keeps the {script} seam, because `open` hands the line to
+        // launchservices and no PATH of ours survives that: the command
+        // has to arrive inside the script that exports one
+        let (_, run) =
+            t.resolve_run("/tmp/my app", None, "npm run dev").unwrap();
+        assert!(
+            run.contains("{script}"),
+            "no script would be written: {run}"
+        );
         assert_eq!(
-            run,
+            run.replace("{script}", "/tmp/devgo-run-app.command"),
             "-na \"Ghostty\" --args \
-             --working-directory=\"/Users/joy/my app\" -e npm run dev"
+             --working-directory=\"/tmp/my app\" \
+             -e bash \"/tmp/devgo-run-app.command\""
         );
 
         let _ = std::fs::remove_dir_all(bundle.parent().unwrap());
