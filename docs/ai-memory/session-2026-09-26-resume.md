@@ -572,3 +572,61 @@ and per the single-instance trap a new launch would just hand off to it.
 
 **First thing to check, because it is the one change with no automated cover:** remove every file
 manager but Trove, right-click a project → the single row must read **Reveal in Trove**.
+
+---
+
+## ⭐ Slice N — all three platforms green, and the reveal lane DRIVEN on Windows
+
+### CI, run `36200743822`: **gate ✅ mac ✅ linux ✅**
+⭐ **The first time this codebase has been compiled and linted on all three platforms it ships to.**
+
+- ⭐ **`summon.rs:50` COMPILES ON A REAL MAC.** The `#[cfg(target_os = "macos")] app.show()` line no
+  machine had ever compiled, clean under strict clippy. **The blocker queued for Joy twice is gone,
+  and he never had to run it.** Also proves runner rustup honours the pin and installs its components.
+- ⭐ **The "6th macOS clippy finding" does not exist** — zero findings on all three hosts.
+- ⛔ **The linux job paid for itself on its first real run:** `E0428: the name first_on_path is defined
+  multiple times`. **Mine**, from `73ab956`: I extracted `first_on_path(path, name)` under
+  `cfg(any(not(windows), test))` and `editors.rs` already had `first_on_path(kind)` under
+  `cfg(target_os = "linux")`. **Only linux sees both** — windows green, mac green, linux broken, and
+  **this box cannot compile for linux at all.** Renamed to `binary_on_path` (`9bd3013`).
+  ⭐ **A platform nobody compiles is a platform that is already broken and nobody knows.**
+
+### ⚠️ The toolchain skew, and my reversed call
+CI went red an hour after it began running clippy, on a tree **green locally at that same moment**.
+Local stable was **1.96.1 (June)**; CI's `@stable` was **1.98.1**, whose clippy has a lint the older
+one lacks. Pinned `rust-toolchain.toml` to **1.98.1 — what CI already ran, not the stale local one**.
+⚠️ I had first recorded "pin considered and deliberately not taken, it would pin CI to the older
+clippy"; **that was wrong and is reversed** — it only holds if you pin to the stale version.
+At the **repo root**, because rustup walks up from the invoking directory and `verify.sh` runs cargo
+from `src-tauri` while CI runs it from the root; only the root is on both walks.
+
+### ⭐ Driven on screen, on the INSTALLED build — Joy's bar, met on Windows
+Rebuilt from HEAD on the pinned toolchain (release build exit 0, MSI produced), installed with a
+backup, relaunched with `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9223`, driven
+via `scripts/cdp.mjs`:
+
+- effective default reads `file_manager: "trove"`, Explorer also registered — **the exact
+  configuration where the old build said Explorer and opened Trove**;
+- ⭐ **killed Trove, invoked the app's own `reveal_in_explorer` with NO target id, Trove came back:
+  PID 24060, window title `G: - Trove`.** Explorer unchanged. **That is the whole default-resolution
+  chain, end to end, on a real installed binary** — not a unit test, not a reconstruction;
+- ⭐ the Shortcuts panel on screen reads **"Reveal in Trove · needs a selection · CTRL+SHIFT+E"** and
+  **"Reveal workspace in Trove · CTRL+ALT+E"**. Screenshot taken via the webview's own capture.
+
+⚠️ **A correction worth more than the result: I twice concluded "synthetic input is not reaching the
+webview". That was FALSE.** The clicks worked and the panel had opened; **my DOM query filtered for
+leaf nodes (`children.length===0`) and those rows split their text across children.** The screenshot
+is what corrected me. ⭐ **A negative result from a query you wrote is a result about your query
+first** — and looking at the pixels beat four rounds of reasoning about the harness.
+
+### What driving CANNOT reach here
+The context menu would not open under synthetic `contextmenu` events at any ancestor, so
+**`App.tsx:866` — the single-manager row label, the one change with no automated cover — is still
+unverified on screen.** It uses the same `revealLabel` value the Shortcuts panel just proved resolves
+to Trove, but that is an argument, not an observation. Needs one human right-click with only one file
+manager registered.
+
+### Told them
+`everything-joy` `claude-setup/session-bus/outbox-joyr9.md`, newest entry: Meli's clippy ask is
+closed, the linux break and what it means, the toolchain warning for every box (**run `rustup
+update`**), and Alina's four clicks with the exact expected observations.
