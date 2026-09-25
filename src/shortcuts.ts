@@ -266,7 +266,10 @@ const NAMED: Record<string, string> = {
 	ArrowLeft: '←',
 	ArrowUp: '↑',
 	ArrowDown: '↓',
-	Enter: '⏎',
+	// the word, not ⏎: the glyph is a hairline outline drawn well under
+	// cap height, and on the footer joy could not read it at any size the
+	// row has room for. the search box has spelled it out since 11
+	Enter: 'Enter',
 	Delete: 'Del',
 	Space: 'Space'
 };

@@ -562,6 +562,7 @@ type ButtonVariant =
 	| 'badge'
 	| 'card'
 	| 'target'
+	| 'launch'
 	| 'choice'
 	| 'add'
 	| 'segment';
@@ -1470,6 +1471,22 @@ interface TargetGroupProps {
 	onPick: (id?: string) => void;
 	/// the default just fired: it pulses once
 	pulse?: boolean;
+}
+
+/// one entry on the footer's right end: a word, the key that reaches it,
+/// and a click when the word is a door
+interface FooterHint {
+	label: string;
+	keys?: string;
+	title?: string;
+	onClick?: () => void;
+}
+
+interface FooterHintGroup {
+	id: string;
+	/// hidden under 1400, where the footer has no room for it
+	wide?: boolean;
+	items: FooterHint[];
 }
 
 /* Toast */

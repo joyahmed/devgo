@@ -31,9 +31,7 @@ const TargetGroup = ({
 	pulse
 }: TargetGroupProps) => (
 	<div className='flex items-center gap-2 shrink-0'>
-		<span className='text-11 text-text-muted shrink-0'>
-			{label}
-		</span>
+		<span className='text-text-muted shrink-0'>{label}</span>
 		{items.map(t => {
 			const isDefault = t.id === defaultId;
 			// the group's key is the default's; an item may carry one of its own
@@ -43,7 +41,7 @@ const TargetGroup = ({
 			return (
 				<Button
 					key={t.id}
-					variant='target'
+					variant='launch'
 					className={`shrink-0 ${isDefault && pulse ? 'animate-pulse-once' : ''}`}
 					aria-current={isDefault ? 'true' : undefined}
 					disabled={!hasSelection || Boolean(t.blocked)}
@@ -52,7 +50,7 @@ const TargetGroup = ({
 					onClick={() => onPick(isDefault ? undefined : t.id)}
 					title={title}
 				>
-					<span className='truncate text-11 leading-none'>{t.name}</span>
+					<span className='truncate leading-none'>{t.name}</span>
 					{key && <Kbd>{key}</Kbd>}
 				</Button>
 			);
@@ -159,46 +157,51 @@ const StatusBar = ({
 					: [])
 			];
 	const both = prettyKeys(shortcutFor('openBoth'));
-	// the frequent keys: the buttons are the hints for the launch verbs,
-	// not for move, open, pin and search, which have no button anywhere.
-	// hidden under 1400, where the footer has no room and the palette
-	// still lists them
-	const hints = [
+	// the right end, in three groups with a rule between them: the keys
+	// that act on the list, the keys that open a surface, and the two
+	// doors that have no key. ↑↓ and ⏎ used to lead it and were dropped —
+	// arrow keys and enter in a list are the one thing nobody looks up,
+	// and their chips cost the room the rest needed to grow.
+	// the first group hides under 1400, where the footer has no width and
+	// the palette still lists them
+	const cluster: FooterHintGroup[] = [
 		{
-			keys: `${prettyKeys(shortcutFor('moveUp'))}${prettyKeys(shortcutFor('moveDown'))}`,
-			label: 'Move'
-		},
-		{ keys: prettyKeys(shortcutFor('openSelected')), label: 'Open' },
-		{ keys: prettyKeys(shortcutFor('togglePin')), label: 'Pin' },
-		{ keys: prettyKeys(shortcutFor('focusSearch')), label: 'Search' }
-	];
-	// the right end: the palette's door, the summon hotkey (shown nowhere
-	// else, and the door into the whole app), every shortcut, help. a
-	// door has a click; the hotkey is a fact
-	const tail = [
-		{
-			label: 'Commands',
-			title: 'Open the command palette',
-			onClick: onOpenPalette,
-			chip: <Kbd>{prettyKeys(shortcutFor('commandPalette'))}</Kbd>
-		},
-		{ label: 'Summon', chip: <Kbd>{prettyKeys(summonHotkey)}</Kbd> },
-		{
-			label: 'Shortcuts',
-			title: 'View all keyboard shortcuts',
-			onClick: onOpenShortcuts,
-			chip: <span className='text-11 leading-none'>&#9000;</span>
+			id: 'list',
+			wide: true,
+			items: [
+				{ label: 'Pin', keys: prettyKeys(shortcutFor('togglePin')) },
+				{ label: 'Search', keys: prettyKeys(shortcutFor('focusSearch')) }
+			]
 		},
 		{
-			label: 'Help',
-			title: 'Help',
-			onClick: onOpenHelp,
-			chip: <span className='text-11 leading-none font-semibold'>?</span>
+			id: 'surfaces',
+			items: [
+				{
+					label: 'Commands',
+					title: 'Open the command palette',
+					keys: prettyKeys(shortcutFor('commandPalette')),
+					onClick: onOpenPalette
+				},
+				// the summon hotkey is shown nowhere else, and it is the
+				// door into the whole app. a fact, so no click
+				{ label: 'Summon', keys: prettyKeys(summonHotkey) }
+			]
+		},
+		{
+			id: 'doors',
+			items: [
+				{
+					label: 'Shortcuts',
+					title: 'View all keyboard shortcuts',
+					onClick: onOpenShortcuts
+				},
+				{ label: 'Help', title: 'Help', onClick: onOpenHelp }
+			]
 		}
 	];
 
 	return (
-		<footer className='flex flex-wrap items-center gap-x-6 gap-y-1.5 min-h-12 py-1.5 px-4 ground-chrome border-t border-border shrink-0 text-11 select-none'>
+		<footer className='flex flex-wrap items-center gap-x-6 gap-y-1.5 min-h-12 py-1.5 px-4 ground-chrome border-t border-border shrink-0 text-13 select-none'>
 			{groups.map(g => (
 				<TargetGroup
 					key={g.label}
@@ -209,7 +212,7 @@ const StatusBar = ({
 				// the remote half: a tmux session on the box, or its plain login
 				// shell. the server's own flag, so it holds across launches
 				<Button
-					variant='target'
+					variant='launch'
 					className='shrink-0'
 					aria-pressed={server.tmux}
 					onClick={() => onServerTmux?.(server, !server.tmux)}
@@ -219,57 +222,56 @@ const StatusBar = ({
 							: `A plain login shell on ${server.name}. Click to attach a tmux session there`
 					}
 				>
-					<span className='text-11 leading-none'>tmux on the box</span>
-					<span className='text-11 leading-none text-text-muted'>
+					<span className='leading-none'>tmux on the box</span>
+					<span className='leading-none text-text-muted'>
 						{server.tmux ? 'on' : 'off'}
 					</span>
 				</Button>
 			) : (
 				<Button
-					variant='target'
+					variant='launch'
 					className={`shrink-0 ${pulse === 'both' ? 'animate-pulse-once' : ''}`}
 					disabled={!hasSelection}
 					onClick={onBoth}
 					title={`Open both — ${both}`}
 				>
-					<span className='text-11 leading-none'>Open both</span>
+					<span className='leading-none'>Open both</span>
 					<Kbd>{both}</Kbd>
 				</Button>
 			)}
-			{/* the key chips, a rule, then the doors; without them the
-			    discovery surfaces are themselves undiscoverable */}
+			{/* the key chips, then the doors; without them the discovery
+			    surfaces are themselves undiscoverable. the rule rides with
+			    the group it follows, so hiding a group hides its rule */}
 			<div className='flex items-center gap-4 shrink-0 ml-auto'>
-				<span className='hidden min-[1400px]:flex items-center gap-3 text-text-secondary'>
-					{hints.map(h => (
-						<span key={h.label} className='inline-flex items-center gap-1.5 shrink-0'>
-							<Kbd>{h.keys}</Kbd>
-							<span className='leading-none'>{h.label}</span>
-						</span>
-					))}
-				</span>
-				<span
-					className='hidden min-[1400px]:block w-px h-5 bg-border-strong shrink-0'
-					aria-hidden='true'
-				/>
-				{tail.map(t =>
-					t.onClick ? (
-						<Button
-							key={t.label}
-							variant='ghost'
-							className='gap-1.5 text-11 shrink-0 hover:bg-transparent hover:text-accent'
-							title={t.title}
-							onClick={t.onClick}
-						>
-							{t.chip}
-							<span className='text-text-secondary leading-none'>{t.label}</span>
-						</Button>
-					) : (
-						<span key={t.label} className='inline-flex items-center gap-1.5 shrink-0'>
-							{t.chip}
-							<span className='text-text-secondary leading-none'>{t.label}</span>
-						</span>
-					)
-				)}
+				{cluster.map((g, i) => (
+					<div
+						key={g.id}
+						className={`items-center gap-4 shrink-0 ${g.wide ? 'hidden min-[1400px]:flex' : 'flex'}`}
+					>
+						{g.items.map(h =>
+							h.onClick ? (
+								<Button
+									key={h.label}
+									variant='ghost'
+									className='gap-1.5 shrink-0 hover:bg-transparent hover:text-accent'
+									title={h.title}
+									onClick={h.onClick}
+								>
+									{h.keys && <Kbd>{h.keys}</Kbd>}
+									<span className='text-text-secondary leading-none'>{h.label}</span>
+								</Button>
+							) : (
+								<span key={h.label} className='inline-flex items-center gap-1.5 shrink-0'>
+									{h.keys && <Kbd>{h.keys}</Kbd>}
+									<span className='text-text-secondary leading-none'>{h.label}</span>
+								</span>
+							)
+						)}
+						{i < cluster.length - 1 && (
+							<span className='w-px h-5 bg-border-strong shrink-0' aria-hidden='true' />
+						)}
+					</div>
+				))}
 			</div>
 		</footer>
 	);

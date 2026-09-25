@@ -2,7 +2,9 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import Button from './Button';
 
 const ROW_H = 30;
-const WIDTH = 256;
+// 256 while Enter was ⏎; spelling the key out ate four characters of
+// every label beside one
+const WIDTH = 288;
 
 // renders what it is given and owns none of it; the actions live in App
 const ContextMenu = ({ x, y, items, onClose }: ContextMenuProps) => {
@@ -45,7 +47,7 @@ const ContextMenu = ({ x, y, items, onClose }: ContextMenuProps) => {
 	return (
 		<div
 			ref={ref}
-			className='fixed z-50 w-64 bg-bg-secondary border border-border rounded-panel shadow-surface py-1 text-15 overflow-y-auto overflow-x-hidden'
+			className='fixed z-50 w-72 bg-bg-secondary border border-border rounded-panel shadow-surface py-1 text-15 overflow-y-auto overflow-x-hidden'
 			style={style}
 			onContextMenu={e => e.preventDefault()}
 		>

@@ -27,6 +27,13 @@ const VARIANT: Record<ButtonVariant, string> = {
 	// A launch target on the row; the default says so with aria-current.
 	target:
 		'gap-1.5 px-3 py-1.5 text-13 border border-border-strong bg-bg-panel text-text-secondary hover:not-disabled:text-text-primary hover:not-disabled:border-accent aria-[current=true]:border-accent aria-[current=true]:bg-bg-hover/40 aria-[current=true]:text-text-primary disabled:border-border disabled:text-text-muted',
+	// The footer's launch buttons. a destination, not a choice among
+	// values: every one that can run is full ink and the default is told
+	// by its edge alone, so muted here means blocked and nothing else.
+	// one height for the whole row — a button with a key chip in it was
+	// 10px taller than one without, and the row read as broken teeth
+	launch:
+		'gap-1.5 h-9 px-3 text-13 border border-border-strong bg-bg-panel text-text-primary hover:not-disabled:border-accent aria-[current=true]:border-accent aria-[current=true]:bg-bg-hover/40 disabled:border-border disabled:text-text-muted',
 	// a door on the command row: + Workspace, + Add repo, + Add server.
 	// bordered, so it reads as a button and not a word
 	add: 'gap-1.5 h-9 pl-2.5 pr-3 border border-border-strong bg-transparent text-text-secondary hover:text-text-primary hover:border-accent hover:bg-bg-hover',
