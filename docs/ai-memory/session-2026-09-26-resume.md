@@ -136,3 +136,53 @@ changed inside another agent's slice.
 
 Slice C: judge the ghostty WIP (`5069efb`) against Joy's Terminal.app decision — it may be correct
 work on a dormant path. Then chapter 78. `wsl.rs:202` clippy stays last, after the doctor lands.
+
+---
+
+## Slice C — ⛔ the ghostty WIP is NOT dormant polish: v1.2.1 shipped a broken row onto real Macs
+
+⛔ **THIS OVERTURNS THE MAC'S "do not spend effort on Ghostty polish".** Meli's bus note said Joy has
+chosen Terminal.app as DevGo's default, so `d8895ae` is dormant. **The default is not the issue.**
+Reading `5069efb` against the history: **`5565a4e` ("MAC: ghostty opens through open, not its own
+binary") is in `v1.2.0` AND `v1.2.1`** — verified with `git tag --contains`. It moved Ghostty onto
+`open` and left the **run** form carrying `{command}`. `open` hands the line to LaunchServices, which
+starts the app with launchd's bare PATH, and `run_script_args` writes the `.command` that exports the
+real PATH **only for a template asking for `{script}`**.
+
+⭐ **And detection is read ONCE — on the run that adds the row.** So `d8895ae` correcting the
+detection table reaches **nobody who already registered Ghostty**. Every v1.2.1 Mac with a Ghostty
+row still carries the bytes that run `claude` with `/usr/bin:/bin:/usr/sbin:/sbin`, where
+`~/.local/bin/claude` is not found and nothing says so. **A table fix cannot reach shipped state; only
+a migration can.** That is what this WIP is, and it is a user-data repair, not polish.
+
+What the agent actually built, and it is more than its brief:
+- `ghostty_running_without_a_script(t, now)` (`target_store.rs`) — a **second key** for the existing
+  repair, matched against the row detection gives *now* rather than remembered bytes, so it catches
+  the row v1.2.1 wrote for itself. ⭐ A row with **no** run form is deliberately left alone — a user
+  who deleted it meant to.
+- `candidate_bundle(id)` (`editors.rs`) — an `open` row names the app and carries no path, so it
+  cannot say where its own bundle is; the only way back is to look again. **None when the app is not
+  installed**, because a migration that rewrites a row pointing at nothing has invented a line.
+- ⭐ `nothing_launched_through_open_runs_a_command_without_the_script_seam` — the Ghostty one-off
+  generalised into a **table-wide invariant over every candidate with a bundle, both branches of the
+  in-bundle check, both templates.** This guards terminals nobody has added yet, which is the part
+  that outlives the Ghostty question entirely.
+
+**Gate, run on this box (branch renamed `worktree-agent-a1e01406fe5bc70e5` → `fix/ghostty-v121-row`,
+which was an unreadable throwaway name):**
+- `cargo test` → **268 passed / 0 failed / 1 ignored**; `main` on Windows is **265**, so +3 running
+- `cargo fmt --check` clean; `cargo clippy --all-targets` → **5 findings, the same pre-existing five, zero new**
+- ⭐ **`a_v1_2_1_ghostty_row_is_repaired_onto_the_script_run_form` RUNS AND PASSES ON WINDOWS** — the
+  migration is data logic, so the machine does not gate it. That is the test that matters here.
+
+⚠️ **One of the four new tests does NOT run on this box:** the `editors.rs` seam invariant is
+`#[cfg(not(windows))]`. It compiles nowhere here and executes nowhere here. **That one is still owed a
+Mac** — and it is the only thing in this slice that is.
+
+⛔ **Not merged, not pushed.** And note the dependency Joy should know about: this repairs rows written
+by a released version, so it wants to be **in** the next release, not after it.
+
+## Next in this session
+
+Chapter 78 (`docs/chapters-77-78`, `62b2aa6` holds chapter 77 only). Then `wsl.rs:202` clippy, last,
+after the doctor lands.
