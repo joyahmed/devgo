@@ -29,6 +29,21 @@ suite is not evidence for these lanes.
 ## 1. Release streams, in the order they must happen
 
 ### Stream 1 — REBASE FIRST. Everything else is harder if this waits.
+⚠️ **The rebase WILL conflict, and not because of `89b4d92`.** Measured by a real trial merge in a
+disposable worktree, not predicted from line numbers:
+- `launcher.rs` merges **cleanly** against this branch's commits.
+- `editors.rs` (~350-line block, `:1914-2270`) and `target_store.rs` (~40-line block, `:416-458`)
+  **conflict hard** — caused by two OTHER commits already on `origin/main` since the merge-base
+  (`427ac49`): **`5565a4e` "MAC: ghostty opens through `open`, not its own binary"** and
+  **`0cec548` "FIX: a missing folder, and two errors that named the wrong cause"**, which added
+  `bundled_ghostty`/`ghostty_bundle` at the same insertion points where this branch added
+  `is_a_program_there` and the Start Menu shortcut tests.
+- ⭐ So **"safe to rebase onto `89b4d92`" and "safe to rebase onto current `origin/main`" are
+  different questions.** The first is yes; the second needs this conflict resolved as its own step.
+⚠️ **`5565a4e` may already change the Ghostty picture in Stream 2 — re-check Stream 2 against it
+before acting on it.** Stream 2 was traced against `origin/main:editors.rs:419`, but that trace and
+this commit have not been reconciled.
+
 - `78.file-manager` has **13 commits `origin/main` lacks**; `origin/main` has **8 this branch lacks**
   (the v1.2.1 release chain **plus** Meli's `89b4d92` PATH fix). `main` is **NOT an ancestor**.
 - `src-tauri/tauri.conf.json` on this branch says **`1.2.0`**; `origin/main` already says **`1.2.1`**.
@@ -58,6 +73,51 @@ All from `WORK-QUEUE.md:86`, **none re-verified since `a041ef0` landed**:
 5. "+ Add repo ▾" clicked once did nothing visible — unconfirmed repro.
 ⚠️ **Alina is the only machine that reproduced these, so Alina must re-verify any fix.**
 
+### Stream 2b — ⭐ THE ESCALATION: `89b4d92`'s PATH ORDER disagrees with the detector
+
+Found by reviewing `89b4d92` on Windows (compiled and run in a disposable worktree; trial merge run
+for real rather than predicted). **This outranks the Ghostty gap.**
+
+`mac_preamble()` (`launcher.rs:437-448`) composes:
+```
+export PATH="$PATH:/usr/local/bin:{login_path}"     # login_path appended LAST
+```
+But the DETECTOR, `path_lookup` (`editors.rs:1281-1295`), searches **`login_path()`'s directories
+ONLY, first-hit-wins** — its own comment says *"not `env::var("PATH")`: a dock-launched app has the
+bare four directories and every editor cli lives elsewhere."*
+
+⛔ **So for any binary name present in BOTH — a Homebrew `node`/`git`/`python3` in `/usr/local/bin`
+shadowing an nvm/pyenv version reachable only via the login PATH — devgo DETECTS one binary and
+LAUNCHES a different one.** Silent, and very hard to diagnose from a bug report. Two sources of one
+truth must not disagree.
+
+⚠️ **Corroboration, and a mistake worth recording:** this session had an abandoned WIP doing the
+opposite — `export PATH={login_path}:$PATH` (login_path PREPENDED, bare PATH as fallback) —
+written specifically to keep launcher and detector in agreement. It is in
+`git stash` as *"my half-done mac preamble fix, superseded by Meli 89b4d92"*. **It was stashed on the
+assumption that an upstream fix supersedes a local one, WITHOUT comparing the two orderings.**
+"Already fixed upstream" is not "fixed correctly".
+
+**Fix:** prepend `login_path()` rather than append. **Test that would catch it** (none exists):
+inject/stub `login_path()` to return a dir containing binary `X`, put a DIFFERENT `X` in a fake
+`/usr/local/bin` ahead of it, and assert `path_lookup` and the generated script's `PATH=` line
+resolve to the SAME file.
+**Inverse:** if appended-last is actually fine (no realistic machine has such a shadow), the cost of
+prepending anyway is zero — nothing regresses. The asymmetry favours prepending.
+
+Also in `89b4d92`: `build_mac_run_script` (`:493-511`) now runs the command via
+`"${SHELL:-bash}" -ic {quoted}` — an interactive shell, which sources rc files and is a second,
+independent PATH repair. Worth knowing when reasoning about why a symptom may or may not persist.
+
+⚠️ **`89b4d92`'s gate `#[cfg(any(not(windows), test))]` covers NATIVE LINUX, not just macOS.** Its
+behaviour change applies to real Linux installs too — so **Alina must re-test the terminal/agent
+lanes**, not only Meli.
+
+⛔ **The tests it touched are TAUTOLOGICAL.** All five are `mac.starts_with(&mac_preamble())` —
+comparing the generated script against calling the same function again. They can never fail whatever
+`login_path()` returns, so they pin neither ordering, quoting, nor the empty-skip branch. **The gap
+the original bug came through is still open.**
+
 ### Stream 4 — `77.wsl-doctor` (new branch, see §3)
 
 ### Stream 5 — the 5 clippy errors (all pre-existing, none in files touched this session)
@@ -68,6 +128,11 @@ All from `WORK-QUEUE.md:86`, **none re-verified since `a041ef0` landed**:
 | `services/ssh_config.rs:27` | `manual_pattern_char_comparison` | trivial — closure → `[' ', '\t', '=']` |
 | `services/platform/runtime.rs:4` | `empty_line_after_outer_attr` | trivial — delete a blank line |
 | `services/platform/wsl.rs:202` | `items_after_test_module` | **bigger** — move a const, an enum and two fns above `mod tests`; mechanical, but a wide diff that will conflict with in-flight branches. **Do this one LAST, after the rebase.** |
+
+⚠️ **CORRECTION — clippy prints `warning:`, not `error:`.** These become errors only because the
+command passes `-D warnings`; **no CI config in the repo enforces that**. "5 pre-existing errors" is
+informally accurate ("clippy is not clean") but is not literally what `cargo clippy` outputs. Decide
+whether the release gate actually requires `-D warnings`, or this argument repeats every session.
 
 ⚠️ **UNRECONCILED, and it blocks a shared definition of "clippy clean":** macOS is recorded as **6**
 errors in the same 5 files; Windows measures **5**. The 6th has never been named and is presumably
