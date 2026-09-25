@@ -116,6 +116,56 @@ REAL_MACHINE detect() trove entry = Some(DetectedTarget { id: "trove", name: "Tr
 
 Temp test removed afterwards; file confirmed byte-identical, diffstat matched.
 
+## End-to-end test in the real app, 2026-09-25 (at `01cd00c`)
+
+Not just unit tests — the app was built from this branch and driven by hand.
+
+⚠️ **Single-instance WOULD have swallowed the dev launch.** It is NOT
+`tauri-plugin-single-instance`; it is a hand-rolled service
+(`src-tauri/src/services/single_instance.rs`) keyed on a lock file at
+`app_data_dir/instance.lock`, and `app_data_dir` derives from the identifier
+`app.zetta.devgo` in `tauri.conf.json` — **which the dev build shares**. A second launch
+connects to the port in the lock file, sends `"restore"`, and calls
+`std::process::exit(0)` (`src-tauri/src/lib.rs:268-275`). **So a `bun tauri dev` while the
+installed DevGo.exe is running silently focuses the OLD binary and exits — you would be
+testing the released build and not know it.** The installed DevGo.exe (PID 13260) was
+killed first, then relaunched afterwards (PID 21004). Anyone testing this branch must do
+the same.
+
+Launch: `bun tauri dev` (README.md:145), `Finished dev profile in 6.49s`, no errors.
+
+**Detected.** Settings → Launch targets → "Detected on this machine" → Scan:
+```
+Trove                                    [file_manager]   Add
+E:\Softwares\Trove\trove.exe
+```
+Provenance renders as the resolved path, which is `source: "shortcut"` doing its job —
+`trove` is not on PATH; the only route is
+`C:\Users\Joy\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Trove.lnk`.
+
+**Added.** Moved into File managers as `Trove` / `E:\Softwares\Trove\trove.exe "{path}"`.
+`%APPDATA%\app.zetta.devgo\targets.json` now carries the row, verified on disk:
+`"id": "trove"`, `"executable": "E:\\Softwares\\Trove\\trove.exe"`,
+`"reveal_args_template": "/select,\"{path}\""`.
+
+**Reveal works — the one thing no test had proved.** With two file managers registered the
+project menu switched from one generic row to per-manager rows (`src/App.tsx:826-841`):
+```
+Reveal in File Explorer    CTRL+SHIFT+E
+Reveal in Trove
+```
+"Reveal in Trove" launched trove.exe (window `01_tauri - Trove`), opened `G: > 01_tauri`,
+status bar **"18 items · 1 item selected"** with `devgo` highlighted. So `/select,"{path}"`
+genuinely selects the item rather than merely opening the folder.
+
+Screenshots in the session scratchpad: `20-detected.png`, `23-after-add.png`, `26-menu.png`,
+`29-trove-select.png`.
+
+⚠️ **Note for whoever runs the INSTALLED release next**: `targets.json` now contains a
+`file_manager` row, but the installed build predates the file-manager work on this branch.
+It did relaunch and run normally (PID 21004) with that row present, so it tolerates it —
+but it has not been exercised beyond starting up.
+
 ## Contract agreed with the Trove session (trove-58), 2026-09-25
 
 1. **`Trove.lnk` at the TOP LEVEL of Programs, unnested, targeting `$INSTDIR`, is now a
