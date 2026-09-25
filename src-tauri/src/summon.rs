@@ -1,4 +1,6 @@
 use tauri::{AppHandle, Emitter, Manager};
+
+use crate::services::runtime_log::log_line;
 use tauri_plugin_global_shortcut::{
     GlobalShortcutExt, Shortcut, ShortcutState,
 };
@@ -40,7 +42,7 @@ pub fn raise_main(app: &AppHandle) {
         // means the setup builder never produced one. nothing here can
         // rebuild it (setup owns the config and the saved geometry), and
         // returning quietly is exactly what made this undiagnosable
-        eprintln!(
+        log_line!(
             "[DevGo] cannot raise: no webview window named 'main'; it was never built or has been destroyed"
         );
         return;
@@ -59,9 +61,10 @@ pub fn raise_main(app: &AppHandle) {
         ("set_focus", err_of(window.set_focus())),
     ];
     if let Some(line) = raise_failure(&steps) {
-        // no log facility in this app; stderr in the house style, so a user
-        // who launched from a terminal sees which step refused
-        eprintln!("[DevGo] could not raise the window - {line}");
+        // to the log file and to stderr: the terminal user sees it now, and
+        // the mac or linux user who cannot be watched sends the file. this
+        // is the line the silent set_focus of c0e20ce would have produced
+        log_line!("[DevGo] could not raise the window - {line}");
     }
 }
 

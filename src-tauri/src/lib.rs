@@ -8,6 +8,8 @@ mod tray;
 use commands::AppState;
 use services::platform::detection;
 use services::preferences::{MonitorRect, WindowState};
+use services::runtime_log;
+use services::runtime_log::log_line;
 use services::single_instance;
 use services::workspace::WorkspaceStore;
 use tauri::tray::TrayIconBuilder;
@@ -25,6 +27,8 @@ use tauri::Manager;
 #[cfg(windows)]
 mod win_taskbar {
     use std::ffi::c_void;
+
+    use crate::services::runtime_log::log_line;
 
     #[link(name = "user32")]
     unsafe extern "system" {
@@ -77,7 +81,14 @@ mod win_taskbar {
         let hr =
             unsafe { SetCurrentProcessExplicitAppUserModelID(id.as_ptr()) };
         if hr < 0 {
-            eprintln!("[DevGo] SetCurrentProcessExplicitAppUserModelID failed: 0x{hr:08x}");
+            // the one line in the app that runs before the log has a
+            // path (the id must be set before the first window exists,
+            // and the app data dir is only resolvable inside setup), so
+            // this one reaches stderr alone. it is windows-only, and
+            // windows is the platform we can put hands on
+            log_line!(
+                "[DevGo] SetCurrentProcessExplicitAppUserModelID failed: 0x{hr:08x}"
+            );
         }
     }
 
@@ -121,7 +132,9 @@ mod win_taskbar {
         // no resource group means a build that skipped tauri-build's
         // resource step; tao's small icon is still there, leave it
         if big.is_null() || small.is_null() {
-            eprintln!("[DevGo] exe carries no icon resource; taskbar icon left to tao");
+            log_line!(
+                "[DevGo] exe carries no icon resource; taskbar icon left to tao"
+            );
             return;
         }
         unsafe {
@@ -212,7 +225,7 @@ fn monitor_rects(monitors: &[tauri::Monitor]) -> Vec<MonitorRect> {
 pub fn apply_transparency(window: &tauri::WebviewWindow, percent: u8) {
     let _ = services::preferences::clamp_transparency(percent);
     if let Err(e) = window.set_effects(None) {
-        eprintln!("transparency: {e}");
+        log_line!("[DevGo] transparency: {e}");
     }
 }
 
@@ -263,17 +276,31 @@ pub fn run() {
             std::fs::create_dir_all(&app_data_dir)
                 .expect("failed to create app data dir");
 
+            // the log, before anything that could want it. same dir as
+            // instance.lock and every store, because it is the same
+            // app_data_dir - not a second opinion about where that is
+            runtime_log::init(&app_data_dir);
+            runtime_log::session_header(&app.package_info().version.to_string());
+
             // One instance. A second launch hands "restore" to the first over
             // the port in instance.lock and exits before creating anything.
             let lock_file = app_data_dir.join("instance.lock");
             let (listener, lock_path) =
                 match single_instance::try_acquire(lock_file) {
-                    Ok((listener, path)) => (listener, path),
+                    Ok((listener, path)) => {
+                        // which of the two instances this one turned out to
+                        // be is the first thing any "it did not come up"
+                        // report needs, and until now nothing said
+                        runtime_log::append(
+                            "[DevGo] single instance: lock acquired, this process serves",
+                        );
+                        (listener, path)
+                    }
                     Err(_) => {
                         // exit 0 with no output reads as "nothing happened,
                         // and it broke" to anyone who launched from a
                         // terminal. one line, to stderr, before going
-                        eprintln!(
+                        log_line!(
                             "DevGo is already running; focusing the existing window."
                         );
                         std::process::exit(0);
@@ -458,7 +485,7 @@ pub fn run() {
                     services::preferences::DEFAULT_SUMMON_HOTKEY.to_string()
                 });
             if let Err(e) = summon::register(&app.handle().clone(), &hotkey) {
-                eprintln!("[DevGo] summon hotkey '{hotkey}' unavailable: {e}");
+                log_line!("[DevGo] summon hotkey '{hotkey}' unavailable: {e}");
             }
 
             // recents come from the cache; rebuilt on every project fetch
@@ -642,6 +669,7 @@ pub fn run() {
             commands::get_default_targets,
             commands::get_last_project,
             commands::set_last_project,
+            commands::get_log_path,
         ])
         .build(context)
         .expect("error while building tauri application")

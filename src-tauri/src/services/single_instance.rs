@@ -4,6 +4,8 @@ use std::net::{TcpListener, TcpStream};
 use std::path::PathBuf;
 use std::thread;
 
+use super::runtime_log::{self, log_line};
+
 pub fn try_acquire(
     lock_file: PathBuf,
 ) -> Result<(TcpListener, PathBuf), String> {
@@ -39,6 +41,13 @@ pub fn try_acquire(
                         std::time::Duration::from_millis(200),
                     ) {
                         let _ = stream.write_all(b"restore");
+                        // the handoff, from the side that gives up. the
+                        // running instance logs the other half when it
+                        // reads the word, so a log with one half and not
+                        // the other says which end broke
+                        runtime_log::append(&format!(
+                            "[DevGo] single instance: handed off to the instance on port {port}"
+                        ));
                         return Err(
                             "Another instance is already running".into()
                         );
@@ -65,12 +74,15 @@ pub fn start_restore_listener(
                 let mut buf = [0u8; 16];
                 if let Ok(n) = stream.read(&mut buf) {
                     if &buf[..n] == b"restore" {
+                        runtime_log::append(
+                            "[DevGo] single instance: a second launch asked for the window",
+                        );
                         on_restore();
                     }
                 }
             }
             Err(e) => {
-                eprintln!(
+                log_line!(
                     "[DevGo] instance listener error: {e}, shutting down listener"
                 );
                 break;

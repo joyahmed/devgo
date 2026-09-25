@@ -2070,6 +2070,24 @@ pub fn get_app_data_dir(state: State<AppState>) -> String {
         .unwrap_or_default()
 }
 
+/// Where the runtime log is, so the frontend can say the path and - on
+/// this branch, which is about revealing files in a file manager - later
+/// hand it to `reveal_path`. No UI here, only the answer.
+///
+/// `runtime_log::log_path()` is the truth; the fallback covers the case
+/// where setup has not run `init`, which no running app can be in, and
+/// keeps the command from having to return an error nobody can act on.
+#[tauri::command]
+pub fn get_log_path(state: State<AppState>) -> String {
+    if let Some(path) = crate::services::runtime_log::log_path() {
+        return path.to_string_lossy().into_owned();
+    }
+    std::path::Path::new(&get_app_data_dir(state))
+        .join(crate::services::runtime_log::FILE_NAME)
+        .to_string_lossy()
+        .into_owned()
+}
+
 /// The same folder, in the file manager.
 #[tauri::command]
 pub fn reveal_app_data_dir(state: State<AppState>) -> Result<(), AppError> {
