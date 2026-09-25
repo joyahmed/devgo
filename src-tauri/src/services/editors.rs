@@ -1322,6 +1322,20 @@ fn resolved_exe(target: &str) -> Option<String> {
     (!t.is_empty() && Path::new(t).is_file()).then(|| t.to_string())
 }
 
+// the detector's resolution rule, and nothing else: join the name to each
+// directory of `path` in order, first file wins, which is what the shell
+// would do. pulled out of path_lookup so the launcher's preamble can be
+// tested against the very function that decides what devgo detected,
+// instead of a second copy of the rule written in the test. compiled on
+// windows under test only, for the same reason the mac preamble is: the
+// agreement it anchors has no windows half to run.
+#[cfg(any(not(windows), test))]
+pub(crate) fn first_on_path(path: &str, name: &str) -> Option<PathBuf> {
+    std::env::split_paths(path)
+        .map(|d| d.join(name))
+        .find(|p| p.is_file())
+}
+
 // the mac twin of the where.exe batch, in no spawns: the PATH is one
 // string login_path resolved once, and a name is found by joining it to
 // each entry and asking the filesystem, first hit wins, which is what the
@@ -1336,15 +1350,12 @@ fn path_lookup(names: &[&str]) -> HashMap<String, String> {
     }
 
     let path = super::platform::login_path();
-    let dirs: Vec<PathBuf> = std::env::split_paths(&path).collect();
 
     for name in names {
         if name.is_empty() {
             continue;
         }
-        if let Some(hit) =
-            dirs.iter().map(|d| d.join(name)).find(|p| p.is_file())
-        {
+        if let Some(hit) = first_on_path(&path, name) {
             found
                 .entry(name.to_lowercase())
                 .or_insert_with(|| hit.to_string_lossy().into_owned());

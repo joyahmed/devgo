@@ -976,6 +976,128 @@ mod tests {
         );
     }
 
+    // two real directories, each holding a file of the same name, so the
+    // question "which one does this order reach" has a filesystem answer
+    // rather than a reading of the format!. the first is what login_path
+    // would have answered, the second is what the hardcoded fallbacks
+    // reach - on a real mac that second one is /usr/local/bin, which no
+    // test may write to, so the test builds its own and hands it to the
+    // script as the `$PATH` the fallbacks widen
+    fn two_dirs_one_name(
+        tag: &str,
+        name: &str,
+    ) -> (std::path::PathBuf, std::path::PathBuf) {
+        let root = std::env::temp_dir().join(tag);
+        let _ = std::fs::remove_dir_all(&root);
+        let login = root.join("login");
+        let fallback = root.join("fallback");
+        for (dir, body) in [(&login, "login"), (&fallback, "fallback")] {
+            std::fs::create_dir_all(dir).expect("temp dir");
+            let exe = dir.join(name);
+            std::fs::write(&exe, format!("#!/bin/sh\nprintf %s {body}\n"))
+                .expect("write probe");
+            #[cfg(not(windows))]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                std::fs::set_permissions(
+                    &exe,
+                    std::fs::Permissions::from_mode(0o755),
+                )
+                .expect("chmod probe");
+            }
+        }
+        (login, fallback)
+    }
+
+    // THE invariant, with no literal in it: devgo has two independent
+    // readers of one PATH - editors::first_on_path, which is what the
+    // detector resolved a name with, and this PATH line, which is what the
+    // launched script resolves it with. when they disagree devgo reports
+    // one binary and runs another, silently. so: put the same name in two
+    // directories, let the detector pick, and ask the generated line -
+    // structurally, by position - whether it reaches that same directory
+    // before it reaches anything the fallbacks bring. an appended login
+    // path puts `$PATH` first and fails here.
+    #[test]
+    fn the_line_reaches_the_directory_the_detector_resolved_from() {
+        const NAME: &str = "devgo-agree-probe";
+        let (login_dir, fallback_dir) =
+            two_dirs_one_name("devgo-path-agreement-order", NAME);
+
+        // the detector's own PATH holds both, login first: that is the
+        // machine where the disagreement is even possible
+        let login = std::env::join_paths([&login_dir, &fallback_dir])
+            .expect("join paths")
+            .to_string_lossy()
+            .into_owned();
+        let detected = crate::services::editors::first_on_path(&login, NAME)
+            .expect("the detector finds the probe");
+        let detected_dir = detected.parent().expect("a parent").to_path_buf();
+        assert_eq!(detected_dir, login_dir, "the detector takes the first hit");
+
+        let line = mac_path_line(&login);
+        let value = line
+            .strip_prefix("export PATH=")
+            .unwrap_or_else(|| panic!("not a PATH line: {line}"));
+
+        let detected_at = value
+            .find(&*detected_dir.to_string_lossy())
+            .unwrap_or_else(|| {
+                panic!("the detector's directory is not on the script's PATH at all: {line}")
+            });
+        let inherited_at = value
+            .find("$PATH")
+            .unwrap_or_else(|| panic!("no inherited PATH in: {line}"));
+        assert!(
+            detected_at < inherited_at,
+            "the script reaches $PATH before the directory devgo detected \
+             from, so it launches a different {NAME}: {line}"
+        );
+        let hardcoded_at = value
+            .rfind("/usr/local/bin")
+            .unwrap_or_else(|| panic!("no fallback in: {line}"));
+        assert!(
+            detected_at < hardcoded_at,
+            "the hardcoded fallback outranks the detected directory: {line}"
+        );
+    }
+
+    // the same invariant with the reading taken out: bash runs the
+    // generated line and says which file it would launch, and that has to
+    // be the file the detector resolved, byte for byte. only off windows -
+    // there login_path() is a `C:\...;C:\...` string, and a bash given that
+    // as its PATH reaches neither directory, so the agreement it would
+    // "prove" is two failures matching. the test above is the windows half.
+    #[cfg(not(windows))]
+    #[test]
+    fn bash_launches_the_file_the_detector_resolved() {
+        const NAME: &str = "devgo-agree-run";
+        let (login_dir, fallback_dir) =
+            two_dirs_one_name("devgo-path-agreement-run", NAME);
+
+        let login = std::env::join_paths([&login_dir, &fallback_dir])
+            .expect("join paths")
+            .to_string_lossy()
+            .into_owned();
+        let detected = crate::services::editors::first_on_path(&login, NAME)
+            .expect("the detector finds the probe");
+
+        // the environment a .command really opens in: the fallbacks' half
+        // of the line - `$PATH` - reaches the other copy
+        let out = Command::new("/bin/bash")
+            .arg("-c")
+            .arg(format!("{}\ncommand -v {NAME}\n", mac_path_line(&login)))
+            .env("PATH", &fallback_dir)
+            .output()
+            .expect("bash");
+        let launched = String::from_utf8_lossy(&out.stdout).trim().to_string();
+        assert_eq!(
+            launched,
+            detected.to_string_lossy(),
+            "the script launches a different {NAME} than devgo detected"
+        );
+    }
+
     // a login path nobody could resolve leaves the line exactly as it was
     // before login_path was pasted in: no `:` with nothing in front of it,
     // which bash reads as the current directory
