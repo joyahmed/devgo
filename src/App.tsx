@@ -822,9 +822,10 @@ const AppInner = () => {
 	const revealInExplorer = (p: Project) => reveal(p.full_path);
 	const revealWorkspace = (ws: string) => reveal(ws);
 
-	// the default manager, when one is set and still registered. a default
-	// that names a deleted target resolves to undefined here and every caller
-	// falls back to what it said before
+	// the manager a reveal with no target id will really open. get_default_targets
+	// already walked resolve_target's chain — the saved default, else the first
+	// registered — so this is the effective one, not merely the saved one, and it
+	// is undefined only when no file manager is registered at all
 	const defaultFileManager = targets.fileManagers.find(
 		t => t.id === targets.defaults.file_manager
 	);
@@ -855,7 +856,12 @@ const AppInner = () => {
 				}))
 			: [
 					{
-						label: labelFor('revealExplorer'),
+						// the single row opens whatever get_default_targets resolved
+						// — one registered manager IS the default — so it names that
+						// one. the static label was the last seat left saying
+						// "Explorer" while trove opened, after 78.7 took the same lie
+						// out of the palette, the shortcut table and help
+						label: revealLabel,
 						hint: keys,
 						onClick: () => reveal(path)
 					}

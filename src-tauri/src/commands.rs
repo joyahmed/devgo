@@ -2966,4 +2966,153 @@ mod tests {
             .iter()
             .any(|r| r.full_path == r"G:\a\web" && r.pinned));
     }
+
+    /// Every `.rs` file of this crate, read once, for the rules below that
+    /// are about the shape of the source rather than the value of a call.
+    fn crate_sources() -> Vec<(std::path::PathBuf, String)> {
+        let mut out = Vec::new();
+        let mut stack =
+            vec![std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src")];
+        while let Some(dir) = stack.pop() {
+            for entry in std::fs::read_dir(&dir).expect("a source directory") {
+                let path = entry.expect("a directory entry").path();
+                if path.is_dir() {
+                    stack.push(path);
+                } else if path.extension().is_some_and(|e| e == "rs") {
+                    let text =
+                        std::fs::read_to_string(&path).expect("a source file");
+                    out.push((path, text));
+                }
+            }
+        }
+        out
+    }
+
+    /// The rule, not a call site: everything that shows a path in a file
+    /// manager goes through the one the user registered.
+    ///
+    /// Read off the source, because the source is where this regression
+    /// lives. A door that spawns a program by name never calls `reveal_line`
+    /// or `reveal_path`, so no unit test of either can see it; what sees it
+    /// is a report saying "devgo opens folders in explorer, except one".
+    /// Three claims:
+    ///
+    /// 1. no file in this crate spawns a file manager by name. The seeds and
+    ///    the detector carry those names as data - `exe: "explorer"` - which
+    ///    is the whole point; a spawn is what must not exist.
+    /// 2. exactly one line turns `TargetKind::FileManager` into a target to
+    ///    launch: the `resolve_target` call inside `reveal_path`.
+    /// 3. every command whose name says reveal hands its path to
+    ///    `reveal_path`.
+    ///
+    /// The command attribute is assembled at run time rather than written
+    /// out, or this test's own text would be one of the things it splits on.
+    #[test]
+    fn every_reveal_door_goes_through_the_registered_file_manager() {
+        let sources = crate_sources();
+        assert!(sources.len() > 10, "the walk really found the crate");
+
+        for name in [
+            "explorer",
+            "explorer.exe",
+            "open",
+            "xdg-open",
+            "nautilus",
+            "dolphin",
+            "nemo",
+            "thunar",
+            "caja",
+            "pcmanfm",
+        ] {
+            let spawn = format!("Command::new(\"{name}\"");
+            for (path, text) in &sources {
+                assert!(
+                    !text.contains(&spawn),
+                    "{}: spawns {name} by name. a file manager is a \
+                     registered target - go through reveal_path",
+                    path.display()
+                );
+            }
+        }
+
+        let mut resolvers: Vec<String> = Vec::new();
+        for (path, text) in &sources {
+            for line in text.lines() {
+                if line.contains("TargetKind::FileManager")
+                    && line.contains("resolve_target(")
+                {
+                    resolvers.push(path.display().to_string());
+                }
+            }
+        }
+        assert_eq!(
+            resolvers.len(),
+            1,
+            "exactly one file manager resolver, found {resolvers:?}"
+        );
+
+        // every file, not only this one: a command lives wherever someone
+        // puts it, and the next reveal door is exactly the one that lands
+        // somewhere else
+        let attribute = format!("#[{}]", "tauri::command");
+        let mut checked = 0;
+        for (_, text) in &sources {
+            for chunk in text.split(&attribute).skip(1) {
+                // the body ends at the first closing brace in column one, so
+                // a later doc comment cannot answer for this function
+                let body = chunk.split("\n}").next().unwrap_or(chunk);
+                let Some((_, rest)) = body.split_once("fn ") else {
+                    continue;
+                };
+                let name = rest.split('(').next().unwrap_or_default();
+                if !name.contains("reveal") {
+                    continue;
+                }
+                assert!(
+                    body.contains("reveal_path("),
+                    "{name} shows a path without going through reveal_path"
+                );
+                checked += 1;
+            }
+        }
+        assert_eq!(checked, 2, "reveal_in_explorer and reveal_app_data_dir");
+    }
+
+    /// The frontend half of the same rule. It cannot spawn anything, so the
+    /// bypass available to it is narrower and just as visible in a menu: a
+    /// second `invoke` door beside `reveal()`, or a row that pins a manager's
+    /// id rather than letting the backend resolve the default. Both are one
+    /// string, and both are what "except one" looked like from the outside.
+    #[test]
+    fn the_frontend_has_one_reveal_door_and_pins_no_manager() {
+        let mut stack = vec![std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .expect("the repo root")
+            .join("src")];
+        let mut doors = 0;
+        let mut files = 0;
+        while let Some(dir) = stack.pop() {
+            for entry in std::fs::read_dir(&dir).expect("the ui directory") {
+                let path = entry.expect("a directory entry").path();
+                if path.is_dir() {
+                    stack.push(path);
+                    continue;
+                }
+                if !path.extension().is_some_and(|e| e == "ts" || e == "tsx") {
+                    continue;
+                }
+                let text = std::fs::read_to_string(&path).expect("a ui file");
+                files += 1;
+                doors += text.matches("'reveal_in_explorer'").count();
+                assert!(
+                    !text.contains("targetId: '"),
+                    "{}: names a file manager instead of passing the id the \
+                     menu row was built from",
+                    path.display()
+                );
+            }
+        }
+        assert!(files > 10, "the walk really found the frontend");
+        assert_eq!(doors, 1, "one invoke of reveal_in_explorer, not {doors}");
+    }
 }
