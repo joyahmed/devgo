@@ -1,11 +1,22 @@
-# the same gate the release runs, on every push to main and every pull
-# request. windows only: the mac gate costs minutes and the tag build
-# runs it there anyway.
+# the same gate the release runs, on every push and every pull request.
+# one job per platform the release ships, because a #[cfg(target_os)] arm is
+# compiled by nothing but the platform it names: the mac and linux arms used to
+# be first compiled by the tag build, which is after the decision to release —
+# the worst moment to learn the code does not build. runners for the other two
+# are free on a public repo, so the gate pays for itself the first time.
+# clippy is the mac and linux job in full: --all-targets compiles every arm,
+# so one step answers "does it build" and "is it clean" at once. the windows
+# job keeps the tests and the frontend build, and gains fmt and the same strict
+# clippy so ci stops being weaker than scripts/verify.sh.
 name: ci
 
 on:
+  # every branch, not just main: work that never opens a pull request — most of
+  # this repo's — was reaching main having been checked by nothing. '**' matches
+  # slashes, so 78.file-manager and friends count; tags are left out because a
+  # v* tag is release.yml's job and would otherwise run this twice.
   push:
-    branches: [main]
+    branches: ['**']
   pull_request:
 
 concurrency:
@@ -19,6 +30,8 @@ jobs:
       - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
@@ -28,7 +41,53 @@ jobs:
           bash -n server/site-new.sh
           jq empty server/devgo-actions.example.json
         shell: bash
+      # fmt needs no build, so it fails in seconds when it fails at all
+      - run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
+        shell: bash
       - run: bun install --frozen-lockfile
+      # dist/ is gitignored, and generate_context! wants frontendDist to exist,
+      # so the frontend build comes before anything that compiles the crate
       - run: bun run build
+      - run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+        shell: bash
       - run: cargo test --manifest-path src-tauri/Cargo.toml || cargo test --manifest-path src-tauri/Cargo.toml -- --test-threads=1
         shell: bash
+
+  mac:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - run: bun install --frozen-lockfile
+      - run: bun run build
+      - run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+
+  linux:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      # tauri links against webkit2gtk and gtk and the runner ships neither
+      # -dev package; without these the build dies in cargo with a pkg-config
+      # error naming a .pc file. same list as scripts/build-linux.sh, pinned
+      # to 24.04 because that is where webkit2gtk-4.1 was verified
+      - run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev libgtk-3-dev \
+            libxdo-dev libayatana-appindicator3-dev librsvg2-dev
+      - run: bun install --frozen-lockfile
+      - run: bun run build
+      - run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
