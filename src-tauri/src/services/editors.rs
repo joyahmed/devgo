@@ -1225,6 +1225,15 @@ fn start_menu_dirs() -> Vec<PathBuf> {
         .collect()
 }
 
+/// How far below a Start Menu root the walk will go. file_type follows a
+/// reparse point, so a junction pointing back at its own parent would
+/// otherwise be an endless descent inside detect. Real shortcuts sit one
+/// or two folders down — a vendor folder, at most a product folder under
+/// it — so eight is far past anything an installer writes and still a
+/// number the walk cannot run past.
+#[cfg(windows)]
+const SHORTCUT_MAX_DEPTH: usize = 8;
+
 /// The `<name>.lnk` under any of `dirs`, matched case-insensitively and
 /// searched all the way down: an installer drops its shortcut in a vendor
 /// folder as often as at the top level. Pure filesystem, no spawn, so a
@@ -1232,15 +1241,21 @@ fn start_menu_dirs() -> Vec<PathBuf> {
 #[cfg(windows)]
 fn find_shortcut(dirs: &[PathBuf], name: &str) -> Option<PathBuf> {
     let wanted = format!("{}.lnk", name.to_lowercase());
-    let mut stack: Vec<PathBuf> = dirs.to_vec();
-    while let Some(dir) = stack.pop() {
+    // the depth rides with each directory rather than counting the loop:
+    // a stack walk visits siblings between levels, so one shared counter
+    // would not say how deep the directory in hand actually is
+    let mut stack: Vec<(PathBuf, usize)> =
+        dirs.iter().map(|d| (d.clone(), 0)).collect();
+    while let Some((dir, depth)) = stack.pop() {
         let Ok(entries) = std::fs::read_dir(&dir) else {
             continue;
         };
         for entry in entries.flatten() {
             let is_dir = entry.file_type().map(|t| t.is_dir()).unwrap_or(false);
             if is_dir {
-                stack.push(entry.path());
+                if depth < SHORTCUT_MAX_DEPTH {
+                    stack.push((entry.path(), depth + 1));
+                }
             } else if entry.file_name().to_string_lossy().to_lowercase()
                 == wanted
             {
@@ -1249,6 +1264,28 @@ fn find_shortcut(dirs: &[PathBuf], name: &str) -> Option<PathBuf> {
         }
     }
     None
+}
+
+/// The script `resolve_shortcuts` runs, built apart from the spawn so a
+/// test can read the quoting without a shell or a real `.lnk`. Single
+/// quotes throughout: the script goes over as one argument, which std
+/// re-quotes with double quotes, and a double quote inside it would not
+/// survive the round trip. A single quote in a path is doubled, which is
+/// PowerShell's own escape, and a single-quoted string is literal, so a
+/// `$` in a path is a `$` and not a variable.
+#[cfg(windows)]
+fn shortcut_script(lnks: &[PathBuf]) -> String {
+    let list = lnks
+        .iter()
+        .map(|p| format!("'{}'", p.to_string_lossy().replace('\'', "''")))
+        .collect::<Vec<_>>()
+        .join(",");
+    format!(
+        "$w = New-Object -ComObject WScript.Shell; \
+         foreach ($p in @({list})) {{ \
+         try {{ Write-Output ([string]$w.CreateShortcut($p).TargetPath) }} \
+         catch {{ Write-Output '' }} }}"
+    )
 }
 
 /// Every shortcut resolved in one `powershell.exe`, the way `path_lookup`
@@ -1261,20 +1298,7 @@ fn resolve_shortcuts(lnks: &[PathBuf]) -> Vec<String> {
     if lnks.is_empty() {
         return Vec::new();
     }
-    let list = lnks
-        .iter()
-        .map(|p| format!("'{}'", p.to_string_lossy().replace('\'', "''")))
-        .collect::<Vec<_>>()
-        .join(",");
-    // single quotes throughout: the script is one argument, which std
-    // re-quotes with double quotes, and a double quote inside it would
-    // not survive the round trip
-    let script = format!(
-        "$w = New-Object -ComObject WScript.Shell; \
-         foreach ($p in @({list})) {{ \
-         try {{ Write-Output ([string]$w.CreateShortcut($p).TargetPath) }} \
-         catch {{ Write-Output '' }} }}"
-    );
+    let script = shortcut_script(lnks);
     let Ok(out) = Command::new("powershell.exe")
         .quiet()
         .args(["-NoProfile", "-NonInteractive", "-Command"])
@@ -2157,6 +2181,55 @@ mod tests {
         assert!(resolved_exe(&root.to_string_lossy()).is_none(), "a dir");
 
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// The walk stops at a fixed depth, which is what keeps a junction
+    /// loop under the Start Menu from hanging detect: a shortcut inside
+    /// the cap is found, one a level past it is not.
+    #[cfg(windows)]
+    #[test]
+    fn the_start_menu_walk_stops_at_a_fixed_depth() {
+        let root = std::env::temp_dir().join("devgo-editors-depth-test");
+        let _ = std::fs::remove_dir_all(&root);
+        let mut deep = root.clone();
+        for i in 0..=SHORTCUT_MAX_DEPTH {
+            deep = deep.join(format!("level{i}"));
+        }
+        std::fs::create_dir_all(&deep).unwrap();
+        // the last folder within the cap, and the first one past it
+        let inside = deep.parent().unwrap().to_path_buf();
+        std::fs::write(inside.join("Near.lnk"), "").unwrap();
+        std::fs::write(deep.join("Far.lnk"), "").unwrap();
+
+        let dirs = vec![root.clone()];
+        assert!(find_shortcut(&dirs, "Near").is_some(), "inside the cap");
+        assert!(find_shortcut(&dirs, "Far").is_none(), "past the cap");
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// A path with the characters a shell would read: the single quote is
+    /// doubled, the space and the dollar ride along literally, and the
+    /// list stays one quoted string per path in order.
+    #[cfg(windows)]
+    #[test]
+    fn a_shortcut_path_with_shell_characters_is_quoted_whole() {
+        let odd = PathBuf::from(r"C:\Joy's Apps\$env Tools\Trove.lnk");
+        let plain = PathBuf::from(r"C:\Program Files\Trove\Trove.lnk");
+        let script = shortcut_script(&[odd, plain]);
+
+        assert!(
+            script.contains(
+                r"@('C:\Joy''s Apps\$env Tools\Trove.lnk','C:\Program Files\Trove\Trove.lnk')"
+            ),
+            "quoted in order, the quote doubled: {script}"
+        );
+        // no bare single quote could end the string early
+        let body = script.split_once("@(").unwrap().1;
+        let list = body.split_once(')').unwrap().0;
+        assert_eq!(list.matches('\'').count() % 2, 0, "quotes stay balanced");
+        assert!(!script.contains("''''"), "only the real quote is doubled");
+        assert!(shortcut_script(&[]).contains("@()"), "no paths, empty list");
     }
 
     /// locate reads the shortcut map only for a row that asked for one:
