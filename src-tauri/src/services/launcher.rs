@@ -435,12 +435,33 @@ fn sh_quote(value: &str) -> String {
 // has, and tmux lives in /opt/homebrew/bin. the -x guard lets an intel mac
 // (homebrew in /usr/local, appended) and a mac with no homebrew pass
 // through silently. #!/bin/bash, not env bash: env would search the very
-// PATH this fixes
+// PATH this fixes.
+//
+// homebrew is not the whole answer: `claude` lives in ~/.local/bin, bun in
+// ~/.bun/bin, node in an nvm directory whose version number nobody can
+// hardcode. login_path() already asked the login shell for the real answer
+// and memoised it for the life of the process, so the resolved string is
+// pasted in here and the script pays nothing at launch — no `zsh -ilc` per
+// .command. appended, never prepended: this line can only ever widen the
+// PATH the script already had. single-quoted and concatenated onto the
+// closing double quote, because a path is not a place to trust $ and `.
+// empty is skipped: a trailing `:` is bash for "and the current
+// directory", a PATH entry nobody asked for
 #[cfg(any(not(windows), test))]
-const MAC_PREAMBLE: &str = r#"#!/bin/bash
+fn mac_preamble() -> String {
+    let resolved = super::platform::login_path();
+    let extra = if resolved.trim().is_empty() {
+        String::new()
+    } else {
+        format!(":{}", sh_quote(resolved.trim()))
+    };
+    format!(
+        r#"#!/bin/bash
 [ -x /opt/homebrew/bin/brew ] && eval "$(/opt/homebrew/bin/brew shellenv)"
-export PATH="$PATH:/usr/local/bin"
-"#;
+export PATH="$PATH:/usr/local/bin"{extra}
+"#
+    )
+}
 
 // the tmux session script for a local project on a mac: the body is
 // build_tmux_script's output unchanged, shebang aside, because tmux is
@@ -476,7 +497,7 @@ fi
         String::new()
     };
 
-    format!("{MAC_PREAMBLE}{bail}{body}")
+    format!("{}{bail}{body}", mac_preamble())
 }
 
 // the run script for a local project on a mac: PATH, into the project,
@@ -484,16 +505,27 @@ fi
 // after the command exits, windows terminal's -NoExit spelled in bash. a
 // failing dev script leaves its error on screen instead of vanishing. the
 // path goes through sh_quote; || exit 1 because a cd that fails must not
-// run the command wherever terminal started. the command is the user's
-// own line, shell syntax by definition, and is not quoted
+// run the command wherever terminal started.
+//
+// the command runs through an INTERACTIVE shell, not this bash directly,
+// because no PATH can reach the half of these commands that are not files:
+// `pnpm` on a lazy-nvm setup is a shell FUNCTION defined in ~/.zshrc that
+// sources nvm on first call, and a function does not exist for any
+// non-interactive child, whatever PATH it is handed. -i sources the rc
+// file where those functions live; the preamble has already done the PATH,
+// so -l is not needed on top. the command is the user's own line, shell
+// syntax by definition — sh_quote keeps it one word for THIS shell and the
+// interactive one parses it as the shell syntax it is
 #[cfg(any(not(windows), test))]
 fn build_mac_run_script(path: &str, command: &str) -> String {
     format!(
-        r#"{MAC_PREAMBLE}cd {} || exit 1
-{command}
+        r#"{}cd {} || exit 1
+"${{SHELL:-bash}}" -ic {}
 exec "${{SHELL:-bash}}" -l
 "#,
-        sh_quote(path)
+        mac_preamble(),
+        sh_quote(path),
+        sh_quote(command)
     )
 }
 
@@ -2189,7 +2221,7 @@ mod tests {
             "no mac lines leaked into the wsl script: {wsl}"
         );
 
-        assert!(mac.starts_with(MAC_PREAMBLE), "{mac}");
+        assert!(mac.starts_with(&mac_preamble()), "{mac}");
         assert!(mac.starts_with("#!/bin/bash\n"), "not env bash: {mac}");
         assert!(mac.contains(r#"eval "$(/opt/homebrew/bin/brew shellenv)""#));
         assert!(mac.contains("/usr/local/bin"), "an intel mac too: {mac}");
@@ -2243,7 +2275,7 @@ mod tests {
             script.contains("cd '/Users/user/app' || exit 1"),
             "{script}"
         );
-        assert!(script.starts_with(MAC_PREAMBLE), "{script}");
+        assert!(script.starts_with(&mac_preamble()), "{script}");
     }
 
     // a directory with a space and an apostrophe reaches bash as one word,
@@ -2265,10 +2297,12 @@ mod tests {
         );
 
         let run = build_mac_run_script(&path, "bun dev");
-        assert!(run.starts_with(MAC_PREAMBLE), "{run}");
+        assert!(run.starts_with(&mac_preamble()), "{run}");
         assert!(
-            run.contains(&format!("cd {quoted} || exit 1\nbun dev\n")),
-            "cd, then the line verbatim: {run}"
+            run.contains(&format!(
+                "cd {quoted} || exit 1\n\"${{SHELL:-bash}}\" -ic 'bun dev'\n"
+            )),
+            "cd, then the line through an interactive shell: {run}"
         );
         assert!(run.ends_with("exec \"${SHELL:-bash}\" -l\n"), "{run}");
         assert_eq!(
@@ -2316,7 +2350,7 @@ mod tests {
 
         let on_disk = std::fs::read_to_string(&expected)
             .unwrap_or_else(|_| panic!("no script at {}", expected.display()));
-        assert!(on_disk.starts_with(MAC_PREAMBLE), "{on_disk}");
+        assert!(on_disk.starts_with(&mac_preamble()), "{on_disk}");
         assert!(on_disk.contains("tmux new-session -d -s "), "{on_disk}");
         assert!(on_disk.contains("-n 'code'"), "{on_disk}");
         assert!(
@@ -2389,8 +2423,9 @@ mod tests {
             std::fs::read_to_string(&expected).expect("the run script");
         assert!(
             script.contains(&format!(
-                "cd {} || exit 1\n{command}\n",
-                sh_quote(&dir.to_string_lossy())
+                "cd {} || exit 1\n\"${{SHELL:-bash}}\" -ic {}\n",
+                sh_quote(&dir.to_string_lossy()),
+                sh_quote(&command)
             )),
             "{script}"
         );

@@ -270,6 +270,12 @@ pub fn run() {
                 match single_instance::try_acquire(lock_file) {
                     Ok((listener, path)) => (listener, path),
                     Err(_) => {
+                        // exit 0 with no output reads as "nothing happened,
+                        // and it broke" to anyone who launched from a
+                        // terminal. one line, to stderr, before going
+                        eprintln!(
+                            "DevGo is already running; focusing the existing window."
+                        );
                         std::process::exit(0);
                     }
                 };
