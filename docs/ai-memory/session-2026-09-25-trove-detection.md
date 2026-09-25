@@ -116,6 +116,40 @@ REAL_MACHINE detect() trove entry = Some(DetectedTarget { id: "trove", name: "Tr
 
 Temp test removed afterwards; file confirmed byte-identical, diffstat matched.
 
+## Third slice: the labels that still named Explorer while opening Trove
+
+**`aa155e9` ✅TARGETS: the last two rows that said explorer while opening trove** —
+`src/App.tsx`, `src/components/Settings.tsx`, `src/types.d.ts` (+24/-5).
+
+`6b05576` taught the menu rows and the project palette entry to name the default manager,
+but **missed three sites that all reveal with NO target id** — so the backend resolves the
+default and the label narrated the wrong app:
+
+1. `App.tsx:1518-1523` — the **workspace palette row** read
+   `Reveal workspace <segment> in Explorer` and opened Trove.
+2. **`Settings.tsx` `ShortcutTable`** listed BOTH reveal keys as "…in Explorer". That is
+   the one screen a user opens to find out what a key does, so it was the worst of them.
+
+Fix: a bare `revealTargetName = defaultFileManager?.name ?? 'Explorer'` beside the existing
+`revealLabel` (`App.tsx:836-839`) for rows that build a sentence around the name rather
+than carrying the whole label; and a `fileManagerName?: string` prop on `ShortcutTableProps`
+(`types.d.ts:873-875`) with a `shortcutLabel()` helper in `Settings.tsx` that substitutes
+only for `revealExplorer` / `revealWorkspace`, fed from the `defaultManagerName` Settings
+already derives. `shortcuts.ts:120` and `:192` stay untouched as the shared static
+fallbacks — the substitution happens at the call sites, matching what `6b05576` did.
+
+Unset default, or one naming a deleted target → all three say "Explorer" again, which is
+then true.
+
+Gate: contrast ok, tsc clean, 93 modules, `cargo test` 264/0/1, clippy unchanged.
+
+⚠️ **Process note, recorded because it cost a broken typecheck.** A background agent was
+spawned for this slice and then the orchestrator began editing the same file directly — two
+writers in `src/App.tsx` produced a duplicate parallel derivation (`revealWorkspaceIn`
+alongside `revealTargetName`) and `TS6133: declared but never read`. The agent was stopped;
+it removed its own duplicate on exit. **Do not run an agent and the orchestrator on the same
+file at the same time.**
+
 ## Second report: "reveal in file explorer opens explorer even though trove is default"
 
 **`6b05576` ✅TARGETS: the default file manager leads the reveal menu** —
@@ -299,9 +333,23 @@ at `E:\Softwares\Trove\trove.exe` — which works identically. Nothing breaks ei
   registered via a shell verb". **Both are false** — `D:\Apps` is empty and there is no
   shell verb anywhere in the registry. This note sent this session down the wrong path
   for its first ten minutes. Not edited here: memory edits belong in the personal repo.
-- **`agent-watch --report` resolved to the wrong project** (`G--01-tauri-trove` instead of
-  `G--01-tauri-devgo`) while the Trove session was live, so its 60% warnings would not
-  have fired for this session's agents. Same session-directory resolution bug already
-  recorded in WORK-QUEUE.md. Worked around by reading the subagents dir directly.
+- **`agent-watch --report` (BARE, no session id) reports another session's agents** when
+  several are live on the box. Seen here: it printed `G--01-tauri-trove` while this session
+  was `G--01-tauri-devgo`.
+  ⚠️ **Correction to an earlier version of this note.** I first wrote that the 60% warnings
+  therefore would not fire for this session's agents. **That was wrong and too broad** —
+  corrected after Wissie read the source on the WSL side. `agent-watch.mjs:205` writes
+  `~/.claude/ctx/${sid}.agents.json` with `sid` from `input.session_id` (`:60`), and both
+  painters read back by that same id (`statusline-command.sh:180`,
+  `statusline-command.js:124`). There is no cross-session path, so **the status line's agent
+  count IS this session's own and the warnings DO fire.**
+  The actual defect is narrower: with no sid and no transcript_path, `subagentsDir()` takes
+  its documented fallback — "most recently written subagents dir on the box"
+  (`agent-watch.mjs:70-97`) — and scans every project slug for the highest mtime. Right on a
+  one-session box; with three sessions live it returns whoever wrote last, and says nothing
+  in its output to indicate it is answering about someone else. **`--report <session-id>`
+  works correctly today** — use that form.
+  Reading `~/.claude/projects/<slug>/<session>/subagents/` directly was a workaround for the
+  overbroad reading and is not needed.
 
 Agents this slice: **5** (3 diagnosis, 1 implementation, 1 independent verify).
