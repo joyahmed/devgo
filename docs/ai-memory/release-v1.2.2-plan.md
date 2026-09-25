@@ -246,6 +246,38 @@ cgroups, and has **no fix action other than terminate/shutdown**.
 
 ---
 
+## 3b. ⛔ BLOCKED — UNREACHABLE, not pending. Needs Joy.
+
+⭐ **There is NO push channel from Windows to Meli or Alina.** Verified, not assumed — and I asserted
+the opposite earlier and was wrong: `ListAgents` here shows only the two Windows sessions, and a peer
+tried addressing Ana by name → *"No agent named 'ana' is reachable."* **Filesystem access is not a
+push channel.** A peer can `wsl.exe` into Ana's box and `ssh` into Alina's — that reads files and runs
+commands; it cannot make a running session act, and it cannot click a desktop.
+
+- **Meli (macOS) — NO CHANNEL AT ALL.** Her Mac has Screen Sharing (5900), Remote Management (3283)
+  and File Sharing (445) open, but **Remote Login (ssh/22) is OFF** — a sweep of 22, 2222, 9999,
+  22022, 2022 was refused on every port. So the 6th clippy finding stays **permanently invisible**
+  until Joy flips Remote Login or Meli answers directly.
+- **Alina (Ubuntu) — shell reachable, desktop NOT.** Q4 (the four ClonePicker defects) and Q5 (the
+  Linux terminal/agent lanes) both require the installed app **driven on screen**: Tab focus order
+  with 388 repos, a visible focus ring, first-letter cycling, a drawer reopened. ⭐ **A peer correctly
+  REFUSED to ssh in and run something adjacent** — that would produce exactly the class of evidence
+  §0 forbids, and it would *look* like an answer. **NOT TESTED is the correct answer.**
+
+⭐ **Two things unblock this and neither belongs to a session:**
+1. **Remote Login enabled on the Mac.**
+2. **A human at Alina's desktop.**
+
+## 3c. ⚠️ `89b4d92` CHANGES NATIVE LINUX, AND NOBODY HAS TESTED IT
+
+Promoted out of the macOS section deliberately — filing it under "mac" is how it would ship silently.
+
+**`89b4d92` reads as a macOS fix. Its gate is `#[cfg(any(not(windows), test))]` — which covers NATIVE
+LINUX.** So its behaviour change reaches real Linux installs: the PATH composition, and running the
+command through `"${SHELL:-bash}" -ic` instead of directly.
+⚠️ **And `5c1c764` on this branch has since CHANGED that code again** (login path now leads).
+So Alina must test `origin/main` now **and** re-test after the rebase. Neither has happened.
+
 ## 4. Per-machine test matrix — at the §0 bar
 
 | Machine | Must verify | State |
