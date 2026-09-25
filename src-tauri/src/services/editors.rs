@@ -1026,6 +1026,17 @@ pub fn bundle_target(id: &str, bundle: &Path) -> Option<LaunchTarget> {
     Some(bundle_form(c, c.app?, bundle))
 }
 
+/// Where a candidate's bundle is installed, the same look `locate` does.
+/// `TargetStore` repairs a stored row whose executable is `open`, and that
+/// form carries the app's NAME and no path, so such a row cannot say where
+/// its own bundle is — the only way back to it is to look again. None when
+/// the app is not installed, which is the right answer: a migration that
+/// rewrites a row pointing at nothing has invented a line.
+pub fn candidate_bundle(id: &str) -> Option<PathBuf> {
+    let c = CANDIDATES.iter().find(|c| c.id == id)?;
+    app_bundle(c.app?)
+}
+
 /// Everything installed, as targets ready to be added. `running` is passed
 /// in so a caller that already paid for `wsl -l --running` does not pay
 /// twice; only those distros are asked. On a Mac it is empty and the
@@ -2073,6 +2084,53 @@ mod tests {
 
             let _ = std::fs::remove_dir_all(bundle.parent().unwrap());
         }
+    }
+
+    /// The rule the ghostty regression broke, held over the whole table.
+    /// `open` does not run the program, it asks launchservices to, and
+    /// launchservices starts an app with launchd's PATH —
+    /// `/usr/bin:/bin:/usr/sbin:/sbin` — no matter what the spawning shell
+    /// had. So no `open` line can carry a PATH, and the only way a command
+    /// reaches the user's own is inside the `.command` the launcher writes,
+    /// which `run_script_args` writes only for a template asking for
+    /// `{script}`. A run form going through `open` without the seam runs
+    /// with those four directories: `claude` in `~/.local/bin` is not
+    /// found, and nothing says so. Every terminal detection can put behind
+    /// `open`, both branches that can do it, both templates.
+    #[cfg(not(windows))]
+    #[test]
+    fn nothing_launched_through_open_runs_a_command_without_the_script_seam() {
+        let mut checked = 0;
+        for c in CANDIDATES.iter().filter(|c| c.app.is_some()) {
+            let app = c.app.unwrap();
+            // both sides of the in-bundle branch: a bundle whose binary is
+            // there, and one whose is not. either can end on `open`
+            for present in [true, false] {
+                let dir = format!("devgo-editors-seam-{}-{present}", c.id);
+                let bundle = if present {
+                    fake_bundle(&dir, app, c.exe)
+                } else {
+                    let root = std::env::temp_dir().join(&dir);
+                    let _ = std::fs::remove_dir_all(&root);
+                    root.join(format!("{app}.app"))
+                };
+
+                let t = bundle_form(c, app, &bundle);
+                if t.executable == "open" {
+                    if let Some(run) = t.run_args_template.as_deref() {
+                        assert!(
+                            run.contains("{script}"),
+                            "{} runs a command through open with no seam: {run}",
+                            c.id
+                        );
+                        checked += 1;
+                    }
+                }
+                let _ =
+                    std::fs::remove_dir_all(std::env::temp_dir().join(&dir));
+            }
+        }
+        assert!(checked > 0, "no open-launched run form was reached");
     }
 
     /// The fix is the bundle form and nothing else. On linux ghostty is on
