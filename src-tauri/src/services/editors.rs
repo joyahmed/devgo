@@ -45,6 +45,11 @@ struct Candidate {
     /// skip, so the bundle is the truth about installation. None on every
     /// windows row: PATH decides
     app: Option<&'static str>,
+    /// windows only: the base name of the Start Menu shortcut, without
+    /// `.lnk`. an installer that puts nothing on PATH still writes one of
+    /// these, and it is the only machine-readable record of where the exe
+    /// landed. None everywhere else, and on every row PATH already finds
+    win_lnk: Option<&'static str>,
 }
 
 // the VS Code family does the crossing itself
@@ -68,6 +73,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_run_args: None,
         reveal_args: None,
         app: None,
+        win_lnk: None,
     },
     Candidate {
         id: "vscode-insiders",
@@ -80,6 +86,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_run_args: None,
         reveal_args: None,
         app: None,
+        win_lnk: None,
     },
     Candidate {
         id: "cursor",
@@ -92,6 +99,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_run_args: None,
         reveal_args: None,
         app: None,
+        win_lnk: None,
     },
     Candidate {
         id: "windsurf",
@@ -104,6 +112,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_run_args: None,
         reveal_args: None,
         app: None,
+        win_lnk: None,
     },
     // zed's windows cli takes the distro as a flag and resolves the linux
     // path itself; it was None until that cli shipped, and devgo refused
@@ -119,6 +128,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_run_args: None,
         reveal_args: None,
         app: None,
+        win_lnk: None,
     },
     Candidate {
         id: "sublime",
@@ -131,6 +141,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_run_args: None,
         reveal_args: None,
         app: None,
+        win_lnk: None,
     },
     Candidate {
         id: "idea",
@@ -143,6 +154,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_run_args: None,
         reveal_args: None,
         app: None,
+        win_lnk: None,
     },
     Candidate {
         id: "webstorm",
@@ -155,6 +167,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_run_args: None,
         reveal_args: None,
         app: None,
+        win_lnk: None,
     },
     Candidate {
         id: "pycharm",
@@ -167,6 +180,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_run_args: None,
         reveal_args: None,
         app: None,
+        win_lnk: None,
     },
     Candidate {
         id: "rustrover",
@@ -179,6 +193,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_run_args: None,
         reveal_args: None,
         app: None,
+        win_lnk: None,
     },
     Candidate {
         id: "goland",
@@ -191,6 +206,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_run_args: None,
         reveal_args: None,
         app: None,
+        win_lnk: None,
     },
     Candidate {
         id: "fleet",
@@ -203,6 +219,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_run_args: None,
         reveal_args: None,
         app: None,
+        win_lnk: None,
     },
     // terminals open WSL projects through the tmux script, like the seed;
     // WT_ARGS shared with it, so a wt removed and added back from this list
@@ -218,6 +235,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_run_args: Some(crate::models::target::WT_WSL_RUN_ARGS),
         reveal_args: None,
         app: None,
+        win_lnk: None,
     },
     Candidate {
         id: "alacritty",
@@ -232,6 +250,7 @@ const CANDIDATES: &[Candidate] = &[
         ),
         reveal_args: None,
         app: None,
+        win_lnk: None,
     },
     Candidate {
         id: "wezterm",
@@ -246,11 +265,13 @@ const CANDIDATES: &[Candidate] = &[
         ),
         reveal_args: None,
         app: None,
+        win_lnk: None,
     },
     // the one file manager windows certainly has, and the same bytes the
     // seed carries. another one - trove, or anything installed by an
-    // msi - is added by hand with its full exe path: an installer puts
-    // nothing on PATH, so no table entry could ever find it
+    // msi - puts nothing on PATH, so exe alone could never find it; the
+    // Start Menu shortcut every installer does write is the second door,
+    // and win_lnk is a row saying which one to knock on
     Candidate {
         id: "explorer",
         name: "File Explorer",
@@ -262,6 +283,23 @@ const CANDIDATES: &[Candidate] = &[
         wsl_run_args: None,
         reveal_args: Some("\"{path}\""),
         app: None,
+        win_lnk: None,
+    },
+    // copied to Program Files or unzipped onto another drive, never on
+    // PATH either way. /select, is explorer's own spelling of reveal and
+    // trove answers to it, comma and all, with no space after it
+    Candidate {
+        id: "trove",
+        name: "Trove",
+        kind: TargetKind::FileManager,
+        exe: "trove",
+        args: "\"{path}\"",
+        wsl_args: None,
+        run_args: None,
+        wsl_run_args: None,
+        reveal_args: Some("/select,\"{path}\""),
+        app: None,
+        win_lnk: Some("Trove"),
     },
 ];
 
@@ -289,6 +327,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_run_args: None,
         reveal_args: None,
         app: Some("Visual Studio Code"),
+        win_lnk: None,
     },
     Candidate {
         id: "vscode-insiders",
@@ -301,6 +340,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_run_args: None,
         reveal_args: None,
         app: Some("Visual Studio Code - Insiders"),
+        win_lnk: None,
     },
     Candidate {
         id: "cursor",
@@ -313,6 +353,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_run_args: None,
         reveal_args: None,
         app: Some("Cursor"),
+        win_lnk: None,
     },
     Candidate {
         id: "windsurf",
@@ -325,6 +366,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_run_args: None,
         reveal_args: None,
         app: Some("Windsurf"),
+        win_lnk: None,
     },
     Candidate {
         id: "zed",
@@ -337,6 +379,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_run_args: None,
         reveal_args: None,
         app: Some("Zed"),
+        win_lnk: None,
     },
     Candidate {
         id: "sublime",
@@ -349,6 +392,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_run_args: None,
         reveal_args: None,
         app: Some("Sublime Text"),
+        win_lnk: None,
     },
     Candidate {
         id: "idea",
@@ -361,6 +405,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_run_args: None,
         reveal_args: None,
         app: Some("IntelliJ IDEA"),
+        win_lnk: None,
     },
     Candidate {
         id: "webstorm",
@@ -373,6 +418,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_run_args: None,
         reveal_args: None,
         app: Some("WebStorm"),
+        win_lnk: None,
     },
     Candidate {
         id: "pycharm",
@@ -385,6 +431,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_run_args: None,
         reveal_args: None,
         app: Some("PyCharm"),
+        win_lnk: None,
     },
     Candidate {
         id: "rustrover",
@@ -397,6 +444,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_run_args: None,
         reveal_args: None,
         app: Some("RustRover"),
+        win_lnk: None,
     },
     Candidate {
         id: "goland",
@@ -409,6 +457,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_run_args: None,
         reveal_args: None,
         app: Some("GoLand"),
+        win_lnk: None,
     },
     Candidate {
         id: "fleet",
@@ -421,6 +470,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_run_args: None,
         reveal_args: None,
         app: Some("Fleet"),
+        win_lnk: None,
     },
     // MAC_TERMINAL_ARGS shared with the seed, as wt shares WT_ARGS:
     // re-adding terminal from this list must give back the session script
@@ -435,6 +485,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_run_args: None,
         reveal_args: None,
         app: Some("Terminal"),
+        win_lnk: None,
     },
     Candidate {
         id: "iterm",
@@ -447,6 +498,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_run_args: None,
         reveal_args: None,
         app: Some("iTerm"),
+        win_lnk: None,
     },
     // the four emulators a mac and a linux box can both have. each opens
     // the session script the way its own cli spells "run this": -e for
@@ -480,6 +532,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_run_args: None,
         reveal_args: None,
         app: Some("Ghostty"),
+        win_lnk: None,
     },
     Candidate {
         id: "wezterm",
@@ -492,6 +545,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_run_args: None,
         reveal_args: None,
         app: Some("WezTerm"),
+        win_lnk: None,
     },
     Candidate {
         id: "kitty",
@@ -504,6 +558,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_run_args: None,
         reveal_args: None,
         app: Some("kitty"),
+        win_lnk: None,
     },
     Candidate {
         id: "alacritty",
@@ -516,6 +571,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_run_args: None,
         reveal_args: None,
         app: Some("Alacritty"),
+        win_lnk: None,
     },
     // the linux terminal emulators. none of the rows above match a stock
     // gnome or kde box: Terminal.app and iTerm2 are mac bundles, and
@@ -541,6 +597,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_run_args: None,
         reveal_args: None,
         app: None,
+        win_lnk: None,
     },
     Candidate {
         id: "konsole",
@@ -554,6 +611,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_run_args: None,
         reveal_args: None,
         app: None,
+        win_lnk: None,
     },
     Candidate {
         id: "xfce4-terminal",
@@ -567,6 +625,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_run_args: None,
         reveal_args: None,
         app: None,
+        win_lnk: None,
     },
     Candidate {
         id: "tilix",
@@ -580,6 +639,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_run_args: None,
         reveal_args: None,
         app: None,
+        win_lnk: None,
     },
     Candidate {
         id: "foot",
@@ -593,6 +653,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_run_args: None,
         reveal_args: None,
         app: None,
+        win_lnk: None,
     },
     Candidate {
         id: "terminator",
@@ -606,6 +667,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_run_args: None,
         reveal_args: None,
         app: None,
+        win_lnk: None,
     },
     Candidate {
         id: "xterm",
@@ -620,6 +682,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_run_args: None,
         reveal_args: None,
         app: None,
+        win_lnk: None,
     },
     // the file managers. finder is a bundle with no cli, like terminal.app,
     // so its door is open and both forms are the seed's bytes; -R is
@@ -641,6 +704,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_run_args: None,
         reveal_args: Some("-R \"{path}\""),
         app: Some("Finder"),
+        win_lnk: None,
     },
     Candidate {
         id: "xdg-open",
@@ -653,6 +717,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_run_args: None,
         reveal_args: None,
         app: None,
+        win_lnk: None,
     },
     Candidate {
         id: "nautilus",
@@ -665,6 +730,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_run_args: None,
         reveal_args: None,
         app: None,
+        win_lnk: None,
     },
     Candidate {
         id: "dolphin",
@@ -677,6 +743,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_run_args: None,
         reveal_args: None,
         app: None,
+        win_lnk: None,
     },
     Candidate {
         id: "nemo",
@@ -689,6 +756,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_run_args: None,
         reveal_args: None,
         app: None,
+        win_lnk: None,
     },
     Candidate {
         id: "thunar",
@@ -701,6 +769,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_run_args: None,
         reveal_args: None,
         app: None,
+        win_lnk: None,
     },
     Candidate {
         id: "caja",
@@ -713,6 +782,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_run_args: None,
         reveal_args: None,
         app: None,
+        win_lnk: None,
     },
     Candidate {
         id: "pcmanfm",
@@ -725,6 +795,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_run_args: None,
         reveal_args: None,
         app: None,
+        win_lnk: None,
     },
 ];
 
@@ -844,13 +915,17 @@ fn wayland_session() -> bool {
 }
 
 // is this candidate installed, and how is it launched? in order: its cli
-// is on PATH, the cli form as the table spells it (the only rule that can
-// fire on windows, no windows row has an app; a mac row with no exe skips
-// it, no cli is the point of the row); it has a bundle and the bundle is
-// there, bundle_form; neither, not installed and not offered
+// is on PATH, the cli form as the table spells it (a mac row with no exe
+// skips it, no cli is the point of the row); on windows its Start Menu
+// shortcut resolved, the same forms with the exe the shortcut points at;
+// it has a bundle and the bundle is there, bundle_form; none of those,
+// not installed and not offered. `lnks` is the batch shortcut_lookup
+// already resolved, keyed by lowercased win_lnk name, and is empty
+// everywhere no row asked for one
 fn locate(
     c: &Candidate,
     found: &HashMap<String, String>,
+    lnks: &HashMap<String, String>,
 ) -> Option<DetectedTarget> {
     if !c.exe.is_empty() {
         if let Some(path) = found.get(&c.exe.to_lowercase()) {
@@ -860,6 +935,19 @@ fn locate(
                 detail: path.clone(),
             });
         }
+    }
+
+    if let Some(path) = c.win_lnk.and_then(|n| lnks.get(&n.to_lowercase())) {
+        // the shortcut is the only thing that knows where the installer
+        // put it, so the resolved exe replaces the bare command; every
+        // template is the row's own
+        let mut target = to_target(c);
+        target.executable = path.clone();
+        return Some(DetectedTarget {
+            target,
+            source: "shortcut".to_string(),
+            detail: path.clone(),
+        });
     }
 
     let app = c.app?;
@@ -949,12 +1037,13 @@ pub fn detect(running: &[String]) -> Vec<DetectedTarget> {
         .filter(|e| !e.is_empty())
         .collect();
     let found = path_lookup(&names);
+    let lnks = shortcut_lookup(&found);
 
     let wayland = wayland_session();
     let mut out: Vec<DetectedTarget> = CANDIDATES
         .iter()
         .filter(|c| usable_in_session(c, wayland))
-        .filter_map(|c| locate(c, &found))
+        .filter_map(|c| locate(c, &found, &lnks))
         .collect();
 
     // agents on the local side: one lookup for the four names
@@ -1075,6 +1164,138 @@ fn path_lookup(names: &[&str]) -> HashMap<String, String> {
         }
     }
     found
+}
+
+/// The second door on Windows, and one nobody knocks on for free: only a
+/// candidate whose cli missed PATH and which names a shortcut is looked
+/// for, the Start Menu is not walked unless one does, and powershell is
+/// not started unless a `.lnk` was actually found. Keyed by the lowercased
+/// `win_lnk` name, so `locate` asks the same question the table spells.
+#[cfg(windows)]
+fn shortcut_lookup(found: &HashMap<String, String>) -> HashMap<String, String> {
+    let mut out = HashMap::new();
+    let wanted: Vec<&'static str> = CANDIDATES
+        .iter()
+        .filter(|c| {
+            c.exe.is_empty() || !found.contains_key(&c.exe.to_lowercase())
+        })
+        .filter_map(|c| c.win_lnk)
+        .collect();
+    if wanted.is_empty() {
+        return out;
+    }
+
+    let dirs = start_menu_dirs();
+    let (mut names, mut lnks) = (Vec::new(), Vec::new());
+    for name in wanted {
+        if let Some(lnk) = find_shortcut(&dirs, name) {
+            names.push(name);
+            lnks.push(lnk);
+        }
+    }
+    for (name, target) in names.iter().zip(resolve_shortcuts(&lnks)) {
+        if let Some(exe) = resolved_exe(&target) {
+            out.insert(name.to_lowercase(), exe);
+        }
+    }
+    out
+}
+
+// off windows there are no shortcuts, so the map is empty and locate's
+// win_lnk rule can never fire; one signature, no cfg at the call site
+#[cfg(not(windows))]
+fn shortcut_lookup(
+    _found: &HashMap<String, String>,
+) -> HashMap<String, String> {
+    HashMap::new()
+}
+
+/// The two Start Menus: the user's own and the machine-wide one. Which of
+/// them an installer wrote to depends on whether it asked for admin, so
+/// both are walked and a missing one is simply not there.
+#[cfg(windows)]
+fn start_menu_dirs() -> Vec<PathBuf> {
+    ["APPDATA", "ProgramData"]
+        .iter()
+        .filter_map(std::env::var_os)
+        .map(|v| {
+            PathBuf::from(v).join(r"Microsoft\Windows\Start Menu\Programs")
+        })
+        .filter(|d| d.is_dir())
+        .collect()
+}
+
+/// The `<name>.lnk` under any of `dirs`, matched case-insensitively and
+/// searched all the way down: an installer drops its shortcut in a vendor
+/// folder as often as at the top level. Pure filesystem, no spawn, so a
+/// test hands it a tree it built itself rather than the real Start Menu.
+#[cfg(windows)]
+fn find_shortcut(dirs: &[PathBuf], name: &str) -> Option<PathBuf> {
+    let wanted = format!("{}.lnk", name.to_lowercase());
+    let mut stack: Vec<PathBuf> = dirs.to_vec();
+    while let Some(dir) = stack.pop() {
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let is_dir = entry.file_type().map(|t| t.is_dir()).unwrap_or(false);
+            if is_dir {
+                stack.push(entry.path());
+            } else if entry.file_name().to_string_lossy().to_lowercase()
+                == wanted
+            {
+                return Some(entry.path());
+            }
+        }
+    }
+    None
+}
+
+/// Every shortcut resolved in one `powershell.exe`, the way `path_lookup`
+/// is one `where.exe`. WScript.Shell is the only reader of a `.lnk`
+/// without a COM crate, and a shell is worth starting once, never once
+/// per row. One line out per path in, in order, so a shortcut that cannot
+/// be read is a blank line rather than a shift in the pairing.
+#[cfg(windows)]
+fn resolve_shortcuts(lnks: &[PathBuf]) -> Vec<String> {
+    if lnks.is_empty() {
+        return Vec::new();
+    }
+    let list = lnks
+        .iter()
+        .map(|p| format!("'{}'", p.to_string_lossy().replace('\'', "''")))
+        .collect::<Vec<_>>()
+        .join(",");
+    // single quotes throughout: the script is one argument, which std
+    // re-quotes with double quotes, and a double quote inside it would
+    // not survive the round trip
+    let script = format!(
+        "$w = New-Object -ComObject WScript.Shell; \
+         foreach ($p in @({list})) {{ \
+         try {{ Write-Output ([string]$w.CreateShortcut($p).TargetPath) }} \
+         catch {{ Write-Output '' }} }}"
+    );
+    let Ok(out) = Command::new("powershell.exe")
+        .quiet()
+        .args(["-NoProfile", "-NonInteractive", "-Command"])
+        .arg(script)
+        .output()
+    else {
+        return Vec::new();
+    };
+    String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .map(|l| l.trim().to_string())
+        .collect()
+}
+
+/// A TargetPath is an answer only while something is still there: a
+/// shortcut outlives the program it pointed at, and an uninstalled one
+/// would otherwise be offered as a target that cannot launch.
+#[cfg(windows)]
+fn resolved_exe(target: &str) -> Option<String> {
+    let t = target.trim();
+    (!t.is_empty() && Path::new(t).is_file()).then(|| t.to_string())
 }
 
 // the mac twin of the where.exe batch, in no spawns: the PATH is one
@@ -1488,6 +1709,7 @@ mod tests {
             wsl_run_args: None,
             reveal_args: None,
             app: None,
+            win_lnk: None,
         };
         assert!(!usable_in_session(&foot, false));
         assert!(usable_in_session(&foot, true));
@@ -1546,7 +1768,7 @@ mod tests {
         let code = CANDIDATES.iter().find(|c| c.id == "vscode").unwrap();
         let mut found = HashMap::new();
         found.insert("code".to_string(), "/opt/homebrew/bin/code".to_string());
-        let d = locate(code, &found).expect("on PATH");
+        let d = locate(code, &found, &HashMap::new()).expect("on PATH");
         assert_eq!(d.source, "path");
         assert_eq!(d.target.executable, "code");
         assert_eq!(d.target.args_template, "\"{path}\"");
@@ -1562,8 +1784,9 @@ mod tests {
             wsl_run_args: None,
             reveal_args: None,
             app: Some("DevGo Ghost Editor That Does Not Exist"),
+            win_lnk: None,
         };
-        assert!(locate(&ghost, &HashMap::new()).is_none());
+        assert!(locate(&ghost, &HashMap::new(), &HashMap::new()).is_none());
 
         let root = std::env::temp_dir().join("devgo-editors-bundle-test");
         let _ = std::fs::remove_dir_all(&root);
@@ -1584,6 +1807,7 @@ mod tests {
             wsl_run_args: None,
             reveal_args: None,
             app: Some("Fake Term"),
+            win_lnk: None,
         };
         let editor = Candidate {
             id: "fakeed",
@@ -1596,6 +1820,7 @@ mod tests {
             wsl_run_args: None,
             reveal_args: None,
             app: Some("Fake Editor"),
+            win_lnk: None,
         };
         let no_cli = Candidate {
             id: "fakeopen",
@@ -1608,11 +1833,16 @@ mod tests {
             wsl_run_args: None,
             reveal_args: None,
             app: Some("Fake Editor"),
+            win_lnk: None,
         };
 
         // none of these fakes is in /Applications, so locate itself says no
         for c in [&term, &editor, &no_cli] {
-            assert!(locate(c, &HashMap::new()).is_none(), "{}", c.id);
+            assert!(
+                locate(c, &HashMap::new(), &HashMap::new()).is_none(),
+                "{}",
+                c.id
+            );
         }
 
         let t = bundle_form(&term, "Fake Term", &root.join("Fake Term.app"));
@@ -1651,6 +1881,7 @@ mod tests {
             wsl_run_args: None,
             reveal_args: Some("--select \"{path}\""),
             app: Some("Fake Term"),
+            win_lnk: None,
         };
         let t = bundle_form(&manager, "Fake Term", &root.join("Fake Term.app"));
         assert_eq!(t.executable, bin.join("faketerm").to_string_lossy());
@@ -1686,7 +1917,9 @@ mod tests {
             wsl_args: None,
             run_args: Some(run_args),
             wsl_run_args: None,
+            reveal_args: None,
             app: Some(app),
+            win_lnk: None,
         }
     }
 
@@ -1887,5 +2120,99 @@ mod tests {
                 c.id
             );
         }
+    }
+
+    /// The Start Menu walk, without a Start Menu: a shortcut in a vendor
+    /// subfolder is found by name whatever its case, a name nothing
+    /// matches is None, and a near miss is not a match.
+    #[cfg(windows)]
+    #[test]
+    fn a_shortcut_is_found_by_name_anywhere_under_the_start_menu() {
+        let root = std::env::temp_dir().join("devgo-editors-lnk-test");
+        let _ = std::fs::remove_dir_all(&root);
+        let nested = root.join("Programs").join("Joy Software");
+        std::fs::create_dir_all(&nested).unwrap();
+        std::fs::write(nested.join("Trove.lnk"), "").unwrap();
+        std::fs::write(root.join("Programs").join("Trovex.lnk"), "").unwrap();
+        std::fs::write(root.join("Programs").join("Trove.txt"), "").unwrap();
+
+        let dirs = vec![root.join("Programs")];
+        let hit = find_shortcut(&dirs, "Trove").expect("in the subfolder");
+        assert_eq!(hit, nested.join("Trove.lnk"));
+        // the name the table spells is matched however the file is cased
+        assert!(find_shortcut(&dirs, "trove").is_some());
+        assert!(find_shortcut(&dirs, "Trov").is_none(), "not a prefix match");
+        assert!(find_shortcut(&dirs, "Trove.lnk").is_none(), "name only");
+        assert!(find_shortcut(&[], "Trove").is_none(), "no dirs, no walk");
+
+        // a TargetPath is only an answer while the exe is still there
+        let exe = root.join("trove.exe");
+        assert!(resolved_exe(&exe.to_string_lossy()).is_none());
+        std::fs::write(&exe, "").unwrap();
+        assert_eq!(
+            resolved_exe(&format!("  {}  ", exe.display())).as_deref(),
+            Some(exe.to_string_lossy().as_ref())
+        );
+        assert!(resolved_exe("").is_none());
+        assert!(resolved_exe(&root.to_string_lossy()).is_none(), "a dir");
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// locate reads the shortcut map only for a row that asked for one:
+    /// a candidate with win_lnk None is missing when its cli is missing,
+    /// however full the map is, and one with a win_lnk gets the resolved
+    /// exe in place of the bare command while keeping its own templates.
+    #[cfg(windows)]
+    #[test]
+    fn only_a_row_that_names_a_shortcut_reads_the_shortcut_map() {
+        let mut lnks = HashMap::new();
+        lnks.insert("trove".to_string(), r"E:\Apps\Trove\trove.exe".into());
+
+        let explorer = CANDIDATES.iter().find(|c| c.id == "explorer").unwrap();
+        assert!(explorer.win_lnk.is_none());
+        assert!(
+            locate(explorer, &HashMap::new(), &lnks).is_none(),
+            "a row with no win_lnk is untouched by the map"
+        );
+
+        let trove = CANDIDATES.iter().find(|c| c.id == "trove").unwrap();
+        // nothing resolved, nothing offered
+        assert!(locate(trove, &HashMap::new(), &HashMap::new()).is_none());
+
+        let d = locate(trove, &HashMap::new(), &lnks).expect("resolved");
+        assert_eq!(d.source, "shortcut");
+        assert_eq!(d.target.executable, r"E:\Apps\Trove\trove.exe");
+        assert_eq!(d.detail, r"E:\Apps\Trove\trove.exe");
+        assert_eq!(d.target.args_template, "\"{path}\"");
+        assert_eq!(
+            d.target.reveal_args_template.as_deref(),
+            Some("/select,\"{path}\"")
+        );
+
+        // PATH still wins when both could answer
+        let mut found = HashMap::new();
+        found.insert("trove".to_string(), r"C:\bin\trove.exe".to_string());
+        let d = locate(trove, &found, &lnks).expect("on PATH");
+        assert_eq!(d.source, "path");
+        assert_eq!(d.target.executable, "trove");
+    }
+
+    /// Nothing is spawned and nothing is walked for a table whose rows are
+    /// all on PATH: the only row naming a shortcut is satisfied, so the
+    /// lookup short-circuits to an empty map.
+    #[cfg(windows)]
+    #[test]
+    fn shortcut_lookup_costs_nothing_when_every_row_resolved_on_path() {
+        let mut found = HashMap::new();
+        for c in CANDIDATES {
+            if c.win_lnk.is_some() {
+                found.insert(
+                    c.exe.to_lowercase(),
+                    format!(r"C:\bin\{}.exe", c.exe),
+                );
+            }
+        }
+        assert!(shortcut_lookup(&found).is_empty());
     }
 }

@@ -2155,6 +2155,7 @@ mod tests {
             wsl_args_template: None,
             run_args_template: None,
             wsl_run_args_template: None,
+            reveal_args_template: None,
         };
         let err = launch_target(&bare, &project, &no_distro(), &tmux_with(&[]))
             .unwrap_err();
@@ -2267,6 +2268,7 @@ mod tests {
             wsl_args_template: None,
             run_args_template: Some("--directory \"{path}\" {command}".into()),
             wsl_run_args_template: None,
+            reveal_args_template: None,
         };
         let hostile = "/home/joy/tick`id`";
         let (_, args) = bare.resolve(hostile, None).unwrap();

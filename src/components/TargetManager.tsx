@@ -384,7 +384,9 @@ const TargetManager = ({
 									{/* where it came from: an entry with no provenance is
 									    the guessing the old seed policy refused */}
 									<span className='font-mono text-11 text-text-muted truncate'>
-										{d.source === 'path' ? d.detail : `in ${d.source}`}
+										{d.source === 'path' || d.source === 'shortcut'
+										? d.detail
+										: `in ${d.source}`}
 									</span>
 								</span>
 								<span className={`${badge} text-text-muted border-border-strong shrink-0`}>

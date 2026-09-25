@@ -1084,6 +1084,7 @@ mod tests {
                     .into(),
             ),
             wsl_run_args_template: None,
+            reveal_args_template: None,
         }
     }
 
