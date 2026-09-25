@@ -500,8 +500,49 @@ fi
     format!("{}{bail}{body}", mac_preamble())
 }
 
-// the run script for a local project on a mac: PATH, into the project,
-// the command, then a login shell so the window stays open in the project
+// the three lines the window opens with, before anything of the user's
+// runs. terminal echoes the .command's own absolute path and a `; exit;`
+// first, so the header starts with a blank line and then says the only
+// three things worth saying: which project, where it is, and the line
+// about to run. a dim rule closes it and a blank line separates it from
+// the command's own output.
+//
+// colour ONLY when stdout is a terminal that claims to render it: a
+// .command can be piped or logged, and escape bytes in a log are worse
+// than no colour. -t 1 answers "am i a tty", TERM answers "does it
+// understand" — unset or dumb and every variable stays empty, which
+// leaves the same header in plain text.
+//
+// printf, not echo -e: echo -e is not portable and reads the DATA for
+// escapes. here the format string is ours alone — the colour variables
+// hold either nothing or a literal \033[..m, never a % — and every
+// interpolated value arrives as a %s argument, already sh_quote'd, so a
+// project called `%s%s` or a path with a backslash prints as itself. the
+// rule is a plain repeat of one character rather than a box: nothing to
+// misalign when the window is narrow.
+#[cfg(any(not(windows), test))]
+fn mac_run_header(name: &str, path: &str, command: &str) -> String {
+    format!(
+        r#"if [ -t 1 ] && [ -n "$TERM" ] && [ "$TERM" != dumb ]; then
+    dg_b='\033[1m'; dg_c='\033[36m'; dg_d='\033[2m'; dg_r='\033[0m'
+else
+    dg_b=''; dg_c=''; dg_d=''; dg_r=''
+fi
+printf '\n'
+printf "$dg_d%s$dg_r $dg_b$dg_c%s$dg_r\n" 'DevGo' {}
+printf "$dg_d%s$dg_r\n" {}
+printf "$dg_d%s$dg_r $dg_b%s$dg_r\n" '$' {}
+printf "$dg_d%s$dg_r\n\n" '──────────────────────────────'
+unset dg_b dg_c dg_d dg_r
+"#,
+        sh_quote(name),
+        sh_quote(path),
+        sh_quote(command)
+    )
+}
+
+// the run script for a local project on a mac: PATH, the header, into the
+// project, the command, then a login shell so the window stays open there
 // after the command exits, windows terminal's -NoExit spelled in bash. a
 // failing dev script leaves its error on screen instead of vanishing. the
 // path goes through sh_quote; || exit 1 because a cd that fails must not
@@ -517,13 +558,14 @@ fi
 // syntax by definition — sh_quote keeps it one word for THIS shell and the
 // interactive one parses it as the shell syntax it is
 #[cfg(any(not(windows), test))]
-fn build_mac_run_script(path: &str, command: &str) -> String {
+fn build_mac_run_script(name: &str, path: &str, command: &str) -> String {
     format!(
-        r#"{}cd {} || exit 1
+        r#"{}{}cd {} || exit 1
 "${{SHELL:-bash}}" -ic {}
 exec "${{SHELL:-bash}}" -l
 "#,
         mac_preamble(),
+        mac_run_header(name, path, command),
         sh_quote(path),
         sh_quote(command)
     )
@@ -792,7 +834,8 @@ fn run_script_args(
         return Ok(args.to_string());
     }
     let session = tmux_session_name(project);
-    let script = build_mac_run_script(&project.full_path, command);
+    let script =
+        build_mac_run_script(&project.name, &project.full_path, command);
     let path =
         write_command_file(&format!("devgo-run-{session}.command"), &script)?;
     Ok(args.replace("{script}", &path))
@@ -2107,7 +2150,7 @@ mod tests {
         };
         let bail = build_mac_script("app-deadbeef", hostile, &off);
         assert!(bail.contains(&format!("cd {quoted} || exit 1")), "{bail}");
-        let run = build_mac_run_script(hostile, "bun dev");
+        let run = build_mac_run_script("app", hostile, "bun dev");
         assert!(run.contains(&format!("cd {quoted} || exit 1")), "{run}");
 
         // and the windows twin, where the shell never read the characters
@@ -2296,7 +2339,7 @@ mod tests {
             "the path appears only inside its quotes: {session}"
         );
 
-        let run = build_mac_run_script(&path, "bun dev");
+        let run = build_mac_run_script("app", &path, "bun dev");
         assert!(run.starts_with(&mac_preamble()), "{run}");
         assert!(
             run.contains(&format!(
@@ -2309,6 +2352,44 @@ mod tests {
             run.matches("My Projects").count(),
             run.matches(quoted).count()
         );
+    }
+
+    // the header colours only when it is looking at a terminal, and every
+    // value it prints is data, not format. the guard is one line so a
+    // future edit that drops half of it fails here; the %s name proves the
+    // arguments never reach printf's format string, which is the bug that
+    // turns a project name into someone else's escape sequence
+    #[test]
+    fn the_run_header_guards_its_colour_and_quotes_its_values() {
+        let header = mac_run_header(
+            "%s%n Dev's App",
+            "/tmp/My Projects/it's here",
+            "pnpm dev",
+        );
+
+        assert!(
+            header.contains(
+                r#"if [ -t 1 ] && [ -n "$TERM" ] && [ "$TERM" != dumb ]; then"#
+            ),
+            "a tty AND a TERM that renders, or no colour at all: {header}"
+        );
+        assert!(
+            header.contains("dg_b=''; dg_c=''; dg_d=''; dg_r=''"),
+            "the else branch leaves plain text behind: {header}"
+        );
+        assert!(!header.contains("echo -e"), "printf only: {header}");
+
+        for value in [
+            r#"'%s%n Dev'\''s App'"#,
+            r#"'/tmp/My Projects/it'\''s here'"#,
+            "'pnpm dev'",
+        ] {
+            assert!(header.contains(value), "{value} is quoted: {header}");
+        }
+        // three printf lines carry values, and each of them is a %s
+        // argument — never the format
+        assert_eq!(header.matches("%s%n").count(), 1, "{header}");
+        assert!(header.ends_with("unset dg_b dg_c dg_d dg_r\n"), "{header}");
     }
 
     // the mac twin of the psmux placeholder test: a local project gets a
