@@ -116,6 +116,60 @@ REAL_MACHINE detect() trove entry = Some(DetectedTarget { id: "trove", name: "Tr
 
 Temp test removed afterwards; file confirmed byte-identical, diffstat matched.
 
+## Second report: "reveal in file explorer opens explorer even though trove is default"
+
+**`6b05576` ✅TARGETS: the default file manager leads the reveal menu** —
+`src/App.tsx`, `src/components/HelpPanel.tsx`, `src/components/Settings.tsx`,
+`src/types.d.ts` (+45/-6).
+
+**It was NOT a broken default, and two plausible theories were both wrong:**
+
+- ❌ *"He is on a stale installed build."* The installed
+  `%LOCALAPPDATA%\DevGo\DevGo.exe` is FileVersion **1.2.0, built 25/09 06:38**, which is
+  AFTER `99201e5` (05:19) and `d862adc` (05:59). A byte-scan of the exe finds
+  `default_file_manager`, `set_default_target`, `get_default_targets`,
+  `reveal_args_template`. It HAS file-manager switching. (`strings` is not installed on
+  this box — a `strings` run returning zeros is a false negative; use a PowerShell byte
+  scan.)
+- ❌ *"`default_file_manager` is written but never read."* It is written at
+  `services/preferences.rs:430` (`set_default_target` ← `useTargets.ts:55-58`) and read at
+  `services/preferences.rs:410` (`default_target`), consumed by `commands.rs:617`
+  (`resolve_target`), `commands.rs:793` (`get_default_targets`) and `commands.rs:1756`.
+
+**The setting lives in `prefs.json`, NOT `targets.json`** — `targets.json` holds rows only.
+Confirmed on disk: `"default_file_manager": "trove"`.
+
+**Actual cause — a discoverability defect in `revealItems` (`App.tsx:827-841` before the
+fix).** With ONE file manager it emits a single row passing no `target_id`, so the backend
+resolves the default. With TWO OR MORE it emits one explicit row per manager iterating
+`targets.fileManagers` in `targets.json` order, each hard-passing `t.id`. Explorer was
+registered first, so "Reveal in File Explorer" occupied the exact seat and label the
+default-honouring row used to have. Joy clicked it from muscle memory; it did what it says.
+
+Every other reveal entry point already honoured the default — Ctrl+Shift+E
+(`App.tsx:1932` → `:822` → `:817`), all three palette entries (`:1592-1596`, `:1498-1506`),
+the clone toast (`:567`), reveal-app-data (`commands.rs:2042-2047`), and the single-manager
+row. There is no tray reveal.
+
+**Fix:** prepend the default manager and filter it out of the rest (stable partition, no
+sort). Unknown/absent default → `find` returns `undefined`, the filter predicate becomes
+`t.id !== undefined` (true for all), the prepend spreads nothing, so the list is exactly
+what it was. The Ctrl+Shift+E hint keys on identity (`t.id === defaults.file_manager`), not
+position, and was left alone — it still marks only the default, and now position and hint
+agree instead of contradicting. Also: the palette said "Reveal in Explorer" while opening
+Trove — both it and `HelpPanel` now name the default. `shortcuts.ts:120` left untouched as
+the shared fallback.
+
+Gate: contrast ok, tsc clean, 93 modules, `cargo test` 264/0/1 held, clippy unchanged.
+No frontend test runner exists in this repo (`package.json` has only dev/build/
+check:contrast/preview/tauri; no vitest or jest) — do not look for one.
+
+⚠️ **RELEASE HAZARD, for the person.** This branch was cut at `427ac49` (04:10 today).
+**`main` has since moved 8 commits ahead and carries tag `v1.2.1`, which is NOT an ancestor
+of `78.file-manager`.** `src-tauri/tauri.conf.json` here still says `"version": "1.2.0"`.
+Merging as-is ships a 1.2.0 newer than the released 1.2.1 — the version goes backwards.
+**Rebase onto main and bump the version before any release.**
+
 ## End-to-end test in the real app, 2026-09-25 (at `01cd00c`)
 
 Not just unit tests — the app was built from this branch and driven by hand.
