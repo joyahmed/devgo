@@ -23,6 +23,7 @@ pub mod single_instance;
 pub mod ssh_config;
 pub mod target_store;
 pub mod workspace;
+pub mod wsl_doctor;
 
 pub use github::GithubStore;
 pub use preferences::PreferencesStore;

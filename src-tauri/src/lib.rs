@@ -571,6 +571,8 @@ pub fn run() {
             commands::get_runtime_info,
             commands::terminate_distro,
             commands::shutdown_wsl,
+            commands::wsl_config_report,
+            commands::wsl_fragmentation,
             commands::open_remote,
             commands::open_url,
             commands::get_app_data_dir,
