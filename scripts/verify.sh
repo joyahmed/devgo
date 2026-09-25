@@ -128,6 +128,10 @@ else
   run_check "cargo fmt --check" "$REPO_ROOT/src-tauri" cargo fmt --check
   # strict form on purpose: plain `cargo clippy` exits 0 even with findings, so
   # without -D warnings this line would be decorative. baseline says zero findings.
+  # and say which clippy said so. rust-toolchain.toml at the repo root pins this to
+  # the version CI runs, so the line should read 0.1.98 — if it does not, your rustup
+  # is missing the pinned toolchain and the skew this gate had in 09/2026 is back.
+  printf '  %-24s %s\n' "clippy version" "$(cd "$REPO_ROOT/src-tauri" && cargo clippy --version 2>&1)"
   run_check "cargo clippy -D warnings" "$REPO_ROOT/src-tauri" cargo clippy --all-targets -- -D warnings
   if [ "$FULL" -eq 1 ]; then
     run_check "cargo test" "$REPO_ROOT/src-tauri" cargo test

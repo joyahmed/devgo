@@ -32,10 +32,12 @@ fn wsl_command() -> Command {
 #[cfg_attr(not(windows), allow(dead_code))]
 fn decode(bytes: &[u8]) -> String {
     if bytes.contains(&0) {
-        let units: Vec<u16> = bytes
-            .chunks_exact(2)
-            .map(|pair| u16::from_le_bytes([pair[0], pair[1]]))
-            .collect();
+        // as_chunks, not chunks_exact: same semantics (the trailing odd byte
+        // lands in the discarded remainder either way), but clippy on newer
+        // stable rejects chunks_exact with a constant size.
+        let (pairs, _odd_trailing_byte) = bytes.as_chunks::<2>();
+        let units: Vec<u16> =
+            pairs.iter().copied().map(u16::from_le_bytes).collect();
         String::from_utf16_lossy(&units)
     } else {
         String::from_utf8_lossy(bytes).into_owned()

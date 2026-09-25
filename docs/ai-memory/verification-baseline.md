@@ -4,7 +4,9 @@ Measured **2026-09-26** on JoyR9 (Windows 11), branch `78.file-manager` at `fc3f
 ⚠️ A baseline is a measurement, and measurements go stale. Re-run `/auto-mode-setup baseline`
 when the toolchain or the scripts move.
 
-Toolchain as measured: cargo/rustc **1.96.1**, bun **1.3.14**, vite **8.3.0**, TypeScript **~6.0.3**.
+Toolchain as measured: cargo/rustc **1.98.1** — **pinned**, by `rust-toolchain.toml` at the repo
+root (added 2026-09-26; it was 1.96.1 when this file was first written). bun **1.3.14**,
+vite **8.3.0**, TypeScript **~6.0.3**.
 Package manager is **bun** — the lockfile is `bun.lock` (bun's newer text format) and `package.json`
 has no `packageManager` field, so nothing but the lockfile and CI says so.
 
@@ -23,7 +25,35 @@ cd src-tauri && cargo fmt --check && cargo clippy --all-targets -- -D warnings
 |---|---|---|
 | Frontend typecheck | `bunx tsc --noEmit` | **green**, 2s |
 | Rust format | `cargo fmt --check` | **green**, <1s |
-| Rust lint, strict | `cargo clippy --all-targets -- -D warnings` | **green**, 6s — **zero findings** |
+| Rust lint, strict | `cargo clippy --all-targets -- -D warnings` | **green**, 6s — **zero findings under clippy 0.1.98 / rustc 1.98.1** (the pinned toolchain, the same one CI runs) |
+
+⭐ **Local and CI now run the SAME clippy, and that is enforced by a file.** `rust-toolchain.toml` at
+the repo root pins `channel = "1.98.1"` with `clippy` and `rustfmt`. rustup resolves it by walking up
+from the working directory, and the root is the only place on **both** walks: `scripts/verify.sh` cds
+into `src-tauri/` first, CI runs `cargo --manifest-path src-tauri/Cargo.toml` from the repo root. A
+copy in `src-tauri/` would pin the local gate and leave CI floating — the exact skew below.
+
+⚠️ **The skew this closed, kept because it is the reason the file exists.** Local stable was
+**clippy 0.1.96 (rustc 1.96.1, 2026-06-26)**; CI's `dtolnay/rust-toolchain@stable` resolved to
+**1.98.1 (2026-09-01)**, two minors newer, because rustup here had not been updated since June. Newer
+clippy ships lints the older one does not have, so a green local clippy did **not** mean a green CI
+clippy. It happened: CI run **36198910630** went red on all three platforms at
+`cargo clippy --all-targets -- -D warnings` with `using \`chunks_exact\` with a constant chunk size`
+(`src-tauri/src/services/platform/wsl.rs`, in `decode`) — a lint that **does not exist in 0.1.96**, so
+`scripts/verify.sh` reported **green on the exact tree CI rejected**. A gate that disagrees with the
+gate that blocks a release is not a gate.
+
+⛔ **An earlier version of this file said a `rust-toolchain.toml` had been "considered and deliberately
+NOT added" — that call was wrong and has been reversed.** The reasoning was that pinning would drag CI
+back to the older clippy and lose the very lint that caught the bug. That only holds if you pin to the
+**stale local** version. We pinned to **current stable, 1.98.1 — the exact version CI already resolved
+to** — so not one lint CI had was lost. What the pin changes is *timing*: a new lint now arrives when
+someone edits one line, instead of unannounced on the morning Rust ships a release.
+
+**Bumping is a deliberate one-line change**: `rustup update stable`, put the new `x.y.z` in
+`rust-toolchain.toml`, run `sh scripts/verify.sh --full`, fix what the newer clippy found. CI follows
+automatically — it reads the same file. The version appears in **exactly one file**; `ci.yml` no longer
+installs a toolchain of its own, precisely so it cannot drift from this one.
 
 ⭐ **`-D warnings` is green as of `fc3f532` and was not before.** It failed on exactly one finding,
 `wsl.rs:202 items_after_test_module`, which is why it is safe to gate on the strict form now. Gate on
@@ -40,7 +70,7 @@ cd src-tauri && cargo test
 |---|---|---|
 | Frontend build | `bun run build` = `check:contrast && tsc && vite build` | **green**, 94 modules, 3.8s |
 | Contrast check | `bun run check:contrast` (inside `build`) | **green** — 6 palettes × 8 rules, 5 lane hues |
-| Rust tests | `cargo test` | **green** — **299 passed / 0 failed / 1 ignored** (283 when this baseline was first measured; +1 PATH agreement, +3 raise diagnostic, +12 runtime log) |
+| Rust tests | `cargo test` | **green** — **304 passed / 0 failed / 1 ignored** under the pinned 1.98.1 (283 when this baseline was first measured; the row said 299 for a while after it was already 304 — re-measure the number, do not carry it forward) |
 
 ⭐ **No output-directory trap here, unlike a Next repo.** `vite build` writes `dist/`, which is
 **gitignored** and is read only by `tauri build`; `bun run dev` serves from vite on **:1420** and
@@ -79,10 +109,17 @@ two server scripts, `jq empty` on the actions example, `bun install --frozen-loc
 `bun run build`, then `cargo test` with a single-threaded retry. `release.yml` runs the same on
 win/mac/linux for `v*` tags.
 
-⛔ **Neither workflow runs `cargo clippy` or `cargo fmt --check`** — a grep for
-`clippy|fmt|lint|vitest|playwright` across `.github/workflows/` returns nothing. **So `-D warnings`
-is a LOCAL gate only**, which is exactly how `items_after_test_module` was able to sit in the tree.
-Frontend typecheck is covered in CI, but only transitively, inside `bun run build`.
+⚠️ **This section is out of date as written, and the correction matters.** When it was measured,
+neither workflow ran `cargo clippy` or `cargo fmt --check`, so `-D warnings` was a LOCAL gate only —
+which is how `items_after_test_module` was able to sit in the tree. **`ci.yml` now runs
+`cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings` on windows, mac and
+linux**. CI is therefore no longer narrower on clippy — and since 2026-09-26 it is not *differently*
+strict either: the `dtolnay/rust-toolchain@stable` step was removed from all three jobs, and the
+runners' rustup installs whatever `rust-toolchain.toml` names on the first cargo call. Same toolchain,
+same lints, both sides. ⚠️ `release.yml` still carries `dtolnay/rust-toolchain@stable` in its three
+jobs; that is harmless — the pin file overrides the action either way — but it is a redundant
+toolchain download and should be dropped next time that file is touched.
+Frontend typecheck is still covered in CI only transitively, inside `bun run build`.
 
 **This answers a question that was queued for Joy** — "is `clippy -D warnings` really the release
 gate?" Measured answer: **no, nothing enforces it but this file.**

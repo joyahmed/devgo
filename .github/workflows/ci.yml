@@ -29,9 +29,15 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy, rustfmt
+      # no rust-toolchain action on purpose: rust-toolchain.toml at the repo
+      # root names the version and its components, and the runners' rustup
+      # honours it — the first cargo call below auto-installs 1.98.1 with
+      # clippy and rustfmt. installing "stable" here would be worse than
+      # redundant: the file overrides it, so the job would download a toolchain
+      # it never uses and THEN download the pinned one. the cost is one cold
+      # rustup install per job (~30s, ~200MB) on a cache miss, paid once per
+      # bump since Swatinem/rust-cache keys on `rustc -vV`. the version stays
+      # in exactly one file — repeating it here is how the two drift again.
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
@@ -58,9 +64,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy
+      # toolchain comes from rust-toolchain.toml — see the gate job
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
@@ -73,9 +77,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy
+      # toolchain comes from rust-toolchain.toml — see the gate job
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
