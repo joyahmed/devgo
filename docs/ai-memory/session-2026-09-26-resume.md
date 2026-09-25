@@ -186,3 +186,84 @@ by a released version, so it wants to be **in** the next release, not after it.
 
 Chapter 78 (`docs/chapters-77-78`, `62b2aa6` holds chapter 77 only). Then `wsl.rs:202` clippy, last,
 after the doctor lands.
+
+---
+
+## Slice E — auto mode: the state was measured, the one red was cleared, then the gate was wired
+
+Run as orchestrator with three subagents (detect+measure, the clippy fix, the gate script), because
+their context is spent instead of the session's.
+
+⭐ **Rule 1 held: nothing was gated against an unknown state.** Everything was run once first. Exactly
+one check was red — `cargo clippy --all-targets -- -D warnings`, exit 101 — on exactly one finding,
+and it was cleared before anything was wired.
+
+| commit | what |
+|---|---|
+| `fc3f532` | ✅LINT: `wsl.rs` test module to the end — clippy strict now **zero findings** |
+| `11a442b` | ✅DOCS: `docs/ai-memory/verification-baseline.md` |
+| `d241b75` | ✅GATE: `scripts/verify.sh` |
+| `dba568d` (everything-joy) | ✅CONFIG: copurge's devgo row + the live copy refreshed |
+
+⭐ **The deferral reason for `wsl.rs:202` was FALSE, and it had been stated twice.** `6c0675b` left it
+alone "because the WSL doctor agent is adding code to that file". `git diff origin/main 77.wsl-doctor
+-- src-tauri/src/services/platform/wsl.rs` is **empty** — the doctor adds a `wsl_doctor` module and
+wires it through `commands.rs`, `lib.rs`, `services/mod.rs`, and **never touches `wsl.rs`**. ⚠️ **A
+conflict that was predicted rather than measured blocked a one-line-class fix for two sessions.**
+The fix was a pure relocation: sorting both versions and diffing shows every line preserved byte for
+byte, 382 lines before and after, and `cargo test` unchanged at 283.
+
+## ⭐ Two measured answers to questions that were queued for Joy
+
+⛔ **"Is `clippy -D warnings` really the release gate?" — NO, and nothing enforces it.**
+`.github/workflows/ci.yml` (windows-latest, push to `main` + every PR) runs `bash -n` on the server
+scripts, `jq empty` on the actions example, `bun install --frozen-lockfile`, `bun run build`,
+`cargo test`. `release.yml` runs the same on win/mac/linux for `v*` tags. A grep for
+`clippy|fmt|lint|vitest|playwright` across `.github/workflows/` **returns nothing.** That is how
+`items_after_test_module` survived in the tree. ⭐ And gate on the **strict** form or the gate is
+decorative: plain `cargo clippy` exits **0 even with findings**.
+
+⛔ **The force-push will NOT be blocked.** The global `pre-push` hook
+(`core.hooksPath = C:/Users/Joy/.git-hooks`) refuses history-rewriting pushes, but only for
+`GUARDED_REPOS="sunstone everything-joy zetta-dev-cli"`. **`devgo` is not in that list.** Also checked
+the hooksPath trap: devgo's `.git/hooks` holds nothing but samples, so setting `core.hooksPath`
+displaced nothing here.
+
+## What the gate is, and the three things that keep it alive
+
+`scripts/verify.sh`, found automatically by copurge. Default = `tsc --noEmit`, `cargo fmt --check`,
+`cargo clippy --all-targets -- -D warnings` (~10s warm). `--full` adds `bun run build` and
+`cargo test`. Exit 1 on red. Proven on all three paths: default **exit 0, 3 green**; `--full`
+**exit 0, 5 green**; stripped `PATH` **exit 1, "nothing was verified"**.
+
+- ⚠️ It checks for a live cargo/rustc **PROCESS**, never for `src-tauri/target/debug/.cargo-lock` —
+  that file exists while idle, so testing it would skip the Rust tier on **every** run. A live
+  `tauri dev` holds an exclusive lock on `target`, so clippy and test **block rather than fail**.
+- ⚠️ A missing tool **skips with a stated reason** rather than failing — a gate that hard-fails on a
+  missing `bun` is deleted by the first person who hits it. **But all-skipped exits 1**, because
+  silently verifying nothing is worse than no gate.
+- It ends every run by naming what devgo **cannot** verify.
+
+⭐ **No Next-style `distDir` trap here:** `vite build` writes `dist/`, which is **gitignored** and read
+only by `tauri build`; `bun run dev` serves from vite on **:1420**. Verified anyway by building to a
+scratch dir — `dist/` mtime did not move, to the nanosecond.
+
+## ⛔ What devgo cannot verify, which no green gate may be allowed to imply
+
+- **No JS/TS test runner at all** — no vitest, jest, `node:test`, testing-library; zero `*.test.*` or
+  `*.spec.*` under `src`, `server`, `scripts`. Every line of React/TS is checked by `tsc` types and
+  by the fact that it bundles, and by nothing else.
+- **No E2E**, no frontend linter.
+- ⭐ **Nothing about the launch lanes.** The v1.2.1 PATH bug was invisible to `cargo test` on every
+  platform. Per `release-v1.2.2-plan.md` §0 the bar is an installed build, clicked, with what
+  appeared on screen.
+
+## Defaults taken without stopping, per supermode
+
+- **Version target = `1.2.2`**, since `docs/ai-memory/release-v1.2.2-plan.md` already names it.
+  ⛔ **Manifests deliberately left at `1.2.1`** — the release is not ready; macOS and Linux are
+  untested against Joy's bar.
+- **The Ghostty branch stays unmerged.** Joy asked whether Ghostty was being made the default; it is
+  not, and nothing was merged. `fix/ghostty-v121-row` changes nothing until someone merges it.
+- **Pre-push hook NOT installed unasked** — `/auto-mode-setup` §4 says offer, never install. copurge
+  is the wired trigger.
