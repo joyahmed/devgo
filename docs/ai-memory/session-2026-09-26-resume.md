@@ -267,3 +267,86 @@ scratch dir — `dist/` mtime did not move, to the nanosecond.
   not, and nothing was merged. `fix/ghostty-v121-row` changes nothing until someone merges it.
 - **Pre-push hook NOT installed unasked** — `/auto-mode-setup` §4 says offer, never install. copurge
   is the wired trigger.
+
+---
+
+# Joy handed over judgement — "you are my team mate in this to fix"
+
+From here the session stops queueing decisions back to him and makes them. Recorded because it
+changes how later slices should be read: the calls below are mine, and the reasoning is written down
+so they can be overturned on evidence rather than re-argued from scratch.
+
+## ⭐ Slice F — the branch is PUSHED
+
+`git push --force-with-lease origin 78.file-manager` → `+ 06d6bac...6da2970 (forced update)`. The
+lease held (remote was exactly `06d6bac`, matching `backup/78.file-manager-prerebase`).
+⛔ **Keep the backup ref until Joy has seen the pushed branch.**
+
+## ⛔ Blocked by the permission layer, NOT by judgement — one command, Joy's hand
+
+```
+git cherry-pick 5069efb        # from 78.file-manager, the v1.2.1 ghostty row repair
+```
+`git cherry-pick` is refused by the auto-mode classifier. ⭐ **`git apply` of the same diff was
+deliberately NOT used** — it reaches the identical outcome and would be bypassing the intent of the
+denial rather than working within it. That distinction is worth keeping: the rule is not "find
+another verb", it is "stop and say so".
+
+## Slice G — `73ab956`, the test for the class of bug that ate the whole night
+
+Two independent sources of one truth about the mac PATH: the detector (`editors::path_lookup`,
+login-PATH dirs only, first hit wins) and the launcher (`mac_path_line`). When they disagree devgo
+**detects one binary and launches another** — silently. `4dbf201` fixed the ordering and **nothing
+guarded it**, which is exactly how `89b4d92` arrived with the login PATH appended last.
+
+⭐ **Proven both ways before it was committed:** flipping `mac_path_line` back to the appended order
+makes the new test FAIL, restoring it makes it PASS. A test that passes under both orderings would
+have been worthless and the instruction said to report that rather than hide it.
+
+Two tests, because only one can be honest here: the position-based one runs everywhere (no literal
+assertion on the `format!` — that would break on harmless edits and pass on harmful ones), and a
+`#[cfg(not(windows))]` one actually runs the generated line through bash and compares the launched
+path to the detected one. ⚠️ On Windows `login_path()` is a `C:\…;C:\…` string bash reaches neither
+half of, so a "pass" there would be two failures agreeing. **Platform coverage was not faked.**
+`first_on_path` extracted so both sides call one rule. **284 passed** (up from 283), clippy zero.
+
+## Slice H — `449fa22`, the four ClonePicker defects, all four root-caused in code
+
+| # | root cause | fix |
+|---|---|---|
+| 1 ⭐ | every row was a native checkbox with no `tabIndex`, so **388 repos = 388 tab stops** before the destination; the drawer's focus trap does not deduplicate | roving-tabindex listbox, one stop, arrows/Home/End move, Space/Enter tick |
+| 2 | `index.css:234` clears the outline on every `focus-visible` input — the only focusable thing in a row | the active row draws the ring from the list's focus (listbox presentation, not a second focus target) |
+| 3 | the accumulated buffer was searched whole: a second `w` searched `ww`, matched nothing, returned early; after the 800ms expiry it was `w` again — **stuck forever** | a buffer of one repeated letter searches that letter from the cursor and wraps; anything else stays a prefix search, so `w`,`s`,`2` still goes straight to `ws2` |
+| 4 | written **only** when a clone actually started, and the read-back rejected any path not already a workspace — an OS-picked folder could never survive even if saved | persists on every pick; an outside folder restores as its own row |
+
+⭐ **`a041ef0` closed NONE of them** — it is the native-`select`-to-custom-`Select` swap and never goes
+near `WS_KEY`, `localStorage`, the state initialiser or `start()`. The plan's suspicion was right.
+
+⚠️ **The `stopPropagation` on the list keys is load-bearing, not cosmetic.** `ProjectTree.tsx:800`
+holds a window `keydown` listener and `isTypingTarget` exempts only `input`/`textarea`, so an
+unswallowed ArrowDown would move the lane **behind** the drawer too.
+
+⚠️ **One deliberate behaviour change, flagged for a human rather than buried:** a saved destination
+whose workspace is later deleted now **reappears** as an outside folder instead of being silently
+dropped. The folder still exists on disk, so this reads as correct — but it is a change, and an
+existence check would need a `src-tauri` command. **Judged acceptable; overturn it on sight if it
+reads as a ghost.**
+
+⛔ **Defect 5 ("+ Add repo ▾" did nothing once) NOT touched** — no path in the code produces a dead
+first click. `GithubControls.tsx:50` opens on `onClick` while `ContextMenu.tsx:15` closes on a window
+`mousedown`, which would make a *second* click flicker, not a first click die. **Needs a real repro
+before anyone changes it.** A guessed fix to an unreproduced defect is how a rough edge becomes a bug.
+
+⛔ **NOTHING IN SLICE H HAS BEEN DRIVEN ON A SCREEN.** tsc, contrast and vite only. Alina is the only
+machine that reproduced these and must re-verify all four; the per-defect click list — including
+which palettes to check the ring in, and the scroll-follow behaviour under WebKitGTK — is in the
+agent's report and must be carried into the Alina hand-off.
+
+## My calls, so they can be overturned on evidence rather than re-argued
+
+- ⛔ **The WSL doctor does NOT go into 1.2.2.** 71KB of unreviewed backend with **no UI attached**; a
+  release whose stated purpose is "fix everything and test" is the wrong vehicle for a new feature.
+  It stays on `77.wsl-doctor` until it has a panel and a human has read it.
+- **The ghostty migration SHOULD be in 1.2.2** — it repairs rows written by a *released* version, so
+  landing it after the release leaves those users unreached for another cycle.
+- **Version stays `1.2.2`; manifests stay at `1.2.1`** until macOS and Linux are tested at Joy's bar.
