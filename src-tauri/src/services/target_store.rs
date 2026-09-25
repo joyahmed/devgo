@@ -166,11 +166,15 @@ impl TargetStore {
         if !cfg!(target_os = "macos") {
             return Ok(());
         }
+        // the in-bundle row still names the path it was written from, so
+        // that one answers for itself; the `open` row names the app and
+        // detection has to find the bundle again
         let bundle = self
             .targets
             .iter()
             .find(|t| bundled_ghostty(t))
-            .and_then(|t| ghostty_bundle(&t.executable));
+            .and_then(|t| ghostty_bundle(&t.executable))
+            .or_else(|| crate::services::editors::candidate_bundle("ghostty"));
         self.replace_bundled_ghostty(bundle.and_then(|b| {
             crate::services::editors::bundle_target("ghostty", &b)
         }))
@@ -182,6 +186,10 @@ impl TargetStore {
     /// either way, and a migration that invents a line is worse than one
     /// that does nothing. Same shape as the adoptions above, a backup
     /// first.
+    ///
+    /// Two stale shapes, because v1.2.1 shipped the first repair without
+    /// the second half of the fix: a row from before it, and the row it
+    /// wrote.
     fn replace_bundled_ghostty(
         &mut self,
         replacement: Option<LaunchTarget>,
@@ -189,7 +197,10 @@ impl TargetStore {
         let Some(replacement) = replacement else {
             return Ok(());
         };
-        let Some(pos) = self.targets.iter().position(bundled_ghostty) else {
+        let Some(pos) = self.targets.iter().position(|t| {
+            bundled_ghostty(t)
+                || ghostty_running_without_a_script(t, &replacement)
+        }) else {
             return Ok(());
         };
         if self.file_path.exists() {
@@ -381,6 +392,35 @@ fn bundled_ghostty(t: &LaunchTarget) -> bool {
     t.id == "ghostty"
         && t.executable.ends_with("Contents/MacOS/ghostty")
         && (t.args_template == *pre || t.args_template == *seam)
+}
+
+/// The row v1.2.1 wrote for itself, and the half of the fix it shipped
+/// without. 5565a4e moved ghostty onto `open` so the session script would
+/// start at all, and left the run form carrying `{command}`; `open` hands
+/// the line to launchservices, which starts ghostty with launchd's bare
+/// PATH, and the launcher writes the `.command` that exports the real one
+/// only for a template asking for `{script}`. So the agent lane and the
+/// dev script ran with `/usr/bin:/bin` and `claude` in `~/.local/bin` was
+/// not found — the very fault the `open` form was reached for. The table
+/// was corrected, but detection is read once, on the run that adds the
+/// row: every v1.2.1 mac still carries these bytes, and this migration is
+/// the only thing that can reach them.
+///
+/// Keyed against the row detection gives NOW, not against remembered
+/// bytes: the executable and the session form together say devgo wrote
+/// this line rather than a person, and a run form with no `{script}` says
+/// it is the broken one. A row with no run form at all is left alone — a
+/// user who deleted it meant to.
+fn ghostty_running_without_a_script(
+    t: &LaunchTarget,
+    now: &LaunchTarget,
+) -> bool {
+    t.id == now.id
+        && t.executable == now.executable
+        && t.args_template == now.args_template
+        && t.run_args_template
+            .as_deref()
+            .is_some_and(|run| !run.contains("{script}"))
 }
 
 /// The bundle a stored executable points into: `Ghostty.app` from
@@ -1022,6 +1062,87 @@ mod tests {
     fn a_hand_edited_ghostty_row_is_left_alone() {
         let custom = "--working-directory=\"{path}\" --font-size=14";
         let (mut s, dir) = mac_ghostty_store("ghostty-custom", custom);
+        s.replace_bundled_ghostty(Some(open_ghostty())).unwrap();
+        assert_eq!(s.get("ghostty").unwrap().args_template, custom);
+        assert!(!dir.join("targets.json.pre-mac-ghostty").exists());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// The row v1.2.1 shipped, and the whole reason this migration needed
+    /// a second key. 5565a4e moved ghostty onto `open` so the session
+    /// script would start at all and left the run form on `{command}`.
+    /// `open` starts ghostty through launchservices with launchd's bare
+    /// PATH, and `run_script_args` writes the `.command` that exports the
+    /// real one only for a template asking for `{script}` — so the agent
+    /// lane ran with `/usr/bin:/bin` and `claude` in `~/.local/bin` was not
+    /// found. Detection is read once, on the run that adds the row, so
+    /// correcting the table reached nobody who already had Ghostty: every
+    /// v1.2.1 mac carries these bytes and only a migration can reach them.
+    #[test]
+    fn a_v1_2_1_ghostty_row_is_repaired_onto_the_script_run_form() {
+        let (mut s, dir) = mac_ghostty_store("ghostty-v121", ghostty_args().1);
+        // exactly what 5565a4e's own repair wrote: its `open` line, and the
+        // run form of the day pushed through the same `--args` wrapper
+        let stale = "-na \"Ghostty\" --args \
+                     --working-directory=\"{path}\" -e {command}";
+        assert!(!stale.contains("{script}"), "the fault, in one line");
+        s.targets[1].executable = "open".into();
+        s.targets[1].args_template = open_ghostty().args_template;
+        s.targets[1].run_args_template = Some(stale.into());
+        s.save().unwrap();
+
+        s.replace_bundled_ghostty(Some(open_ghostty())).unwrap();
+        let row = s.get("ghostty").unwrap();
+        let run = row.run_args_template.expect("the run form survives");
+        assert!(run.contains("{script}"), "or no .command is written: {run}");
+        assert_eq!(Some(run), open_ghostty().run_args_template);
+        assert_eq!(row.args_template, open_ghostty().args_template);
+        assert_eq!(s.list()[1].id, "ghostty", "and sits where it sat");
+        assert_eq!(s.get("vscode").unwrap().name, "VS Code");
+        assert!(dir.join("targets.json.pre-mac-ghostty").exists());
+
+        // persisted, and the repaired row is now one the key passes over
+        let reloaded = TargetStore::new(dir.clone()).unwrap();
+        assert_eq!(
+            reloaded.get("ghostty").unwrap().run_args_template,
+            open_ghostty().run_args_template
+        );
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// The second key is the missing `{script}`, not the id. A row that
+    /// already carries it is finished, and a store that rewrote it on every
+    /// load would copy a backup over the one the real migration left.
+    #[test]
+    fn a_ghostty_row_that_already_runs_a_script_is_left_alone() {
+        let (mut s, dir) = mac_ghostty_store("ghostty-done", ghostty_args().1);
+        s.targets[1] = open_ghostty();
+        s.save().unwrap();
+
+        s.replace_bundled_ghostty(Some(open_ghostty())).unwrap();
+        assert_eq!(
+            s.get("ghostty").unwrap().run_args_template,
+            open_ghostty().run_args_template
+        );
+        assert!(
+            !dir.join("targets.json.pre-mac-ghostty").exists(),
+            "nothing was stale, so nothing was written"
+        );
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// The flags stay the user's on this side of the fix too: an `open` row
+    /// whose session line was tuned is not a line devgo wrote, whatever its
+    /// run form says, so the `{script}` key alone must not carry it off.
+    #[test]
+    fn a_hand_edited_open_ghostty_row_is_left_alone() {
+        let (mut s, dir) =
+            mac_ghostty_store("ghostty-open-custom", ghostty_args().1);
+        let custom = "-na \"Ghostty\" --args --font-size=14 bash \"{script}\"";
+        s.targets[1].executable = "open".into();
+        s.targets[1].args_template = custom.into();
+        s.save().unwrap();
+
         s.replace_bundled_ghostty(Some(open_ghostty())).unwrap();
         assert_eq!(s.get("ghostty").unwrap().args_template, custom);
         assert!(!dir.join("targets.json.pre-mac-ghostty").exists());
