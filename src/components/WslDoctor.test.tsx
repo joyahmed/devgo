@@ -22,6 +22,7 @@ const RUNTIME = (wsl_available: boolean): RuntimeInfo => ({
 const CONFIG: WslConfigReport = {
 	path: 'C:\\Users\\joy\\.wslconfig',
 	exists: true,
+	reason: null,
 	host_memory_bytes: 34359738368,
 	host_processors: 16,
 	findings: []
@@ -164,6 +165,64 @@ describe('WslDoctor — a probe that read nothing', () => {
 		// the order-4 column at zero is the whole diagnosis: pages free,
 		// no 64 KiB run left
 		expect(screen.getByTitle('order 4: 0 free runs of 16 pages')).not.toBeNull();
+	});
+});
+
+describe('WslDoctor — .wslconfig has three states, never two', () => {
+	// ⭐ THE distinction. "the file is not there" and "I could not look" are
+	// different sentences about the machine, and the panel used to print the
+	// first one for both. inside WSL that made it assert a healthy default
+	// configuration for C:\Users\<you>\.wslconfig, which it never opened
+	it('shows the stated reason and makes no claim about the defaults', async () => {
+		wire({
+			config: {
+				path: '',
+				exists: false,
+				reason:
+					'DevGo is not running on Windows, so it cannot reach %USERPROFILE%\\.wslconfig.',
+				host_memory_bytes: null,
+				host_processors: null,
+				findings: []
+			}
+		});
+		render(<WslDoctor onError={() => {}} />);
+
+		expect(
+			await screen.findByText(
+				'DevGo is not running on Windows, so it cannot reach %USERPROFILE%\\.wslconfig.'
+			)
+		).not.toBeNull();
+		expect(screen.queryByText('absent — WSL is on its defaults')).toBeNull();
+		// no File/Host grid either — a column of dashes reads as a reading
+		expect(screen.queryByText('Host memory')).toBeNull();
+		expect(screen.queryByText('What the file says')).toBeNull();
+	});
+
+	// and the other half of the distinction: a Windows box that really has
+	// no .wslconfig still gets told so. a reason-less report is a read one
+	it('still says the file is absent when the path was actually looked at', async () => {
+		wire({
+			config: {
+				...CONFIG,
+				exists: false,
+				reason: null,
+				findings: [
+					{
+						severity: 'info',
+						line: null,
+						text: 'no .wslconfig',
+						problem: 'there is no file here, so WSL is running on its defaults',
+						fix: 'half this machine’s memory and every logical processor'
+					}
+				]
+			}
+		});
+		render(<WslDoctor onError={() => {}} />);
+
+		expect(
+			await screen.findByText('absent — WSL is on its defaults')
+		).not.toBeNull();
+		expect(screen.getByText('Host memory')).not.toBeNull();
 	});
 });
 

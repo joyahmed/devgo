@@ -181,9 +181,14 @@ pub struct Host {
 #[derive(Debug, Clone, Serialize)]
 pub struct ConfigReport {
     /// where we looked — named even when nothing is there, because "no
-    /// file" is a fact about a path
+    /// file" is a fact about a path. empty when there was no path to name
     pub path: String,
     pub exists: bool,
+    /// why the file was never opened. the same shape `fragmentation::Report`
+    /// uses, and for the same reason: "nobody asked this box" must never
+    /// render as "this box is fine". none means the path WAS looked at, and
+    /// then `exists` is a fact rather than a guess
+    pub reason: Option<String>,
     pub host_memory_bytes: Option<u64>,
     pub host_processors: Option<u32>,
     pub findings: Vec<Finding>,
@@ -755,21 +760,72 @@ pub fn host() -> Host {
 
 /// Read `.wslconfig` and say what WSL is throwing away.
 pub fn report() -> ConfigReport {
-    let host = host();
-    let Some(path) = default_path() else {
-        return ConfigReport {
-            path: String::new(),
-            exists: false,
-            host_memory_bytes: host.memory_bytes,
-            host_processors: host.processors,
-            findings: Vec::new(),
-        };
+    report_from(host(), cfg!(windows), default_path(), |p| {
+        std::fs::read_to_string(p)
+    })
+}
+
+/// The three states, decided from a path and one read attempt.
+///
+/// ⭐ THREE, never two. "the file is not there" and "I could not look" are
+/// different sentences about the machine, and collapsing them is how a
+/// panel ends up asserting a healthy default configuration for a file it
+/// never opened.
+///
+/// 1. read, nothing at the path → `exists` false, one Info finding: WSL is
+///    on its defaults, and that is the truth on a Windows box.
+/// 2. read, file there → `exists` true and the findings.
+/// 3. never read → `reason`, and not one word about the configuration.
+///
+/// Split out from `report` so all three are testable on any host — the one
+/// that matters most is the one a Windows dev machine never reaches.
+fn report_from(
+    host: Host,
+    windows: bool,
+    path: Option<std::path::PathBuf>,
+    read: impl FnOnce(&std::path::Path) -> std::io::Result<String>,
+) -> ConfigReport {
+    let unread = |path: String, reason: String| ConfigReport {
+        path,
+        exists: false,
+        reason: Some(reason),
+        host_memory_bytes: host.memory_bytes,
+        host_processors: host.processors,
+        findings: Vec::new(),
+    };
+
+    // `.wslconfig` is a file on a Windows profile. off Windows — a linux
+    // build, or this same binary running INSIDE wsl, where USERPROFILE is
+    // gone and HOME is /home/<you> — default_path() names a path on the
+    // wrong filesystem entirely, and the real C:\Users\<you>\.wslconfig
+    // sits there unread. detection.rs sets wsl_available from
+    // WSL_DISTRO_NAME, so the panel DOES render in that case
+    if !windows {
+        return unread(
+            String::new(),
+            "DevGo is not running on Windows, so it cannot reach \
+             %USERPROFILE%\\.wslconfig — the real file lives on the Windows \
+             side. Nothing here has been read, and nothing here says your \
+             configuration is fine."
+                .to_string(),
+        );
+    }
+
+    let Some(path) = path else {
+        return unread(
+            String::new(),
+            "Neither USERPROFILE nor HOME is set, so there is no path to \
+             look at. DevGo has not read a .wslconfig, and nothing here says \
+             your configuration is fine."
+                .to_string(),
+        );
     };
     let shown = path.display().to_string();
-    match std::fs::read_to_string(&path) {
+    match read(&path) {
         Ok(text) => ConfigReport {
             path: shown,
             exists: true,
+            reason: None,
             host_memory_bytes: host.memory_bytes,
             host_processors: host.processors,
             findings: validate(&text, host),
@@ -777,9 +833,10 @@ pub fn report() -> ConfigReport {
         // no file is the healthy case, and worth saying out loud: a user
         // hunting a memory cap that is not there should be told there is
         // no file to hold one
-        Err(_) => ConfigReport {
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => ConfigReport {
             path: shown,
             exists: false,
+            reason: None,
             host_memory_bytes: host.memory_bytes,
             host_processors: host.processors,
             findings: vec![Finding::new(
@@ -798,6 +855,16 @@ pub fn report() -> ConfigReport {
                 },
             )],
         },
+        // ⛔ NOT "absent". a permission error, a path that is a directory,
+        // a profile on a disconnected drive — the file may hold every
+        // setting in the book, and this panel has seen none of them
+        Err(e) => unread(
+            shown.clone(),
+            format!(
+                "DevGo could not read {shown}: {e}. The file has not been \
+                 looked at, so nothing here says your configuration is fine."
+            ),
+        ),
     }
 }
 
@@ -1156,6 +1223,132 @@ instanceIdleTimeout=-1
 
     // the probe against this machine's own .wslconfig. ignored because the
     // answer depends on whose box it runs on; run by hand with
+    // ------------------------------------------- the three states
+
+    fn at(name: &str) -> Option<std::path::PathBuf> {
+        Some(std::path::PathBuf::from(name))
+    }
+
+    fn io(kind: std::io::ErrorKind, msg: &str) -> std::io::Error {
+        std::io::Error::new(kind, msg)
+    }
+
+    /// State 1. A Windows box with no file: WSL really is on its defaults,
+    /// and saying so is the correct answer, not a guess.
+    #[test]
+    fn a_missing_file_on_windows_is_read_and_reported_as_defaults() {
+        let r = report_from(
+            host64(),
+            true,
+            at("C:\\Users\\joy\\.wslconfig"),
+            |_| Err(io(std::io::ErrorKind::NotFound, "nope")),
+        );
+        assert_eq!(r.reason, None, "the path WAS looked at");
+        assert!(!r.exists);
+        assert_eq!(r.findings.len(), 1);
+        assert!(r.findings[0].problem.contains("running on its defaults"));
+    }
+
+    /// State 2.
+    #[test]
+    fn a_readable_file_is_validated() {
+        let r = report_from(
+            host64(),
+            true,
+            at("C:\\Users\\joy\\.wslconfig"),
+            |_| Ok("[wsl2]\nmemory=48GB\n".to_string()),
+        );
+        assert_eq!(r.reason, None);
+        assert!(r.exists);
+    }
+
+    /// ⭐ State 3, the whole point. A read that FAILED for any reason but
+    /// "there is nothing there" is not evidence of a healthy default — the
+    /// file may hold every setting in the book.
+    #[test]
+    fn a_read_error_is_a_reason_and_never_a_health_claim() {
+        let r = report_from(
+            host64(),
+            true,
+            at("C:\\Users\\joy\\.wslconfig"),
+            |_| {
+                Err(io(
+                    std::io::ErrorKind::PermissionDenied,
+                    "access is denied",
+                ))
+            },
+        );
+        let reason = r.reason.expect("a failed read must state why");
+        assert!(reason.contains("could not read"));
+        assert!(!r.exists);
+        assert!(
+            r.findings.is_empty(),
+            "no findings about a file nobody opened"
+        );
+        assert!(
+            !reason.contains("on its defaults"),
+            "state 3 must make no claim about the configuration"
+        );
+    }
+
+    /// ⭐ Inside WSL. detection.rs sets `wsl_available` from
+    /// WSL_DISTRO_NAME, so the panel renders; default_path() resolves HOME
+    /// to /home/<you>/.wslconfig, which is not the file. Reporting "absent
+    /// — WSL is on its defaults" there is a false statement about the
+    /// machine, because C:\Users\<you>\.wslconfig is sitting unread.
+    #[test]
+    fn off_windows_nothing_is_read_and_nothing_is_claimed() {
+        let r =
+            report_from(host64(), false, at("/home/joy/.wslconfig"), |_| {
+                panic!("must not even try to read off Windows")
+            });
+        let reason = r.reason.expect("off Windows must state why");
+        assert!(reason.contains("not running on Windows"));
+        assert!(r.path.is_empty(), "a linux path is not the file we mean");
+        assert!(!r.exists);
+        assert!(r.findings.is_empty());
+        assert!(!reason.contains("on its defaults"));
+    }
+
+    /// No USERPROFILE and no HOME: there is no path, so there is no fact.
+    #[test]
+    fn no_path_at_all_is_a_reason_not_an_absent_file() {
+        let r = report_from(host64(), true, None, |_| {
+            panic!("there is nothing to read")
+        });
+        let reason = r.reason.expect("a missing path must state why");
+        assert!(reason.contains("no path to look at"));
+        assert!(r.findings.is_empty());
+    }
+
+    /// The host readings survive every state — they come from the kernel,
+    /// not from the file, and are true whether or not it was read.
+    #[test]
+    fn the_host_readings_are_carried_in_all_three_states() {
+        for r in [
+            report_from(host64(), false, None, |_| unreachable!()),
+            report_from(host64(), true, at("x"), |_| {
+                Err(io(std::io::ErrorKind::NotFound, "nope"))
+            }),
+            report_from(host64(), true, at("x"), |_| Ok(String::new())),
+        ] {
+            assert_eq!(r.host_memory_bytes, Some(64 << 30));
+            assert_eq!(r.host_processors, Some(12));
+        }
+    }
+
+    /// The panel reads snake_case ambient globals — no `rename_all` lives
+    /// in this module, and `reason` must arrive spelled that way.
+    #[test]
+    fn reason_serialises_as_reason() {
+        let r = report_from(host64(), false, None, |_| unreachable!());
+        let json = serde_json::to_value(&r).unwrap();
+        assert!(json["reason"].is_string());
+        assert!(json["host_memory_bytes"].is_u64());
+        let ok = report_from(host64(), true, at("x"), |_| Ok(String::new()));
+        assert!(serde_json::to_value(&ok).unwrap()["reason"].is_null());
+    }
+
     // cargo test -- --ignored --nocapture real_wslconfig
     #[cfg(windows)]
     #[test]

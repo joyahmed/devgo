@@ -259,6 +259,16 @@ const WslDoctor = ({ onError }: WslDoctorProps) => {
 				</p>
 				{config === null ? (
 					<p className={`${hint} italic`}>Reading…</p>
+				) : config.reason !== null ? (
+					// ⛔ the same rule the fragmentation probe follows one section
+					// down, and this is the path that did not have it: a stated
+					// reason is the whole answer. a File row reading "absent — WSL
+					// is on its defaults" under it would be a health claim about a
+					// file nobody opened, and a Host grid of dashes would look like
+					// a reading rather than a silence
+					<p className='text-13 text-text-primary max-w-[76ch]'>
+						{config.reason}
+					</p>
 				) : (
 					<div className='flex flex-col gap-4'>
 						<dl className='grid grid-cols-[auto_1fr] items-baseline gap-x-4 gap-y-1 text-13'>

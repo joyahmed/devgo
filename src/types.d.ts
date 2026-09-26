@@ -48,11 +48,15 @@ interface WslFinding {
 	fix: string;
 }
 
-/// `wsl_config_report`. `exists` false is not an error — it means WSL is
-/// running on its defaults, which the findings say out loud.
+/// `wsl_config_report`. Three states, never two. `reason` set means the file
+/// was never opened — off Windows, no path, or a read that failed — and then
+/// nothing else in here is a statement about the configuration. `reason` null
+/// means the path WAS looked at, and `exists` false is the healthy case: WSL
+/// is running on its defaults, which the findings say out loud.
 interface WslConfigReport {
 	path: string;
 	exists: boolean;
+	reason: string | null;
 	host_memory_bytes: number | null;
 	host_processors: number | null;
 	findings: WslFinding[];
