@@ -166,7 +166,7 @@ scripts/build-linux.sh --deps --install
 
 - **More server actions** in the example set, as people ask for them.
 
-Issues are welcome.
+What it gets wrong today is written down rather than left to be discovered: [`docs/KNOWN-ISSUES.md`](docs/KNOWN-ISSUES.md) lists the rough edges in the current release, what you will see when you hit one, and the way round it. Issues are welcome — anything that is not on that list especially.
 
 ## 📖 Chapters
 
