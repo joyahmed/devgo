@@ -1152,8 +1152,10 @@ interface DrawerProps {
 	children: React.ReactNode;
 	/// a right drawer's default fits a form; a picker with a list wants more
 	width?: string;
-	/// settings sits at 40 so a confirm sheet (50) opens over it
-	z?: 40 | 50;
+	/// settings sits at 40 so a confirm sheet (50) opens over it, and the
+	/// command palette at 60 because it is summoned from anywhere and has
+	/// to land on top of whatever summoned it
+	z?: 40 | 50 | 60;
 	/// a stable name for the runtime log, and the key a caller closing
 	/// this drawer from outside passes to closingBecause(). without it the
 	/// log falls back to the title, and every close a caller made reads as

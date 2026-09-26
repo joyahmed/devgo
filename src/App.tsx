@@ -2082,13 +2082,19 @@ const AppInner = () => {
 
 			{/* the palette was its own overlay dropping from the top; it is the
 			    top drawer's first user, so the surface, the slide and escape are
-			    the code the confirm sheets run */}
+			    the code the confirm sheets run.
+			    z 60 and not the default 50: this is the one drawer that can be
+			    summoned while another is already up, and at 50 it tied with the
+			    clone picker and lost the tie to source order - it dropped in
+			    UNDER the picker, behind the picker's backdrop, with every
+			    command dimmed and unclickable */}
 			<Drawer
 				{...{
 					side: 'top' as const,
 					open: paletteOpen,
 					onClose: () => setPaletteOpen(false),
-					width: 'w-[min(780px,92vw)]'
+					width: 'w-[min(780px,92vw)]',
+					z: 60 as const
 				}}
 			>
 				{paletteOpen && (

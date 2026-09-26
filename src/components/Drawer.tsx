@@ -12,6 +12,32 @@ const FOCUSABLE =
 const UNEXPLAINED =
 	'UNEXPLAINED - not Escape, not the backdrop, not the ✕, and no caller said why';
 
+// every drawer that is open right now, in the order they opened. the
+// keyboard belongs to the LAST one and to no other: the command palette
+// is itself a drawer and opens over the picker that summoned it, and one
+// Escape has to close the palette, not both of them.
+//
+// before this the point looked moot for a reason that was itself the bug.
+// every listener here was torn down and re-registered on each render (see
+// the deps below), so when the first drawer's handler closed its drawer,
+// React flushed that update inside the key dispatch and removed the other
+// drawer's listener before the browser reached it - a listener removed
+// mid-dispatch is never called. one drawer closed, the other silently ate
+// the key, and which one it was depended on mount order
+const openDrawers: object[] = [];
+
+// spelled out rather than built with a template, so tailwind's scanner
+// can see all three. 40 is a working surface (settings), 50 is a sheet
+// that opens over one (a confirm, the clone picker), 60 is the command
+// palette, which is summoned from anywhere and must be on top of whatever
+// it was summoned from - it used to share 50 with the clone drawer and
+// lost the tie to source order, opening UNDER it and behind its backdrop
+const LAYER: Record<NonNullable<DrawerProps['z']>, string> = {
+	40: 'z-40',
+	50: 'z-50',
+	60: 'z-60'
+};
+
 // the one secondary surface: a panel that slides in from an edge over a
 // dimmed backdrop and leaves the list visible beside it. right for
 // anything you work inside, top for a sentence and two buttons. this
@@ -50,8 +76,30 @@ const Drawer = ({
 	// log a close that never happened. declared before that effect, so on
 	// the commit that opens the drawer this body runs first
 	const detail = useRef<(() => string) | undefined>(undefined);
+	// onClose is in the same boat and for a worse reason: every call site
+	// passes a fresh arrow, so naming it in the deps of the key effect
+	// below re-registered that effect on every render of App - which is
+	// what stole focus back from the palette and what lost the other
+	// drawer's Escape. read through a ref, the effect can depend on `open`
+	// alone and stay put for as long as the drawer is up
+	const close = useRef(onClose);
+	// this drawer's place in the stack above: an identity, nothing more
+	const me = useRef({});
+	// what to give the focus back to, read in RENDER on the pass that
+	// opens the drawer and not in the effect below. by the time any effect
+	// runs, an autoFocus input in the body (the palette's command box, the
+	// clone picker's "Find a repo…") has already taken the focus during
+	// the commit — so an effect records the drawer's OWN input as "what
+	// had it before", and on close it calls focus() on a node that has
+	// just been detached, which does nothing and leaves the caret on
+	// <body>. this was invisible while the effect re-ran on every render
+	// and simply re-focused the drawer each time
+	const wasOpen = useRef(false);
+	if (open && !wasOpen.current) returnTo.current = document.activeElement;
+	wasOpen.current = open;
 	useEffect(() => {
 		detail.current = logDetail;
+		close.current = onClose;
 	});
 
 	// the observation, and nothing but: this effect opens no door and
@@ -82,7 +130,8 @@ const Drawer = ({
 	// return below
 	useEffect(() => {
 		if (!open) return;
-		returnTo.current = document.activeElement;
+		const token = me.current;
+		openDrawers.push(token);
 		const el = panel.current;
 		// the first control in the body, Cancel on a confirm and the input on
 		// a name box, not the header's ✕, which is first in dom order
@@ -92,10 +141,14 @@ const Drawer = ({
 		(first ?? el)?.focus({ preventScroll: true });
 
 		const handler = (e: KeyboardEvent) => {
+			// a drawer with another drawer on top of it is scenery: the one
+			// on top owns Escape and owns the tab cycle, and this one waits
+			// its turn
+			if (openDrawers[openDrawers.length - 1] !== token) return;
 			if (e.key === 'Escape') {
 				e.stopPropagation();
 				reason.current = 'Escape';
-				onClose();
+				close.current();
 				return;
 			}
 			if (e.key !== 'Tab' || !el) return;
@@ -114,10 +167,15 @@ const Drawer = ({
 		window.addEventListener('keydown', handler);
 		return () => {
 			window.removeEventListener('keydown', handler);
+			const at = openDrawers.indexOf(token);
+			if (at >= 0) openDrawers.splice(at, 1);
 			const back = returnTo.current;
 			if (back instanceof HTMLElement) back.focus({ preventScroll: true });
 		};
-	}, [open, onClose]);
+		// `open` alone, deliberately: see the close ref above. onClose in
+		// here re-ran this effect on every render of App, which re-focused
+		// the first control of a drawer the user had already moved off
+	}, [open]);
 
 	if (!open) return null;
 
@@ -142,7 +200,7 @@ const Drawer = ({
 		// under the title bar (top-12), so the window's own chrome is never
 		// covered; settings sits at 40 so a confirm sheet (50) opens over it
 		<div
-			className={`fixed inset-x-0 bottom-0 top-12 bg-black/40 ${z === 40 ? 'z-40' : 'z-50'}`}
+			className={`fixed inset-x-0 bottom-0 top-12 bg-black/40 ${LAYER[z]}`}
 			onClick={closeFromBackdrop}
 		>
 			<div
@@ -153,8 +211,11 @@ const Drawer = ({
 				aria-label={title}
 				// bg-popover, not bg-secondary, and the backdrop below is why it
 				// had to change: bg-black/40 dims the lanes, it does not hide
-				// them, so at the knob's default 10 the panel's own alpha 0.9
-				// let a 60%-bright lane through its prose. 71fc000 fixed this
+				// them, so with the transparency knob at 10 the panel's own
+				// alpha 0.9 let a 60%-bright lane through its prose. (the
+				// knob's DEFAULT is 0 and the window ships opaque - see
+				// preferences.rs, which owns that number; this comment used to
+				// say the default was 10 and it was never true.) 71fc000 fixed this
 				// for menus and reasoned the drawer was covered by that
 				// backdrop; it is not - the WSL doctor's paragraphs were read
 				// with /var/www, ~20 repo names, hostnames and ports legible

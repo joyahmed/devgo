@@ -107,6 +107,102 @@ describe('Drawer — focus', () => {
 	});
 });
 
+// the palette is itself a Drawer and is summoned from anywhere, so two
+// of these can be up at once. jsdom cannot judge which one is PAINTED on
+// top - that is z-index and compositing, and the z prop is asserted in
+// App, not here - but it can judge every other half of that bug: who has
+// focus, who gets the keys, and who closes
+describe('Drawer — two of them at once', () => {
+	// a picker with a search box, then the palette over it: the shape of
+	// the real defect, where Ctrl+Shift+P left the caret in the picker
+	const Stacked = ({ onTop, onUnder }: { onTop: () => void; onUnder: () => void }) => {
+		const [top, setTop] = useState(false);
+		return (
+			<>
+				<Drawer open={true} side='right' title='Clone' onClose={onUnder}>
+					<input aria-label='find a repo' />
+				</Drawer>
+				<Drawer open={top} side='top' onClose={() => { onTop(); setTop(false); }}>
+					<input aria-label='type a command' />
+				</Drawer>
+				<button onClick={() => setTop(true)}>summon</button>
+			</>
+		);
+	};
+
+	it('gives the keyboard to the one that opened last', async () => {
+		const user = userEvent.setup();
+		render(<Stacked onTop={() => {}} onUnder={() => {}} />);
+
+		expect(document.activeElement).toBe(screen.getByLabelText('find a repo'));
+		await user.click(screen.getByRole('button', { name: 'summon' }));
+		// the defect: the drawer underneath re-ran its focus effect on the
+		// re-render that opened this one and took the caret straight back
+		expect(document.activeElement).toBe(screen.getByLabelText('type a command'));
+	});
+
+	it('closes only the top one on Escape', async () => {
+		const user = userEvent.setup();
+		const onTop = vi.fn();
+		const onUnder = vi.fn();
+		render(<Stacked onTop={onTop} onUnder={onUnder} />);
+
+		await user.click(screen.getByRole('button', { name: 'summon' }));
+		await user.keyboard('{Escape}');
+
+		expect(onTop).toHaveBeenCalledTimes(1);
+		expect(onUnder).not.toHaveBeenCalled();
+		// and the one underneath is still there
+		expect(screen.getByLabelText('find a repo')).not.toBeNull();
+	});
+
+	it('hands Escape back to the one underneath once the top one goes', async () => {
+		const user = userEvent.setup();
+		const onTop = vi.fn();
+		const onUnder = vi.fn();
+		render(<Stacked onTop={onTop} onUnder={onUnder} />);
+
+		await user.click(screen.getByRole('button', { name: 'summon' }));
+		await user.keyboard('{Escape}');
+		await user.keyboard('{Escape}');
+		expect(onUnder).toHaveBeenCalledTimes(1);
+	});
+});
+
+// the caret belongs to whoever the user last put it on. the focus effect
+// used to name onClose in its deps, and every call site passes a fresh
+// arrow, so a render of App anywhere - a toast, a clone tick, a poll -
+// re-ran it and dragged focus back to the first control in the body
+describe('Drawer — focus is taken once, not on every render', () => {
+	// a FRESH onClose arrow each time, which is what every call site in App
+	// passes: that identity change was in the focus effect's deps, so the
+	// effect tore down and re-ran and put the caret back on the first
+	// control. nothing else about the render differs
+	const body = (
+		<>
+			<input aria-label='first' />
+			<input aria-label='second' />
+		</>
+	);
+	const at = (n: number) => (
+		<Drawer open={true} side='right' title={`Clone ${n}`} onClose={() => {}}>
+			{body}
+		</Drawer>
+	);
+
+	it('leaves the caret where the user put it when the parent re-renders', () => {
+		const { rerender } = render(at(1));
+
+		const second = screen.getByLabelText('second');
+		second.focus();
+		rerender(at(2));
+		rerender(at(3));
+
+		expect(document.activeElement).toBe(second);
+		expect(document.activeElement).not.toBe(screen.getByLabelText('first'));
+	});
+});
+
 describe('Drawer — the close reason in devgo.log', () => {
 	// the word UNEXPLAINED is only worth anything if it is rare, so every
 	// exit this file owns has to name itself on the way out
@@ -153,7 +249,7 @@ describe('Drawer — the close reason in devgo.log', () => {
 
 	// jsdom cannot composite, so it cannot see a lane through a panel — but
 	// the class is the whole difference. bg-secondary follows the
-	// transparency knob and at its default 10 the settings panels were read
+	// transparency knob and with that knob at 10 the settings panels were read
 	// with /var/www, twenty repo names, client hostnames and ports legible
 	// behind the prose; bg-popover is the same hex with the knob taken off
 	// it. the bg-black/40 backdrop is not a substitute and was the reason
