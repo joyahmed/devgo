@@ -1,4 +1,5 @@
 import type { KeyboardEvent } from 'react';
+import { escapeCleared } from '../searchKeys';
 import { prettyKeys, shortcutFor } from '../shortcuts';
 import Button from './Button';
 import Kbd from './Kbd';
@@ -62,7 +63,6 @@ const SearchBox = ({
 	const keys: Record<string, (() => void) | undefined> = {
 		ArrowDown: () => onArrow?.(1),
 		ArrowUp: () => onArrow?.(-1),
-		Escape: () => onChange(''),
 		Enter: onEnter
 	};
 
@@ -71,6 +71,11 @@ const SearchBox = ({
 		// actions declared in the shortcut table and owned by App's handler; if
 		// this forwarded them as a plain Enter, one chord would launch twice.
 		if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
+		// Escape is not in the table above because it has two answers, not
+		// one: it clears a box with text in it and stops there, and it is
+		// left alone on an empty box so whatever is around the box can
+		// close on it. escapeCleared holds that rule for every search box
+		if (escapeCleared(e, value, () => onChange(''))) return;
 		const action = keys[e.key];
 		if (!action) return;
 		e.preventDefault();

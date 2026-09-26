@@ -3,6 +3,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { relativeTime } from '../github';
 import { fuzzyScore } from '../palette';
 import { lastSegment, normalizePath } from '../paths';
+import { escapeCleared } from '../searchKeys';
 import Button from './Button';
 import Select from './Select';
 import { pickTone } from './rowStyles';
@@ -248,6 +249,17 @@ const ClonePicker = ({
 					setQuery(e.target.value);
 					setActive(0);
 				}}
+				// the one rule every search box in the app follows: Escape
+				// clears a box that has text and goes no further, and is left
+				// alone on an empty one so the drawer above closes on it.
+				// without this the key did the same thing either way — closed
+				// the drawer and threw away the filter and the ticks with it
+				onKeyDown={e =>
+					escapeCleared(e, query, () => {
+						setQuery('');
+						setActive(0);
+					})
+				}
 			/>
 			<div className='flex items-center justify-between mb-2'>
 				<span className='text-13 text-text-muted'>

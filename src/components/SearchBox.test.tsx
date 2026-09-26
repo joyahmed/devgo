@@ -1,7 +1,7 @@
 import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import SearchBox from './SearchBox';
 
 afterEach(cleanup);
@@ -123,5 +123,50 @@ describe('SearchBox — keys', () => {
 		await user.click(input);
 		await user.keyboard('{Escape}');
 		expect(input.value).toBe('');
+	});
+});
+
+// the defect, reported from linux: Escape on a search box inside a drawer
+// did one thing whatever the box held. window is where Drawer listens for
+// it, so this asks the only question that matters — did the key get past
+// the box — rather than asserting on stopPropagation being called
+describe('SearchBox — Escape belongs to the box only while it has text', () => {
+	// Drawer's Escape-to-close is a window keydown listener; this is the
+	// same listener, standing in for it
+	const seen = vi.fn();
+	const on = (e: KeyboardEvent) => {
+		if (e.key === 'Escape') seen();
+	};
+	beforeEach(() => {
+		seen.mockClear();
+		window.addEventListener('keydown', on);
+	});
+	afterEach(() => window.removeEventListener('keydown', on));
+
+	it('clears the text and lets nothing above it see the key', async () => {
+		const user = userEvent.setup();
+		render(<Harness initial='repo' />);
+
+		const input = screen.getByRole('textbox') as HTMLInputElement;
+		await user.click(input);
+		await user.keyboard('{Escape}');
+
+		expect(input.value).toBe('');
+		// the drawer above must still be open: it never got the key
+		expect(seen).not.toHaveBeenCalled();
+	});
+
+	// the whole bug in one line. an empty box has nothing to clear and no
+	// claim on Escape, so the key goes up and the drawer around it closes
+	it('lets the key through when the box is already empty', async () => {
+		const user = userEvent.setup();
+		render(<Harness />);
+
+		const input = screen.getByRole('textbox') as HTMLInputElement;
+		await user.click(input);
+		await user.keyboard('{Escape}');
+
+		expect(input.value).toBe('');
+		expect(seen).toHaveBeenCalledTimes(1);
 	});
 });
