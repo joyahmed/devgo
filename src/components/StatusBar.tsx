@@ -96,14 +96,22 @@ const TargetGroup = ({
 	pulse
 }: TargetGroupProps) => (
 	<div className='flex items-center gap-2 shrink-0'>
-		{/* the label is the first thing the footer gives up: every button
-		    under it already names its target, and only a window wider than
-		    the whole cluster has the room to say it twice. sr-only rather
-		    than hidden, so a screen reader still hears which group it is
-		    and, being absolutely positioned, it costs the row no width */}
-		<span className='text-text-muted shrink-0 sr-only min-[2400px]:not-sr-only'>
-			{label}
-		</span>
+		{/* the label is the footer's cheapest loss, and it is now taken at
+		    every width. it used to come back above min-[2400px], and a
+		    viewport literal asks the wrong question: joy's mac panel is
+		    1920 points wide, so that rule could not match there at any
+		    window size, and his mac footer sat with 530px of empty strip
+		    while it hid this label and the whole Pin/Search/Commands/Summon
+		    cluster. the honest question — is there room left on this line —
+		    can only be asked by an element that grows into the room, and
+		    the only such element here is the cluster at the far end (see
+		    below): a label that grew to measure its own space would take
+		    that space from hints whose chip is their entire affordance,
+		    while every button under this label already names its target.
+		    so it goes, and it goes first. sr-only rather than hidden, so a
+		    screen reader still hears which group it is and, being
+		    absolutely positioned, it costs the row no width */}
+		<span className='text-text-muted shrink-0 sr-only'>{label}</span>
 		{items.map(t => {
 			const isDefault = t.id === defaultId;
 			// the group's key is the default's; an item may carry one of its own
@@ -242,22 +250,42 @@ const StatusBar = ({
 	// arrow keys and enter in a list are the one thing nobody looks up,
 	// and their chips cost the room the rest needed to grow.
 	//
-	// the footer sheds these as it narrows, and the numbers are measured
-	// rather than picked: with everything shown the row is ~2300px wide,
-	// so a maximised 1920 screen (2133 css px at joy's 0.9 scale) has
-	// never fit it — the two-line footer was not a small-window bug, it
-	// was every window. without the list group it is ~1920, without the
-	// surfaces group ~1480. each group carries the width it needs as a
-	// literal class, because tailwind cannot see a class built at runtime.
-	// what is lost is only ever a hint: every key below is in the shortcut
-	// table, so the Shortcuts door — which never hides — still lists it,
-	// and the summon hotkey is also set and shown in Settings. Search is
-	// the cheapest of them twice over, since the box it focuses wears the
-	// same chip
+	// the footer sheds these last, and it sheds them by the width this
+	// cluster actually got — a container query on the grower below, not a
+	// breakpoint. a viewport literal asked the wrong question twice over.
+	// it assumed the window's width says how crowded the strip is, when
+	// what crowds the strip is how many targets joy has configured and how
+	// long their names are: on his mac the last launch button ended at
+	// 1258 and Shortcuts began at 1790 — 530px of empty footer — and these
+	// groups were hidden in it because the window was under 2400, not
+	// because the strip had run out. and the mac panel is 1920 points
+	// wide, so min-[2400px] and min-[2000px] could never match on that
+	// machine at any size: Pin, Search, Commands and Summon were not
+	// hidden until you widened, they were gone.
+	//
+	// the numbers are still measured, they are just measured of the right
+	// thing — the room at this end rather than the screen. drawn from the
+	// built stylesheet: the two doors are 184px, the surfaces pair 436 and
+	// the list pair 247, so a group appears once the cluster holds
+	// everything from itself rightwards — 628px for surfaces, 883 for list,
+	// rounded up to 40rem and 56rem so the last group in is never the one
+	// that wraps. each threshold is a literal class, because tailwind
+	// cannot see a class built at runtime, and a container query is no
+	// different there.
+	//
+	// these go last of the three things the strip can give up, because a
+	// chip here has no button behind it: the label over a launch group is
+	// decoration and a key chip inside a launch button only names the key
+	// of a button you can still see and press, while Pin, Search, Commands
+	// and Summon exist nowhere else on the strip — hiding one does not
+	// demote it, it deletes it for anyone who has not memorised the key.
+	// the two doors never hide at any width, which is what keeps the loss
+	// recoverable: Shortcuts lists every binding here, and the summon
+	// hotkey is also set and shown in Settings
 	const cluster: FooterHintGroup[] = [
 		{
 			id: 'list',
-			show: 'hidden min-[2400px]:flex',
+			show: 'hidden @min-[56rem]/hints:flex',
 			items: [
 				{ label: 'Pin', keys: prettyKeys(shortcutFor('togglePin')) },
 				{ label: 'Search', keys: prettyKeys(shortcutFor('focusSearch')) }
@@ -265,7 +293,7 @@ const StatusBar = ({
 		},
 		{
 			id: 'surfaces',
-			show: 'hidden min-[2000px]:flex',
+			show: 'hidden @min-[40rem]/hints:flex',
 			items: [
 				{
 					label: 'Commands',
@@ -336,14 +364,6 @@ const StatusBar = ({
 					<Kbd>{both}</Kbd>
 				</Button>
 			)}
-			{/* a spacer, not ml-auto on the cluster. an auto margin pushed the
-			    hints right on one line and then, the moment they wrapped to a
-			    line of their own, ate that whole line and left them hanging off
-			    the far edge with nothing to their left — an alignment nobody
-			    chose. a zero-width grower is its own flex item, so it stays
-			    behind on the first line and the wrapped cluster starts flush
-			    left, under the groups it came from */}
-			<span className='grow' aria-hidden='true' />
 			{/* the key chips, then the doors; without them the discovery
 			    surfaces are themselves undiscoverable. the rule rides with the
 			    group it follows, so hiding a group hides its rule, and its own
@@ -351,8 +371,24 @@ const StatusBar = ({
 			    space, the smallest innermost: 8px between items, 16px across a
 			    rule, 24px between whole footer groups. at the old flat gap-4 the
 			    space between Shortcuts and Help was the space between groups,
-			    so the strip had no grain */}
-			<div className='flex items-center gap-2 shrink-0'>
+			    so the strip had no grain.
+
+			    this end grows, and because it grows it is the one element on
+			    the strip that knows how much room is left: @container turns
+			    that width into the question the groups above ask. it replaced
+			    a zero-width grower that held the two ends apart — and that
+			    replaced ml-auto, which pushed the hints right on one line and
+			    then, the moment they wrapped to a line of their own, ate that
+			    whole line and left them hanging off the far edge with nothing
+			    to their left. basis-0 keeps this from wrapping anything: it
+			    asks for no width of its own, so the launch groups wrap only
+			    when they alone do not fit, and the cluster gives up a group
+			    before the footer gives up a line. min-w-[13rem] is the two
+			    doors' room, reserved because they never hide — the groups wrap
+			    rather than squeeze a door off the end — and flex-wrap is the
+			    floor under that: at the very narrowest the doors drop to a
+			    second line instead of overflowing the strip */}
+			<div className='@container/hints grow basis-0 min-w-[13rem] flex flex-wrap items-center justify-end gap-2'>
 				{cluster.map((g, i) => (
 					<div
 						key={g.id}

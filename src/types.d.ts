@@ -1543,7 +1543,10 @@ interface FooterHint {
 interface FooterHintGroup {
 	id: string;
 	/// the literal tailwind class that decides the width this group needs
-	/// ("hidden min-[2400px]:flex"); omitted, the group is always shown
+	/// ("hidden @min-[40rem]/hints:flex"). a container query on the cluster
+	/// at the footer's right end, never a viewport breakpoint: what crowds
+	/// the strip is the launch targets, not the screen. omitted, the group
+	/// is always shown
 	show?: string;
 	items: FooterHint[];
 }
