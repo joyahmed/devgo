@@ -317,3 +317,27 @@ something else.
 2. **Branch number** for the doctor — `77` (the free slot) or `79` (chronological).
 3. **Tutorial scope** — §5.
 4. Whether the five clippy errors block the release or ship as known.
+
+---
+
+## Stream 6 — UX items raised 2026-09-26, both are "an HN visitor hits this" risks
+
+### 6a. ⭐ The on-load message is too easy to miss (Joy, at the keyboard, 2026-09-26)
+Joy: *"the message on load is very unlikely not gonna be seen caz it is a thin line on bottom left.
+it can be a bit bigger and appear on a more visible area."*
+
+**Fix:** make it larger and move it somewhere the eye actually lands. ⚠️ **Not the toast** — `Toast.tsx:37`
+is `fixed bottom-4 right-4`, bottom **right**, so the thing Joy is describing is something else on the
+bottom **left**, most likely in the footer (`StatusBar.tsx:204`, `text-13`, `min-h-12`).
+⛔ **Identify the exact element before restyling anything** — a grep for a load-time notice found
+nothing, so this needs the app watched through a cold start, or one word from Joy. Restyling the wrong
+element is worse than leaving it.
+
+### 6b. ⚠️ The clone drawer closed by itself once, unreproduced
+Seen while driving the ClonePicker tests on the installed 1.2.1 build: the drawer was confirmed open,
+then ~90s later — with **no input events in between** — it was gone and focus had moved to a
+background button. **Not reproduced** in three attempts (3 min idle with it open; a repeated Tab
+cycle; a re-run of the Tab-to-list sequence). `Drawer.tsx` closes only on Escape, backdrop click, or
+the ✕ button — there is no blur or visibility handler, so there is no explanation in the code.
+⛔ **Not called a defect.** Recorded because **if a user hits it they lose their tick set** (ticks
+reset to 0 on close; the destination survives), and on a launch day that becomes a comment thread.
