@@ -46,7 +46,14 @@ const GithubControls = ({
 				<Button
 					variant={labelled ? 'add' : 'ghost'}
 					className={labelled ? 'shrink-0' : `${glyph} text-18 leading-none`}
-					title='Clone repos into a workspace, add one by name, or group them'
+					// no title on the one control that opens a menu: a native tooltip
+					// is an OS window above the webview, and this menu opens 4px under
+					// the button, so the tooltip landed on top of its first item,
+					// "Clone repos…" (alina, 1.2.2-rc2). no z-index can move it. the
+					// menu spells all three actions out in words anyway, so the hint
+					// said nothing the next frame did not; aria-label keeps the glyph
+					// form named for a screen reader, the labelled form has its own text
+					aria-label={labelled ? undefined : 'Add repo'}
 					onClick={e => {
 						e.stopPropagation();
 						const r = e.currentTarget.getBoundingClientRect();
