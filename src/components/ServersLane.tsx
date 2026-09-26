@@ -328,7 +328,8 @@ const ServersLane = ({
 	onRootContextMenu,
 	onSetup,
 	onArrow,
-	onEnter
+	onEnter,
+	enterHint
 }: ServersLaneProps) => {
 	const {
 		servers: all,
@@ -508,6 +509,7 @@ const ServersLane = ({
 								onChange: setQuery,
 								onArrow,
 								onEnter,
+								enterHint,
 								placeholder: 'Search servers & folders…',
 								lane: 'servers' as const,
 								className: '-my-1.5 [&_input]:py-1 [&_input]:text-13'

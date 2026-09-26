@@ -764,6 +764,10 @@ interface GithubLaneProps {
 	/// from the heading's box the arrows walk the github rows alone
 	onArrow?: (dir: 1 | -1) => void;
 	onEnter?: () => void;
+	/// whether onEnter has a row to act on: the box's ENTER chip. computed
+	/// by whoever owns onEnter, so the heading's box advertises exactly
+	/// what the command row's box does
+	enterHint?: boolean;
 }
 
 /// recents, + Add repo, refresh: beside the github box on the search line
@@ -1170,6 +1174,10 @@ interface ServersLaneProps {
 	/// from the card's box the arrows walk the servers and folders alone
 	onArrow: (dir: 1 | -1) => void;
 	onEnter: () => void;
+	/// whether onEnter has a row to act on: the box's ENTER chip. the tree
+	/// owns onEnter, so it owns the answer; the same boolean goes to the
+	/// command row's box, which is the same box on a wider window
+	enterHint?: boolean;
 }
 
 interface ServerRowProps {
@@ -1395,6 +1403,11 @@ interface ProjectTreeProps {
 	onServerOpen?: (server: Server) => void;
 	/// the server under the cursor, or none: the footer follows it
 	onServerCursor?: (server: Server | null) => void;
+	/// whether openServerRow() would open something right now. the cursor
+	/// id alone does not answer it — a query can filter the row away and a
+	/// closed lane has no rows at all — and the servers box in the command
+	/// row is outside this tree, so it is told rather than deducing it
+	onServerRowOpenable?: (openable: boolean) => void;
 	onServerContextMenu?: (server: Server, x: number, y: number) => void;
 	onServerSetup?: (server: Server) => void;
 	onServersAddMenu?: (x: number, y: number) => void;

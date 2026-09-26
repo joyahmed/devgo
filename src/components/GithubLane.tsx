@@ -231,7 +231,8 @@ const GithubLane = ({
 	searchInHeading = true,
 	searchRef,
 	onArrow,
-	onEnter
+	onEnter,
+	enterHint
 }: GithubLaneProps) => {
 	const {
 		query,
@@ -345,6 +346,7 @@ const GithubLane = ({
 								onChange: setQuery,
 								onArrow,
 								onEnter,
+								enterHint,
 								placeholder: 'Search GitHub repos…',
 								lane: 'github' as const,
 								className: '-my-1.5 [&_input]:py-1 [&_input]:text-13'
