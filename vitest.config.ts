@@ -28,6 +28,12 @@ export default defineConfig({
 		// tests import describe/it/expect/vi from 'vitest' instead, which is
 		// four words per file against a tsconfig that can silently lose types.
 		globals: false,
+		// and BECAUSE globals is off, @testing-library/react never gets to
+		// register its own cleanup(): it gates that on a global afterEach
+		// existing. without this file nothing in the suite ever unmounts, and
+		// every render/renderHook stays live for the rest of the run.
+		// src/test-setup.ts carries the full reasoning.
+		setupFiles: ['./src/test-setup.ts'],
 		include: ['src/**/*.test.{ts,tsx}']
 	}
 });
