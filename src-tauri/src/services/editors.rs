@@ -1980,14 +1980,24 @@ mod tests {
     }
 
     // a bundle with its binary in place, so the in-bundle branch is the one
-    // the test has to beat rather than one a missing file already ruled out
+    // the test has to beat rather than one a missing file already ruled out.
+    //
+    // a row with no cli at all — terminal.app, iterm2, finder, `exe: ""` —
+    // has no binary to place: `open -a` is how it is launched by design, so
+    // the bundle standing there IS its present case and there is no
+    // in-bundle branch for it to beat. writing that empty name would target
+    // `bin.join("")`, which is `bin` itself, and a write over a directory is
+    // an IsADirectory error — the one that failed this suite on mac and
+    // linux while windows, where the whole module is cfg'd out, passed
     fn fake_bundle(dir: &str, app: &str, exe: &str) -> PathBuf {
         let root = std::env::temp_dir().join(dir);
         let _ = std::fs::remove_dir_all(&root);
         let bundle = root.join(format!("{app}.app"));
         let bin = bundle.join("Contents").join("MacOS");
         std::fs::create_dir_all(&bin).unwrap();
-        std::fs::write(bin.join(exe), "").unwrap();
+        if !exe.is_empty() {
+            std::fs::write(bin.join(exe), "").unwrap();
+        }
         bundle
     }
 
