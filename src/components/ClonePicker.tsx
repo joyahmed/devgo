@@ -81,7 +81,12 @@ const ClonePicker = ({
 		const saved = readInto();
 		return saved && !workspaces.includes(saved) ? saved : null;
 	});
-	const [addAsWorkspace, setAddAsWorkspace] = useState(true);
+	// a folder chosen through the picker in this session is one the user
+	// just aimed at, so offering to add it is a favour and starts ticked. a
+	// remembered one is the opposite: deleting a workspace in Settings turns
+	// its own path into an outside folder, and a tick nobody placed there
+	// would clone the repos straight back into the workspace just deleted
+	const [addAsWorkspace, setAddAsWorkspace] = useState(chosen === null);
 	const outside = chosen !== null && workspace === chosen && !insideAny(chosen, workspaces);
 
 	// the destination is written the moment it is picked, not when the
@@ -101,6 +106,9 @@ const ClonePicker = ({
 			.then(picked => {
 				if (typeof picked !== 'string') return;
 				setChosen(picked);
+				// picked here and now, so the tick is the user's own choice
+				// again even if the drawer opened on a remembered folder
+				setAddAsWorkspace(true);
 				remember(picked);
 			})
 			.catch(e => setError(String(e)));
