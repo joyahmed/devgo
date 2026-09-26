@@ -3,10 +3,12 @@ import Button from './Button';
 import Kbd from './Kbd';
 
 // the footer's two doors have no key to show, and beside four neighbours
-// that each lead with a chip they read as unfinished text. a glyph fills
-// the same leading slot: one mark per item, a chip where there is a key
-// and a drawing where there is not. house style - 24 viewBox, stroke 2,
-// currentColor, so the six palettes reach it with no token of its own
+// that each end in a chip they read as unfinished text. a glyph fills the
+// same trailing slot: one mark per item, a chip where there is a key and
+// a drawing where there is not. muted on purpose - it stands where a key
+// chip stands without being one, and at the pill's full ink it read as
+// the louder of the two. house style - 24 viewBox, stroke 2, currentColor,
+// so the six palettes reach it with no token of its own
 const FooterIcon = ({ children }: { children: React.ReactNode }) => (
 	<svg
 		width='14'
@@ -17,7 +19,7 @@ const FooterIcon = ({ children }: { children: React.ReactNode }) => (
 		strokeWidth='2'
 		strokeLinecap='round'
 		strokeLinejoin='round'
-		className='shrink-0'
+		className='shrink-0 text-text-muted'
 		aria-hidden='true'
 	>
 		{children}
@@ -139,7 +141,8 @@ const TargetGroup = ({
 // the bottom: you aim at these from muscle memory while your eyes are
 // still on the list, and expanding a workspace must not move them.
 // when it runs out of width it wraps by whole groups: every group is a
-// direct child of the footer, and the hints ml-auto onto the last line
+// direct child of the footer, and a grower between the launch groups and
+// the hints holds the two ends apart without stranding the hints
 const StatusBar = ({
 	hasSelection,
 	selectionIsWsl,
@@ -333,36 +336,65 @@ const StatusBar = ({
 					<Kbd>{both}</Kbd>
 				</Button>
 			)}
+			{/* a spacer, not ml-auto on the cluster. an auto margin pushed the
+			    hints right on one line and then, the moment they wrapped to a
+			    line of their own, ate that whole line and left them hanging off
+			    the far edge with nothing to their left — an alignment nobody
+			    chose. a zero-width grower is its own flex item, so it stays
+			    behind on the first line and the wrapped cluster starts flush
+			    left, under the groups it came from */}
+			<span className='grow' aria-hidden='true' />
 			{/* the key chips, then the doors; without them the discovery
-			    surfaces are themselves undiscoverable. the rule rides with
-			    the group it follows, so hiding a group hides its rule */}
-			<div className='flex items-center gap-4 shrink-0 ml-auto'>
+			    surfaces are themselves undiscoverable. the rule rides with the
+			    group it follows, so hiding a group hides its rule, and its own
+			    mx-2 keeps the air equal on both sides of it. three steps of
+			    space, the smallest innermost: 8px between items, 16px across a
+			    rule, 24px between whole footer groups. at the old flat gap-4 the
+			    space between Shortcuts and Help was the space between groups,
+			    so the strip had no grain */}
+			<div className='flex items-center gap-2 shrink-0'>
 				{cluster.map((g, i) => (
 					<div
 						key={g.id}
-						className={`items-center gap-4 shrink-0 ${g.show ?? 'flex'}`}
+						className={`items-center gap-2 shrink-0 ${g.show ?? 'flex'}`}
 					>
 						{g.items.map(h =>
 							h.onClick ? (
+								// a door wears the launch pill: name first, mark trailing,
+								// the same box as a target above it. on this strip the
+								// bordered box is the whole affordance
 								<Button
 									key={h.label}
-									variant='ghost'
-									className='gap-1.5 shrink-0 hover:bg-transparent hover:text-accent'
+									variant='launch'
+									className='shrink-0'
 									title={h.title}
 									onClick={h.onClick}
 								>
+									<span className='leading-none'>{h.label}</span>
 									{h.keys ? <Kbd>{h.keys}</Kbd> : h.icon}
-									<span className='text-text-secondary leading-none'>{h.label}</span>
 								</Button>
 							) : (
-								<span key={h.label} className='inline-flex items-center gap-1.5 shrink-0'>
+								// a fact, so no click — and now it does not offer one
+								// either. same grammar and the same height, but no box:
+								// no edge, no ground, nothing that lifts under the
+								// pointer, and its name a step under a door's ink. these
+								// are keys you already hold, not doors devgo is opening.
+								// px-1 only so a bare word never sits against the edge of
+								// the pill before it
+								<span
+									key={h.label}
+									className='inline-flex items-center gap-1.5 shrink-0 h-9 px-1 text-text-secondary'
+								>
+									<span className='leading-none'>{h.label}</span>
 									{h.keys ? <Kbd>{h.keys}</Kbd> : h.icon}
-									<span className='text-text-secondary leading-none'>{h.label}</span>
 								</span>
 							)
 						)}
 						{i < cluster.length - 1 && (
-							<span className='w-px h-5 bg-border-strong shrink-0' aria-hidden='true' />
+							<span
+								className='w-px h-5 bg-border-strong shrink-0 mx-2'
+								aria-hidden='true'
+							/>
 						)}
 					</div>
 				))}

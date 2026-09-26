@@ -27,13 +27,28 @@ const VARIANT: Record<ButtonVariant, string> = {
 	// A launch target on the row; the default says so with aria-current.
 	target:
 		'gap-1.5 px-3 py-1.5 text-13 border border-border-strong bg-bg-panel text-text-secondary hover:not-disabled:text-text-primary hover:not-disabled:border-accent aria-[current=true]:border-accent aria-[current=true]:bg-bg-hover/40 aria-[current=true]:text-text-primary disabled:border-border disabled:text-text-muted',
-	// The footer's launch buttons. a destination, not a choice among
-	// values: every one that can run is full ink and the default is told
-	// by its edge alone, so muted here means blocked and nothing else.
-	// one height for the whole row — a button with a key chip in it was
-	// 10px taller than one without, and the row read as broken teeth
+	// The footer's pills: every launch target, and the doors at the right
+	// end too, so one grammar covers the whole strip. a destination, not a
+	// choice among values: every one that can run is full ink and the
+	// default is told by its edge alone, so muted here means blocked and
+	// nothing else. one height for the whole row — a button with a key chip
+	// in it was 10px taller than one without, and the row read as broken
+	// teeth.
+	// hover lifts the ground and warms the edge to text-muted, the pair
+	// card and choice already use. it used to borrow the accent edge, which
+	// is aria-current's: two meanings in one colour, and the one that had
+	// to stay legible — which target the keys will hit — was the one that
+	// lost.
+	// the [&:disabled_kbd] rules reach the key chip inside a blocked
+	// button. Kbd fills itself with bg-raised at full ink, so the longest
+	// chip on the strip stayed the loudest thing on it while sitting in a
+	// greyed-out pill — the least available action shouting. dropping the
+	// chip to this button's own disabled register (hairline edge, no fill,
+	// muted ink) keeps the key's shape and drops its volume, and does it
+	// from the parent, so Kbd needs no prop and its six other callers see
+	// no change
 	launch:
-		'gap-1.5 h-9 px-3 text-13 border border-border-strong bg-bg-panel text-text-primary hover:not-disabled:border-accent aria-[current=true]:border-accent aria-[current=true]:bg-bg-hover/40 disabled:border-border disabled:text-text-muted',
+		'gap-1.5 h-9 px-3 text-13 border border-border-strong bg-bg-panel text-text-primary hover:not-disabled:border-text-muted hover:not-disabled:bg-bg-hover aria-[current=true]:border-accent aria-[current=true]:bg-bg-hover/40 disabled:border-border disabled:text-text-muted [&:disabled_kbd]:border-border [&:disabled_kbd]:bg-transparent [&:disabled_kbd]:text-text-muted',
 	// a door on the command row: + Workspace, + Add repo, + Add server.
 	// bordered, so it reads as a button and not a word
 	add: 'gap-1.5 h-9 pl-2.5 pr-3 border border-border-strong bg-transparent text-text-secondary hover:text-text-primary hover:border-accent hover:bg-bg-hover',
