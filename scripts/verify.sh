@@ -190,6 +190,35 @@ else
   echo "verify: tiers 1+2 (default — pass --full for the pre-main set)"
 fi
 
+# is vitest actually installed in THIS tree? a LOCAL-TREE test on purpose, never
+# `command -v vitest` and never `bunx vitest`: vitest is a dev dep and never lands
+# on PATH, and bunx would answer a missing one by DOWNLOADING it — a gate that
+# installs its own checker is worse than one that skips. that reasoning is intact;
+# only the spelling below changed.
+#
+# ⚠️ trap #1, third instance — the old form was `[ -x node_modules/.bin/vitest ]`
+# and there is NO extensionless `vitest` file in that directory on windows: bun
+# writes `vitest.exe` and `vitest.bunx`. it read true here ONLY because msys `stat`
+# silently retries a missing path with `.exe`. measured 2026-09-26 on this tree:
+# msys sh says TRUE, node's accessSync says ENOENT, powershell's Test-Path says
+# FALSE. under any sh without that retry the probe reads FALSE on a perfectly
+# healthy tree and the suite SKIPS FOREVER — trap #1's own words ("the gate would
+# quietly stop checking rust forever") aimed at the frontend instead.
+#
+# ⭐ the package manifest is the primary probe because it is what "installed"
+# actually means, and `node_modules/vitest/package.json` is one spelling on all
+# three platforms — no extension to guess, no shell retry in the answer. the .bin
+# sweep after it is the fallback for a hoisted/linked layout, and it names every
+# real spelling: extensionless symlink on mac and linux, .exe/.cmd/.ps1/.bunx on
+# windows. neither branch can fetch anything.
+vitest_installed() {
+  [ -f "$REPO_ROOT/node_modules/vitest/package.json" ] && return 0
+  for _v in vitest vitest.exe vitest.cmd vitest.ps1 vitest.bunx; do
+    [ -f "$REPO_ROOT/node_modules/.bin/$_v" ] && return 0
+  done
+  return 1
+}
+
 # ⚠️ trap #2 — a missing tool SKIPS, it does not fail. a gate that hard-errors
 # because someone's shell lost bun on PATH gets deleted by the first person who
 # hits it. the safety net is the EXECUTED counter at the bottom: skipping
@@ -208,15 +237,13 @@ if command -v bun >/dev/null 2>&1; then
   # noise of the tsc line above it, and a test you only run before a main
   # push is a test that tells you about a break one commit too late.
   #
-  # the presence test is the BINARY, not `command -v vitest` and not the
-  # package.json script: vitest is a dev dep and never lands on PATH, and
-  # bunx would answer a missing one by DOWNLOADING it — a gate that installs
-  # packages behind your back is worse than one that skips. so a tree with no
-  # node_modules skips here the same way a shell with no bun skips above.
-  if [ -x "$REPO_ROOT/node_modules/.bin/vitest" ]; then
+  # see vitest_installed() above for why this is a local-tree file test and not
+  # `command -v` — and for the msys `.exe` retry that made the old spelling lie.
+  # a tree with no node_modules skips here the same way a shell with no bun does.
+  if vitest_installed; then
     run_check "vitest run" "$REPO_ROOT" bun run test
   else
-    skip "vitest run" "node_modules/.bin/vitest absent — run bun install"
+    skip "vitest run" "vitest not installed in node_modules — run bun install"
   fi
   if [ "$FULL" -eq 1 ]; then
     # dist/ is gitignored and no dev server reads it (vite serves :1420 from
