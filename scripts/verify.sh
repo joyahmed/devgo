@@ -4,7 +4,8 @@
 #   sh scripts/verify.sh          tiers 1+2  (typecheck, fmt, clippy)   ~10s warm
 #   sh scripts/verify.sh --full   + tier 3   (bun run build, cargo test) ~10s more
 #
-# the numbers and the tier split come from docs/ai-memory/verification-baseline.md.
+# the timings and the tier split were MEASURED against this tree, not guessed — and a
+# measurement goes stale the moment the toolchain moves, so re-time rather than trust.
 # exit 0 = every check ran and every check was green. exit 1 = something was red,
 # or something was SKIPPED, or nothing ran — a partial run is not a pass.
 # copurge reads that exit code, so keep it honest.
@@ -219,7 +220,7 @@ echo "summary:"
 printf '%s' "$SUMMARY"
 
 # name what this repo has no way to check, so a green gate is not read as
-# broader assurance than it is. list is from docs/ai-memory/verification-baseline.md.
+# broader assurance than it is. every line below was checked against the tree, not guessed.
 echo ""
 echo "cannot verify:"
 echo "  - no JS/TS test runner at all (no vitest/jest/node:test, zero *.test.*):"

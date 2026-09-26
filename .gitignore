@@ -27,3 +27,4 @@ dist-ssr
 # assistant session state — never part of the repo
 .claude/
 CLAUDE.md
+docs/ai-memory/
