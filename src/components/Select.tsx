@@ -62,11 +62,15 @@ const Select = ({ value, options, onChange, label, title }: SelectProps) => {
 	// first letters jump: while the list is open they move the highlight,
 	// while it is shut they choose, as they do on a native select. the
 	// buffer expires by timestamp, so there is no timer to clear.
-	// one letter pressed again is a cycle, not a longer prefix: "ww"
-	// matched no label and the highlight stuck on the first w, so ws2 was
-	// unreachable from the keyboard. a repeat searches for the single
-	// letter from one past where we are and wraps; anything else is a
-	// prefix and searches from the top, so "ws2" still lands directly
+	// one letter is a cycle, not a longer prefix: "ww" matched no label and
+	// the highlight stuck on the first w, so ws2 was unreachable from the
+	// keyboard. a single letter — pressed again inside the window, OR
+	// pressed fresh after it has lapsed — searches from one past where we
+	// are and wraps, so holding 0 walks 01_tauri → 02_next → 03_ai and back
+	// round at whatever speed it is pressed; waiting out the buffer used to
+	// restart from the top and re-pick the row already under the cursor,
+	// which reads as the key doing nothing. only two DIFFERENT letters make
+	// a prefix, and that searches from the top, so "ws2" still lands directly
 	const typed = useRef({ text: '', at: 0 });
 	const jump = (key: string) => {
 		const now = Date.now();
@@ -74,7 +78,7 @@ const Select = ({ value, options, onChange, label, title }: SelectProps) => {
 		const text =
 			(now - typed.current.at < TYPE_MS ? typed.current.text : '') + letter;
 		typed.current = { text, at: now };
-		const cycling = text.length > 1 && [...text].every(c => c === letter);
+		const cycling = [...text].every(c => c === letter);
 		const prefix = cycling ? letter : text;
 		const from = cycling ? (open ? active : at) + 1 : 0;
 		const n = options.length;
