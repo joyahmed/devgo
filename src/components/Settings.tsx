@@ -84,11 +84,12 @@ const ShortcutTable = ({
 }: ShortcutTableProps) => {
 	const groups = [...new Set(SHORTCUTS.map(s => s.group))];
 	// both reveal keys pass no target and land on the default manager, so the
-	// table has to name it rather than keep saying Explorer at a trove user
+	// table has to name it rather than keep saying Explorer at a trove user.
+	// labelFor owns that: the regex this used to run was anchored on
+	// "Explorer$" and so fired on windows alone, leaving the mac and linux
+	// wordings — Finder, "file manager" — untouched
 	const shortcutLabel = (id: ShortcutId) =>
-		fileManagerName && (id === 'revealExplorer' || id === 'revealWorkspace')
-			? labelFor(id).replace(/Explorer$/, fileManagerName)
-			: labelFor(id);
+		labelFor(id, { manager: fileManagerName });
 	const [capturing, setCapturing] = useState(false);
 
 	// capture phase, so the keys pressed to choose a chord never reach the
@@ -1072,8 +1073,8 @@ const Settings = ({
 }: SettingsProps) => {
 
 	// help's reveal button opens the DEFAULT manager, so its label names that
-	// one; a default that is unset or points at a deleted target leaves the
-	// static "Reveal in Explorer" in place
+	// one; a default that is unset or points at a deleted target leaves
+	// labelFor to name the desktop's own manager instead
 	const defaultManagerName = targets.fileManagers.find(
 		t => t.id === targets.defaults.file_manager
 	)?.name;
@@ -1174,8 +1175,11 @@ const Settings = ({
 				<HelpPanel
 					{...{
 						onError,
-						revealLabel:
-							defaultManagerName && `Reveal in ${defaultManagerName}`
+						// the same owner the shortcut table asks, so the two
+						// surfaces cannot answer differently again
+						revealLabel: labelFor('revealExplorer', {
+							manager: defaultManagerName
+						})
 					}}
 				/>
 			)

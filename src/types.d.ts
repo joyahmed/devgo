@@ -533,6 +533,12 @@ interface Shortcut {
 	macLabel?: string;
 	/// the same, for linux: no explorer, no finder, and one filesystem
 	linuxLabel?: string;
+	/// for an action that opens a named target, the label with the target's
+	/// name in it: `{manager}` is the effective file manager, `{subject}` an
+	/// optional thing being acted on (blank when the caller passes none).
+	/// labelFor fills them, and it is the only thing that may — a label that
+	/// is rewritten downstream is a label that drifts
+	managerLabel?: string;
 	/// only windows has a second filesystem to have a path in. the menus
 	/// and the settings panel drop it elsewhere (isAvailable)
 	windowsOnly?: boolean;
@@ -833,8 +839,9 @@ interface HelpSectionProps {
 interface HelpPanelProps {
 	onError: (message: string) => void;
 	/// the button reveals the data folder in the DEFAULT manager, so it must
-	/// name that one; absent, the static "Reveal in Explorer" still applies
-	revealLabel?: string;
+	/// name that one. built by labelFor and handed down whole — help does not
+	/// get to word this differently from the shortcut table
+	revealLabel: string;
 }
 
 interface SettingsPanel {
@@ -894,8 +901,8 @@ interface ShortcutTableProps {
 	/// the accelerator the backend actually bound
 	onSummonChanged: (hotkey: string) => void;
 	onError: (message: string) => void;
-	/// the default file manager's name, so the two reveal rows say what they
-	/// open; absent, their static "Explorer" wording still applies
+	/// the effective default file manager's name, so the two reveal rows say
+	/// what they open; absent, labelFor names the desktop's own manager
 	fileManagerName?: string;
 }
 

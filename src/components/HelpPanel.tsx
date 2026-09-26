@@ -1,7 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { useEffect, useState } from 'react';
 import { isMac, isWindows } from '../platform';
-import { labelFor, prettyKeys, shortcutFor } from '../shortcuts';
+import { prettyKeys, shortcutFor } from '../shortcuts';
 import Button from './Button';
 
 // the one prose surface in devgo. text-13 is the chrome size — row
@@ -225,7 +225,7 @@ const HelpPanel = ({ onError, revealLabel }: HelpPanelProps) => {
 							invoke('reveal_app_data_dir').catch(e => onError(String(e)))
 						}
 					>
-						{revealLabel ?? labelFor('revealExplorer')}
+						{revealLabel}
 					</Button>
 				</div>
 			</HelpSection>

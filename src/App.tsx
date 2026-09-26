@@ -840,15 +840,13 @@ const AppInner = () => {
 	const defaultFileManager = targets.fileManagers.find(
 		t => t.id === targets.defaults.file_manager
 	);
-	// the label the reveal key and the palette carry: the static one says
-	// "Explorer" even when the user made trove the default, which is a lie
-	const revealLabel = defaultFileManager
-		? `Reveal in ${defaultFileManager.name}`
-		: labelFor('revealExplorer');
-	// the workspace palette row reveals with no target too, so the backend
-	// takes the same default. that row builds a sentence around the name
-	// instead of carrying the whole label, so it borrows the bare name
-	const revealTargetName = defaultFileManager?.name ?? 'Explorer';
+	// the label the reveal key and the palette carry. labelFor owns the
+	// wording — the static one says "Explorer" even when the user made trove
+	// the default, which is a lie, and every surface that built this sentence
+	// for itself drifted from the others within a chapter
+	const revealLabel = labelFor('revealExplorer', {
+		manager: defaultFileManager?.name
+	});
 
 	// the reveal rows of a menu: one while there is one manager, and one each
 	// once a second is registered — trove beside explorer. the default goes
@@ -860,7 +858,8 @@ const AppInner = () => {
 					...(defaultFileManager ? [defaultFileManager] : []),
 					...targets.fileManagers.filter(t => t.id !== defaultFileManager?.id)
 				].map(t => ({
-					label: `Reveal in ${t.name}`,
+					// a row that names its own target, worded by the same owner
+					label: labelFor('revealExplorer', { manager: t.name }),
 					// the key opens the default one, so only that row claims it
 					hint: t.id === targets.defaults.file_manager ? keys : undefined,
 					onClick: () => reveal(path, t.id)
@@ -1536,9 +1535,10 @@ const AppInner = () => {
 				id: 'revealWorkspace',
 				// it opens the default manager, so it has to say which one -
 				// it passes no target id and the backend resolves the default
-				title: p
-					? `Reveal workspace ${lastSegment(p.workspace)} in ${revealTargetName}`
-					: `Reveal workspace in ${revealTargetName}`,
+				title: labelFor('revealWorkspace', {
+					manager: defaultFileManager?.name,
+					subject: p ? lastSegment(p.workspace) : undefined
+				}),
 				subtitle: p?.workspace ?? 'Select a project first',
 				hint: hint('revealWorkspace'),
 				keywords: ['workspace', 'folder', 'explorer'],

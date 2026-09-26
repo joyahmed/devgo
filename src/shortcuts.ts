@@ -126,6 +126,7 @@ export const SHORTCUTS: Shortcut[] = [
 		label: 'Reveal in Explorer',
 		macLabel: 'Reveal in Finder',
 		linuxLabel: 'Reveal in file manager',
+		managerLabel: 'Reveal in {manager}',
 		group: 'Project',
 		needsSelection: true
 	},
@@ -198,6 +199,7 @@ export const SHORTCUTS: Shortcut[] = [
 		label: 'Reveal workspace in Explorer',
 		macLabel: 'Reveal workspace in Finder',
 		linuxLabel: 'Reveal workspace in file manager',
+		managerLabel: 'Reveal workspace{subject} in {manager}',
 		group: 'Workspace',
 		needsSelection: true
 	},
@@ -220,11 +222,35 @@ export const SHORTCUTS: Shortcut[] = [
 export const shortcutFor = (id: ShortcutId): string =>
 	SHORTCUTS.find(s => s.id === id)?.keys ?? '';
 
-// the action's name on this desktop. the context menus, the palette and
-// the settings panel all ask here, so reveal in finder is decided once
-export const labelFor = (id: ShortcutId): string => {
+// the manager a reveal with no target id will really open, when the caller
+// has no registered one to name. windows and a mac both ship one and the
+// backend falls back to it by name; linux falls back to xdg-open, which hands
+// the path to whatever that desktop calls its file manager — a thing with no
+// name to print, so linux gets undefined and `linuxLabel` answers instead
+const builtInManager = (): string | undefined =>
+	isMac ? 'Finder' : isLinux ? undefined : 'Explorer';
+
+/// The action's name on this desktop, and the ONE place a reveal label is
+/// built.
+///
+/// The context menus, the palette, the settings table and help all ask here,
+/// so "reveal in finder" is decided once. `manager` is the effective file
+/// manager — the registered default the backend would resolve; leave it out
+/// and the desktop's own is assumed. A shortcut with a `managerLabel` names
+/// that manager; everything else gets the plain per-desktop label. Never
+/// rewrite what comes back: a `replace()` on a label derives data from
+/// presentation, and the regex that did it here matched on windows only.
+export const labelFor = (
+	id: ShortcutId,
+	opts?: { manager?: string; subject?: string }
+): string => {
 	const s = SHORTCUTS.find(x => x.id === id);
 	if (!s) return '';
+	const manager = opts?.manager ?? builtInManager();
+	if (s.managerLabel && manager)
+		return s.managerLabel
+			.replace('{subject}', opts?.subject ? ` ${opts.subject}` : '')
+			.replace('{manager}', manager);
 	return (isMac && s.macLabel) || (isLinux && s.linuxLabel) || s.label;
 };
 
