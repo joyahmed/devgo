@@ -150,4 +150,20 @@ describe('Drawer — the close reason in devgo.log', () => {
 		);
 		expect(logged().some(l => l.includes('UNEXPLAINED'))).toBe(true);
 	});
+
+	// jsdom cannot composite, so it cannot see a lane through a panel — but
+	// the class is the whole difference. bg-secondary follows the
+	// transparency knob and at its default 10 the settings panels were read
+	// with /var/www, twenty repo names, client hostnames and ports legible
+	// behind the prose; bg-popover is the same hex with the knob taken off
+	// it. the bg-black/40 backdrop is not a substitute and was the reason
+	// 71fc000 left the drawer out: it dims what is behind, it does not hide
+	// it
+	it('sits on the ground the transparency knob cannot reach', () => {
+		render(<Harness />);
+
+		const panel = screen.getByRole('dialog');
+		expect(panel.className).toContain('bg-bg-popover');
+		expect(panel.className).not.toContain('bg-bg-secondary');
+	});
 });

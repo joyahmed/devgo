@@ -40,16 +40,20 @@
 	/* the surface a control sits on: a chip filled with bg-panel inside a
 	   button filled with bg-panel was invisible at 1.00:1 */
 	--color-bg-raised: #243c66;
-	/* the surface a menu, a dropdown, a popover or a toast floats on. the
-	   same hex as bg-secondary, so nothing about a menu looks different
-	   with the knob at zero, but it is the one surface the transparency
-	   knob never touches (see :root below): a menu is a small box of text
-	   that opens ON TOP of other text, and at the knob's default 10% the
-	   add-repo menu's labels sat over "joyahmed", "SERVERS" and a
+	/* the surface a menu, a dropdown, a popover, a toast or a drawer floats
+	   on. the same hex as bg-secondary, so nothing about one looks
+	   different with the knob at zero, but it is the one surface the
+	   transparency knob never touches (see :root below): these are boxes of
+	   text that open ON TOP of other text, and at the knob's default 10%
+	   the add-repo menu's labels sat over "joyahmed", "SERVERS" and a
 	   scrollbar, all of it legible straight through them, which is how a
 	   click that did open a menu got reported as "nothing visible". the
-	   panels and lanes keep their see-through: it is a feature on a big
-	   mostly-empty box and a defect on a three-line one */
+	   drawer joined them after the same defect was found in settings: its
+	   bg-black/40 backdrop dims the lanes, it does not hide them, so the
+	   WSL doctor's prose was read with /var/www, twenty repo names,
+	   client hostnames and port numbers behind it. the panels and lanes
+	   keep their see-through: it is a feature on a big mostly-empty box
+	   and a defect on one full of words */
 	--color-bg-popover: #090e19;
 	--color-text-primary: #f4f8ff;
 	--color-text-secondary: #b9c6de;
@@ -228,7 +232,10 @@ body,
 	   measured against this. do not "restore consistency" by wrapping it
 	   in the color-mix: what the alpha buys a menu is unreadable labels
 	   over whatever the menu opened on top of, and a menu is on screen for
-	   two seconds, so there is nothing for the knob to show off through it */
+	   two seconds, so there is nothing for the knob to show off through it.
+	   the drawer is here for the same reason and one more: a backdrop that
+	   dims is not a backdrop that hides, and bg-black/40 left every
+	   settings panel readable-through at the default knob */
 	--color-bg-popover: var(--solid-bg-secondary);
 }
 

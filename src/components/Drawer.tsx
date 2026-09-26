@@ -151,7 +151,16 @@ const Drawer = ({
 				role='dialog'
 				aria-modal='true'
 				aria-label={title}
-				className={`${place} flex flex-col bg-bg-secondary border-border shadow-surface outline-none`}
+				// bg-popover, not bg-secondary, and the backdrop below is why it
+				// had to change: bg-black/40 dims the lanes, it does not hide
+				// them, so at the knob's default 10 the panel's own alpha 0.9
+				// let a 60%-bright lane through its prose. 71fc000 fixed this
+				// for menus and reasoned the drawer was covered by that
+				// backdrop; it is not - the WSL doctor's paragraphs were read
+				// with /var/www, ~20 repo names, hostnames and ports legible
+				// straight through them, in every panel, in nord and neon
+				// alike. same hex, same look at knob zero, same contrast gate
+				className={`${place} flex flex-col bg-bg-popover border-border shadow-surface outline-none`}
 				onClick={e => e.stopPropagation()}
 			>
 				{title && (
