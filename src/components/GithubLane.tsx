@@ -258,7 +258,17 @@ const GithubLane = ({
 		toggleGroup,
 		showRecents
 	} = github;
-	const login = payload?.cache.login ?? status?.login ?? null;
+	// who the lane says you are, and whether that is still true. the cache
+	// keeps the login the last refresh ran under so an offline list still
+	// says whose it is - but a cached name is not a live answer, and until
+	// today the cache won outright: with gh logged out the heading went on
+	// printing "joyahmed" under the words "Logged in as". gh's own answer
+	// wins whenever gh has given one; the cached name shows only when it
+	// is all there is, and then it says so. the list itself stays - it is
+	// still useful with no network and no login; it is the CLAIM that was
+	// wrong, not the data
+	const signedOut = status !== null && status.login === null;
+	const login = status?.login ?? payload?.cache.login ?? null;
 	const total = payload?.cache.repos.length ?? 0;
 	const local = payload?.local ?? {};
 	const cloning = jobsLine(jobs);
@@ -334,9 +344,14 @@ const GithubLane = ({
 				{login && (
 					<span
 						className='text-11 text-text-muted font-mono shrink-0'
-						title='Logged in as'
+						title={
+							signedOut
+								? `gh is signed out. ${login} is who the cached list was fetched as, not who you are now. Run: gh auth login`
+								: 'Logged in as'
+						}
 					>
 						{login}
+						{signedOut && ' · signed out'}
 					</span>
 				)}
 				{/* the lane's own box, when the command row has no column for
