@@ -317,6 +317,13 @@ const TargetManager = ({
 			onError('A target needs a name and an executable');
 			return;
 		}
+		// close is chained INSIDE the guard, not after it: guard is a .catch,
+		// which resolves once it has handled the rejection, so anything after
+		// it runs on the failure path too. A refused add — a path with no
+		// program at it is the usual one — must leave the panel open with
+		// every typed field where the user left it, the reason in a toast,
+		// and focus still on Add, so correcting the path and pressing it
+		// again is the whole repair.
 		guard(
 			onAdd({
 				name: draft.name.trim(),
@@ -331,8 +338,8 @@ const TargetManager = ({
 				run_args_template: draft.run_args_template.trim() || null,
 				wsl_run_args_template: draft.wsl_run_args_template.trim() || null,
 				reveal_args_template: draft.reveal_args_template.trim() || null
-			})
-		).then(close);
+			}).then(close)
+		);
 	};
 
 	return (
