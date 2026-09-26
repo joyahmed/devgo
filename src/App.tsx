@@ -18,7 +18,12 @@ import NameDialog from './components/NameDialog';
 import Onboarding from './components/Onboarding';
 import ProjectTree from './components/ProjectTree';
 import RefreshIcon from './components/RefreshIcon';
-import { laneGrid, MID_QUERY, WIDE_QUERY } from './components/rowStyles';
+import {
+	laneGrid,
+	MID_QUERY,
+	searchBoxRow,
+	WIDE_QUERY
+} from './components/rowStyles';
 import ScanPicker from './components/ScanPicker';
 import SearchBox from './components/SearchBox';
 import ServerForm from './components/ServerForm';
@@ -2576,7 +2581,7 @@ const AppInner = () => {
 										onEnter: handleSearchEnter,
 										onArrow: handleArrow,
 										enterHint: Boolean(selected) || filtered.length > 0,
-										className: 'flex-1 min-w-[12rem]'
+										className: searchBoxRow
 									}}
 								/>
 								<div className='flex items-center gap-3 shrink-0'>
@@ -2639,7 +2644,7 @@ const AppInner = () => {
 											// hasRepos, which counts the cache: a query matching
 											// nothing left the chip up over an empty lane
 											enterHint: github.visible.length > 0,
-											className: 'flex-1 min-w-0'
+											className: searchBoxRow
 										}}
 									/>
 									{/* the lane's controls on the box's line, in the row form:
@@ -2673,7 +2678,7 @@ const AppInner = () => {
 											enterHint: canOpenServerRow,
 											placeholder: 'Search servers & folders…',
 											lane: 'servers' as const,
-											className: 'flex-1 min-w-0'
+											className: searchBoxRow
 										}}
 									/>
 									<Button

@@ -2,7 +2,16 @@ import { compactCount, GH_INSTALL, RECENT_LIMIT, relativeTime } from '../github'
 import Button from './Button';
 import GithubControls from './GithubControls';
 import LaneHeading from './LaneHeading';
-import { card, laneBody, row, rowFlat, rowIndented, zebra } from './rowStyles';
+import {
+	card,
+	laneBody,
+	row,
+	rowFlat,
+	rowIndented,
+	searchBoxHeading,
+	searchBoxHeadingSlot,
+	zebra
+} from './rowStyles';
 import SearchBox from './SearchBox';
 
 const Lock = () => (
@@ -336,7 +345,7 @@ const GithubLane = ({
 				    all of github after the keystrokes settle */}
 				{searchInHeading && total > 0 && (
 					<div
-						className='w-[min(320px,40%)]'
+						className={searchBoxHeadingSlot}
 						onClick={e => e.stopPropagation()}
 					>
 						<SearchBox
@@ -349,7 +358,7 @@ const GithubLane = ({
 								enterHint,
 								placeholder: 'Search GitHub repos…',
 								lane: 'github' as const,
-								className: '-my-1.5 [&_input]:py-1 [&_input]:text-13'
+								className: searchBoxHeading
 							}}
 						/>
 					</div>

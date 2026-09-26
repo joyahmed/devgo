@@ -17,6 +17,45 @@ export const rowIndented = `${rowInner} pl-10 pr-4 border-l`;
 export const nameCell =
 	'font-medium font-mono truncate basis-[34%] min-w-[12rem] shrink-0';
 
+// the search boxes' sizing, written once for all five call sites. one
+// SearchBox drawn five times was five different sizes, because the size
+// was never the component's: the project box carried a 12rem floor, the
+// github and server boxes carried none, and the two boxes in the lane
+// headings were a third and a fourth number again. joy compared the
+// three across windows, macos and ubuntu and said they were not the same
+// boxes; they were not.
+//
+// the floor is what a box without one loses. SearchBox's own container
+// query drops the summon chip (ctrl+k / ctrl+g / ctrl+h) under 20rem,
+// and a little under that the placeholder stops saying what the box
+// searches: "Search GitHub repos…" was already clipping with 156px of
+// input, and the github box measured 215px — 142px of input — in the
+// 450px lane column three lanes get at 1400. 12rem also has to be the
+// floor and
+// not more, because a floor a grid child cannot honour overflows the
+// column instead of shrinking: the tightest column that holds a box in
+// the command row is 450.67px (three lanes at 1400), the github controls
+// take 223.6 of it and leave 215, so 13rem is the ceiling and 12rem is
+// the number the project box already carried. do not take it off to let
+// a lane shrink: a lane shrinking is the thing it is here for
+export const searchBoxRow = 'flex-1 min-w-[12rem]';
+
+// the same box in a lane heading, where it shares its line with the
+// lane's label, its count and its controls instead of with a column. a
+// share of the heading over the same floor, so the two forms of one
+// lane's box are the same box. 22rem and not 20: the chip's query is
+// asked of the box's CONTENT box, which is 10px narrower than the box
+// itself (a 1px border each side and the 2 of padding the chips sit in),
+// so a box has to be 330px wide before its key shows. capped at 20rem
+// the box in the heading would be the one that never shows its key while
+// the same box in the command row shows it — which is what it was: 320px
+// over github, 280 over servers, neither ever showing one
+export const searchBoxHeadingSlot = 'w-[min(22rem,45%)] min-w-[12rem]';
+
+// a heading is a line of text, so the box in one is set a step smaller
+// and pulled back to the line's height
+export const searchBoxHeading = '-my-1.5 [&_input]:py-1 [&_input]:text-13';
+
 // zebra on the rows under a heading, at /30 so it reads as a texture and
 // not as stripes
 export const zebra = (i: number) => (i % 2 ? 'bg-bg-secondary/30' : '');

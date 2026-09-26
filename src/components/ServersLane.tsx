@@ -1,6 +1,14 @@
 import Button from './Button';
 import LaneHeading from './LaneHeading';
-import { card, laneBody, row, rowFlat, zebra } from './rowStyles';
+import {
+	card,
+	laneBody,
+	row,
+	rowFlat,
+	searchBoxHeading,
+	searchBoxHeadingSlot,
+	zebra
+} from './rowStyles';
 import SearchBox from './SearchBox';
 import { isEtc } from '../etcCuration';
 import { appStatus } from '../serverApps';
@@ -499,7 +507,7 @@ const ServersLane = ({
 				    column for them: a server, or a folder on one */}
 				{searchInHeading && all.length > 0 && (
 					<div
-						className='w-[min(280px,45%)]'
+						className={searchBoxHeadingSlot}
 						onClick={e => e.stopPropagation()}
 					>
 						<SearchBox
@@ -512,7 +520,7 @@ const ServersLane = ({
 								enterHint,
 								placeholder: 'Search servers & folders…',
 								lane: 'servers' as const,
-								className: '-my-1.5 [&_input]:py-1 [&_input]:text-13'
+								className: searchBoxHeading
 							}}
 						/>
 					</div>
