@@ -1,3 +1,5 @@
+use std::sync::Once;
+
 use tauri::{AppHandle, Emitter, Manager};
 
 use crate::services::editors::wayland_session;
@@ -128,8 +130,50 @@ fn bound_line(accelerator: &str, wayland: bool, no_x: bool) -> String {
             "[DevGo] summon hotkey '{accelerator}' registered through x11, but this is a wayland session: global-hotkey has no wayland backend, so the compositor may never deliver the key however this line reads - raise the window from the tray if it does not"
         )
     } else {
-        format!("[DevGo] summon hotkey '{accelerator}' registered")
+        format!(
+            "[DevGo] summon hotkey '{accelerator}' registered - the bind claims success; whether a press ever reaches devgo is a separate observation, logged on the first one"
+        )
     }
+}
+
+/// Fired at most once per process, by the press handler, the first time the
+/// hotkey is really delivered.
+static FIRST_PRESS: Once = Once::new();
+
+/// The line the log gets the first time the hotkey is actually pressed - the
+/// observation that `bound_line` above can only claim.
+///
+/// The two have to be separate lines because a global hotkey can register
+/// successfully and then never be handed a key, and from inside this process
+/// the two outcomes are *indistinguishable*: there is nothing to poll, no
+/// error to catch, only a handler that is never called. Named causes, both of
+/// which we have hit:
+///
+/// - a remote-desktop client. joy drives the ubuntu desktop from windows
+///   through mstsc, and an rdp client claims most modifier combinations on the
+///   *client* side - it never puts them on the wire, so the X server devgo is
+///   bound to never sees the press. the grab is real and permanently idle.
+/// - xwayland. a grab taken against the xwayland root window is granted and
+///   the register returns Ok, but the wayland compositor owns the real input
+///   and routes the key to whoever it likes, which need not be xwayland at
+///   all. same shape: a live grab nothing arrives at.
+///
+/// So the log now distinguishes three states rather than two: no line at all
+/// (nothing was ever bound), the bind line alone (bound, and the key has not
+/// once arrived - look outside devgo, at the rdp client or the compositor, or
+/// pick a combination they do not want), and both lines (bound, and the key
+/// does reach us; anything still wrong is in `raise_main`, which logs for
+/// itself).
+///
+/// Once per process and not per press: the answer to "does the key ever
+/// arrive" is the same every time after the first, and a line per press would
+/// bury the rest of the file under a chord someone taps all day. `FIRST_PRESS`
+/// stays open until a press really happens, so a rebind after a silent bind
+/// still gets to log the moment the new chord lands.
+fn fired_line(accelerator: &str) -> String {
+    format!(
+        "[DevGo] summon hotkey '{accelerator}' fired - first press this session, so the key really does reach devgo and not only the bind said so"
+    )
 }
 
 /// Is the x11 backend flying blind - linux, and no DISPLAY for it to open?
@@ -155,15 +199,25 @@ fn x11_blind() -> bool {
 /// callable from here and it is cheap, but it only looks the shortcut up in
 /// the plugin's own HashMap, which `on_shortcut` has just inserted into on
 /// the line above - it can answer nothing but true, and a log line that
-/// cannot be false is worse than no line.
+/// cannot be false is worse than no line. The one thing that *can* be false
+/// is whether a key ever arrives, and only the press handler can see that:
+/// see `fired_line`.
 pub fn register(app: &AppHandle, accelerator: &str) -> Result<(), String> {
     let shortcut = parse(accelerator)?;
     let handle = app.clone();
+    // the closure gets the accelerator as text: `_shortcut` names the same
+    // chord, but not in the spelling the user typed and the bind line printed,
+    // and the two lines have to be greppable by the same string
+    let name = accelerator.to_string();
     app.global_shortcut()
         .on_shortcut(shortcut, move |_app, _shortcut, event| {
             // Fire on press only; without this the handler also runs on release
             // and the window toggles straight back.
             if event.state == ShortcutState::Pressed {
+                // before the toggle, not after: `toggle` returns silently when
+                // there is no main window, and the arrival of the key is worth
+                // recording even in the run where nothing came up
+                FIRST_PRESS.call_once(|| log_line!("{}", fired_line(&name)));
                 toggle(&handle);
             }
         })
@@ -199,7 +253,7 @@ pub fn rebind(
 
 #[cfg(test)]
 mod tests {
-    use super::{bound_line, raise_failure};
+    use super::{bound_line, fired_line, raise_failure};
 
     #[test]
     fn success_says_the_key_it_bound() {
@@ -207,6 +261,38 @@ mod tests {
         assert!(line.contains("Ctrl+Alt+Space"), "{line}");
         assert!(line.contains("registered"), "{line}");
         assert!(!line.contains("wayland"), "{line}");
+    }
+
+    /// Even the happy branch must not read as proof. An rdp client or a
+    /// compositor can swallow the chord with the bind reporting Ok, so this
+    /// line is a claim and has to say so.
+    #[test]
+    fn success_reads_as_a_claim_not_a_confirmation() {
+        let line = bound_line("Ctrl+Alt+Space", false, false);
+        assert!(line.contains("claims"), "{line}");
+    }
+
+    #[test]
+    fn a_press_says_the_key_arrived_and_which_key() {
+        let line = fired_line("Ctrl+Alt+Space");
+        assert!(line.contains("Ctrl+Alt+Space"), "{line}");
+        assert!(line.contains("fired"), "{line}");
+        assert!(line.contains("first press"), "{line}");
+    }
+
+    /// The whole point of the pair is that a reader can tell them apart, so
+    /// neither may borrow the other's verb: "registered" is the bind and
+    /// "fired" is the press, in every session and on every platform.
+    #[test]
+    fn the_bind_line_and_the_press_line_are_different_claims() {
+        let fired = fired_line("Ctrl+Alt+Space");
+        assert!(!fired.contains("registered"), "{fired}");
+        for wayland in [false, true] {
+            for no_x in [false, true] {
+                let bound = bound_line("Ctrl+Alt+Space", wayland, no_x);
+                assert!(!bound.contains("fired"), "{bound}");
+            }
+        }
     }
 
     #[test]
