@@ -78,7 +78,18 @@ describe('WslDoctor — which probe runs when', () => {
 		wire({});
 		render(<WslDoctor onError={() => {}} />);
 
-		await screen.findByText('Run the probe');
+		// ⛔ WAIT FOR THE READ, NOT FOR THE BUTTON. the button is painted by the
+		// commit that lands `get_runtime_info`; the effect that reads .wslconfig
+		// is a passive effect of that same commit and does not always run inside
+		// the same flush, so `findByText('Run the probe')` can resolve one task
+		// before `wsl_config_report` has been called at all. a 400-mount stress
+		// replica of this test failed ~2 times in 400 with `wsl_config_report`
+		// at 0 — which is this file's whole intermittent-failure story, and it
+		// is the TEST sampling early, not the panel calling late.
+		// `What the file says` only renders once `config` is non-null, so it is
+		// the report itself arriving, and the counts under it are settled.
+		await screen.findByText('What the file says');
+		expect(screen.getByText('Run the probe')).not.toBeNull();
 		expect(called('wsl_config_report')).toBe(1);
 		expect(called('wsl_fragmentation')).toBe(0);
 	});
