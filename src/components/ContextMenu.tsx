@@ -71,13 +71,36 @@ const ContextMenu = ({ x, y, items, onClose }: ContextMenuProps) => {
 						}`}
 						disabled={item.disabled}
 						onClick={() => {
+							// a dead entry swallows the click and leaves the menu
+							// standing, so the hint saying why stays on screen to be
+							// read. chrome already drops every mouse event on a
+							// disabled <button>, but the guard is written here because
+							// the day this stops being one — aria-disabled for the
+							// screen readers a disabled button hides the hint from, a
+							// div, a tooltip wrapper — the click lands again, and a
+							// menu that dismisses is the exact feedback a successful
+							// pick gives: the trap that had a tester reporting "one
+							// click straight through it and the drawer never opened"
+							if (item.disabled) return;
 							item.onClick();
 							onClose();
 						}}
 					>
+						{/* enabled is the full ink, disabled is the muted one — the
+						    pair the launch and target buttons already use, where
+						    muted means blocked and nothing else. it goes on this
+						    span and not on the button because ghost's own ink is
+						    muted, and two `text-` utilities on one element are
+						    settled by tailwind's output order, not by the class
+						    string. dead beats dangerous: red on a row that cannot
+						    run promises an action there is none of */}
 						<span
 							className={`flex w-full items-center justify-between gap-6 ${
-								item.danger ? 'text-danger' : ''
+								item.disabled
+									? 'text-text-muted'
+									: item.danger
+										? 'text-danger'
+										: 'text-text-primary'
 							}`}
 						>
 							<span className='truncate'>{item.label}</span>
