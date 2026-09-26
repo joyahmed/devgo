@@ -336,8 +336,7 @@ const ServersLane = ({
 	onRootContextMenu,
 	onSetup,
 	onArrow,
-	onEnter,
-	enterHint
+	onEnter
 }: ServersLaneProps) => {
 	const {
 		servers: all,
@@ -517,7 +516,6 @@ const ServersLane = ({
 								onChange: setQuery,
 								onArrow,
 								onEnter,
-								enterHint,
 								placeholder: 'Search servers & folders…',
 								lane: 'servers' as const,
 								className: searchBoxHeading

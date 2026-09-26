@@ -922,11 +922,6 @@ const AppInner = () => {
 	// the row object with it
 	const [serverCursorId, setServerCursorId] = useState<string | null>(null);
 	const serverSel = servers.servers.find(s => s.id === serverCursorId) ?? null;
-	// whether the servers box's enter would open anything. not derived from
-	// the id above: that one answers "which server does the footer follow",
-	// and it outlives the row when a query stops matching it. the tree can
-	// see its own rows, so the tree says
-	const [canOpenServerRow, setCanOpenServerRow] = useState(false);
 	// the local hosts a server row offers: every terminal target, then a
 	// psmux session and the default distro's own ssh, both through the
 	// default terminal. psmux and wsl are windows's, so they are offered
@@ -2580,7 +2575,6 @@ const AppInner = () => {
 										onChange: setQuery,
 										onEnter: handleSearchEnter,
 										onArrow: handleArrow,
-										enterHint: Boolean(selected) || filtered.length > 0,
 										className: searchBoxRow
 									}}
 								/>
@@ -2643,11 +2637,6 @@ const AppInner = () => {
 											onArrow: handleGithubArrow,
 											placeholder: 'Search GitHub repos…',
 											lane: 'github' as const,
-											// one visible row is the whole condition — the cursor's
-											// repo if there is one, the first match otherwise. it was
-											// hasRepos, which counts the cache: a query matching
-											// nothing left the chip up over an empty lane
-											enterHint: github.visible.length > 0,
 											className: searchBoxRow
 										}}
 									/>
@@ -2675,11 +2664,6 @@ const AppInner = () => {
 											onChange: servers.setQuery,
 											onEnter: handleServersEnter,
 											onArrow: handleServersArrow,
-											// the tree's answer, not a guess made here: this box's
-											// enter opens the row under the cursor and has no
-											// first-match fallback, so the chip is a lie the moment
-											// that row is not on screen
-											enterHint: canOpenServerRow,
 											placeholder: 'Search servers & folders…',
 											lane: 'servers' as const,
 											className: searchBoxRow
@@ -2748,7 +2732,6 @@ const AppInner = () => {
 								servers,
 								onServerOpen: openServer,
 								onServerCursor: (s: Server | null) => setServerCursorId(s?.id ?? null),
-								onServerRowOpenable: setCanOpenServerRow,
 								onServerContextMenu: (s: Server, x: number, y: number) =>
 									setServerMenu({ server: s, x, y }),
 								onServerSetup: setup.open,

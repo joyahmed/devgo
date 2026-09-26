@@ -426,7 +426,6 @@ const ProjectTree = ({
 	servers,
 	onServerOpen,
 	onServerCursor,
-	onServerRowOpenable,
 	onServerContextMenu,
 	onServersAddMenu,
 	onServersHeadingContextMenu,
@@ -701,37 +700,24 @@ const ProjectTree = ({
 		onRepoOpen?.(repo);
 		return true;
 	};
-	// the row enter would act on from the servers box, looked up in the rows
-	// that are actually on screen rather than trusted from the cursor id: a
-	// query can filter the cursor's row away and a closed lane has no rows
-	// at all, and the cursor survives both. hoisted out of openServerRow
-	// because the ENTER chip has to answer the same question the key does —
-	// this box has no first-match fallback, so nothing else makes the chip
-	// honest
-	const serverRowUnderCursor = rows.find(
-		r =>
-			(r.kind === 'server' && r.server.id === serverCursor) ||
-			(r.kind === 'folder' && folderKey(r.server, r.folder) === folderCursor)
-	);
-	const canOpenServerRow = Boolean(serverRowUnderCursor);
-	// enter on a server row: a terminal on it; on a folder, a terminal there
+	// enter on a server row: a terminal on it; on a folder, a terminal
+	// there. the row is looked up in the rows that are actually on screen
+	// rather than trusted from the cursor id: a query can filter the
+	// cursor's row away and a closed lane has no rows at all, and the
+	// cursor survives both
 	const openServerRow = () => {
-		const r = serverRowUnderCursor;
-		if (!r) return false;
-		if (r.kind === 'server') onServerOpen?.(r.server);
-		else if (r.kind === 'folder') onFolderOpen?.(r.server, r.folder);
+		const row = rows.find(
+			r =>
+				(r.kind === 'server' && r.server.id === serverCursor) ||
+				(r.kind === 'folder' && folderKey(r.server, r.folder) === folderCursor)
+		);
+		if (!row) return false;
+		if (row.kind === 'server') onServerOpen?.(row.server);
+		else if (row.kind === 'folder') onFolderOpen?.(row.server, row.folder);
 		return true;
 	};
 
 	useImperativeHandle(ref, () => ({ navigate, openRepo, openServerRow }));
-
-	// on a wide window the servers box sits in the command row, outside this
-	// tree, and its chip needs the answer above. told the same way the
-	// cursor itself is told, except from an effect: the row can also leave
-	// without the cursor moving, when the query stops matching it
-	useEffect(() => {
-		onServerRowOpenable?.(canOpenServerRow);
-	}, [canOpenServerRow]);
 
 	// Takes the state wanted rather than toggling: → always expands and ←
 	// always collapses, and only Ctrl+Space computes the flip, at its call site.
@@ -879,11 +865,7 @@ const ProjectTree = ({
 				searchInHeading: githubSearchInHeading,
 				searchRef: githubSearchRef,
 				onArrow: (dir: 1 | -1) => navigate(dir, 'github'),
-				onEnter: () => openRepo() || onRepoOpen?.(github.visible[0]),
-				// the cursor's repo or, failing that, the first match — so one
-				// visible row is the whole condition, and an empty result means
-				// the chip goes even though the cache still holds repos
-				enterHint: github.visible.length > 0
+				onEnter: () => openRepo() || onRepoOpen?.(github.visible[0])
 			}}
 		/>
 	) : null;
@@ -911,8 +893,7 @@ const ProjectTree = ({
 					onRootContextMenu?.(s, root, x, y),
 				onSetup: (s: Server) => onServerSetup?.(s),
 				onArrow: (dir: 1 | -1) => navigate(dir, 'servers'),
-				onEnter: () => openServerRow(),
-				enterHint: canOpenServerRow
+				onEnter: () => openServerRow()
 			}}
 		/>
 	) : null;

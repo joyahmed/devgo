@@ -54,7 +54,6 @@ const SearchBox = ({
 	onChange,
 	onEnter,
 	onArrow,
-	enterHint,
 	placeholder = 'Search local projects…',
 	lane = 'projects',
 	className = '',
@@ -118,8 +117,15 @@ const SearchBox = ({
 					&#10005;
 				</Button>
 			)}
-			{/* the same chip every other shortcut hint wears */}
-			{enterHint && <Kbd>Enter</Kbd>}
+			{/* the same chip every other shortcut hint wears. any input at all
+			    is the whole condition (joy: "ENTER should appear on any search
+			    bar when it has any input"), and it is derived from value here
+			    for the same reason the summon key above is derived from lane: it
+			    was a prop, and three of the five call sites forgot to pass it
+			    until a fix on 2026-09-26, so the chip was simply missing on
+			    three boxes. the component already owns value, so it owns the
+			    answer — do not turn this back into a prop */}
+			{value && <Kbd>Enter</Kbd>}
 			{/* the key that summons this box, so the binding is discoverable
 			    without opening settings. it goes once there is text: the hint
 			    is for the box you are not in, and the clear x arrives on the

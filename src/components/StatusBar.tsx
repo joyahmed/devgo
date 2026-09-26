@@ -356,7 +356,6 @@ const StatusBar = ({
 	};
 	const footerRef = useRef<HTMLElement>(null);
 	const stripRef = useRef<HTMLDivElement>(null);
-	const spacerRef = useRef<HTMLDivElement>(null);
 	const clusterRef = useRef<HTMLDivElement>(null);
 	// the width the strip ACTUALLY needed at each level, measured at the
 	// instant that level was given up. taking a level back asks for its own
@@ -379,9 +378,8 @@ const StatusBar = ({
 	const settle = () => {
 		const footer = footerRef.current;
 		const strip = stripRef.current;
-		const spacer = spacerRef.current;
 		const cluster = clusterRef.current;
-		if (!footer || !strip || !spacer || !cluster) return;
+		if (!footer || !strip || !cluster) return;
 		const fs = getComputedStyle(footer);
 		const stamp = JSON.stringify([
 			fs.fontSize,
@@ -417,22 +415,17 @@ const StatusBar = ({
 		const clusterWants =
 			shown.reduce((w, c) => w + wide(c), 0) +
 			(parseFloat(cs.columnGap) || 0) * Math.max(shown.length - 1, 0);
-		// every child of the strip counts, the spacer included: a flex gap
-		// sits on both sides of it, so it is worth 48px of the strip's natural
-		// width at no width of its own.
-		// ⚠️ and at NO width of its own is the point — the spacer is asked for
-		// its basis, never for the box it ended up with. it grows, so its box
-		// is a function of the room, and a room-shaped number in a natural
-		// width is the circular measurement all over again: on a wrapped line
-		// it grew to fill that line, the natural width came out ~300px too
-		// wide, and the strip shed two more steps than it had to and would not
-		// take them back until 2560
+		// ⚠️ every child of the strip counts and every one of them is asked
+		// for its own natural box — which is only true because none of them
+		// grows. a grower's box is a function of the room it was given, and a
+		// room-shaped number inside a natural width is the circular
+		// measurement all over again: the spacer this replaced grew to fill a
+		// wrapped line, came out ~300px too wide, and the strip shed two steps
+		// more than it had to and would not take them back until 2560
 		const kids = [...strip.children];
 		const wants =
-			kids.reduce(
-				(w, c) => w + (c === cluster ? clusterWants : c === spacer ? 0 : wide(c)),
-				0
-			) + gap * Math.max(kids.length - 1, 0);
+			kids.reduce((w, c) => w + (c === cluster ? clusterWants : wide(c)), 0) +
+			gap * Math.max(kids.length - 1, 0);
 		const room =
 			footer.clientWidth - parseFloat(fs.paddingLeft) - parseFloat(fs.paddingRight);
 		// 1px of dead band, for subpixel text at a fractional device ratio
@@ -507,26 +500,24 @@ const StatusBar = ({
 			    w-fit is what closes the dead gap: the strip is as wide as its
 			    contents and mx-auto centres it, so at 2560 it is the same strip
 			    as at 1686, standing in the middle, rather than the same items
-			    pulled apart. min-w is a FLOOR and nothing more: it stops a
-			    short strip — a server row's two buttons, or one shed to the
-			    bone — from collapsing into a single centred clump with the
-			    hints hanging off the launch buttons. 64rem because it is under
-			    every realistic project strip measured (the narrowest, a mac
-			    five-target row with the chips and Pin/Search shed, is 1309px),
-			    so on a project row this floor never opens a gap: the strip
-			    hugs. a floor set to the widest strip instead would have put
-			    180px of dead air back in the middle of a narrow windows row,
-			    which is the defect this whole change is about. min(…,100%) and
-			    not the bare literal: a min-width beats a max-width in css, so
-			    the plain form would push the strip off the end of a narrow
-			    window instead of letting it shrink.
+			    pulled apart. justify-center is the other half of that, and it
+			    is the half that only shows when the strip has run out of shed
+			    and wrapped: a wrapped line is laid out in a box the full width
+			    of the window, so without it the second row sits flush left
+			    under a centred first row — "not centered in smaller screen",
+			    measured at 723px. ⛔ it also supersedes the flush-LEFT wrapped
+			    line 15d157a aimed at: flush left was the answer to ml-auto
+			    stranding a wrapped line flush right, and centring answers that
+			    better. there is deliberately NO grower in here and no minimum
+			    width: either one takes the slack on the first line, and a line
+			    whose slack is spoken for cannot be centred.
 			    ⚠️ the room the shed measures against is the FOOTER's content
 			    box, never this element's: w-fit means this box is a function of
 			    what is in it, and measuring the thing you are resizing is the
 			    circular question that makes a footer oscillate */}
 			<div
 				ref={stripRef}
-				className='w-fit min-w-[min(64rem,100%)] mx-auto flex flex-wrap items-center gap-x-6 gap-y-1.5'
+				className='w-fit mx-auto flex flex-wrap items-center justify-center gap-x-6 gap-y-1.5'
 			>
 				{groups.map(g => (
 					<TargetGroup
@@ -572,16 +563,6 @@ const StatusBar = ({
 						{!gone('chips') && <Kbd>{both}</Kbd>}
 					</Button>
 				)}
-				{/* the air between the two ends, and nothing else: it asks for no
-				    width of its own and takes whatever the strip's floor leaves
-				    over, so the launch groups sit at one end and the hints at the
-				    other. a child of its own rather than a grow on the cluster —
-				    see below for what that cost on a wrapped line. it is worth
-				    24px of the strip's natural width twice over, since a flex gap
-				    sits on both sides of it, and that is on purpose: the two ends
-				    of the strip are further apart than any two things inside
-				    either end */}
-				<div ref={spacerRef} className='grow basis-0' aria-hidden='true' />
 				{/* the key chips, then the doors; without them the discovery
 				    surfaces are themselves undiscoverable. the rule rides with the
 				    group it follows, so hiding a group hides its rule, and its own
@@ -595,20 +576,20 @@ const StatusBar = ({
 				    they never hide, so nothing may squeeze them off the end — the
 				    launch groups give up a step, or failing that a line, first. it
 				    replaces a 13rem min-width that guessed at the same room in a
-				    literal, and a grow/basis-0 that held the two ends apart from
-				    this side. the spacer above does that job now, because a
-				    growing cluster that landed on a second line took the whole
-				    line and its justify-end left the two doors hanging off the far
-				    right with nothing to their left — measured at 760px, the same
-				    defect ml-auto shipped once already. hugging its own content,
-				    it wraps flush left under the groups instead. flex-wrap stays
-				    as the floor under everything: at the very narrowest the doors
-				    drop to a second line rather than overflow the strip. it
-				    was a named container while the container queries lived here;
-				    nothing queries it now, so the name went with them. ⚠️ spelling
-				    a dead utility in a comment does not kill it: tailwind reads
-				    these files as plain text, so the class was still in the built
-				    stylesheet until this sentence stopped quoting it */}
+				    literal, and a grow/basis-0 with justify-end that held the two
+				    ends apart from this side — which on a second line took the
+				    whole line and left the two doors hanging off the far right
+				    with nothing to their left, the same defect ml-auto shipped
+				    once already. hugging its own content, it goes where the
+				    strip's justify-center puts it, centred like every other row.
+				    flex-wrap stays as the floor under everything: at the very
+				    narrowest the doors drop to a second line rather than overflow
+				    the strip. it was a named container while the container queries
+				    lived here; nothing queries it now, so the name went with them.
+				    ⚠️ spelling a dead utility in a comment does not kill it:
+				    tailwind reads these files as plain text, so the class was
+				    still in the built stylesheet until this sentence stopped
+				    quoting it */}
 				<div
 					ref={clusterRef}
 					className='shrink-0 flex flex-wrap items-center gap-2'
