@@ -704,13 +704,28 @@ const ProjectTree = ({
 	// there. the row is looked up in the rows that are actually on screen
 	// rather than trusted from the cursor id: a query can filter the
 	// cursor's row away and a closed lane has no rows at all, and the
-	// cursor survives both
+	// cursor survives both.
+	//
+	// then the first match, when that lookup finds nothing. the ENTER chip
+	// on the servers box is up for ANY text at all — that is the box's own
+	// rule, derived from its value and deliberately not a prop — so Enter
+	// must always have an answer or the chip is a promise the lane breaks.
+	// three ordinary states used to hit that: nothing in the lane was ever
+	// clicked, so there is no cursor at all; the query filtered the
+	// cursor's row away; the lane is collapsed, so `rows` holds no server
+	// rows while the heading box still renders. all three fall through to
+	// the first visible match — the same fallback the github box beside it
+	// has had since `onEnter: () => openRepo() || onRepoOpen?.(...visible[0])`
 	const openServerRow = () => {
-		const row = rows.find(
-			r =>
-				(r.kind === 'server' && r.server.id === serverCursor) ||
-				(r.kind === 'folder' && folderKey(r.server, r.folder) === folderCursor)
-		);
+		const row =
+			rows.find(
+				r =>
+					(r.kind === 'server' && r.server.id === serverCursor) ||
+					(r.kind === 'folder' && folderKey(r.server, r.folder) === folderCursor)
+			) ??
+			(servers?.visible[0]
+				? { kind: 'server' as const, server: servers.visible[0].server }
+				: undefined);
 		if (!row) return false;
 		if (row.kind === 'server') onServerOpen?.(row.server);
 		else if (row.kind === 'folder') onFolderOpen?.(row.server, row.folder);
