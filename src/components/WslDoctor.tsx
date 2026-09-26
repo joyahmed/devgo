@@ -7,6 +7,11 @@ import Button from './Button';
 // them out of a third module for two strings is worse than four lines here
 const heading = 'text-15 font-semibold text-text-primary mb-2';
 const hint = 'text-13 text-text-muted max-w-[76ch]';
+// the group heading inside a section. EVERY group wears one, findings
+// included: an unlabelled `Nothing to report.` under a data grid is a
+// sentence with no subject, and the reader has to guess which of the two
+// things above it reported nothing
+const group = 'text-13 font-semibold text-text-primary mb-1';
 
 // the probe failing is not the same as there being no WSL, but the panel
 // cannot sit on "Checking…" for the rest of the session. onError says what
@@ -39,9 +44,24 @@ const bytes = (n: number | null) => {
 // rose-vs-white ink is a row that says nothing to anyone reading in
 // greyscale, and the whole point of this panel is the one finding that is
 // an error sitting in a list of nine that are not
+//
+// ⛔ WARNING'S THIRD CARRIER IS WEIGHT, NOT HUE. it used to be
+// `border-border-strong`, which is `#5f7fb5` in neon — a blue thirty
+// degrees off the cyan accent, so the one chip that means "look at this"
+// wore the one colour this app uses for "click this". there is no amber
+// token in any of the five palettes and inventing a hex would be a sixth
+// token no theme owns, so warning is the only FILLED chip instead:
+// `bg-raised` is a step the contrast gate already guarantees over every
+// surface (1.6:1 over bg-panel), text-primary on it is a checked pair, it
+// survives greyscale, and it ranks warning above info without borrowing
+// error's red
 const SEVERITY: Record<WslSeverity, { glyph: string; word: string; cls: string }> = {
 	error: { glyph: '✕', word: 'Error', cls: 'text-danger border-danger' },
-	warning: { glyph: '▲', word: 'Warning', cls: 'text-text-primary border-border-strong' },
+	warning: {
+		glyph: '▲',
+		word: 'Warning',
+		cls: 'text-text-primary bg-bg-raised border-border'
+	},
 	info: { glyph: '●', word: 'Info', cls: 'text-text-muted border-border' }
 };
 
@@ -51,7 +71,12 @@ const SEVERITY: Record<WslSeverity, { glyph: string; word: string; cls: string }
 const WslFindingRow = ({ finding }: WslFindingProps) => {
 	const { glyph, word, cls } = SEVERITY[finding.severity];
 	return (
-		<li className='flex gap-3 px-3 py-2 bg-bg-panel rounded-control'>
+		// ⛔ OUTLINED, not filled. a zone row two groups up is
+		// `bg-bg-panel rounded-control` and so was this, so four boxes in one
+		// column read as one undifferentiated list and a finding looked like
+		// a fifth zone. a finding is a sentence ABOUT the readings, not
+		// another reading: hairline card, no fill
+		<li className='flex gap-3 px-3 py-2 border border-border rounded-control'>
 			<span
 				className={`shrink-0 self-start text-11 font-semibold rounded-control border px-1.5 py-0.5 ${cls}`}
 			>
@@ -219,7 +244,13 @@ const WslDoctor = ({ onError }: WslDoctorProps) => {
 	return (
 		<div className='flex flex-col gap-5'>
 			<section>
-				<h4 className={heading}>.wslconfig</h4>
+				{/* every other h4 in Settings is a capitalised English phrase —
+				    Scan depth, Ignore folders, Memory fragmentation — and a bare
+				    `.wslconfig` was the one heading that read as a path. the
+				    filename stays spelled and stays monospace; it is a real file */}
+				<h4 className={heading}>
+					The <code className='font-mono'>.wslconfig</code> file
+				</h4>
 				<p className={`${hint} mb-2`}>
 					The file, never the running VM. A key under the wrong heading leaves
 					no trace in WSL's behaviour — it simply never applies, which is why
@@ -229,7 +260,7 @@ const WslDoctor = ({ onError }: WslDoctorProps) => {
 				{config === null ? (
 					<p className={`${hint} italic`}>Reading…</p>
 				) : (
-					<div className='flex flex-col gap-3'>
+					<div className='flex flex-col gap-4'>
 						<dl className='grid grid-cols-[auto_1fr] items-baseline gap-x-4 gap-y-1 text-13'>
 							{configRows(config).map(r => (
 								<div key={r.label} className='contents'>
@@ -244,7 +275,10 @@ const WslDoctor = ({ onError }: WslDoctorProps) => {
 								</div>
 							))}
 						</dl>
-						<WslFindings {...{ findings: config.findings }} />
+						<div>
+							<h5 className={group}>What the file says</h5>
+							<WslFindings {...{ findings: config.findings }} />
+						</div>
 					</div>
 				)}
 			</section>
@@ -294,7 +328,7 @@ const WslDoctor = ({ onError }: WslDoctorProps) => {
 						</p>
 
 						<div>
-							<h5 className='text-13 font-semibold text-text-primary mb-1'>
+							<h5 className={group}>
 								Memory
 							</h5>
 							<dl className='grid grid-cols-[auto_1fr] items-baseline gap-x-4 gap-y-1 text-13'>
@@ -310,7 +344,7 @@ const WslDoctor = ({ onError }: WslDoctorProps) => {
 						</div>
 
 						<div>
-							<h5 className='text-13 font-semibold text-text-primary mb-1'>
+							<h5 className={group}>
 								Free lists
 							</h5>
 							{frag.readings.zones.length === 0 ? (
@@ -328,7 +362,7 @@ const WslDoctor = ({ onError }: WslDoctorProps) => {
 
 						{frag.readings.failures.length > 0 && (
 							<div>
-								<h5 className='text-13 font-semibold text-text-primary mb-1'>
+								<h5 className={group}>
 									Allocation failures already in the kernel ring
 								</h5>
 								<p className={`${hint} mb-1`}>
@@ -352,7 +386,10 @@ const WslDoctor = ({ onError }: WslDoctorProps) => {
 							</div>
 						)}
 
-						<WslFindings {...{ findings: frag.findings }} />
+						<div>
+							<h5 className={group}>What the readings say</h5>
+							<WslFindings {...{ findings: frag.findings }} />
+						</div>
 					</div>
 				)}
 			</section>

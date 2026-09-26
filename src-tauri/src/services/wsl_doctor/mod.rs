@@ -72,6 +72,15 @@ impl Finding {
 /// apart, and the reader has to work out that the two numbers are the same
 /// number. a buddyinfo order is 2^n pages: decimal spelling was never
 /// right here, it was only invisible.
+///
+/// ⛔ THE RULE IS ONE DECIMAL ABOVE `B`, WITH NO CEILING. This used to drop
+/// the decimal past 99.9 — `128 GiB` — while `bytes()` in WslDoctor.tsx
+/// kept it unconditionally — `128.0 GiB`. The two agree exactly below 100,
+/// which is why a 63.9 GiB host never showed it; a 128 GiB box or a
+/// ≥100 MiB zone reading puts both spellings of one number in one card,
+/// the same defect the binary-units fix was about. Same reasoning as
+/// `64.0 KiB` keeping its `.0`: the trailing zero is not noise, it is the
+/// promise that every reading in this panel is written the same way.
 pub(crate) fn human(bytes: u64) -> String {
     const UNITS: [&str; 5] = ["B", "KiB", "MiB", "GiB", "TiB"];
     let mut value = bytes as f64;
@@ -80,11 +89,10 @@ pub(crate) fn human(bytes: u64) -> String {
         value /= 1024.0;
         unit += 1;
     }
-    if unit == 0 || value >= 100.0 {
+    if unit == 0 {
+        // whole bytes are whole: "512.0 B" counts nothing that exists
         format!("{} {}", value.round() as u64, UNITS[unit])
     } else {
-        // one decimal up to 99.9: "1.5 GiB" is a number, "2 GiB" of 1.5 is
-        // a lie
         format!("{value:.1} {}", UNITS[unit])
     }
 }
@@ -100,8 +108,22 @@ mod tests {
         assert_eq!(human(1024), "1.0 KiB");
         assert_eq!(human(64 * 1024), "64.0 KiB");
         assert_eq!(human(24 * 1024 * 1024 * 1024), "24.0 GiB");
-        // past 99.9 the decimal stops earning its place
-        assert_eq!(human(128 * 1024 * 1024 * 1024), "128 GiB");
+    }
+
+    /// ⭐ The panel's own `bytes()` (WslDoctor.tsx) keeps one decimal at
+    /// every unit above `B`, unconditionally. This side used to drop it
+    /// past 99.9, so a finding said `128 GiB` ten pixels under a grid that
+    /// said `128.0 GiB` — one number, two spellings. Invisible on a
+    /// 63.9 GiB host, which is why it shipped. The pin is here so it
+    /// cannot come back the next time someone decides four significant
+    /// figures look untidy.
+    #[test]
+    fn the_decimal_survives_past_99_9_because_the_panel_keeps_it_too() {
+        assert_eq!(human(100 * 1024 * 1024), "100.0 MiB");
+        assert_eq!(human(128 * 1024 * 1024 * 1024), "128.0 GiB");
+        assert_eq!(human(1023 * 1024 * 1024 * 1024), "1023.0 GiB");
+        // and `B` is still the one unit with no decimal: a byte is whole
+        assert_eq!(human(512), "512 B");
     }
 
     /// ⭐ The panel prints its own numbers with a binary formatter, so a
