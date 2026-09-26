@@ -770,7 +770,7 @@ interface GithubLaneProps {
 	enterHint?: boolean;
 }
 
-/// recents, + Add repo, refresh: beside the github box on the search line
+/// recents, + Repo, refresh: beside the github box on the search line
 interface RefreshIconProps {
 	spinning?: boolean;
 	size?: number;
@@ -778,9 +778,9 @@ interface RefreshIconProps {
 
 interface GithubControlsProps {
 	github: GithubState;
-	/// the + menu: clone repos / add repo by name / group repos, at (x, y)
+	/// the + menu: clone repos / by name / group repos, at (x, y)
 	onAddMenu: (x: number, y: number) => void;
-	/// the row form: + Add repo ▾ as a button in the + Workspace shape; the
+	/// the row form: + Repo ▾ as a button in the + Workspace shape; the
 	/// heading keeps the bare glyphs, a heading being a line of text
 	labelled?: boolean;
 }
@@ -1150,7 +1150,7 @@ interface ServersLaneProps {
 	/// Enter / double-click: a terminal on the box
 	onOpen: (server: Server) => void;
 	onContextMenu: (server: Server, x: number, y: number) => void;
-	/// the heading's +: add a server, or import ~/.ssh/config
+	/// the heading's +: a server by hand, or the ~/.ssh/config import
 	onAddMenu: (x: number, y: number) => void;
 	/// a right-click on the heading: the details switch and the adds
 	onHeadingContextMenu: (x: number, y: number) => void;

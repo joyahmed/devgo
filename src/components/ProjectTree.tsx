@@ -149,9 +149,12 @@ const GitBadge = ({ info, onOpenBranches }: GitBadgeProps) => {
 				className={`truncate font-mono text-13 text-text-muted ${
 					info.remote ? 'hover:text-accent cursor-pointer' : ''
 				}`}
-				title={
-					info.remote ? `${info.branch} — branches on ${info.remote}` : info.branch
-				}
+				// with a remote this chip opens the branch menu 4px under itself, and
+				// a native tooltip is an OS window over its first entry (see
+				// GithubControls); that menu names the host and repeats this branch as
+				// an entry of its own. without a remote the chip opens nothing, so the
+				// tooltip that reveals a truncated branch name stays
+				title={info.remote ? undefined : info.branch}
 				onClick={
 					info.remote
 						? e => {

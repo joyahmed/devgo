@@ -1261,7 +1261,7 @@ const AppInner = () => {
 		}
 	];
 	const serversAddItems: MenuEntry[] = [
-		{ label: 'Add a server…', onClick: () => setServerForm({}) },
+		{ label: 'New server…', onClick: () => setServerForm({}) },
 		{ label: 'Import from ~/.ssh/config', onClick: importSsh }
 	];
 
@@ -2134,7 +2134,7 @@ const AppInner = () => {
 								hint: workspaces.length === 0 ? 'add a workspace first' : undefined
 							},
 							{
-								label: 'Add repo by name…',
+								label: 'By name…',
 								onClick: () => setAddRepoOpen(true),
 								disabled: !github.status?.login
 							},
@@ -2603,6 +2603,10 @@ const AppInner = () => {
 											</Button>
 										))}
 									</div>
+									{/* no title, for the reason spelled out in GithubControls: the menu
+									    opens 4px under this button and a native tooltip is an OS window
+									    over it, on its first entry. that entry carries the shortcut this
+									    title named, as its hint, so nothing is lost */}
 									<Button
 										variant='add'
 										className='shrink-0'
@@ -2610,7 +2614,6 @@ const AppInner = () => {
 											const r = e.currentTarget.getBoundingClientRect();
 											setAddMenu({ x: r.left, y: r.bottom + 4 });
 										}}
-										title={`Add workspace (${prettyKeys(shortcutFor('addWorkspace'))})`}
 									>
 										<span className='text-18 leading-none'>+</span>
 										<span className='text-13 font-semibold leading-none'>
@@ -2648,7 +2651,7 @@ const AppInner = () => {
 										}}
 									/>
 									{/* the lane's controls on the box's line, in the row form:
-									    recents · + Add repo ▾ · ↻, the same three the heading
+									    recents · + Repo ▾ · ↻, the same three the heading
 									    carries on a narrow window */}
 									<GithubControls
 										{...{
@@ -2681,10 +2684,14 @@ const AppInner = () => {
 											className: searchBoxRow
 										}}
 									/>
+									{/* no title over the menu it opens either, and this one's two
+									    entries are the ~/.ssh/config import the title mentioned. the
+									    word is the bare noun now, the + carrying the verb as it does on
+									    + Workspace (joy: "like + Workspace make +Repo +Server", "no more
+									    add repo add server") */}
 									<Button
 										variant='add'
 										className='shrink-0'
-										title='Add a server, or import ~/.ssh/config'
 										onClick={e => {
 											const r = e.currentTarget.getBoundingClientRect();
 											setServersAddMenu({ x: r.left, y: r.bottom + 4 });
@@ -2692,7 +2699,7 @@ const AppInner = () => {
 									>
 										<span className='text-18 leading-none'>+</span>
 										<span className='text-13 font-semibold leading-none'>
-											Add server
+											Server
 										</span>
 										<span className='text-11 leading-none opacity-70'>▾</span>
 									</Button>

@@ -526,10 +526,12 @@ const ServersLane = ({
 					</div>
 				)}
 				{searchInHeading && (
+					// no title: this opens the same menu 4px under itself, and a native
+					// tooltip lands on its first entry (see GithubControls). both entries
+					// — a server by hand, the ~/.ssh/config import — say what it said
 					<Button
 						variant='ghost'
 						className='text-11 px-1.5 py-0.5 -my-1'
-						title='Add a server, or import ~/.ssh/config'
 						onClick={e => {
 							e.stopPropagation();
 							const r = e.currentTarget.getBoundingClientRect();

@@ -1,11 +1,14 @@
 import Button from './Button';
 import RefreshIcon from './RefreshIcon';
 
-// the github lane's three controls: recents, + Add repo, refresh. one
+// the github lane's three controls: recents, + Repo, refresh. one
 // component in two places, so the row and the heading can never offer
 // different controls. labelled is the row form (joy: "the + should be a
 // button containing Add Repo like + Workspace button"); the heading
-// keeps the bare glyphs, a heading being a line of text
+// keeps the bare glyphs, a heading being a line of text.
+// the word is the bare noun on both forms, the + carrying the verb the
+// way it does on + Workspace (joy: "like + Workspace make +Repo +Server",
+// then "no more add repo add server" — which takes the aria-label with it)
 const GithubControls = ({
 	github,
 	onAddMenu,
@@ -53,7 +56,7 @@ const GithubControls = ({
 					// menu spells all three actions out in words anyway, so the hint
 					// said nothing the next frame did not; aria-label keeps the glyph
 					// form named for a screen reader, the labelled form has its own text
-					aria-label={labelled ? undefined : 'Add repo'}
+					aria-label={labelled ? undefined : 'Repo'}
 					onClick={e => {
 						e.stopPropagation();
 						const r = e.currentTarget.getBoundingClientRect();
@@ -63,7 +66,7 @@ const GithubControls = ({
 					<span className='text-18 leading-none'>+</span>
 					{labelled && (
 						<>
-							<span className='text-13 font-semibold leading-none'>Add repo</span>
+							<span className='text-13 font-semibold leading-none'>Repo</span>
 							<span className='text-11 leading-none opacity-70'>▾</span>
 						</>
 					)}
