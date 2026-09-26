@@ -200,19 +200,27 @@ const WslDoctor = ({ onError }: WslDoctorProps) => {
 			value: c.exists ? 'present' : 'absent — WSL is on its defaults',
 			mono: false
 		},
-		{ label: 'Host memory', value: bytes(c.host_memory_bytes), mono: false },
+		// a byte count and a core count are the same kind of reading the
+		// Memory grid two sections down renders, and that grid is monospace:
+		// 63.9 GiB in the prose face above 31.3 GiB in the mono one made one
+		// panel look like two. "present" stays prose — it is a sentence
+		{ label: 'Host memory', value: bytes(c.host_memory_bytes), mono: true },
 		{
 			label: 'Host processors',
 			value: c.host_processors === null ? '—' : String(c.host_processors),
-			mono: false
+			mono: true
 		}
 	];
 
+	// gap-5 is the step every other Settings panel puts between its sections
+	// — tmux, Scanning and GitHub all use it, and the gap-6 here was the one
+	// thing making this panel breathe differently from its neighbours inside
+	// the same drawer
 	return (
-		<div className='flex flex-col gap-6'>
+		<div className='flex flex-col gap-5'>
 			<section>
 				<h4 className={heading}>.wslconfig</h4>
-				<p className={`${hint} mb-3`}>
+				<p className={`${hint} mb-2`}>
 					The file, never the running VM. A key under the wrong heading leaves
 					no trace in WSL's behaviour — it simply never applies, which is why
 					it goes unnoticed for weeks. Read when this panel opened; nothing
@@ -222,7 +230,7 @@ const WslDoctor = ({ onError }: WslDoctorProps) => {
 					<p className={`${hint} italic`}>Reading…</p>
 				) : (
 					<div className='flex flex-col gap-3'>
-						<dl className='grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-13'>
+						<dl className='grid grid-cols-[auto_1fr] items-baseline gap-x-4 gap-y-1 text-13'>
 							{configRows(config).map(r => (
 								<div key={r.label} className='contents'>
 									<dt className='text-text-muted'>{r.label}</dt>
@@ -243,7 +251,7 @@ const WslDoctor = ({ onError }: WslDoctorProps) => {
 
 			<section>
 				<h4 className={heading}>Memory fragmentation</h4>
-				<p className={`${hint} mb-3`}>
+				<p className={`${hint} mb-2`}>
 					Free pages are not free <em>runs</em> of pages: an allocation that
 					needs sixteen contiguous ones can fail while gigabytes sit free in
 					single-page scraps, and it dies without a word from the OOM killer.
@@ -252,16 +260,18 @@ const WslDoctor = ({ onError }: WslDoctorProps) => {
 					kernel ring inside a distro that is <em>already</em> running —
 					read-only, no sudo, and it will not start one to look.
 				</p>
-				<p className={`${hint} mb-3`}>
+				<p className={`${hint} mb-2`}>
 					It runs on this button and never on a clock: a wedged WSLService
 					makes the call stall for as long as it takes to answer.
 				</p>
-				<Button
-					variant='primary'
-					className='self-start'
-					disabled={probing}
-					onClick={probe}
-				>
+				{/* ⛔ NOT primary. every one of the twelve primary buttons in
+				    this app commits something — Add, Save, Add server, Save &
+				    rescan — and this one writes nothing at all. the read that
+				    shells out to a slow external process and can only report
+				    is GitHub's "Refresh now", one panel down, and that is
+				    secondary. a solid accent block here promised a mutation
+				    the panel's own header says it never performs */}
+				<Button className='self-start' disabled={probing} onClick={probe}>
 					{probing ? 'Probing…' : frag === null ? 'Run the probe' : 'Probe again'}
 				</Button>
 
@@ -287,7 +297,7 @@ const WslDoctor = ({ onError }: WslDoctorProps) => {
 							<h5 className='text-13 font-semibold text-text-primary mb-1'>
 								Memory
 							</h5>
-							<dl className='grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-13'>
+							<dl className='grid grid-cols-[auto_1fr] items-baseline gap-x-4 gap-y-1 text-13'>
 								{MEM_ROWS.map(m => (
 									<div key={m.key} className='contents'>
 										<dt className='text-text-muted'>{m.label}</dt>
