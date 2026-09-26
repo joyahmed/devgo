@@ -47,9 +47,20 @@ const SearchBox = ({
 		action();
 	};
 
+	// the chips used to float over the input's right end on a fixed
+	// padding reserve, and a reserve is a number that goes stale: the day
+	// a second chip arrived, 144px of it was reserved on a box that can be
+	// 230px wide and the placeholder read "Search lo". the row is a flex
+	// row now, so the input is given what the chips do not take and the
+	// reserve cannot drift from what is drawn.
+	//
+	// a box's width is not a function of the window — four lanes on a 4k
+	// screen give a 230px github box — so the one thing that still has to
+	// be asked is asked of the box itself, with a container query rather
+	// than a breakpoint
 	return (
 		<div
-			className={`relative bg-bg-panel rounded-control border border-border-strong focus-within:border-accent focus-within:shadow-[var(--color-glow)] transition-colors ${className}`}
+			className={`@container flex items-center gap-1.5 pr-2 bg-bg-panel rounded-control border border-border-strong focus-within:border-accent focus-within:shadow-[var(--color-glow)] transition-colors ${className}`}
 		>
 			<input
 				ref={ref}
@@ -58,38 +69,41 @@ const SearchBox = ({
 				// appears, and the project box is where that typing goes
 				autoFocus={lane === 'projects'}
 				data-lane-search={lane}
-				// the chips float over the input's right end, so the padding has
-				// to be the room they take. two of them at once is the one case
-				// that needs more than the old reserve, and it can only happen
-				// on an empty box: with text the focus chip is gone and the
-				// clear x that replaces it is the narrower of the two
-				className={`w-full py-2 pl-3.5 ${!value && enterHint ? 'pr-36' : 'pr-20'} bg-transparent outline-none text-15 text-text-primary placeholder:text-text-muted`}
+				// min-w-0 or the input refuses to shrink below its own intrinsic
+				// width and pushes the chips out of the box
+				className='flex-1 min-w-0 py-2 pl-3.5 bg-transparent outline-none text-15 text-text-primary placeholder:text-text-muted'
 				placeholder={placeholder}
 				value={value}
 				onChange={e => onChange(e.target.value)}
 				onKeyDown={handleKeyDown}
 			/>
-			<div className='absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1.5'>
-				{value && (
-					<Button
-						variant='ghost'
-						className='text-15 text-text-secondary'
-						title='Clear'
-						onClick={() => onChange('')}
-					>
-						&#10005;
-					</Button>
-				)}
-				{/* the same chip every other shortcut hint wears */}
-				{enterHint && <Kbd>Enter</Kbd>}
-				{/* the key that summons this box, so the binding is discoverable
-				    without opening settings. it goes once there is text: the hint
-				    is for the box you are not in, and the clear x arrives on the
-				    same keystroke, so the row was changing at that moment anyway.
-				    clicking in changes nothing, which was the whole objection to
-				    swapping it with enter on focus */}
-				{!value && <Kbd>{prettyKeys(shortcutFor(FOCUS_KEY[lane]))}</Kbd>}
-			</div>
+			{value && (
+				<Button
+					variant='ghost'
+					className='text-15 text-text-secondary'
+					title='Clear'
+					onClick={() => onChange('')}
+				>
+					&#10005;
+				</Button>
+			)}
+			{/* the same chip every other shortcut hint wears */}
+			{enterHint && <Kbd>Enter</Kbd>}
+			{/* the key that summons this box, so the binding is discoverable
+			    without opening settings. it goes once there is text: the hint
+			    is for the box you are not in, and the clear x arrives on the
+			    same keystroke, so the row was changing at that moment anyway.
+			    clicking in changes nothing, which was the whole objection to
+			    swapping it with enter on focus. it also goes on a box under
+			    20rem, for the same reason and in the same order the footer
+			    drops its hints: a key for somewhere you are not is worth less
+			    than the words saying what this box searches. Enter stays —
+			    it names the key of the box you are in */}
+			{!value && (
+				<span className='flex @max-[20rem]:hidden'>
+					<Kbd>{prettyKeys(shortcutFor(FOCUS_KEY[lane]))}</Kbd>
+				</span>
+			)}
 		</div>
 	);
 };

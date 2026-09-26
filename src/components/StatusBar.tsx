@@ -58,6 +58,29 @@ const choiceOf = (t: LaunchTarget, isWsl: boolean): TargetChoice => ({
 				: undefined
 });
 
+// the footer is the only surface where a target's name pays rent in
+// pixels, so it says the name shorter than the rest of the app does.
+// both rules choose a shorter name rather than clipping one: a trailing
+// parenthetical — "Claude Code (Ubuntu-26.04)", the form editors.rs
+// gives every in-distro target — becomes a muted suffix at the chip
+// size, so which row runs in the distro is still on the screen, and the
+// two seeded agent clis whose product name is unambiguous at one word
+// lose the second word. a name devgo did not seed is left exactly as
+// the user typed it: a forty-character one stays forty characters and
+// the footer gives up a group to a second line sooner, which is the
+// degradation it was built for. settings, the command palette and the
+// context menus keep the stored name, and so does this button's tooltip
+const SHORT_NAME: Record<string, string> = {
+	'Claude Code': 'Claude',
+	'Gemini CLI': 'Gemini'
+};
+
+const footerName = (name: string) => {
+	const m = /^(.*) \(([^()]+)\)$/.exec(name);
+	const base = m ? m[1] : name;
+	return { short: SHORT_NAME[base] ?? base, suffix: m?.[2] };
+};
+
 // every target visible, none behind a chevron. a split button was built
 // first and rejected on sight: a launcher has three to six targets, and
 // hiding four behind a dropdown saves space the row already has
@@ -71,13 +94,21 @@ const TargetGroup = ({
 	pulse
 }: TargetGroupProps) => (
 	<div className='flex items-center gap-2 shrink-0'>
-		<span className='text-text-muted shrink-0'>{label}</span>
+		{/* the label is the first thing the footer gives up: every button
+		    under it already names its target, and only a window wider than
+		    the whole cluster has the room to say it twice. sr-only rather
+		    than hidden, so a screen reader still hears which group it is
+		    and, being absolutely positioned, it costs the row no width */}
+		<span className='text-text-muted shrink-0 sr-only min-[2400px]:not-sr-only'>
+			{label}
+		</span>
 		{items.map(t => {
 			const isDefault = t.id === defaultId;
 			// the group's key is the default's; an item may carry one of its own
 			const key = t.shortcut ?? (isDefault ? shortcut : undefined);
 			const title =
 				t.blocked ?? (key ? `${t.title ?? t.name} — ${key}` : (t.title ?? t.name));
+			const { short, suffix } = footerName(t.name);
 			return (
 				<Button
 					key={t.id}
@@ -90,7 +121,12 @@ const TargetGroup = ({
 					onClick={() => onPick(isDefault ? undefined : t.id)}
 					title={title}
 				>
-					<span className='truncate leading-none'>{t.name}</span>
+					<span className='truncate leading-none'>{short}</span>
+					{suffix && (
+						<span className='leading-none text-11 text-text-muted shrink-0'>
+							{suffix}
+						</span>
+					)}
 					{key && <Kbd>{key}</Kbd>}
 				</Button>
 			);
@@ -202,12 +238,23 @@ const StatusBar = ({
 	// doors that have no key. ↑↓ and ⏎ used to lead it and were dropped —
 	// arrow keys and enter in a list are the one thing nobody looks up,
 	// and their chips cost the room the rest needed to grow.
-	// the first group hides under 1400, where the footer has no width and
-	// the palette still lists them
+	//
+	// the footer sheds these as it narrows, and the numbers are measured
+	// rather than picked: with everything shown the row is ~2300px wide,
+	// so a maximised 1920 screen (2133 css px at joy's 0.9 scale) has
+	// never fit it — the two-line footer was not a small-window bug, it
+	// was every window. without the list group it is ~1920, without the
+	// surfaces group ~1480. each group carries the width it needs as a
+	// literal class, because tailwind cannot see a class built at runtime.
+	// what is lost is only ever a hint: every key below is in the shortcut
+	// table, so the Shortcuts door — which never hides — still lists it,
+	// and the summon hotkey is also set and shown in Settings. Search is
+	// the cheapest of them twice over, since the box it focuses wears the
+	// same chip
 	const cluster: FooterHintGroup[] = [
 		{
 			id: 'list',
-			wide: true,
+			show: 'hidden min-[2400px]:flex',
 			items: [
 				{ label: 'Pin', keys: prettyKeys(shortcutFor('togglePin')) },
 				{ label: 'Search', keys: prettyKeys(shortcutFor('focusSearch')) }
@@ -215,6 +262,7 @@ const StatusBar = ({
 		},
 		{
 			id: 'surfaces',
+			show: 'hidden min-[2000px]:flex',
 			items: [
 				{
 					label: 'Commands',
@@ -292,7 +340,7 @@ const StatusBar = ({
 				{cluster.map((g, i) => (
 					<div
 						key={g.id}
-						className={`items-center gap-4 shrink-0 ${g.wide ? 'hidden min-[1400px]:flex' : 'flex'}`}
+						className={`items-center gap-4 shrink-0 ${g.show ?? 'flex'}`}
 					>
 						{g.items.map(h =>
 							h.onClick ? (

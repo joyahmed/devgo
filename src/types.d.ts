@@ -1529,8 +1529,9 @@ interface FooterHint {
 
 interface FooterHintGroup {
 	id: string;
-	/// hidden under 1400, where the footer has no room for it
-	wide?: boolean;
+	/// the literal tailwind class that decides the width this group needs
+	/// ("hidden min-[2400px]:flex"); omitted, the group is always shown
+	show?: string;
 	items: FooterHint[];
 }
 
