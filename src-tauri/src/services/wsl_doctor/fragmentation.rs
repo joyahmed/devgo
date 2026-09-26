@@ -21,7 +21,7 @@ use serde::Serialize;
 // count * 2^order * this
 const PAGE_SIZE: u64 = 4096;
 
-// where "high order" starts. order 4 is sixteen pages, 64 KB contiguous:
+// where "high order" starts. order 4 is sixteen pages, 64 KiB contiguous:
 // the size the kernel's own slab growth, network buffers and vhd i/o paths
 // ask for, and the first order whose exhaustion kills things rather than
 // slowing them
@@ -587,6 +587,20 @@ mod tests {
         assert_eq!(headline.severity, Severity::Info);
         assert!(headline.text.contains("Normal"));
         assert!(headline.text.contains("order 10"));
+        // ⭐ the panel prints the same zone's bytes with its own binary
+        // formatter right above this sentence. a decimal `GB` here put two
+        // unit systems ten pixels apart in one card
+        for f in &findings {
+            for s in [&f.text, &f.problem, &f.fix] {
+                assert!(
+                    !s.contains(" KB")
+                        && !s.contains(" MB")
+                        && !s.contains(" GB"),
+                    "decimal units in a finding: {s}"
+                );
+            }
+        }
+        assert!(headline.problem.contains("runs of 64.0 KiB or bigger"));
     }
 
     /// No failures in the ring and a restricted dmesg look identical from
@@ -606,7 +620,7 @@ mod tests {
     /// broken. A warning, not an error.
     #[test]
     fn a_zone_thinning_at_the_top_is_a_warning_not_an_error() {
-        // 200000 order-0 runs is ~780 MB; one order-4 run is 64 KB
+        // 200000 order-0 runs is ~780 MiB; one order-4 run is 64 KiB
         let findings = assess(&read_probe(&lines(
             "buddy Node 0, zone Normal 200000 0 0 0 1 0 0 0 0 0 0",
         )));

@@ -1022,7 +1022,9 @@ instanceIdleTimeout=-1
         assert_eq!(found[0].severity, Severity::Warning);
         // the three numbers that make the case: what is asked, what the
         // machine has, what wsl would have picked on its own
-        for expected in ["24.0 GB", "64.0 GB", "32.0 GB"] {
+        // spelled in binary units, the same way the panel spells its own
+        // numbers — two unit systems in one card is the bug this pins
+        for expected in ["24.0 GiB", "64.0 GiB", "32.0 GiB"] {
             assert!(
                 found[0].problem.contains(expected),
                 "{expected} missing from: {}",

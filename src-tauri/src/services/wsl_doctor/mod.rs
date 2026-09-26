@@ -64,8 +64,16 @@ impl Finding {
 /// Bytes as a person reads them. Binary units, because every number this
 /// crosses paths with — `memory=24GB` in .wslconfig, MemTotal in
 /// /proc/meminfo, a buddyinfo block — is a power of two underneath.
+///
+/// ⭐ the units are SPELLED binary too. the arithmetic here was always
+/// /1024, but it used to print `GB`, and the panel's own formatter prints
+/// `GiB` off the same bytes — so one card read `25.6 GiB free` on one line
+/// and `25.3 GB of this zone's 25.6 GB free` on the next, ten pixels
+/// apart, and the reader has to work out that the two numbers are the same
+/// number. a buddyinfo order is 2^n pages: decimal spelling was never
+/// right here, it was only invisible.
 pub(crate) fn human(bytes: u64) -> String {
-    const UNITS: [&str; 5] = ["B", "KB", "MB", "GB", "TB"];
+    const UNITS: [&str; 5] = ["B", "KiB", "MiB", "GiB", "TiB"];
     let mut value = bytes as f64;
     let mut unit = 0;
     while value >= 1024.0 && unit + 1 < UNITS.len() {
@@ -75,7 +83,8 @@ pub(crate) fn human(bytes: u64) -> String {
     if unit == 0 || value >= 100.0 {
         format!("{} {}", value.round() as u64, UNITS[unit])
     } else {
-        // one decimal up to 99.9: "1.5 GB" is a number, "2 GB" of 1.5 is a lie
+        // one decimal up to 99.9: "1.5 GiB" is a number, "2 GiB" of 1.5 is
+        // a lie
         format!("{value:.1} {}", UNITS[unit])
     }
 }
@@ -88,10 +97,28 @@ mod tests {
     fn human_sizes_round_the_way_a_person_reads_them() {
         assert_eq!(human(0), "0 B");
         assert_eq!(human(512), "512 B");
-        assert_eq!(human(1024), "1.0 KB");
-        assert_eq!(human(64 * 1024), "64.0 KB");
-        assert_eq!(human(24 * 1024 * 1024 * 1024), "24.0 GB");
+        assert_eq!(human(1024), "1.0 KiB");
+        assert_eq!(human(64 * 1024), "64.0 KiB");
+        assert_eq!(human(24 * 1024 * 1024 * 1024), "24.0 GiB");
         // past 99.9 the decimal stops earning its place
-        assert_eq!(human(128 * 1024 * 1024 * 1024), "128 GB");
+        assert_eq!(human(128 * 1024 * 1024 * 1024), "128 GiB");
+    }
+
+    /// ⭐ The panel prints its own numbers with a binary formatter, so a
+    /// finding that spelled the SAME bytes in decimal units put two unit
+    /// systems in one card. The step is 1024 and the spelling must say so
+    /// — a `GB` escaping from here is the defect coming back.
+    #[test]
+    fn the_units_are_spelled_binary_because_the_step_is_1024() {
+        // the step, not just the label: 1024 KiB is exactly 1 MiB
+        assert_eq!(human(1024 * 1024), "1.0 MiB");
+        assert_eq!(human(1000), "1000 B");
+        for bytes in [1, 1 << 10, 1 << 20, 1 << 30, 1 << 40, u64::MAX] {
+            let s = human(bytes);
+            assert!(
+                s.ends_with(" B") || s.ends_with("iB"),
+                "{s} is not a binary unit"
+            );
+        }
     }
 }
