@@ -679,3 +679,66 @@ with the NSIS installer, not the MSI**, and only `--bundles msi` had been built.
 `--bundles nsis`, ran `DevGo_1.2.1_x64-setup.exe /S`, exit 0, registered version now correct.
 ⚠️ **Whoever installs on Windows: build the NSIS bundle, not the MSI.** Left running as a normal
 launch, without the `--remote-debugging-port` used for driving.
+
+---
+
+## Slice P — six UI changes Joy asked for while watching the app, all driven and verified on screen
+
+⭐ **Every one of these came from Joy looking at the running app, and every one was verified by
+looking at it again.** That is the loop the whole night was missing until now.
+
+| commit | change | verified how |
+|---|---|---|
+| `03496bb` | a refused Add keeps the draft | driven: toast fired, all four fields intact, `targets.json` SHA256 identical |
+| `8b2778d` | the load message, `Ctrl+H`, search-bar keys, footer icons, drawer logging | screenshots + measurements below |
+| `93996ce` | Help/About get document typography | measured live: **16px / 24px**, was 13px / 22px |
+
+### ⭐ The load message was ONE bug wearing three complaints
+Joy reported, separately: a thin unreadable strip on load; *"the footer lost shortcuts and help
+icons"*; *"move and open also gone"*. **All three were the same defect.** The toast joined the **full
+path** of every degraded workspace — **356 characters** here — and at `bottom-4 right-4 z-50` a
+string that long stretches the toast to nearly the window width, turning it into a bar sitting **on
+top of the footer's right half**, which is exactly where Shortcuts, Help and Open both live.
+⭐ **Nothing was missing. It was covered.** Shortening the message restored all three, and the
+`max-w-[min(34rem,90vw)]` cap means no future toast can do it again.
+
+Measured on the live toast after the fix: centre x **1422 = exactly `innerWidth/2`**, font-size
+**18px**, width **544px = 19.1%** of the window, bottom edge 142 against a footer starting at 1498.
+
+### ⭐ The Help panel: the instinct was right, the remedy was not
+Joy: *"a bigger settings would not make those help text so small"*. Measuring `1ch` from the actual
+font file: Settings is **already** `w-[min(960px,94vw)]`, and at the default 900px window **94vw
+binds, not the 960 cap** — so widening buys nothing for that window and only adds whitespace on a
+maximised one. At `text-13` the 76ch measure was **533px and already fitted**. ⭐ **Width was never
+the constraint; the size was.** `text-15` + `leading-relaxed`, headings to `text-18`.
+⚠️ The other Settings pages' hints stay at `text-13` **on purpose**: a hint annotates a control, so at
+15 it would be larger than the buttons it explains and equal to its own heading. The line is drawn by
+**surface** — Help and About are documents, the control pages are chrome.
+
+### The footer's rule, found rather than invented
+Not "icons or no icons" — **one leading mark per item**. Pin/Search/Commands/Summon lead with a key
+chip; Shortcuts and Help led with nothing. So `{h.keys ? <Kbd/> : h.icon}` — a chip where there is a
+key, a glyph where there is not, **never both**. Two hand-drawn inline SVGs, `currentColor`,
+**+290 bytes gzipped** measured.
+
+### `Ctrl+H`, and the chips
+Servers was the one lane with no focus shortcut. ⭐ The chips derive their key from the **shortcuts
+table via the `lane` prop inside `SearchBox`**, typed `Record<SearchLane, ShortcutId>` — so no call
+site can pass the wrong key and **a new lane is a compile error until it declares one.** That is the
+structural answer to the class of bug that produced the Explorer/Trove mislabel.
+The chip hides once the box has text: the clear `×` already appears on the first keystroke, so it
+adds **no new shift**, and a hint telling you how to reach the box you are typing in is noise.
+
+### ⛔ Still not observed, and not claimed
+The **actual** stale-workspace message. Nothing was degraded on any run, and forcing one would have
+meant disconnecting a drive or editing Joy's workspaces. The new `A and B` / `A, B +N more`
+formatting is verified by **reading `paths.ts:21-26`**, not by seeing it. ⭐ **A fabricated pass is
+worse than a stated gap.**
+
+### ⭐ The technique that finally made driving reliable
+**DOM `.click()` inside ONE `file` script.** Each `bun` invocation steals focus, the webview serves a
+stale frame when unfocused, and something tears Settings down on blur — so real CDP mouse clicks
+across separate invocations are flaky and produce false negatives. ⚠️ Also: `input[type=text]`
+matches nothing in this app (the inputs carry no `type`), and filtering DOM queries by
+`children.length===0` returns `[]` on any row whose text is split across children. **Those three cost
+four wrong conclusions tonight between me and the agents.**
