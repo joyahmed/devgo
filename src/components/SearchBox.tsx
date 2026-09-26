@@ -13,6 +13,37 @@ const FOCUS_KEY: Record<SearchLane, ShortcutId> = {
 	servers: 'focusServerSearch'
 };
 
+// how narrow a box may get before its summon chip goes, per lane. the
+// query is asked of the box's CONTENT box, 10px inside the box itself (a
+// 1px border each side and the pr-2 the chips sit in), and the number is
+// the narrowest content in which that lane's placeholder still reads
+// beside its chips. measured, not judged — every box rendered at 1px
+// steps with BOTH chips up (Enter and the summon key, which is the worst
+// case) and the placeholder's own width compared with what the input is
+// left:
+//   projects  294.4  "Search local projects…"     + ENTER + CTRL+K
+//   github    295.1  "Search GitHub repos…"       + ENTER + CTRL+G
+//   servers   318.6  "Search servers & folders…"  + ENTER + CTRL+H
+// so 18.5rem = 296 for the two short placeholders, and the servers box
+// keeps 20rem = 320 because its placeholder is 24px longer and clips
+// under 318.6. one number for all three would have to be the servers
+// floor, and that is why joy's mac showed no CTRL+G: three lanes at 1686
+// leave the github box 300.4px of content, 19.6 short of 20rem, while
+// the servers box beside it has 402 — the boxes differ, so their floors
+// do. macos pays for its longer placeholders out of a shorter chip
+// (CMD+G, one mono advance narrower than CTRL+G), which is why one pair
+// of numbers holds on both.
+//
+// ⛔ do not lower these by eye. 474bfac exists because a fixed 144px
+// chip reserve on a 230px box rendered the projects placeholder as
+// "Search lo"; these floors are the only thing between that bug and the
+// next narrow window
+const GATE: Record<SearchLane, string> = {
+	projects: '@max-[18.5rem]:hidden',
+	github: '@max-[18.5rem]:hidden',
+	servers: '@max-[20rem]:hidden'
+};
+
 // the input and nothing else. it carried a SEARCH PROJECTS label and a
 // 10px sort: button; the placeholder names the scope now and the sort is
 // a real control beside the box. from this chapter there are two of
@@ -94,13 +125,14 @@ const SearchBox = ({
 			    is for the box you are not in, and the clear x arrives on the
 			    same keystroke, so the row was changing at that moment anyway.
 			    clicking in changes nothing, which was the whole objection to
-			    swapping it with enter on focus. it also goes on a box under
-			    20rem, for the same reason and in the same order the footer
+			    swapping it with enter on focus. it also goes on a box too
+			    narrow to hold it beside the placeholder — GATE, above, per
+			    lane — for the same reason and in the same order the footer
 			    drops its hints: a key for somewhere you are not is worth less
 			    than the words saying what this box searches. Enter stays —
 			    it names the key of the box you are in */}
 			{!value && (
-				<span className='flex @max-[20rem]:hidden'>
+				<span className={`flex ${GATE[lane]}`}>
 					<Kbd>{prettyKeys(shortcutFor(FOCUS_KEY[lane]))}</Kbd>
 				</span>
 			)}

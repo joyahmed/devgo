@@ -26,7 +26,9 @@ export const nameCell =
 // boxes; they were not.
 //
 // the floor is what a box without one loses. SearchBox's own container
-// query drops the summon chip (ctrl+k / ctrl+g / ctrl+h) under 20rem,
+// query drops the summon chip (ctrl+k / ctrl+g / ctrl+h) under its
+// lane's GATE — 18.5rem of content over projects and github, 20rem over
+// servers, whose placeholder is 24px longer —
 // and a little under that the placeholder stops saying what the box
 // searches: "Search GitHub repos…" was already clipping with 156px of
 // input, and the github box measured 215px — 142px of input — in the
@@ -46,7 +48,8 @@ export const searchBoxRow = 'flex-1 min-w-[12rem]';
 // lane's box are the same box. 22rem and not 20: the chip's query is
 // asked of the box's CONTENT box, which is 10px narrower than the box
 // itself (a 1px border each side and the 2 of padding the chips sit in),
-// so a box has to be 330px wide before its key shows. capped at 20rem
+// so a box has to be 306px wide (github, projects) or 330px (servers)
+// before its key shows, and 22rem = 352 clears both. capped at 20rem
 // the box in the heading would be the one that never shows its key while
 // the same box in the command row shows it — which is what it was: 320px
 // over github, 280 over servers, neither ever showing one
