@@ -45,8 +45,11 @@ const ToastProvider = ({ children }: ToastProviderProps) => {
 						key={t.id}
 						title={t.detail}
 						// max-w is structural: however long a message grows, the toast
-						// stays a toast instead of stretching into a full width strip
-						className={`flex items-center gap-3 px-5 py-3 max-w-[min(34rem,90vw)] bg-bg-secondary border rounded-panel text-18 shadow-surface animate-fade-in pointer-events-auto ${VARIANT[t.type]}`}
+						// stays a toast instead of stretching into a full width strip.
+						// bg-popover because a toast floats over the lanes with no
+						// backdrop under it: a message nobody can read against the row
+						// text behind it is a message that was never sent either
+						className={`flex items-center gap-3 px-5 py-3 max-w-[min(34rem,90vw)] bg-bg-popover border rounded-panel text-18 shadow-surface animate-fade-in pointer-events-auto ${VARIANT[t.type]}`}
 					>
 						<span>{t.message}</span>
 						{t.action && (

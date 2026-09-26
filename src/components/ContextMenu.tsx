@@ -47,7 +47,10 @@ const ContextMenu = ({ x, y, items, onClose }: ContextMenuProps) => {
 	return (
 		<div
 			ref={ref}
-			className='fixed z-50 w-72 bg-bg-secondary border border-border rounded-panel shadow-surface py-1 text-15 overflow-y-auto overflow-x-hidden'
+			// bg-popover, not bg-secondary: a menu opens over other rows, and
+			// on the knob-following surface its labels and the lane behind them
+			// were both readable at once
+			className='fixed z-50 w-72 bg-bg-popover border border-border rounded-panel shadow-surface py-1 text-15 overflow-y-auto overflow-x-hidden'
 			style={style}
 			onContextMenu={e => e.preventDefault()}
 		>

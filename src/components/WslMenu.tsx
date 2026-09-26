@@ -39,7 +39,9 @@ const WslMenu = ({
 	};
 
 	return (
-		<div className='absolute right-0 mt-1 z-50 min-w-56 bg-bg-secondary border border-border rounded-control shadow-surface py-1 text-15'>
+		// bg-popover: a dropdown hangs over the rows below the button it
+		// belongs to, so its ground is the one that does not follow the knob
+		<div className='absolute right-0 mt-1 z-50 min-w-56 bg-bg-popover border border-border rounded-control shadow-surface py-1 text-15'>
 			{wsl.distros.map(d => (
 				<div
 					key={d}

@@ -161,7 +161,9 @@ const Select = ({ value, options, onChange, label, title }: SelectProps) => {
 					id={id}
 					role='listbox'
 					aria-label={label}
-					className={`absolute inset-x-0 z-50 overflow-y-auto bg-bg-secondary border border-border rounded-panel shadow-surface py-1 ${
+					// bg-popover: the open list covers the fields under it, and a
+					// see-through one showed their labels through its options
+					className={`absolute inset-x-0 z-50 overflow-y-auto bg-bg-popover border border-border rounded-panel shadow-surface py-1 ${
 						up ? 'bottom-full mb-1' : 'top-full mt-1'
 					}`}
 					style={{ maxHeight: MAX }}

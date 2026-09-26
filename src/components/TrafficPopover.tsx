@@ -155,7 +155,9 @@ const TrafficPopover = ({ traffic }: TrafficPopoverProps) => {
 	return (
 		<div
 			ref={ref}
-			className='fixed z-50 bg-bg-secondary border border-border rounded-panel shadow-surface p-4 flex flex-col gap-4 text-15'
+			// bg-popover: numbers and a sparkline over the repo rows they came
+			// from, where a see-through ground crosses the digits with row text
+			className='fixed z-50 bg-bg-popover border border-border rounded-panel shadow-surface p-4 flex flex-col gap-4 text-15'
 			style={{
 				top,
 				left: Math.max(8, Math.min(x, window.innerWidth - 8 - WIDTH)),

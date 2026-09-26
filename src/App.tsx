@@ -2771,7 +2771,10 @@ const AppInner = () => {
 
 			{dragOver && (
 				<div className='fixed inset-0 z-50 flex items-center justify-center bg-accent/10 border-2 border-dashed border-accent m-2 rounded-panel pointer-events-none'>
-					<span className='text-18 font-semibold text-accent bg-bg-secondary/90 px-5 py-2.5 rounded-control border border-accent'>
+					{/* bg-popover, which was this /90 by hand: the drop hint is one
+					    line of text in the middle of whatever is on screen, and the
+					    tenth it let through was the tree it is telling you to drop on */}
+					<span className='text-18 font-semibold text-accent bg-bg-popover px-5 py-2.5 rounded-control border border-accent'>
 						Drop a folder to add a workspace
 					</span>
 				</div>
