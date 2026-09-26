@@ -42,8 +42,9 @@ import { useTraffic } from './hooks/useTraffic';
 import { useWorkspaces } from './hooks/useWorkspaces';
 import { useRuntime } from './hooks/useRuntime';
 import { useWsl } from './hooks/useWsl';
-import { lastSegment, parentOf } from './paths';
+import { lastSegment, namesOf, parentOf } from './paths';
 import { isMac, isWindows } from './platform';
+import { closingBecause } from './uiLog';
 import {
 	appForFolder,
 	canFill,
@@ -343,6 +344,7 @@ const AppInner = () => {
 		if (first) handleOpenRepo(first);
 	};
 	// the servers box, the same arrangement over its lane
+	const serversSearchRef = useRef<HTMLInputElement>(null);
 	const handleServersArrow = (dir: 1 | -1) =>
 		treeRef.current?.navigate(dir, 'servers');
 	const handleServersEnter = () => treeRef.current?.openServerRow();
@@ -461,13 +463,17 @@ const AppInner = () => {
 			return;
 		}
 		reported.current = key;
-		const names = degraded.map(s => s.workspace).join(', ');
+		// two names and a count in the toast; every path in its hover text, so
+		// the full answer to "which ones?" is one pointer away
+		const names = namesOf(degraded.map(s => s.workspace));
 		const allCached = degraded.every(s => s.status === 'cached');
 		toast(
 			allCached
 				? `Showing cached projects for ${names}`
 				: `Could not read ${names}`,
-			allCached ? 'info' : 'error'
+			allCached ? 'info' : 'error',
+			undefined,
+			degraded.map(s => s.workspace).join('\n')
 		);
 	}, [workspaceStates]);
 
@@ -571,6 +577,11 @@ const AppInner = () => {
 	const [clonePicker, setClonePicker] = useState<ClonePickerRequest | null>(
 		null
 	);
+	// what a surprise close of the clone drawer would cost, kept current by
+	// the picker and read by the drawer's close line. a ref, not state: the
+	// tick set changes on every space bar and App is not re-rendering for a
+	// log line
+	const cloneTicks = useRef(0);
 	const [addRepoOpen, setAddRepoOpen] = useState(false);
 	const [githubAddMenu, setGithubAddMenu] = useState<{
 		x: number;
@@ -1913,6 +1924,8 @@ const AppInner = () => {
 			if (fire('focusSearch', () => searchRef.current?.select())) return;
 			if (fire('focusGithubSearch', () => githubSearchRef.current?.select()))
 				return;
+			if (fire('focusServerSearch', () => serversSearchRef.current?.select()))
+				return;
 			if (fire('clearSearch', () => setQuery(''))) return;
 			if (fire('refresh', handleRefresh)) return;
 			if (fire('settings', () => openSettings())) return;
@@ -2354,7 +2367,13 @@ const AppInner = () => {
 					open: clonePicker !== null,
 					title: 'Clone from GitHub',
 					onClose: () => setClonePicker(null),
-					width: 'w-[min(640px,92vw)]'
+					width: 'w-[min(640px,92vw)]',
+					// the drawer that closed on its own once, with no input
+					// before it and no explanation in the code. logAs names it
+					// in devgo.log and keys the reason a caller leaves below;
+					// logDetail says what the close cost
+					logAs: 'clone',
+					logDetail: () => `${cloneTicks.current} ticked`
 				}}
 			>
 				{clonePicker && (
@@ -2364,6 +2383,9 @@ const AppInner = () => {
 							local: github.payload?.local ?? {},
 							workspaces,
 							preselect: clonePicker.preselect,
+							onTicked: (n: number) => {
+								cloneTicks.current = n;
+							},
 							onStart: async (repos: GithubRepo[], into: string, add: boolean) => {
 								// the workspace first, so the clone lands in a lane
 								if (add) await handleAddWorkspace(into);
@@ -2375,7 +2397,14 @@ const AppInner = () => {
 									'info'
 								);
 							},
-							onDone: () => setClonePicker(null)
+							onDone: () => {
+								// the picker closing itself, the one legitimate
+								// close this drawer has that is not Escape, the
+								// backdrop or the ✕. said out loud so it cannot
+								// be mistaken for the ghost
+								closingBecause('clone', 'the picker finished');
+								setClonePicker(null);
+							}
 						}}
 					/>
 				)}
@@ -2623,6 +2652,7 @@ const AppInner = () => {
 								<div className='flex items-center gap-3 min-w-0'>
 									<SearchBox
 										{...{
+											ref: serversSearchRef,
 											value: servers.query,
 											onChange: servers.setQuery,
 											onEnter: handleServersEnter,
@@ -2716,6 +2746,7 @@ const AppInner = () => {
 								onGithubAddMenu: (x: number, y: number) => setGithubAddMenu({ x, y }),
 								githubSearchRef,
 								githubSearchInHeading: !githubSearchInRow,
+								serversSearchRef,
 								serversSearchInHeading: !serversSearchInRow
 							}}
 						/>

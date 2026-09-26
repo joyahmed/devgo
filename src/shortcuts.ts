@@ -20,6 +20,12 @@ export const SHORTCUTS: Shortcut[] = [
 		label: 'Focus GitHub search',
 		group: 'Global'
 	},
+	{
+		id: 'focusServerSearch',
+		keys: 'Ctrl+H',
+		label: 'Focus server search',
+		group: 'Global'
+	},
 	{ id: 'clearSearch', keys: 'Ctrl+L', label: 'Clear search', group: 'Global' },
 	{ id: 'refresh', keys: 'F5', label: 'Refresh projects', group: 'Global' },
 	// the browser's habit. matched by hand in the key handler since 11, so

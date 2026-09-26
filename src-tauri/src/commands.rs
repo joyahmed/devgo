@@ -2088,6 +2088,25 @@ pub fn get_log_path(state: State<AppState>) -> String {
         .into_owned()
 }
 
+/// One line from the webview into the same runtime log.
+///
+/// The gap this closes: the backend has had eight call sites in that file
+/// since it existed, and the frontend has had none - so a report that
+/// reads "the drawer closed on its own" arrives with a log that says
+/// nothing about drawers, because the only side that saw it had no way to
+/// write. The interesting failures are the ones nobody can reproduce on
+/// the reporter's machine, and on macOS and Linux that is every failure.
+///
+/// No `Result`: there is nothing a caller could do about a full disk that
+/// it should not already be doing, and a rejected promise in a `finally`
+/// handler is a second bug on top of the one being diagnosed. The tag,
+/// the length cap and the per-session budget are `runtime_log::ui`'s, so
+/// the module that owns the file owns the bound on it.
+#[tauri::command]
+pub fn log_ui_line(line: String) {
+    crate::services::runtime_log::ui(&line);
+}
+
 /// The same folder, in the file manager.
 #[tauri::command]
 pub fn reveal_app_data_dir(state: State<AppState>) -> Result<(), AppError> {

@@ -2,6 +2,46 @@ import { prettyKeys, shortcutFor } from '../shortcuts';
 import Button from './Button';
 import Kbd from './Kbd';
 
+// the footer's two doors have no key to show, and beside four neighbours
+// that each lead with a chip they read as unfinished text. a glyph fills
+// the same leading slot: one mark per item, a chip where there is a key
+// and a drawing where there is not. house style - 24 viewBox, stroke 2,
+// currentColor, so the six palettes reach it with no token of its own
+const FooterIcon = ({ children }: { children: React.ReactNode }) => (
+	<svg
+		width='14'
+		height='14'
+		viewBox='0 0 24 24'
+		fill='none'
+		stroke='currentColor'
+		strokeWidth='2'
+		strokeLinecap='round'
+		strokeLinejoin='round'
+		className='shrink-0'
+		aria-hidden='true'
+	>
+		{children}
+	</svg>
+);
+
+// a keyboard seen head on: the case, three keys, a spacebar
+const KeyboardGlyph = () => (
+	<FooterIcon>
+		<rect x='2' y='6' width='20' height='13' rx='2' />
+		<path d='M7 10.5h.01M12 10.5h.01M17 10.5h.01M8 15h8' />
+	</FooterIcon>
+);
+
+// the question in a ring; stem and dot drawn apart so the gap survives
+// the round cap at 14 px
+const HelpGlyph = () => (
+	<FooterIcon>
+		<circle cx='12' cy='12' r='9.5' />
+		<path d='M9.3 9.3a2.8 2.8 0 0 1 5.4 1c0 1.9-2.7 2.3-2.7 3.9' />
+		<path d='M12 17.6h.01' />
+	</FooterIcon>
+);
+
 // the same fact TargetManager shows as a badge, before the click. an
 // agent is a command on one side or the other; an editor or a terminal
 // is blocked on wsl only when it has no wsl form
@@ -193,9 +233,15 @@ const StatusBar = ({
 				{
 					label: 'Shortcuts',
 					title: 'View all keyboard shortcuts',
+					icon: <KeyboardGlyph />,
 					onClick: onOpenShortcuts
 				},
-				{ label: 'Help', title: 'Help', onClick: onOpenHelp }
+				{
+					label: 'Help',
+					title: 'Help',
+					icon: <HelpGlyph />,
+					onClick: onOpenHelp
+				}
 			]
 		}
 	];
@@ -257,12 +303,12 @@ const StatusBar = ({
 									title={h.title}
 									onClick={h.onClick}
 								>
-									{h.keys && <Kbd>{h.keys}</Kbd>}
+									{h.keys ? <Kbd>{h.keys}</Kbd> : h.icon}
 									<span className='text-text-secondary leading-none'>{h.label}</span>
 								</Button>
 							) : (
 								<span key={h.label} className='inline-flex items-center gap-1.5 shrink-0'>
-									{h.keys && <Kbd>{h.keys}</Kbd>}
+									{h.keys ? <Kbd>{h.keys}</Kbd> : h.icon}
 									<span className='text-text-secondary leading-none'>{h.label}</span>
 								</span>
 							)

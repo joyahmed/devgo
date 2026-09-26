@@ -50,7 +50,8 @@ const ClonePicker = ({
 	mode = 'clone',
 	groups = [],
 	initialGroup,
-	onGroup
+	onGroup,
+	onTicked
 }: ClonePickerProps) => {
 	const grouping = mode === 'group';
 	const [groupName, setGroupName] = useState(
@@ -135,6 +136,12 @@ const ClonePicker = ({
 	useEffect(() => {
 		activeRef.current?.scrollIntoView({ block: 'nearest' });
 	}, [active]);
+
+	// tell the drawer above how much a close would cost right now. the
+	// receiver writes a ref, so this renders nothing and changes nothing
+	useEffect(() => {
+		onTicked?.(picked.size);
+	}, [picked, onTicked]);
 
 	// a row already on disk is inert in clone mode, the way its checkbox is
 	const toggleAt = (i: number) => {

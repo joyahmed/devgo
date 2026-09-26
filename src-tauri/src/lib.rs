@@ -670,6 +670,7 @@ pub fn run() {
             commands::get_last_project,
             commands::set_last_project,
             commands::get_log_path,
+            commands::log_ui_line,
         ])
         .build(context)
         .expect("error while building tauri application")

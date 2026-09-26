@@ -436,6 +436,7 @@ const ProjectTree = ({
 	onGithubAddMenu,
 	githubSearchRef,
 	githubSearchInHeading = true,
+	serversSearchRef,
 	serversSearchInHeading = true,
 	ref
 }: ProjectTreeProps) => {
@@ -875,6 +876,7 @@ const ProjectTree = ({
 				onHeadingContextMenu: (x: number, y: number) =>
 					onServersHeadingContextMenu?.(x, y),
 				searchInHeading: serversSearchInHeading,
+				searchRef: serversSearchRef,
 				folderCursor,
 				onSelectFolder: selectFolder,
 				onOpenFolder: (s: Server, f: RemoteFolder) => onFolderOpen?.(s, f),

@@ -485,6 +485,7 @@ type ShortcutId =
 	| 'commandPalette'
 	| 'focusSearch'
 	| 'focusGithubSearch'
+	| 'focusServerSearch'
 	| 'clearSearch'
 	| 'refresh'
 	| 'refreshAlt'
@@ -701,6 +702,12 @@ interface ClonePickerProps {
 	/// the group the picker opens pointed at; a header passes its own name
 	initialGroup?: string;
 	onGroup?: (repos: GithubRepo[], group: string) => Promise<void>;
+	/// how many rows are ticked right now, for the drawer's close line.
+	/// a callback into a ref and not state lifted into App: the tick set
+	/// is the thing a surprise close destroys, and re-rendering the whole
+	/// app on every space bar to watch it would be a worse bug than the
+	/// one being chased
+	onTicked?: (count: number) => void;
 }
 
 interface OnboardingProps {
@@ -1002,6 +1009,15 @@ interface DrawerProps {
 	width?: string;
 	/// settings sits at 40 so a confirm sheet (50) opens over it
 	z?: 40 | 50;
+	/// a stable name for the runtime log, and the key a caller closing
+	/// this drawer from outside passes to closingBecause(). without it the
+	/// log falls back to the title, and every close a caller made reads as
+	/// unexplained - which is the one word that has to stay rare
+	logAs?: string;
+	/// extra context to put on the close line, read at close time. the
+	/// clone drawer answers with the tick count, because a tick set is
+	/// what a surprise close costs the user
+	logDetail?: () => string;
 }
 
 interface ConfirmDialogProps {
@@ -1130,6 +1146,7 @@ interface ServersLaneProps {
 	/// the box and the + in the heading, or in the command row over the
 	/// lane on a wide window
 	searchInHeading?: boolean;
+	searchRef?: React.Ref<HTMLInputElement>;
 	/// a folder under an expanded server: the cursor by `${id}:${path}`
 	folderCursor: string | null;
 	onSelectFolder: (server: Server, folder: RemoteFolder) => void;
@@ -1394,6 +1411,7 @@ interface ProjectTreeProps {
 	onGithubAddMenu?: (x: number, y: number) => void;
 	githubSearchRef?: React.Ref<HTMLInputElement>;
 	githubSearchInHeading?: boolean;
+	serversSearchRef?: React.Ref<HTMLInputElement>;
 	serversSearchInHeading?: boolean;
 	ref?: React.Ref<ProjectTreeHandle>;
 }
@@ -1496,6 +1514,8 @@ interface TargetGroupProps {
 interface FooterHint {
 	label: string;
 	keys?: string;
+	/// the leading mark when there is no key: a chip or a glyph, never both
+	icon?: React.ReactNode;
 	title?: string;
 	onClick?: () => void;
 }
@@ -1522,11 +1542,19 @@ interface Toast {
 	message: string;
 	type: ToastType;
 	action?: ToastAction;
+	/// the long form the message summarises — hover text, so a toast can stay
+	/// short without the detail being thrown away
+	detail?: string;
 }
 
 interface ToastContextType {
 	toasts: Toast[];
-	toast: (message: string, type?: ToastType, action?: ToastAction) => void;
+	toast: (
+		message: string,
+		type?: ToastType,
+		action?: ToastAction,
+		detail?: string
+	) => void;
 }
 
 interface ToastProviderProps {

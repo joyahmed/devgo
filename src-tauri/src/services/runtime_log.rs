@@ -32,6 +32,7 @@
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::OnceLock;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -111,6 +112,82 @@ pub fn session_header(version: &str) {
         std::env::consts::ARCH,
         std::process::id()
     ));
+}
+
+// ── the ui's half ───────────────────────────────────────────────────────
+
+/// The tag that separates a line the webview wrote from a line this crate
+/// wrote. `[DevGo]` is the backend's; `[DevGo/ui]` sorts beside it in any
+/// listing, greps as `/ui]`, and tells a reader at a glance which side of
+/// the IPC boundary a claim came from - which matters, because the two
+/// sides disagree about things like "the drawer is open" and the log is
+/// where that disagreement has to be visible.
+pub const UI_PREFIX: &str = "[DevGo/ui]";
+
+/// The longest line the frontend may send, in characters, not bytes: the
+/// truncation has to land on a char boundary or the write panics, and
+/// counting the thing we are slicing by is the way not to get that wrong.
+///
+/// 512 is about six times the longest line either side writes today and
+/// still an order of magnitude under a line anyone would read, so it cuts
+/// off a runaway `JSON.stringify` of a repo list without ever cutting off
+/// a sentence someone wrote on purpose. A cut line ends in `…`, so a
+/// reader is never left guessing whether the log or the code stopped
+/// short.
+pub const MAX_UI_CHARS: usize = 512;
+
+/// How many lines the webview gets per process. The 1 MiB cap already
+/// makes "fill the disk" impossible; this is about the other failure, a
+/// render loop that logs every frame and pushes the backend's lines out
+/// through rotation before anyone reads them. At the cap above, 2000
+/// lines is at most a quarter of the live file, so what the backend said
+/// about this session always survives whatever the frontend does.
+///
+/// Per process and not per second: a rate limiter needs a clock, a window
+/// and a decision about what to do with the lines it drops, and none of
+/// that is a few honest lines. A budget is one counter.
+pub const MAX_UI_LINES: usize = 2_000;
+
+/// Lines spent. Relaxed: the only question asked of it is "have we gone
+/// past 2000", and no other memory is ordered against the answer.
+static UI_LINES: AtomicUsize = AtomicUsize::new(0);
+
+/// One line from the webview, tagged, flattened, bounded and spent from
+/// the budget. Returns `()` on every path, like the rest of this module.
+pub fn ui(raw: &str) {
+    let spent = UI_LINES.fetch_add(1, Ordering::Relaxed);
+    if spent > MAX_UI_LINES {
+        return;
+    }
+    if spent == MAX_UI_LINES {
+        append(&format!(
+            "{UI_PREFIX} budget spent: {MAX_UI_LINES} lines this session, \
+             the rest are dropped"
+        ));
+        return;
+    }
+    append(&ui_line(raw));
+}
+
+/// The tag, then the line, as one line.
+///
+/// Every control character becomes a space. A newline in particular: the
+/// file's unit is a line, a reader greps it by line, and a frontend that
+/// could send `\n[DevGo] everything is fine` could forge a backend line.
+/// Replacing rather than stripping keeps the length honest, so the `…`
+/// below means what it says.
+pub fn ui_line(raw: &str) -> String {
+    let kept: String = raw
+        .chars()
+        .map(|c| if c.is_control() { ' ' } else { c })
+        .take(MAX_UI_CHARS)
+        .collect();
+    let cut = if raw.chars().count() > MAX_UI_CHARS {
+        "…"
+    } else {
+        ""
+    };
+    format!("{UI_PREFIX} {kept}{cut}")
 }
 
 // ── the file ────────────────────────────────────────────────────────────
@@ -335,6 +412,52 @@ mod tests {
         rotate_if_full(&missing, 0);
         assert!(!dir.join(OLD_FILE_NAME).exists());
         assert_eq!(fs::read_dir(&dir).unwrap().count(), 0);
+    }
+
+    /// A ui line is tagged so a reader can tell it from a backend line
+    /// without reading the sentence.
+    #[test]
+    fn a_ui_line_carries_the_ui_tag_and_not_the_backend_one() {
+        let line = ui_line("drawer \"clone\" closed: escape");
+        assert!(line.starts_with("[DevGo/ui] "), "{line}");
+        assert!(!line.starts_with("[DevGo] "), "{line}");
+        assert!(line.ends_with("drawer \"clone\" closed: escape"), "{line}");
+    }
+
+    /// The cap, exactly: 512 characters pass whole, 513 come back cut to
+    /// 512 with the marker that says so.
+    #[test]
+    fn a_ui_line_is_cut_at_the_cap_and_says_it_was() {
+        let at_cap = ui_line(&"a".repeat(MAX_UI_CHARS));
+        assert_eq!(at_cap, format!("{UI_PREFIX} {}", "a".repeat(MAX_UI_CHARS)));
+
+        let over = ui_line(&"a".repeat(MAX_UI_CHARS + 1));
+        assert_eq!(over, format!("{UI_PREFIX} {}…", "a".repeat(MAX_UI_CHARS)));
+    }
+
+    /// Cutting counts characters, not bytes, so a line of multi-byte text
+    /// is cut on a char boundary rather than panicking the slice - and a
+    /// short line of long characters is not cut at all.
+    #[test]
+    fn a_ui_line_is_cut_by_characters_not_bytes() {
+        let emoji = "🦀".repeat(MAX_UI_CHARS / 2);
+        assert!(emoji.len() > MAX_UI_CHARS, "the bytes really do exceed it");
+        let line = ui_line(&emoji);
+        assert!(!line.ends_with('…'), "{line}");
+        assert_eq!(
+            line.chars().count(),
+            UI_PREFIX.chars().count() + 1 + MAX_UI_CHARS / 2
+        );
+    }
+
+    /// A newline from the frontend cannot start a second line, and in
+    /// particular cannot forge one that reads as the backend's.
+    #[test]
+    fn a_ui_line_cannot_forge_a_second_line() {
+        let line = ui_line("all fine\n[DevGo] nothing happened\r\tok\0");
+        assert!(!line.contains('\n'), "{line}");
+        assert!(!line.contains('\r'), "{line}");
+        assert_eq!(line, "[DevGo/ui] all fine [DevGo] nothing happened  ok ");
     }
 
     /// `append` before `init` - the window between process start and setup -

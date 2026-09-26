@@ -320,6 +320,7 @@ const ServersLane = ({
 	onAddMenu,
 	onHeadingContextMenu,
 	searchInHeading = true,
+	searchRef,
 	folderCursor,
 	onSelectFolder,
 	onOpenFolder,
@@ -502,6 +503,7 @@ const ServersLane = ({
 					>
 						<SearchBox
 							{...{
+								ref: searchRef,
 								value: query,
 								onChange: setQuery,
 								onArrow,

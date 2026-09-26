@@ -1,6 +1,17 @@
 import type { KeyboardEvent } from 'react';
+import { prettyKeys, shortcutFor } from '../shortcuts';
 import Button from './Button';
 import Kbd from './Kbd';
+
+// which key summons which box. the lane already says which box this is,
+// so the id is derived here rather than passed in: a call site that could
+// hand over a key is a call site that could hand over the wrong one, and
+// the chip would then advertise a binding the handler does not have
+const FOCUS_KEY: Record<SearchLane, ShortcutId> = {
+	projects: 'focusSearch',
+	github: 'focusGithubSearch',
+	servers: 'focusServerSearch'
+};
 
 // the input and nothing else. it carried a SEARCH PROJECTS label and a
 // 10px sort: button; the placeholder names the scope now and the sort is
@@ -47,7 +58,12 @@ const SearchBox = ({
 				// appears, and the project box is where that typing goes
 				autoFocus={lane === 'projects'}
 				data-lane-search={lane}
-				className='w-full py-2 pl-3.5 pr-20 bg-transparent outline-none text-15 text-text-primary placeholder:text-text-muted'
+				// the chips float over the input's right end, so the padding has
+				// to be the room they take. two of them at once is the one case
+				// that needs more than the old reserve, and it can only happen
+				// on an empty box: with text the focus chip is gone and the
+				// clear x that replaces it is the narrower of the two
+				className={`w-full py-2 pl-3.5 ${!value && enterHint ? 'pr-36' : 'pr-20'} bg-transparent outline-none text-15 text-text-primary placeholder:text-text-muted`}
 				placeholder={placeholder}
 				value={value}
 				onChange={e => onChange(e.target.value)}
@@ -66,6 +82,13 @@ const SearchBox = ({
 				)}
 				{/* the same chip every other shortcut hint wears */}
 				{enterHint && <Kbd>Enter</Kbd>}
+				{/* the key that summons this box, so the binding is discoverable
+				    without opening settings. it goes once there is text: the hint
+				    is for the box you are not in, and the clear x arrives on the
+				    same keystroke, so the row was changing at that moment anyway.
+				    clicking in changes nothing, which was the whole objection to
+				    swapping it with enter on focus */}
+				{!value && <Kbd>{prettyKeys(shortcutFor(FOCUS_KEY[lane]))}</Kbd>}
 			</div>
 		</div>
 	);
