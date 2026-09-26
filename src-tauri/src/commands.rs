@@ -19,6 +19,7 @@ use crate::services::launcher;
 use crate::services::platform::Quiet;
 use crate::services::platform::{wsl, wsl_watch, RuntimeInfo};
 use crate::services::pty;
+use crate::services::runtime_log::log_line;
 use crate::services::scanner::LOCAL_FS;
 use crate::services::scanner::{ScanOutcome, UnavailableReason};
 use crate::services::server_folders::{
@@ -1858,16 +1859,30 @@ pub fn import_config_from_file(
     }
 
     // best effort: the key may be taken on this machine, and that must not
-    // fail the import. persisted only if it binds
+    // fail the import. persisted only if it binds - but every outcome says so
+    // in the log, because an imported hotkey that quietly did not come across
+    // is the other way this ends badly, and the toast says "imported" either
+    // way
     let previous = state.pref_store.lock().map_err(lock_err)?.summon_hotkey();
-    if config.summon_hotkey != previous
-        && crate::summon::rebind(&app, &previous, &config.summon_hotkey).is_ok()
-    {
-        let _ = state
-            .pref_store
-            .lock()
-            .map_err(lock_err)?
-            .set_summon_hotkey(Some(config.summon_hotkey));
+    let wanted = config.summon_hotkey;
+    if wanted != previous {
+        match crate::summon::rebind(&app, &previous, &wanted) {
+            Ok(()) => {
+                if let Err(e) = state
+                    .pref_store
+                    .lock()
+                    .map_err(lock_err)?
+                    .set_summon_hotkey(Some(wanted.clone()))
+                {
+                    log_line!(
+                        "[DevGo] imported summon hotkey '{wanted}' bound but was not saved, so it reverts to '{previous}' next launch: {e}"
+                    );
+                }
+            }
+            Err(e) => log_line!(
+                "[DevGo] imported summon hotkey '{wanted}' would not bind, keeping '{previous}': {e}"
+            ),
+        }
     }
 
     Ok(state.workspace_store.lock().map_err(lock_err)?.list())

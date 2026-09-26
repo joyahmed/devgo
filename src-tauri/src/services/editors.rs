@@ -909,8 +909,13 @@ fn usable_in_session(c: &Candidate, wayland: bool) -> bool {
 }
 
 // is there a compositor? WAYLAND_DISPLAY is what one sets, and what foot
-// itself reads to decide
-fn wayland_session() -> bool {
+// itself reads to decide.
+//
+// pub(crate) because `summon.rs` asks the same question for a different
+// reason - the global hotkey crate is x11-only - and two detectors that can
+// disagree about which session this is would be worse than one in a module
+// named after editors
+pub(crate) fn wayland_session() -> bool {
     std::env::var_os("WAYLAND_DISPLAY").is_some_and(|v| !v.is_empty())
 }
 

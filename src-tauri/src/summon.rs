@@ -1,5 +1,6 @@
 use tauri::{AppHandle, Emitter, Manager};
 
+use crate::services::editors::wayland_session;
 use crate::services::runtime_log::log_line;
 use tauri_plugin_global_shortcut::{
     GlobalShortcutExt, Shortcut, ShortcutState,
@@ -96,11 +97,65 @@ fn parse(accelerator: &str) -> Result<Shortcut, String> {
         .map_err(|e| format!("not a valid accelerator: {e}"))
 }
 
+/// The line the log gets when a register returns Ok, and the reason there is
+/// one at all.
+///
+/// Do not delete this as noise. Until it existed, success wrote nothing, so
+/// an empty log was ambiguous in the worst way available: it meant either
+/// "the hotkey is bound" or "nothing was ever bound and no layer said so".
+/// The second is real — `global-hotkey`'s x11 backend opens its X connection
+/// on a worker thread and returns Ok before that connection is attempted,
+/// then answers Ok to a register whose worker is already dead, and the one
+/// `tracing::error!` that would have explained it is behind a feature this
+/// build does not enable. A line on success is what makes the absence of a
+/// line mean something.
+///
+/// `wayland` and `no_x` weaken the wording rather than changing it, because
+/// on linux "registered" is not always a claim this process can make. The
+/// crate has no wayland backend at all, only x11, so there are three cases
+/// and the log should not read the same in all of them: no X server to reach
+/// (the Ok is fabricated and nothing is bound), a compositor with XWayland
+/// (the grab can be taken and still never be delivered a key, which is the
+/// ubuntu report), and a plain X11 session (the Ok means what it says).
+fn bound_line(accelerator: &str, wayland: bool, no_x: bool) -> String {
+    let session = if wayland { "wayland" } else { "no" };
+    if no_x {
+        format!(
+            "[DevGo] summon hotkey '{accelerator}' reported registered, but DISPLAY is unset in a {session} session: global-hotkey binds through x11 only and its x11 backend answers Ok without ever reaching a server, so nothing is bound - raise the window from the tray"
+        )
+    } else if wayland {
+        format!(
+            "[DevGo] summon hotkey '{accelerator}' registered through x11, but this is a wayland session: global-hotkey has no wayland backend, so the compositor may never deliver the key however this line reads - raise the window from the tray if it does not"
+        )
+    } else {
+        format!("[DevGo] summon hotkey '{accelerator}' registered")
+    }
+}
+
+/// Is the x11 backend flying blind - linux, and no DISPLAY for it to open?
+///
+/// `cfg!` rather than `#[cfg]`: windows and macos bind through their own os
+/// api and never set DISPLAY, so the question is only linux's, but both arms
+/// keep compiling everywhere and there is no second code path to maintain.
+fn x11_blind() -> bool {
+    cfg!(target_os = "linux")
+        && !std::env::var_os("DISPLAY").is_some_and(|v| !v.is_empty())
+}
+
 /// Register `accelerator` as the summon hotkey.
 ///
 /// Returns Err rather than panicking when the combination is already owned by
 /// another application — a launcher that refuses to start because something
 /// else holds Ctrl+Alt+Space would be worse than one without a hotkey.
+///
+/// The Ok branch logs, here rather than at the call sites, so that startup,
+/// the settings rebind and a settings import all leave the same evidence.
+///
+/// What is deliberately *not* asked: `GlobalShortcut::is_registered`. It is
+/// callable from here and it is cheap, but it only looks the shortcut up in
+/// the plugin's own HashMap, which `on_shortcut` has just inserted into on
+/// the line above - it can answer nothing but true, and a log line that
+/// cannot be false is worse than no line.
 pub fn register(app: &AppHandle, accelerator: &str) -> Result<(), String> {
     let shortcut = parse(accelerator)?;
     let handle = app.clone();
@@ -112,7 +167,14 @@ pub fn register(app: &AppHandle, accelerator: &str) -> Result<(), String> {
                 toggle(&handle);
             }
         })
-        .map_err(|e| format!("{e}"))
+        .map_err(|e| format!("{e}"))?;
+    // windows and macos never set WAYLAND_DISPLAY and x11_blind is false for
+    // them, so both get the plain wording with no cfg here
+    log_line!(
+        "{}",
+        bound_line(accelerator, wayland_session(), x11_blind())
+    );
+    Ok(())
 }
 
 pub fn unregister(app: &AppHandle, accelerator: &str) {
@@ -137,7 +199,34 @@ pub fn rebind(
 
 #[cfg(test)]
 mod tests {
-    use super::raise_failure;
+    use super::{bound_line, raise_failure};
+
+    #[test]
+    fn success_says_the_key_it_bound() {
+        let line = bound_line("Ctrl+Alt+Space", false, false);
+        assert!(line.contains("Ctrl+Alt+Space"), "{line}");
+        assert!(line.contains("registered"), "{line}");
+        assert!(!line.contains("wayland"), "{line}");
+    }
+
+    #[test]
+    fn wayland_success_admits_it_may_not_work() {
+        let line = bound_line("Ctrl+Alt+Space", true, false);
+        assert!(line.contains("wayland"), "{line}");
+        assert!(line.contains("x11"), "{line}");
+        assert!(line.contains("tray"), "{line}");
+    }
+
+    // the case the crate lies about: no server, Ok anyway. the line must not
+    // say the bare "registered" the caller would otherwise trust
+    #[test]
+    fn without_a_display_the_line_says_nothing_is_bound() {
+        for wayland in [false, true] {
+            let line = bound_line("Ctrl+Alt+Space", wayland, true);
+            assert!(line.contains("DISPLAY is unset"), "{line}");
+            assert!(line.contains("nothing is bound"), "{line}");
+        }
+    }
 
     #[test]
     fn says_nothing_when_every_step_succeeds() {
