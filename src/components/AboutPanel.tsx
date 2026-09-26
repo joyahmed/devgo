@@ -3,7 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { useEffect, useState } from 'react';
 import { isWindows } from '../platform';
 import Button from './Button';
-import { Code, HelpSection } from './HelpPanel';
+import { Code, HelpSection, PROSE } from './HelpPanel';
 
 const REPO = 'https://github.com/joyahmed/devgo';
 
@@ -21,9 +21,9 @@ const AboutPanel = () => {
 	}, []);
 
 	return (
-		<div className='flex flex-col gap-5'>
+		<div className='flex flex-col gap-6'>
 			<div>
-				<h4 className='flex items-center gap-2 text-18 font-bold text-text-primary mb-1'>
+				<h4 className='flex items-center gap-2 text-24 font-bold text-text-primary mb-2'>
 					<span className='text-accent leading-none' aria-hidden='true'>
 						&#10022;
 					</span>
@@ -32,7 +32,7 @@ const AboutPanel = () => {
 						<span className='font-mono text-15 text-text-muted'>v{version}</span>
 					)}
 				</h4>
-				<p className='text-13 text-text-secondary max-w-[76ch]'>
+				<p className={PROSE}>
 					A cross-platform project launcher: Windows and WSL, macOS, and
 					Linux. The installers are unsigned. Built by Joy Ahmed with
 					Tauri, Rust and React.
@@ -49,7 +49,7 @@ const AboutPanel = () => {
 						<Button
 							key={l.label}
 							variant='ghost'
-							className='p-0 text-13 text-accent hover:bg-transparent'
+							className='p-0 text-15 text-accent hover:bg-transparent'
 							onClick={() => invoke('open_url', { url: l.href }).catch(() => {})}
 						>
 							{l.label}

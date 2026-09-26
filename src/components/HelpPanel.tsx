@@ -4,17 +4,24 @@ import { isMac, isWindows } from '../platform';
 import { labelFor, prettyKeys, shortcutFor } from '../shortcuts';
 import Button from './Button';
 
+// the one prose surface in devgo. text-13 is the chrome size — row
+// metadata, a button's label, a keyboard hint — and Help and About are
+// the only place that asks to be read a paragraph at a time, so they
+// take the next step of the scale. leading-relaxed because the token's
+// own 22px is set for a row of controls, not for eight lines of it, and
+// the measure still stops at 76ch: the panel is wide for the rows in the
+// other panels, not for these sentences
+export const PROSE = 'text-15 leading-relaxed text-text-secondary max-w-[76ch]';
+
 // one help section: a heading and a paragraph. short, in-app, offline:
 // the rules devgo lives by were code comments and tutorial chapters, and
 // a user of the installed app sees neither
 export const HelpSection = ({ title, children }: HelpSectionProps) => (
 	<div>
-		<h4 className='text-15 font-semibold text-text-primary mb-1'>{title}</h4>
-		{/* help is prose and stops at a reading measure: the panel is wide
-		    for the rows in the other panels, not for these sentences */}
-		<div className='text-13 text-text-secondary flex flex-col gap-2 max-w-[76ch]'>
-			{children}
-		</div>
+		{/* text-18, a step over the body it introduces: at the same size a
+		    dozen sections of prose have nothing to scan by */}
+		<h4 className='text-18 font-semibold text-text-primary mb-2'>{title}</h4>
+		<div className={`${PROSE} flex flex-col gap-3`}>{children}</div>
 	</div>
 );
 
@@ -195,7 +202,7 @@ const HelpPanel = ({ onError, revealLabel }: HelpPanelProps) => {
 	}, []);
 
 	return (
-		<div className='flex flex-col gap-5'>
+		<div className='flex flex-col gap-6'>
 			{SECTIONS.filter(s => !(s.windowsOnly && !isWindows)).map(s => (
 				<HelpSection key={s.title} title={s.title}>
 					{s.body}
@@ -213,7 +220,7 @@ const HelpPanel = ({ onError, revealLabel }: HelpPanelProps) => {
 				<div>
 					<Button
 						variant='ghost'
-						className='p-0 text-13 text-accent hover:bg-transparent'
+						className='p-0 text-15 text-accent hover:bg-transparent'
 						onClick={() =>
 							invoke('reveal_app_data_dir').catch(e => onError(String(e)))
 						}
