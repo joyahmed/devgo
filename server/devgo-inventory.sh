@@ -401,6 +401,161 @@ host_json() {
 		"${#P_STATUS[@]}" "$online" "${#S_FILE[@]}"
 }
 
+# --------------------------------------------------------------- backups
+# what this box already backs up, read-only. every probe is a stat, an ls,
+# a du or a tail of a log that is already on this disk. nothing here talks
+# to a network: an off-site copy is reported out of the backup script's OWN
+# log, never by asking the remote. devgo puts no wall-clock timeout on the
+# ssh that runs this file, so a probe that could block on a round trip
+# would hang the whole server row with nothing to cancel it.
+#
+# devgo invokes the tool that holds the secret; it never reads the secret.
+# rclone is looked for here as a file that exists, and is never run, never
+# read and never configured from this script.
+#
+# ⭐ three answers, not two. no "backups" key at all — an older or an
+# edited copy of this script — is NOT the same as a job with no off-site
+# copy, and offsite:null ("nothing said either way") is not the same as
+# offsite:false ("looked, and there is none"). the app renders all three
+# differently: collapsing them cries wolf at the boxes that are fine.
+
+# ⛔ /var/backups is NOT in this list and must not be added: on every
+# debian it holds apt's own dpkg.status.0.gz rotations, which nobody
+# scheduled and nobody copies off-site. reporting it turns the one panel
+# that is supposed to say "this box has no off-site copy" into a panel
+# that says it on every box, which is the same as saying nothing
+IFS=: read -r -a BACKUP_ROOTS <<<"${DEVGO_BACKUP_ROOTS:-$HOME/backups:/srv/backups:/backup}"
+# a box that keeps its copies on a removable disk instead
+for d in /media/*/backups /mnt/*/backups; do
+	[[ -d $d ]] && BACKUP_ROOTS+=("$d")
+done
+
+# a name that opens with a datestamp is one copy of a job, never a job
+dated() { local b=${1%/}; [[ ${b##*/} =~ ^[0-9]{4}-?[0-9]{2}-?[0-9]{2} ]]; }
+
+# rclone as a path, not as a command: the crontab that runs the backup sets
+# its own PATH, and under a non-interactive ssh ~/bin is usually not on it
+RCLONE=''
+for d in "$(command -v rclone 2>/dev/null)" "$HOME/bin/rclone" /usr/local/bin/rclone /usr/bin/rclone; do
+	[[ -n $d && -x $d ]] && { RCLONE=$d; break; }
+done
+
+# when the newest thing in a directory last changed. ls without -a already
+# skips the lock files, which is what we want: a lock is not a backup
+newest_in() {
+	local n
+	n=$(ls -1t "$1" 2>/dev/null | head -1)
+	[[ -n $n ]] && stat -c %Y "$1/$n" 2>/dev/null
+}
+
+# how many copies are kept: datestamped entries one level down, else two
+# (a job with daily/ weekly/ monthly/ tiers), else the plain files
+retained_in() {
+	local d=$1 e n=0
+	for e in "$d"/*; do [[ -e $e ]] && dated "$e" && n=$((n + 1)); done
+	[[ $n -gt 0 ]] || for e in "$d"/*/*; do [[ -e $e ]] && dated "$e" && n=$((n + 1)); done
+	[[ $n -gt 0 ]] || for e in "$d"/*; do [[ -f $e && $e != *.log ]] && n=$((n + 1)); done
+	printf '%s' "$n"
+}
+
+# the job's logs, newest first, at most four. ⚠️ NOT one log: zetta's
+# postgres job writes logs/cron.log for the dumps and logs/files.log for
+# the env files, and only the first names the off-site target. taking the
+# newest alone reported that job as having no target it plainly has
+job_logs() {
+	local l
+	l=$(ls -1t "$1"/logs/*.log 2>/dev/null | head -4)
+	[[ -n $l ]] || l=$(ls -1t "$1"/*.log 2>/dev/null | head -4)
+	printf '%s' "$l"
+}
+
+backup_job_json() {
+	local d=$1 name logs=() txt st=unknown off=null offlast='' offtgt='' size='' last='' v l line oline
+	name=${d##*/}
+	# "backups" names nothing; the disk or the account it sits on does
+	[[ $name == backup || $name == backups ]] && { v=${d%/*}; name=${v##*/}; }
+	last=$(newest_in "$d")
+	# du walks the tree, so it is the one probe here that can be slow on a
+	# store nobody has pruned. bounded when coreutils can bound it; a null
+	# size is a size we did not wait for, and the app prints it as unknown
+	if has timeout; then
+		size=$(timeout 5 du -sb "$d" 2>/dev/null | cut -f1)
+	else
+		size=$(du -sb "$d" 2>/dev/null | cut -f1)
+	fi
+	while IFS= read -r l; do [[ -n $l && -r $l ]] && logs+=("$l"); done <<<"$(job_logs "$d")"
+
+	# a status file the backup script wrote itself wins: it said so in one
+	# word and did not need to be guessed at
+	if [[ -r $d/LATEST_STATUS ]]; then
+		v=$(sed -n 's/^status=//p' "$d/LATEST_STATUS" 2>/dev/null | tail -1)
+		case ${v^^} in SUCCESS | OK | DONE) st=success ;; FAIL* | ERROR*) st=failed ;; esac
+	fi
+
+	for l in "${logs[@]}"; do
+		txt=$(tail -c 20000 "$l" 2>/dev/null)
+		[[ -n $txt ]] || continue
+		if [[ $st == unknown ]]; then
+			line=$(grep -E 'SUCCESS|FAIL|ERROR|(^| )OK( |$)' <<<"$txt" | tail -1)
+			case $line in
+				*FAIL* | *ERROR*) st=failed ;;
+				*SUCCESS* | *OK*) st=success ;;
+			esac
+		fi
+		oline=$(grep -iE 'off-?site|rclone|remote sync' <<<"$txt" | tail -1)
+		[[ -n $oline ]] || continue
+		off=true
+		[[ -n $offlast ]] || offlast=$(stat -c %Y "$l" 2>/dev/null)
+		# a remote:path token, which must open with a letter — 02:30:11 is
+		# a clock and NOTICE: is a log level, and neither is a target
+		[[ -n $offtgt ]] || offtgt=$(grep -oE '[A-Za-z][A-Za-z0-9_.-]*:[A-Za-z0-9_./-]+' <<<"$oline" | tail -1)
+	done
+
+	if [[ $off == null && ${#logs[@]} -gt 0 ]]; then
+		# a log was read and it says nothing about a copy leaving this box
+		off=false
+	elif [[ $off == null && -z $RCLONE ]]; then
+		# nothing logged AND no tool on the box that could have copied it
+		# anywhere. that is a finding, not a hole in the reading
+		off=false
+	fi
+
+	printf '{"name":%s,"dir":%s,"last_run":%s,"size_bytes":%s,"retained":%s,"offsite":%s,"offsite_last":%s,"offsite_target":%s,"last_status":%s,"log":%s}' \
+		"$(jstr "$name")" "$(jstr "$d")" "$(jnum "$last")" "$(jnum "$size")" "$(retained_in "$d")" \
+		"$off" "$(jnum "$offlast")" "$(jopt "$offtgt")" "$(jstr "$st")" "$(jopt "${logs[0]:-}")"
+}
+
+# a root whose own children are datestamped IS the job; a root whose
+# children are names is a shelf of them
+backups_json() {
+	local jobs='' r e subs dsub files
+	for r in "${BACKUP_ROOTS[@]}"; do
+		r=${r%/}
+		[[ -n $r && -d $r && -r $r && -x $r ]] || continue
+		subs=0 dsub=0 files=0
+		for e in "$r"/*; do
+			[[ -e $e ]] || continue
+			if [[ -d $e ]]; then
+				subs=$((subs + 1))
+				dated "$e" && dsub=$((dsub + 1))
+			else
+				files=$((files + 1))
+			fi
+		done
+		if [[ $subs -eq 0 && $files -eq 0 ]]; then
+			continue
+		elif [[ $dsub -gt 0 || $subs -eq 0 ]]; then
+			jobs+="${jobs:+,}$(backup_job_json "$r")"
+		else
+			for e in "$r"/*/; do
+				e=${e%/}
+				[[ -d $e && -r $e ]] && jobs+="${jobs:+,}$(backup_job_json "$e")"
+			done
+		fi
+	done
+	printf '{"known":true,"jobs":[%s]}' "$jobs"
+}
+
 apps=''
 for i in "${!A_DIR[@]}"; do apps+="${apps:+,}$(app_json "$i")"; done
 orphans=''
@@ -408,7 +563,7 @@ for i in "${!P_APP[@]}"; do [[ ${P_APP[i]} -lt 0 ]] && orphans+="${orphans:+,}$(
 osites=''
 for i in "${!S_FILE[@]}"; do [[ ${S_APP[i]} -lt 0 ]] && osites+="${osites:+,}$(site_json "$i")"; done
 
-doc="{\"schema\":1,\"generated\":$(jstr "$(date +%Y-%m-%dT%H:%M:%S%z)"),\"host\":$(host_json),\"apps\":[$apps],\"orphan_processes\":[$orphans],\"orphan_sites\":[$osites]}"
+doc="{\"schema\":2,\"generated\":$(jstr "$(date +%Y-%m-%dT%H:%M:%S%z)"),\"host\":$(host_json),\"apps\":[$apps],\"orphan_processes\":[$orphans],\"orphan_sites\":[$osites],\"backups\":$(backups_json)}"
 
 if $PRETTY && has jq; then
 	jq . <<<"$doc"

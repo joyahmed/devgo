@@ -19,6 +19,7 @@ import {
 import { savedThemeId, setTheme, THEMES } from '../themes';
 import Button from './Button';
 import AboutPanel from './AboutPanel';
+import Backups from './Backups';
 import Drawer from './Drawer';
 import HelpPanel from './HelpPanel';
 import Kbd from './Kbd';
@@ -1173,6 +1174,11 @@ const Settings = ({
 					}}
 				/>
 			)
+		},
+		{
+			id: 'backups',
+			label: 'Backups',
+			render: () => <Backups {...{ onError }} />
 		},
 		{
 			id: 'help',

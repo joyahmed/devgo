@@ -24,6 +24,62 @@ pub struct Inventory {
     pub host: Host,
     #[serde(default)]
     pub apps: Vec<App>,
+    // ⭐ Option, and the option is the point. None is "this box's copy of
+    // the contract has no backups key" — an older script, or one the user
+    // edited, which server_setup deliberately refuses to overwrite. That
+    // is NOT the same reading as Some(b) whose jobs say there is no
+    // off-site copy, and the panel must never render them alike: the
+    // second is a warning, the first is an offer to update the script
+    #[serde(default)]
+    pub backups: Option<Backups>,
+}
+
+/// What the box says about what it backs up. Read-only: the contract
+/// stats, lists and tails files that are already on that disk, and never
+/// asks a remote anything — there is no wall-clock timeout on the ssh
+/// that carries this, so a network probe in here would hang the listing.
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub struct Backups {
+    // the script looked. false (or the whole struct missing) means it did
+    // not, which is why the default is the cautious one
+    #[serde(default)]
+    pub known: bool,
+    // empty and known is a real answer: this box backs nothing up
+    #[serde(default)]
+    pub jobs: Vec<BackupJob>,
+}
+
+/// One directory of kept copies, and what the box's own log says about it.
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub struct BackupJob {
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub dir: String,
+    // unix seconds of the newest copy in the directory
+    #[serde(default)]
+    pub last_run: Option<u64>,
+    #[serde(default)]
+    pub size_bytes: Option<u64>,
+    #[serde(default)]
+    pub retained: u32,
+    // ⭐ the same three-way reading one level down. Some(true) a copy
+    // leaves the box, Some(false) the log was read and none does, None
+    // nothing on the box said either way. A job with no log on a box that
+    // has no rclone is Some(false): that is a finding, not a silence
+    #[serde(default)]
+    pub offsite: Option<bool>,
+    #[serde(default)]
+    pub offsite_last: Option<u64>,
+    // a remote:path as the log spelled it, never a credential: the
+    // contract reads the log, not the tool's config
+    #[serde(default)]
+    pub offsite_target: Option<String>,
+    // success | failed | unknown
+    #[serde(default)]
+    pub last_status: String,
+    #[serde(default)]
+    pub log: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
@@ -654,6 +710,67 @@ mod tests {
                 .unwrap();
         assert_eq!(bare.apps[0].kind, "");
         assert!(parse_inventory("not json").is_err());
+    }
+
+    // ⭐ the three readings the panel must keep apart, as the contract
+    // spells them. the payload is what the live script actually returned
+    // from the prod box on 2026-09-26, trimmed to the backups key
+    #[test]
+    fn the_three_backup_readings_stay_three() {
+        // 1. no backups key at all: an older script, or one the user
+        // edited and server_setup refuses to overwrite. not a warning
+        assert!(inv().backups.is_none());
+        assert!(parse_inventory(r#"{"apps":[]}"#).unwrap().backups.is_none());
+
+        let text = r#"{"schema":2,"apps":[],"backups":{"known":true,"jobs":[
+          {"name":"postgres","dir":"/home/joy/backups/postgres","last_run":1790389811,"size_bytes":39920378,
+           "retained":13,"offsite":true,"offsite_last":1790391701,"offsite_target":"gdcrypt:postgres",
+           "last_status":"success","log":"/home/joy/backups/postgres/logs/files.log"},
+          {"name":"med-store","dir":"/home/joy/backups/med-store","last_run":1790402846,"size_bytes":1034509,
+           "retained":10,"offsite":false,"offsite_last":null,"offsite_target":null,
+           "last_status":"success","log":"/home/joy/backups/med-store/backup.log"},
+          {"name":"mysql-final","dir":"/home/joy/backups/mysql-final","last_run":1785346471,"size_bytes":6866794,
+           "retained":2,"offsite":null,"offsite_last":null,"offsite_target":null,
+           "last_status":"unknown","log":null}]}}"#;
+        let b = parse_inventory(text).unwrap().backups.unwrap();
+        assert!(b.known);
+        assert_eq!(b.jobs.len(), 3);
+        // 2. reported, a copy leaves the box
+        assert_eq!(b.jobs[0].offsite, Some(true));
+        assert_eq!(
+            b.jobs[0].offsite_target.as_deref(),
+            Some("gdcrypt:postgres")
+        );
+        assert_eq!(b.jobs[0].retained, 13);
+        // 3. reported, and the log says nothing leaves. the warning
+        assert_eq!(b.jobs[1].offsite, Some(false));
+        // and the fourth reading that is NOT a warning: nothing on the
+        // box said either way, which is not the same as "there is none"
+        assert_eq!(b.jobs[2].offsite, None);
+        assert_eq!(b.jobs[2].log, None);
+    }
+
+    // a box that backs nothing up still answers. known with no jobs is a
+    // reading; it must not arrive as None and be read as "old script"
+    #[test]
+    fn a_box_with_no_backups_still_reports() {
+        let b = parse_inventory(
+            r#"{"apps":[],"backups":{"known":true,"jobs":[]}}"#,
+        )
+        .unwrap()
+        .backups
+        .unwrap();
+        assert!(b.known);
+        assert!(b.jobs.is_empty());
+        // and a job stripped to nothing still loads, like every other
+        // struct in this contract
+        let bare = parse_inventory(r#"{"backups":{"known":true,"jobs":[{}]}}"#)
+            .unwrap()
+            .backups
+            .unwrap();
+        assert_eq!(bare.jobs[0].name, "");
+        assert_eq!(bare.jobs[0].last_run, None);
+        assert_eq!(bare.jobs[0].retained, 0);
     }
 
     // the exact process the script emits for a docker container on the

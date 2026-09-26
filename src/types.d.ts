@@ -362,6 +362,39 @@ interface ServerInventory {
 		nginx_sites: number;
 	};
 	apps: ServerApp[];
+	/// ⭐ undefined is a reading of its own: this box's copy of the
+	/// contract has no backups key — an older script, or one its owner
+	/// edited, which devgo deliberately refuses to overwrite. That is NOT
+	/// "this box has no off-site copy", and the panel must not say it is
+	backups?: ServerBackups | null;
+}
+
+/// what the box says about what it backs up. read-only, and every probe
+/// in it is local to that disk: no remote is asked anything
+interface ServerBackups {
+	/// the script looked. false, or the whole object missing, means it
+	/// did not — so the default is the cautious one
+	known: boolean;
+	/// empty and known is a real answer: this box backs nothing up
+	jobs: ServerBackupJob[];
+}
+
+interface ServerBackupJob {
+	name: string;
+	dir: string;
+	/// unix seconds of the newest copy in the directory
+	last_run: number | null;
+	size_bytes: number | null;
+	retained: number;
+	/// ⭐ the same three-way reading one level down. true a copy leaves
+	/// the box, false the log was read and none does, null nothing on the
+	/// box said either way. only false is a warning
+	offsite: boolean | null;
+	offsite_last: number | null;
+	/// a remote:path as the log spelled it, never a credential
+	offsite_target: string | null;
+	last_status: 'success' | 'failed' | 'unknown' | string;
+	log: string | null;
 }
 
 /// run types the line and presses enter; pretype leaves it on the prompt;
@@ -800,6 +833,19 @@ interface ScanningPanelProps {
 
 interface WslDoctorProps {
 	onError: (message: string) => void;
+}
+
+interface BackupsProps {
+	onError: (message: string) => void;
+}
+
+interface BackupServerProps {
+	server: Server;
+	listing?: ServerListing;
+}
+
+interface BackupJobProps {
+	job: ServerBackupJob;
 }
 
 interface WslFindingProps {
