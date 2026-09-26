@@ -1529,6 +1529,13 @@ interface TargetGroupProps {
 	onPick: (id?: string) => void;
 	/// the default just fired: it pulses once
 	pulse?: boolean;
+	/// the footer has not had to give up the group labels yet. false drops
+	/// the label to sr-only — the last thing the strip sheds, since
+	/// `Terminal` is also a target name
+	showLabel?: boolean;
+	/// the footer has not had to give up the key chips yet. false drops
+	/// them; the button stays named, clickable and tooltipped with its key
+	showKeys?: boolean;
 }
 
 /// one entry on the footer's right end: a word, the key that reaches it,
@@ -1543,13 +1550,10 @@ interface FooterHint {
 }
 
 interface FooterHintGroup {
+	/// also the name the footer's shed order knows this group by: a group
+	/// whose id is in SHED_ORDER hides once the strip has run out of room
+	/// for it, and one that is absent from that list never hides
 	id: string;
-	/// the literal tailwind class that decides the width this group needs
-	/// ("hidden @min-[40rem]/hints:flex"). a container query on the cluster
-	/// at the footer's right end, never a viewport breakpoint: what crowds
-	/// the strip is the launch targets, not the screen. omitted, the group
-	/// is always shown
-	show?: string;
 	items: FooterHint[];
 }
 
