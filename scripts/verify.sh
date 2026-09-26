@@ -257,15 +257,48 @@ else
     echo "  !! repo, so the rust tier RUNS (see trap #1b). if it turns out to be ours"
     echo "  !! after all, cargo blocks on the target lock instead of lying to you."
   fi
-  run_check "cargo fmt --check" "$REPO_ROOT/src-tauri" cargo fmt --check
+  # ⭐ probe what each check actually RUNS, not the binary that fronts it. the
+  # three lines below need three different things: `cargo fmt` needs the rustfmt
+  # COMPONENT, `cargo clippy` needs the clippy component, and only `cargo test`
+  # is satisfied by cargo alone. rustup installs them separately —
+  # `rustup toolchain install --profile minimal` gives you cargo with NEITHER —
+  # so `command -v cargo` licenses one of these three and guesses at the other
+  # two. on a minimal box the guess is wrong and the gate prints
+  # `error: no such command: 'fmt'` and scores RED, which says "the code is
+  # broken" when the truth is "this machine cannot check formatting". that is
+  # trap #2 exactly. a missing component SKIPS.
+  #
+  # `cargo fmt --version` / `cargo clippy --version` are the cheapest question
+  # that asks the real thing: they shell out to the component itself and exit
+  # 101 with "no such command" when it is absent. neither touches the target
+  # lock, so neither can turn a busy tree into a red one — and both sit inside
+  # this else-branch, after the `ours` skip above, so a busy repo still reports
+  # the busy reason and never a component one.
+  #
+  # ⭐ the skip reason names the FIX, not the symptom: the reader should be able
+  # to paste `rustup component add rustfmt` and move on.
+  if (cd "$REPO_ROOT/src-tauri" && cargo fmt --version) >/dev/null 2>&1; then
+    run_check "cargo fmt --check" "$REPO_ROOT/src-tauri" cargo fmt --check
+  else
+    skip "cargo fmt --check" "rustfmt component absent — rustup component add rustfmt"
+  fi
   # strict form on purpose: plain `cargo clippy` exits 0 even with findings, so
   # without -D warnings this line would be decorative. baseline says zero findings.
   # and say which clippy said so. rust-toolchain.toml at the repo root pins this to
   # the version CI runs, so the line should read 0.1.98 — if it does not, your rustup
   # is missing the pinned toolchain and the skew this gate had in 09/2026 is back.
-  printf '  %-24s %s\n' "clippy version" "$(cd "$REPO_ROOT/src-tauri" && cargo clippy --version 2>&1)"
-  run_check "cargo clippy -D warnings" "$REPO_ROOT/src-tauri" cargo clippy --all-targets -- -D warnings
+  # the version line moved INSIDE the probe: with clippy absent it used to print
+  # the "no such command" error under a "clippy version" label, which reads as a
+  # broken toolchain rather than an uninstalled component.
+  if (cd "$REPO_ROOT/src-tauri" && cargo clippy --version) >/dev/null 2>&1; then
+    printf '  %-24s %s\n' "clippy version" "$(cd "$REPO_ROOT/src-tauri" && cargo clippy --version 2>&1)"
+    run_check "cargo clippy -D warnings" "$REPO_ROOT/src-tauri" cargo clippy --all-targets -- -D warnings
+  else
+    skip "cargo clippy -D warnings" "clippy component absent — rustup component add clippy"
+  fi
   if [ "$FULL" -eq 1 ]; then
+    # no component probe: `cargo test` is the one line here that cargo alone
+    # satisfies, so `command -v cargo` above really does license it.
     run_check "cargo test" "$REPO_ROOT/src-tauri" cargo test
   fi
 fi
