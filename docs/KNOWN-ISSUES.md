@@ -144,20 +144,26 @@ for never starts, with no error — because DevGo has handed off by then, and wh
 window belongs to the program that owns it. On a Mac, read the PATH entry above first: that is the
 known cause, and Ghostty is the target I know is bad there.
 
-The log will not settle it for you. It records refusals and the unexplained, not launches, so a launch
-that opens a window and swallows the command leaves no line in it. Attach it anyway for the version
-and OS header at the top, and tell me the rest: which program, which platform, whether a window
-appeared, whether it was in the right directory, and what it printed. That is enough for me to move
-the row from the second table to the first.
+The log will go a long way here. Every launch you ask for writes two lines: what DevGo was about to
+run, and whether the spawn was accepted or refused. Between them they say which of the two failures
+you hit — if there is no "started" line, the program never ran and the refusal names why; if there
+is one, the window opened and whatever went wrong happened inside it, which is the case above. On a
+Mac the first line also names the script DevGo generated, and reading that file shows you the PATH
+it set.
+
+Send the log and, if you can, say which program, whether a window appeared, whether it was in the
+right directory, and what it printed. That is enough for me to move the row from the second table to
+the first.
 
 Until then, Settings › Editors & Terminals will point the agent and dev-script keys at anything in
 the first table.
 
 ## The log, and why attaching it helps
 
-DevGo keeps one small log beside its config, capped at 1 MiB with one rotated copy. It is written
-when something refuses, and it carries the version, the OS and the reason — the things a bug report
-otherwise costs a round trip to establish.
+DevGo keeps one small log beside its config, capped at 1 MiB with one rotated copy. It records every
+launch you ask for and every refusal, and it carries the version, the OS and the reason — the things
+a bug report otherwise costs a round trip to establish. It does not record scans, refreshes or
+anything that runs on its own.
 
 | | |
 |---|---|
