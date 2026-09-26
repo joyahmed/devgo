@@ -526,19 +526,27 @@ const ServersLane = ({
 					</div>
 				)}
 				{searchInHeading && (
+					// the noun and the caret the command row's Servers ▾ wears, at
+					// heading scale: no +, because this adds nothing on the click — it
+					// opens a menu, and the glyph was promising a verb it never had.
+					// ⚠️ it does repeat the lane's own SERVERS label two words to its
+					// left. the alternative was a different word here than on the row
+					// form, and one pattern for all three menus is worth more than
+					// avoiding that echo.
 					// no title: this opens the same menu 4px under itself, and a native
 					// tooltip lands on its first entry (see GithubControls). both entries
 					// — a server by hand, the ~/.ssh/config import — say what it said
 					<Button
 						variant='ghost'
-						className='text-11 px-1.5 py-0.5 -my-1'
+						className='gap-1.5 text-11 px-1.5 py-0.5 -my-1'
 						onClick={e => {
 							e.stopPropagation();
 							const r = e.currentTarget.getBoundingClientRect();
 							onAddMenu(r.left, r.bottom + 4);
 						}}
 					>
-						+ Add
+						<span className='leading-none'>Servers</span>
+						<span className='text-11 leading-none opacity-70'>▾</span>
 					</Button>
 				)}
 			</LaneHeading>

@@ -2603,22 +2603,23 @@ const AppInner = () => {
 											</Button>
 										))}
 									</div>
-									{/* no title, for the reason spelled out in GithubControls: the menu
-									    opens 4px under this button and a native tooltip is an OS window
-									    over it, on its first entry. that entry carries the shortcut this
-									    title named, as its hint, so nothing is lost */}
+									{/* the noun in the plural, because the menu is about workspaces in
+									    general and not about one of them, and no + : this button has
+									    never added a workspace on the click, it opens a menu, and the
+									    glyph promised a verb it did not perform. see Button's `menu`.
+									    no title either, for the reason spelled out in GithubControls:
+									    the menu opens 4px under this button and a native tooltip is an
+									    OS window over it, on its first entry. that entry carries the
+									    shortcut this title named, as its hint, so nothing is lost */}
 									<Button
-										variant='add'
+										variant='menu'
 										className='shrink-0'
 										onClick={e => {
 											const r = e.currentTarget.getBoundingClientRect();
 											setAddMenu({ x: r.left, y: r.bottom + 4 });
 										}}
 									>
-										<span className='text-18 leading-none'>+</span>
-										<span className='text-13 font-semibold leading-none'>
-											Workspace
-										</span>
+										<span className='text-13 leading-none'>Workspaces</span>
 										<span className='text-11 leading-none opacity-70'>▾</span>
 									</Button>
 									<Button
@@ -2651,7 +2652,7 @@ const AppInner = () => {
 										}}
 									/>
 									{/* the lane's controls on the box's line, in the row form:
-									    recents · + Repo ▾ · ↻, the same three the heading
+									    recents · Repos ▾ · ↻, the same three the heading
 									    carries on a narrow window */}
 									<GithubControls
 										{...{
@@ -2684,23 +2685,20 @@ const AppInner = () => {
 											className: searchBoxRow
 										}}
 									/>
-									{/* no title over the menu it opens either, and this one's two
-									    entries are the ~/.ssh/config import the title mentioned. the
-									    word is the bare noun now, the + carrying the verb as it does on
-									    + Workspace (joy: "like + Workspace make +Repo +Server", "no more
-									    add repo add server") */}
+									{/* the plural noun and the caret, one pattern with Workspaces ▾ and
+									    Repos ▾, and no + : this opens a menu rather than adding a
+									    server, so the glyph was claiming a verb the button does not
+									    have. no title over the menu it opens either, and this one's two
+									    entries are the ~/.ssh/config import the title mentioned */}
 									<Button
-										variant='add'
+										variant='menu'
 										className='shrink-0'
 										onClick={e => {
 											const r = e.currentTarget.getBoundingClientRect();
 											setServersAddMenu({ x: r.left, y: r.bottom + 4 });
 										}}
 									>
-										<span className='text-18 leading-none'>+</span>
-										<span className='text-13 font-semibold leading-none'>
-											Server
-										</span>
+										<span className='text-13 leading-none'>Servers</span>
 										<span className='text-11 leading-none opacity-70'>▾</span>
 									</Button>
 								</div>

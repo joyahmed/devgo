@@ -62,8 +62,27 @@ const VARIANT: Record<ButtonVariant, string> = {
 	launch:
 		'gap-1.5 h-9 px-3 text-13 border border-border-strong bg-bg-panel text-text-primary hover:not-disabled:border-text-muted hover:not-disabled:bg-bg-hover aria-[current=true]:border-accent aria-[current=true]:bg-bg-hover/40 hover:not-disabled:aria-[current=true]:border-accent disabled:border-border disabled:text-text-muted [&:disabled_kbd]:border-border [&:disabled_kbd]:bg-transparent [&:disabled_kbd]:text-text-muted',
 	// a door on the command row: + Workspace, + Add repo, + Add server.
-	// bordered, so it reads as a button and not a word
+	// bordered, so it reads as a button and not a word.
+	// ⚠️ nothing uses this any more — the three doors it was written for
+	// were all menu openers, and `menu` below is what they wear. kept
+	// because a real add button, one that adds on the click, would want
+	// exactly this
 	add: 'gap-1.5 h-9 pl-2.5 pr-3 border border-border-strong bg-transparent text-text-secondary hover:text-text-primary hover:border-accent hover:bg-bg-hover',
+	// a trigger that opens a menu: Workspaces ▾, Repos ▾, Servers ▾.
+	// ⭐ the + glyph these three wore is GONE and must not come back for
+	// symmetry with some future add button. none of the three ever added
+	// anything on the click — each one opens a ContextMenu — so the glyph
+	// promised a verb it never performed, and on github it was not even an
+	// add: two of that menu's three entries copy remote repos to disk and
+	// regroup repos already listed. a noun says what the menu is about and
+	// the caret says it is a menu, which is the whole of what these do.
+	// quieter than `add` on purpose: a menu opened now and then must not
+	// compete with the search box beside it, so it sits on the same edge
+	// and ground as the sort control and the box themselves, and its hover
+	// warms the edge to text-muted rather than to the accent — the pair
+	// card, choice and launch already use. h-9 so the command row's
+	// heights stay level; 474bfac is what broken teeth in that strip cost
+	menu: 'gap-1.5 h-9 px-3 text-13 border border-border-strong bg-bg-panel text-text-secondary hover:text-text-primary hover:border-text-muted hover:bg-bg-hover',
 	// one cell of a segmented control; the wrapper carries the border and
 	// the chosen cell says so with aria-current
 	segment:

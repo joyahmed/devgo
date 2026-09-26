@@ -578,6 +578,7 @@ type ButtonVariant =
 	| 'launch'
 	| 'choice'
 	| 'add'
+	| 'menu'
 	| 'segment';
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
@@ -770,7 +771,7 @@ interface GithubLaneProps {
 	enterHint?: boolean;
 }
 
-/// recents, + Repo, refresh: beside the github box on the search line
+/// recents, Repos ▾, refresh: beside the github box on the search line
 interface RefreshIconProps {
 	spinning?: boolean;
 	size?: number;
@@ -778,10 +779,11 @@ interface RefreshIconProps {
 
 interface GithubControlsProps {
 	github: GithubState;
-	/// the + menu: clone repos / by name / group repos, at (x, y)
+	/// the menu: clone repos / by name / group repos, at (x, y)
 	onAddMenu: (x: number, y: number) => void;
-	/// the row form: + Repo ▾ as a button in the + Workspace shape; the
-	/// heading keeps the bare glyphs, a heading being a line of text
+	/// the row form: Repos ▾ as a bordered button, the shape Workspaces ▾
+	/// and Servers ▾ wear; the heading form is the same noun and caret at
+	/// heading scale, a heading being a line of text
 	labelled?: boolean;
 }
 

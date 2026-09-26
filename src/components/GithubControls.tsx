@@ -1,14 +1,19 @@
 import Button from './Button';
 import RefreshIcon from './RefreshIcon';
 
-// the github lane's three controls: recents, + Repo, refresh. one
+// the github lane's three controls: recents, Repos ▾, refresh. one
 // component in two places, so the row and the heading can never offer
-// different controls. labelled is the row form (joy: "the + should be a
-// button containing Add Repo like + Workspace button"); the heading
-// keeps the bare glyphs, a heading being a line of text.
-// the word is the bare noun on both forms, the + carrying the verb the
-// way it does on + Workspace (joy: "like + Workspace make +Repo +Server",
-// then "no more add repo add server" — which takes the aria-label with it)
+// different controls. labelled is the row form, a bordered button on the
+// command row's line (joy, of the shape: "like + Workspace button"); the
+// heading form is the same words at heading scale, a heading being a line
+// of text.
+// ⭐ the + is gone from both forms and must not come back. this control
+// has never added a repo on the click: it opens a menu, and of that
+// menu's three entries only "By name…" is an add at all — "Clone repos…"
+// copies remote repos onto disk and "Group repos…" organises repos
+// already listed. a noun and a caret claim exactly what it does, which
+// is why the glyph form needs no aria-label any more either: it has
+// words of its own now
 const GithubControls = ({
 	github,
 	onAddMenu,
@@ -47,29 +52,26 @@ const GithubControls = ({
 			)}
 			{total > 0 && (
 				<Button
-					variant={labelled ? 'add' : 'ghost'}
-					className={labelled ? 'shrink-0' : `${glyph} text-18 leading-none`}
+					variant={labelled ? 'menu' : 'ghost'}
+					className={
+						labelled ? 'shrink-0' : 'gap-1.5 text-11 px-1.5 py-0.5 -my-1 shrink-0'
+					}
 					// no title on the one control that opens a menu: a native tooltip
 					// is an OS window above the webview, and this menu opens 4px under
 					// the button, so the tooltip landed on top of its first item,
 					// "Clone repos…" (alina, 1.2.2-rc2). no z-index can move it. the
 					// menu spells all three actions out in words anyway, so the hint
-					// said nothing the next frame did not; aria-label keeps the glyph
-					// form named for a screen reader, the labelled form has its own text
-					aria-label={labelled ? undefined : 'Repo'}
+					// said nothing the next frame did not
 					onClick={e => {
 						e.stopPropagation();
 						const r = e.currentTarget.getBoundingClientRect();
 						onAddMenu(r.left, r.bottom + 4);
 					}}
 				>
-					<span className='text-18 leading-none'>+</span>
-					{labelled && (
-						<>
-							<span className='text-13 font-semibold leading-none'>Repo</span>
-							<span className='text-11 leading-none opacity-70'>▾</span>
-						</>
-					)}
+					<span className={`${labelled ? 'text-13' : 'text-11'} leading-none`}>
+						Repos
+					</span>
+					<span className='text-11 leading-none opacity-70'>▾</span>
 				</Button>
 			)}
 			{canRefresh && (
