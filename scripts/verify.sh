@@ -5,7 +5,8 @@
 #   sh scripts/verify.sh --full   + tier 3   (bun run build, cargo test) ~10s more
 #
 # the numbers and the tier split come from docs/ai-memory/verification-baseline.md.
-# exit 0 = everything that ran was green. exit 1 = something was red, or nothing ran.
+# exit 0 = every check ran and every check was green. exit 1 = something was red,
+# or something was SKIPPED, or nothing ran — a partial run is not a pass.
 # copurge reads that exit code, so keep it honest.
 
 set -u
@@ -31,6 +32,7 @@ done
 
 RED=0        # checks that failed
 EXECUTED=0   # checks that actually ran — if this stays 0 the gate verified nothing
+SKIPPED=0    # checks that did NOT run — any of these means this was not a full run
 SUMMARY=""
 
 note() { SUMMARY="${SUMMARY}  $1
@@ -61,6 +63,7 @@ run_check() {
 skip() {
   printf '  %-24s skipped (%s)\n' "$1" "$2"
   note "$(printf '%-24s skipped (%s)' "$1" "$2")"
+  SKIPPED=$((SKIPPED + 1))
 }
 
 # ⚠️ trap #1 — test for the PROCESS, never for src-tauri/target/debug/.cargo-lock.
@@ -68,25 +71,91 @@ skip() {
 # clippy/test BLOCK instead of fail, which reads as a hang. but the .cargo-lock
 # FILE exists while cargo is idle too, so keying off it would skip the rust tier
 # on every single run and the gate would quietly stop checking rust forever.
-rust_is_busy() {
-  if command -v tasklist >/dev/null 2>&1; then
-    # the // is git-bash's escape: msys rewrites it to a single / for tasklist.
-    if tasklist //FI "IMAGENAME eq cargo.exe" //NH 2>/dev/null | grep -qi 'cargo\.exe'; then
-      return 0
-    fi
-    if tasklist //FI "IMAGENAME eq rustc.exe" //NH 2>/dev/null | grep -qi 'rustc\.exe'; then
-      return 0
-    fi
-    return 1
+#
+# ⚠️ trap #1b — and the process test must be scoped to THIS repo. "is any cargo.exe
+# alive" had the exact failure trap #1 was written to avoid: on 2026-09-26 a
+# `cargo build` in G:\01_tauri\trove — a different project — made this gate report
+# fmt/clippy/test "skipped" and still exit OK on the two frontend checks, and a
+# commit was pushed on the back of it. another repo's build cannot touch our target
+# lock, so it must not silence our rust tier.
+#
+# the msys path needs to be a windows path before it can be compared to what
+# Win32_Process reports. cygpath -m gives G:/01_tauri/devgo (forward slashes).
+repo_root_win() {
+  if command -v cygpath >/dev/null 2>&1; then
+    cygpath -m "$REPO_ROOT" 2>/dev/null && return 0
   fi
-  if command -v powershell >/dev/null 2>&1; then
-    powershell -NoProfile -Command \
-      "if (Get-Process cargo,rustc -ErrorAction SilentlyContinue) { exit 0 } else { exit 1 }" \
-      >/dev/null 2>&1 && return 0
-    return 1
+  # /g/01_tauri/devgo → g:/01_tauri/devgo, the one rewrite msys makes on its own.
+  printf '%s\n' "$REPO_ROOT" | sed -E 's#^/([a-zA-Z])/#\1:/#'
+}
+
+# prints exactly one of:
+#   ours    a cargo/rustc/test binary that belongs to THIS repo is live → it holds
+#           (or is about to take) our target lock, so the rust tier must skip.
+#   other   rust work is live but nothing ties it to this repo → run anyway.
+#   clear   no rust work at all.
+#
+# the discriminator is the path, not the process name: Win32_Process gives us
+# ExecutablePath and CommandLine, and anything working on us names us — rustc
+# carries --out-dir <root>/src-tauri/target/..., a running `tauri dev` app and
+# every test harness binary LIVE in <root>/src-tauri/target/. trove's
+# `cargo.exe build --bins --release` names no path of ours and so is not ours.
+#
+# ⭐ unattributable cargo (bare `cargo build`, a command line we cannot read, a
+# process that exits mid-query) counts as "other", i.e. we RUN. skipping on
+# unknown is how the bug got here — "unknown" is the common case, so unknown→skip
+# is the old behaviour under a new name. running risks a block on the target lock,
+# and a block is loud: it never prints OK and never lets a commit through, where a
+# silent skip did exactly that. fail toward the noisy failure.
+#
+# ⭐ rust-analyzer never causes a skip. the editor itself holds no build lock, and
+# the transient cargo check/rustc it spawns hold ours for seconds — long enough to
+# make cargo wait and print "Blocking waiting for file lock", not long enough to
+# hang, and frequent enough that skipping on them would make the rust tier drop out
+# at random. so anything descended from rust-analyzer is demoted to "other".
+rust_activity() {
+  ps_exe=""
+  if command -v pwsh >/dev/null 2>&1; then
+    ps_exe=pwsh
+  elif command -v powershell >/dev/null 2>&1; then
+    ps_exe=powershell
   fi
-  # no way to look: assume clear rather than skipping rust forever (see trap #1).
-  return 1
+  if [ -n "$ps_exe" ]; then
+    verdict=$(VERIFY_REPO_ROOT="$(repo_root_win)" "$ps_exe" -NoProfile -Command '
+$ErrorActionPreference = "SilentlyContinue"
+$root = ($env:VERIFY_REPO_ROOT).ToLower().Replace("\","/").TrimEnd("/")
+$rust = "^(cargo|cargo-clippy|rustc|rustdoc|rustup)\.exe$"
+$map = @{}
+foreach ($p in Get-CimInstance Win32_Process) { $map[[int]$p.ProcessId] = $p }
+$ours = 0; $other = 0
+foreach ($p in $map.Values) {
+  $isRust = $p.Name.ToLower() -match $rust
+  $exe = ""; if ($p.ExecutablePath) { $exe = $p.ExecutablePath.ToLower().Replace("\","/") }
+  $cl  = ""; if ($p.CommandLine)    { $cl  = $p.CommandLine.ToLower().Replace("\","/") }
+  $mine = $exe.StartsWith($root + "/src-tauri/target/") -or ($isRust -and $cl.Contains($root + "/"))
+  if (-not ($isRust -or $mine)) { continue }
+  $cur = $p; $hops = 0; $editor = $false
+  while ($cur -and $hops -lt 12) {
+    if ($cur.Name -match "^rust-analyzer" -or ($cur.CommandLine -and $cur.CommandLine -match "rust-analyzer")) { $editor = $true; break }
+    $cur = $map[[int]$cur.ParentProcessId]; $hops++
+  }
+  if ($editor) { continue }
+  if ($mine) { $ours++ } else { $other++ }
+}
+if ($ours -gt 0) { "ours" } elseif ($other -gt 0) { "other" } else { "clear" }
+' 2>/dev/null | tr -d '\r\n ')
+    case "$verdict" in
+      ours|other|clear) printf '%s' "$verdict"; return 0 ;;
+    esac
+  fi
+  # not windows (or the query itself failed): ps sees the same paths.
+  if command -v ps >/dev/null 2>&1; then
+    if ps -eo args= 2>/dev/null | grep -F "$REPO_ROOT/src-tauri/target" | grep -qv 'rust-analyzer'; then
+      printf 'ours'; return 0
+    fi
+  fi
+  # no way to look. per trap #1 an unreadable answer must not become a skip.
+  printf 'clear'
 }
 
 if [ "$FULL" -eq 1 ]; then
@@ -113,18 +182,25 @@ else
 fi
 
 echo "rust:"
+RUST_STATE=clear
+command -v cargo >/dev/null 2>&1 && RUST_STATE=$(rust_activity)
 if ! command -v cargo >/dev/null 2>&1; then
   skip "cargo fmt --check" "cargo not on PATH"
   skip "cargo clippy -D warnings" "cargo not on PATH"
   [ "$FULL" -eq 1 ] && skip "cargo test" "cargo not on PATH"
-elif rust_is_busy; then
-  echo "  !! RUST TIER SKIPPED — a cargo/rustc process is live (tauri dev?)."
-  echo "  !! cargo would BLOCK on the src-tauri/target lock, not fail. stop the"
-  echo "  !! dev server and re-run if you need rust verified."
-  skip "cargo fmt --check" "cargo/rustc running"
-  skip "cargo clippy -D warnings" "cargo/rustc running"
-  [ "$FULL" -eq 1 ] && skip "cargo test" "cargo/rustc running"
+elif [ "$RUST_STATE" = "ours" ]; then
+  echo "  !! RUST TIER SKIPPED — a cargo/rustc/target binary of THIS repo is live"
+  echo "  !! (tauri dev?). cargo would BLOCK on the src-tauri/target lock, not fail."
+  echo "  !! stop the dev server and re-run if you need rust verified."
+  skip "cargo fmt --check" "this repo's cargo running"
+  skip "cargo clippy -D warnings" "this repo's cargo running"
+  [ "$FULL" -eq 1 ] && skip "cargo test" "this repo's cargo running"
 else
+  if [ "$RUST_STATE" = "other" ]; then
+    echo "  !! rust work is live elsewhere on this machine — nothing ties it to this"
+    echo "  !! repo, so the rust tier RUNS (see trap #1b). if it turns out to be ours"
+    echo "  !! after all, cargo blocks on the target lock instead of lying to you."
+  fi
   run_check "cargo fmt --check" "$REPO_ROOT/src-tauri" cargo fmt --check
   # strict form on purpose: plain `cargo clippy` exits 0 even with findings, so
   # without -D warnings this line would be decorative. baseline says zero findings.
@@ -162,8 +238,18 @@ if [ "$EXECUTED" -eq 0 ]; then
   exit 1
 fi
 if [ "$RED" -gt 0 ]; then
-  echo "verify: FAIL — $RED check(s) red."
+  echo "verify: FAIL — $RED check(s) red, $SKIPPED skipped, $EXECUTED ran."
   exit 1
 fi
-echo "verify: OK — $EXECUTED check(s) green."
+if [ "$SKIPPED" -gt 0 ]; then
+  # ⭐ nothing red is not the same as everything checked. the 2026-09-26 push went
+  # out on "OK — 2 check(s) green" while fmt, clippy and test had all been skipped:
+  # a partial run read as a full one. a skipped check is an unverified check, so
+  # the verdict is not OK and the exit code is not 0 — copurge must stop here too.
+  echo "verify: INCOMPLETE — $EXECUTED check(s) green, $SKIPPED skipped, 0 red."
+  echo "  nothing failed, but this was not a full run. fix the skips above (see the"
+  echo "  reason on each line) and re-run before treating this tree as verified."
+  exit 1
+fi
+echo "verify: OK — $EXECUTED check(s) green, 0 skipped."
 exit 0
