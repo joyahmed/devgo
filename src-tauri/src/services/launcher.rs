@@ -500,12 +500,39 @@ fi
     format!("{}{bail}{body}", mac_preamble())
 }
 
+// the values the header prints, exported by the OUTER bash so the header
+// itself can carry no user data at all. this is the seam that makes the
+// nesting safe: the header text travels INSIDE a single-quoted `-ic`
+// argument (see build_mac_run_script), and anything quoted in there would
+// have to be quoted twice. exported instead, each value is sh_quote'd
+// exactly once, here, where a human reading the generated script can see
+// it — and the header refers to it by name. the names are prefixed because
+// they cross into the user's own interactive shell; the header unsets them
+// again before the user's command runs, so nothing of ours is left in its
+// environment.
+#[cfg(any(not(windows), test))]
+fn mac_run_env(name: &str, path: &str, command: &str) -> String {
+    format!(
+        "export DEVGO_RUN_NAME={}\nexport DEVGO_RUN_PATH={}\nexport DEVGO_RUN_CMD={}\n",
+        sh_quote(name),
+        sh_quote(path),
+        sh_quote(command)
+    )
+}
+
 // the three lines the window opens with, before anything of the user's
 // runs. terminal echoes the .command's own absolute path and a `; exit;`
 // first, so the header starts with a blank line and then says the only
 // three things worth saying: which project, where it is, and the line
 // about to run. a dim rule closes it and a blank line separates it from
 // the command's own output.
+//
+// ⭐ it runs INSIDE the interactive shell, after that shell's rc files,
+// not before it. printed by the .command itself it was invisible on every
+// launch: an rc file is allowed to `clear` (this one does, unconditionally,
+// and a cleared screen takes the scrollback with it — ESC[3J), and it would
+// wipe a header printed a moment earlier whatever the command was. after
+// the rc file there is nothing left to erase it.
 //
 // colour ONLY when stdout is a terminal that claims to render it: a
 // .command can be piped or logged, and escape bytes in a log are worse
@@ -516,37 +543,38 @@ fi
 // printf, not echo -e: echo -e is not portable and reads the DATA for
 // escapes. here the format string is ours alone — the colour variables
 // hold either nothing or a literal \033[..m, never a % — and every
-// interpolated value arrives as a %s argument, already sh_quote'd, so a
-// project called `%s%s` or a path with a backslash prints as itself. the
-// rule is a plain repeat of one character rather than a box: nothing to
-// misalign when the window is narrow.
+// interpolated value arrives as a %s argument, read from the environment,
+// so a project called `%s%n` or a path with a backslash prints as itself.
+// the rule is a plain repeat of one character rather than a box: nothing
+// to misalign when the window is narrow.
+//
+// not one single quote in this whole fragment, deliberately: it is about
+// to go through sh_quote as one word, and a fragment with no `'` in it
+// survives that byte for byte, which is what makes it readable in the
+// generated file and checkable in a test.
 #[cfg(any(not(windows), test))]
-fn mac_run_header(name: &str, path: &str, command: &str) -> String {
-    format!(
-        r#"if [ -t 1 ] && [ -n "$TERM" ] && [ "$TERM" != dumb ]; then
-    dg_b='\033[1m'; dg_c='\033[36m'; dg_d='\033[2m'; dg_r='\033[0m'
+fn mac_run_header() -> &'static str {
+    r#"if [ -t 1 ] && [ -n "$TERM" ] && [ "$TERM" != dumb ]; then
+    dg_b="\033[1m"; dg_c="\033[36m"; dg_d="\033[2m"; dg_r="\033[0m"
 else
-    dg_b=''; dg_c=''; dg_d=''; dg_r=''
+    dg_b=""; dg_c=""; dg_d=""; dg_r=""
 fi
-printf '\n'
-printf "$dg_d%s$dg_r $dg_b$dg_c%s$dg_r\n" 'DevGo' {}
-printf "$dg_d%s$dg_r\n" {}
-printf "$dg_d%s$dg_r $dg_b%s$dg_r\n" '$' {}
-printf "$dg_d%s$dg_r\n\n" '──────────────────────────────'
-unset dg_b dg_c dg_d dg_r
-"#,
-        sh_quote(name),
-        sh_quote(path),
-        sh_quote(command)
-    )
+printf "\n"
+printf "$dg_d%s$dg_r $dg_b$dg_c%s$dg_r\n" "DevGo" "$DEVGO_RUN_NAME"
+printf "$dg_d%s$dg_r\n" "$DEVGO_RUN_PATH"
+printf "$dg_d%s$dg_r $dg_b%s$dg_r\n" "\$" "$DEVGO_RUN_CMD"
+printf "$dg_d%s$dg_r\n\n" "──────────────────────────────"
+unset dg_b dg_c dg_d dg_r DEVGO_RUN_NAME DEVGO_RUN_PATH DEVGO_RUN_CMD
+"#
 }
 
-// the run script for a local project on a mac: PATH, the header, into the
-// project, the command, then a login shell so the window stays open there
-// after the command exits, windows terminal's -NoExit spelled in bash. a
-// failing dev script leaves its error on screen instead of vanishing. the
-// path goes through sh_quote; || exit 1 because a cd that fails must not
-// run the command wherever terminal started.
+// the run script for a local project on a mac: PATH, the header's values,
+// into the project, the header and the command through one interactive
+// shell, then a login shell so the window stays open there after the
+// command exits, windows terminal's -NoExit spelled in bash. a failing dev
+// script leaves its error on screen instead of vanishing. the path goes
+// through sh_quote; || exit 1 because a cd that fails must not run the
+// command wherever terminal started.
 //
 // the command runs through an INTERACTIVE shell, not this bash directly,
 // because no PATH can reach the half of these commands that are not files:
@@ -556,18 +584,24 @@ unset dg_b dg_c dg_d dg_r
 // file where those functions live; the preamble has already done the PATH,
 // so -l is not needed on top. the command is the user's own line, shell
 // syntax by definition — sh_quote keeps it one word for THIS shell and the
-// interactive one parses it as the shell syntax it is
+// interactive one parses it as the shell syntax it is.
+//
+// header first, command second, inside that one argument: the rc file has
+// already run (and already cleared) by the time either of them does, and
+// the user's command is the LAST thing in the payload, so the -ic shell
+// exits with the user's own status and nothing prints after it.
 #[cfg(any(not(windows), test))]
 fn build_mac_run_script(name: &str, path: &str, command: &str) -> String {
+    let payload = format!("{}{command}", mac_run_header());
     format!(
         r#"{}{}cd {} || exit 1
 "${{SHELL:-bash}}" -ic {}
 exec "${{SHELL:-bash}}" -l
 "#,
         mac_preamble(),
-        mac_run_header(name, path, command),
+        mac_run_env(name, path, command),
         sh_quote(path),
-        sh_quote(command)
+        sh_quote(&payload)
     )
 }
 
@@ -2341,11 +2375,12 @@ mod tests {
 
         let run = build_mac_run_script("app", &path, "bun dev");
         assert!(run.starts_with(&mac_preamble()), "{run}");
+        let payload = sh_quote(&format!("{}bun dev", mac_run_header()));
         assert!(
             run.contains(&format!(
-                "cd {quoted} || exit 1\n\"${{SHELL:-bash}}\" -ic 'bun dev'\n"
+                "cd {quoted} || exit 1\n\"${{SHELL:-bash}}\" -ic {payload}\n"
             )),
-            "cd, then the line through an interactive shell: {run}"
+            "cd, then header and line through one interactive shell: {run}"
         );
         assert!(run.ends_with("exec \"${SHELL:-bash}\" -l\n"), "{run}");
         assert_eq!(
@@ -2361,7 +2396,8 @@ mod tests {
     // turns a project name into someone else's escape sequence
     #[test]
     fn the_run_header_guards_its_colour_and_quotes_its_values() {
-        let header = mac_run_header(
+        let header = mac_run_header();
+        let env = mac_run_env(
             "%s%n Dev's App",
             "/tmp/My Projects/it's here",
             "pnpm dev",
@@ -2374,22 +2410,73 @@ mod tests {
             "a tty AND a TERM that renders, or no colour at all: {header}"
         );
         assert!(
-            header.contains("dg_b=''; dg_c=''; dg_d=''; dg_r=''"),
+            header.contains(r#"dg_b=""; dg_c=""; dg_d=""; dg_r="""#),
             "the else branch leaves plain text behind: {header}"
         );
         assert!(!header.contains("echo -e"), "printf only: {header}");
 
+        // every value is sh_quote'd exactly once, in the exports, and the
+        // header names it instead of carrying it
         for value in [
             r#"'%s%n Dev'\''s App'"#,
             r#"'/tmp/My Projects/it'\''s here'"#,
             "'pnpm dev'",
         ] {
-            assert!(header.contains(value), "{value} is quoted: {header}");
+            assert!(env.contains(value), "{value} is quoted: {env}");
         }
-        // three printf lines carry values, and each of them is a %s
-        // argument — never the format
-        assert_eq!(header.matches("%s%n").count(), 1, "{header}");
-        assert!(header.ends_with("unset dg_b dg_c dg_d dg_r\n"), "{header}");
+        assert_eq!(env.matches("%s%n").count(), 1, "{env}");
+        assert!(!header.contains("%s%n"), "{header}");
+        for var in ["DEVGO_RUN_NAME", "DEVGO_RUN_PATH", "DEVGO_RUN_CMD"] {
+            assert!(env.contains(&format!("export {var}=")), "{env}");
+            // read as a printf ARGUMENT, in its own double quotes, never
+            // spliced into a format string
+            assert!(header.contains(&format!(r#" "${var}""#)), "{header}");
+        }
+        assert!(
+            header.ends_with(
+                "unset dg_b dg_c dg_d dg_r \
+                 DEVGO_RUN_NAME DEVGO_RUN_PATH DEVGO_RUN_CMD\n"
+            ),
+            "nothing of ours is left in the user's environment: {header}"
+        );
+        // the fragment holds no single quote, so going through sh_quote as
+        // one word leaves it byte for byte the same
+        assert!(!header.contains('\''), "{header}");
+        assert_eq!(sh_quote(header), format!("'{header}'"));
+    }
+
+    /// The defect 3c6a6c5 shipped with: the header was printed by the
+    /// .command and then the user's login shell started. An rc file that
+    /// runs `clear` — ~/.zshrc does, unconditionally — wipes the screen AND
+    /// the scrollback, so the header was never once seen, whatever the
+    /// command was. The cure is where it runs: inside the -ic payload,
+    /// after the rc files, with the user's command last so the exit status
+    /// is still theirs.
+    #[test]
+    fn the_run_header_is_printed_by_the_interactive_shell_not_before_it() {
+        let run = build_mac_run_script("app", "/tmp/app", "bun dev");
+
+        let (before, payload) = run
+            .split_once("\"${SHELL:-bash}\" -ic ")
+            .expect("the interactive shell line");
+        assert!(
+            !before.contains("printf"),
+            "nothing is printed before the shell that may clear: {run}"
+        );
+        let payload = payload
+            .split_once("'\nexec ")
+            .expect("the payload, then the login shell")
+            .0;
+        assert!(
+            payload.starts_with(&format!("'{}", mac_run_header())),
+            "the payload opens with the header: {run}"
+        );
+        assert!(
+            payload.ends_with("bun dev"),
+            "and closes with the user's own line, so the status is theirs: \
+             {run}"
+        );
+        assert!(run.ends_with("exec \"${SHELL:-bash}\" -l\n"), "{run}");
     }
 
     // the mac twin of the psmux placeholder test: a local project gets a
@@ -2506,7 +2593,7 @@ mod tests {
             script.contains(&format!(
                 "cd {} || exit 1\n\"${{SHELL:-bash}}\" -ic {}\n",
                 sh_quote(&dir.to_string_lossy()),
-                sh_quote(&command)
+                sh_quote(&format!("{}{command}", mac_run_header()))
             )),
             "{script}"
         );
