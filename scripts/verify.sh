@@ -190,11 +190,11 @@ else
   echo "verify: tiers 1+2 (default — pass --full for the pre-main set)"
 fi
 
-# is vitest actually installed in THIS tree? a LOCAL-TREE test on purpose, never
-# `command -v vitest` and never `bunx vitest`: vitest is a dev dep and never lands
-# on PATH, and bunx would answer a missing one by DOWNLOADING it — a gate that
-# installs its own checker is worse than one that skips. that reasoning is intact;
-# only the spelling below changed.
+# is this dev dep actually installed in THIS tree? a LOCAL-TREE test on purpose,
+# never `command -v vitest` and never `bunx vitest`: vitest, tsc and vite are dev
+# deps and never land on PATH, and bunx would answer a missing one by DOWNLOADING
+# it — a gate that installs its own checker is worse than one that skips. that
+# reasoning is intact; only the spelling below changed.
 #
 # ⚠️ trap #1, third instance — the old form was `[ -x node_modules/.bin/vitest ]`
 # and there is NO extensionless `vitest` file in that directory on windows: bun
@@ -206,15 +206,25 @@ fi
 # quietly stop checking rust forever") aimed at the frontend instead.
 #
 # ⭐ the package manifest is the primary probe because it is what "installed"
-# actually means, and `node_modules/vitest/package.json` is one spelling on all
+# actually means, and `node_modules/<pkg>/package.json` is one spelling on all
 # three platforms — no extension to guess, no shell retry in the answer. the .bin
 # sweep after it is the fallback for a hoisted/linked layout, and it names every
 # real spelling: extensionless symlink on mac and linux, .exe/.cmd/.ps1/.bunx on
 # windows. neither branch can fetch anything.
-vitest_installed() {
-  [ -f "$REPO_ROOT/node_modules/vitest/package.json" ] && return 0
-  for _v in vitest vitest.exe vitest.cmd vitest.ps1 vitest.bunx; do
-    [ -f "$REPO_ROOT/node_modules/.bin/$_v" ] && return 0
+#
+# ⚠️ trap #2, last instance — this probe was vitest-only, and the two checks on
+# either side of the vitest one need node_modules just as much. `bun run build` is
+# `check:contrast && tsc && vite build`, which resolves tsc and vite out of
+# node_modules/.bin, and `bun run` does NOT install a missing dep: on a tree with
+# bun on PATH but no node_modules the build went RED one line below where vitest
+# SKIPPED. `bun x tsc` fails the other way — bun x answers a missing typescript by
+# DOWNLOADING it, the exact thing the paragraph at the top of this block refuses.
+# so the helper takes the package and its .bin name, and all three checks ask it
+# first. $1 = the package directory under node_modules, $2 = the .bin basename.
+dep_installed() {
+  [ -f "$REPO_ROOT/node_modules/$1/package.json" ] && return 0
+  for _e in "" .exe .cmd .ps1 .bunx; do
+    [ -f "$REPO_ROOT/node_modules/.bin/$2$_e" ] && return 0
   done
   return 1
 }
@@ -232,15 +242,24 @@ if command -v bun >/dev/null 2>&1; then
   # carries one shim and not the other) the gate would hard-error where trap #2
   # says it must skip. the two checks below already go through `bun run`; this
   # line now matches them, and the probe licenses all three for real.
-  run_check "tsc --noEmit" "$REPO_ROOT" bun x tsc --noEmit
+  #
+  # ⭐ and the probe is per-check, not per-tier: tsc is a dev dep like the other
+  # two, so `bun` on PATH licenses the INVOCATION and dep_installed licenses the
+  # TOOL. without it `bun x tsc` would quietly fetch typescript from npm and
+  # "verify" the tree with a compiler this tree never pinned.
+  if dep_installed typescript tsc; then
+    run_check "tsc --noEmit" "$REPO_ROOT" bun x tsc --noEmit
+  else
+    skip "tsc --noEmit" "typescript not installed in node_modules — run bun install"
+  fi
   # tier 1, not tier 3: the whole suite is ~2.5s cold, which is inside the
   # noise of the tsc line above it, and a test you only run before a main
   # push is a test that tells you about a break one commit too late.
   #
-  # see vitest_installed() above for why this is a local-tree file test and not
+  # see dep_installed() above for why this is a local-tree file test and not
   # `command -v` — and for the msys `.exe` retry that made the old spelling lie.
   # a tree with no node_modules skips here the same way a shell with no bun does.
-  if vitest_installed; then
+  if dep_installed vitest vitest; then
     run_check "vitest run" "$REPO_ROOT" bun run test
   else
     skip "vitest run" "vitest not installed in node_modules — run bun install"
@@ -248,7 +267,15 @@ if command -v bun >/dev/null 2>&1; then
   if [ "$FULL" -eq 1 ]; then
     # dist/ is gitignored and no dev server reads it (vite serves :1420 from
     # memory), so this build cannot disturb anything and needs no scratch dir.
-    run_check "bun run build" "$REPO_ROOT" bun run build
+    #
+    # both halves of the script get probed: `bun run build` shells out to tsc AND
+    # to vite, and a tree missing either one is a tree that cannot build — which
+    # is a skip, not a red. (check:contrast runs on bun alone, already licensed.)
+    if dep_installed typescript tsc && dep_installed vite vite; then
+      run_check "bun run build" "$REPO_ROOT" bun run build
+    else
+      skip "bun run build" "typescript/vite not installed in node_modules — run bun install"
+    fi
   fi
 else
   skip "tsc --noEmit" "bun not on PATH"
