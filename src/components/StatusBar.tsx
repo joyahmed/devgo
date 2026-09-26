@@ -514,10 +514,20 @@ const StatusBar = ({
 			    ⚠️ the room the shed measures against is the FOOTER's content
 			    box, never this element's: w-fit means this box is a function of
 			    what is in it, and measuring the thing you are resizing is the
-			    circular question that makes a footer oscillate */}
+			    circular question that makes a footer oscillate.
+			    ⭐ gap-x-4, not the gap-x-6 this shipped with: four gaps at 8px
+			    less is 32px back. that is not a taste edit. measured at joy's
+			    1686, the strip with its chips already shed wanted 1691.91px
+			    against 1654px of room — 37.91px short — so it took a SECOND
+			    step and deleted Pin and Search, and `Pin` is then stated
+			    nowhere on the main window at all. air is the only thing left on
+			    this strip that can be spent without deleting a word, so it is
+			    spent before a word is: here, and on the rule's margin below.
+			    the two together return 48px and the ladder survives, 8/12/16
+			    where it was 8/16/24 */}
 			<div
 				ref={stripRef}
-				className='w-fit mx-auto flex flex-wrap items-center justify-center gap-x-6 gap-y-1.5'
+				className='w-fit mx-auto flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5'
 			>
 				{groups.map(g => (
 					<TargetGroup
@@ -566,11 +576,18 @@ const StatusBar = ({
 				{/* the key chips, then the doors; without them the discovery
 				    surfaces are themselves undiscoverable. the rule rides with the
 				    group it follows, so hiding a group hides its rule, and its own
-				    mx-2 keeps the air equal on both sides of it. three steps of
-				    space, the smallest innermost: 8px between items, 16px across a
-				    rule, 24px between whole footer groups. at the old flat gap-4 the
+				    mx-1 keeps the air equal on both sides of it. three steps of
+				    space, the smallest innermost: 8px between items, 12px across a
+				    rule, 16px between whole footer groups. at the old flat gap-4 the
 				    space between Shortcuts and Help was the space between groups,
 				    so the strip had no grain.
+				    the ladder used to read 8/16/24 and was tightened a step at a
+				    time with the strip's gap-x-4 above, for the 37.91px that were
+				    costing Pin and Search a whole shed step at 1686. what matters
+				    is that the three steps stay ordered and distinct, not the
+				    numbers they are: at mx-2 under gap-x-4 the rule's air would
+				    equal the gap between groups and the ladder would collapse to
+				    two steps, which is the defect the sentence above is about.
 
 				    shrink-0 is the whole of what reserves the two doors' room:
 				    they never hide, so nothing may squeeze them off the end — the
@@ -633,7 +650,7 @@ const StatusBar = ({
 							)}
 							{i < hints.length - 1 && (
 								<span
-									className='w-px h-5 bg-border-strong shrink-0 mx-2'
+									className='w-px h-5 bg-border-strong shrink-0 mx-1'
 									aria-hidden='true'
 								/>
 							)}

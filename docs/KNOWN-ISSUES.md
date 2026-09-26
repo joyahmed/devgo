@@ -8,20 +8,35 @@ it is known and you do not need to write it up. Everything else is worth an
 [issue](https://github.com/joyahmed/devgo/issues) — including the two entries below marked *not
 reproduced*, where a second sighting is the whole thing that is missing.
 
-## The bottom action bar wraps on a narrow window
+## The bottom action bar drops its key hints on a narrow window
 
-All platforms. Make the window narrow enough — a 1920-wide screen is enough if you do not maximise —
-and the footer's key hints no longer fit on one line. The Editor / Terminal / Agent group keeps line
-one and the rest (Pin, Search, Commands, Summon, Shortcuts, Help) folds onto a second, and the bar
-doubles in height. Nothing is lost: every hint is still there, every key still works, and the command
-palette (`Ctrl+Shift+P`) lists the same actions with no bar at all.
+All platforms. The footer measures the room it has and, when the strip no longer fits on one line, it
+gives up one thing at a time in a fixed order rather than wrapping. In order: the key chips on the
+launch buttons, then `Pin` and `Search`, then `Commands` and `Summon`, then the `Editor` / `Terminal`
+/ `Agent` labels in front of each group. `Shortcuts` and `Help` never go, and a second line is only
+the floor under all of that — the bar reaches it at a width nothing else on screen is usable at.
 
-Cosmetic, and the fix is not the obvious one. A bar that does not fit needs to *drop* content at
-narrow widths, not shrink it — DevGo's text-size control is a zoom, so scaling type to the viewport
-would fight the size you chose in Settings. That is why I have left it open rather than patched it.
+So the bar keeps its height and loses content, which is the opposite trade from the one this entry
+used to describe. **The chips cost you nothing**: the button stays visible, named and clickable, its
+tooltip still names the key, and Settings › Shortcuts lists every binding in the app. The three steps
+after them do cost you something — `Pin`, `Search`, `Commands` and `Summon` are stated nowhere else
+on the bar — but Shortcuts is one click away and never sheds, and the command palette
+(`Ctrl+Shift+P`) lists the same actions with no bar at all.
 
-Workaround: widen or maximise the window. There is no setting that hides the footer's key hints, so
-the palette is the other way round the bar when the window has to stay narrow.
+The widths are not a setting and not a guess; they are whatever your row of targets measures. On my
+Windows window, with VS Code and Zed, Windows Terminal and two Claude Code rows, the chips go below
+about 2300, `Pin` and `Search` below about 1675, `Commands` and `Summon` below about 1430, the labels
+below about 1000, and the second line arrives below about 870. More targets, or longer names, move
+every one of those up.
+
+That the bar sheds at all is deliberate — a bar that does not fit has to *drop* content, not shrink
+it, because DevGo's text-size control is a zoom and scaling type to the window would fight the size
+you chose in Settings. What is still wrong is how early the second step arrives: losing `Pin` at a
+width you would call a normal window is a real loss of information, and the current spacing only
+buys it down to the numbers above rather than solving it.
+
+Workaround: widen or maximise the window, or press `Ctrl+Shift+P` — the palette names every action
+the bar does and every key it stopped showing.
 
 ## The project search box clips its placeholder
 
