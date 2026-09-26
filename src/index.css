@@ -44,10 +44,19 @@
 	   on. the same hex as bg-secondary, so nothing about one looks
 	   different with the knob at zero, but it is the one surface the
 	   transparency knob never touches (see :root below): these are boxes of
-	   text that open ON TOP of other text, and at the knob's default 10%
+	   text that open ON TOP of other text, and with the knob raised to 10%
 	   the add-repo menu's labels sat over "joyahmed", "SERVERS" and a
 	   scrollbar, all of it legible straight through them, which is how a
-	   click that did open a menu got reported as "nothing visible". the
+	   click that did open a menu got reported as "nothing visible".
+	   ⛔ the knob's DEFAULT is 0, not 10: window_transparency is a
+	   serde-default u8 on a derive(Default) struct (preferences.rs), the
+	   window is only built transparent when it is above zero (lib.rs), and
+	   tauri.conf.json ships transparent:false — so out of the box this
+	   window is OPAQUE, and a see-through screenshot has to set the knob
+	   first. preferences.rs is where that answer lives; a tester read an
+	   older line here saying 10, believed the window was see-through by
+	   default, and designed a visual check that would have passed on
+	   nothing. the
 	   drawer joined them after the same defect was found in settings: its
 	   bg-black/40 backdrop dims the lanes, it does not hide them, so the
 	   WSL doctor's prose was read with /var/www, twenty repo names,
