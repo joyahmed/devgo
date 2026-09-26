@@ -196,7 +196,14 @@ fi
 # everything is the one case that must still be loud and red.
 echo "frontend:"
 if command -v bun >/dev/null 2>&1; then
-  run_check "tsc --noEmit" "$REPO_ROOT" bunx tsc --noEmit
+  # ⭐ `bun x`, not `bunx`: the probe one line up tests `bun`, so every command
+  # under it must BE bun. `bunx` is a second binary — today the same install
+  # ships both, so the old `bunx tsc` passed for a reason unrelated to what the
+  # probe established, and the day they diverge (a partial install, a PATH that
+  # carries one shim and not the other) the gate would hard-error where trap #2
+  # says it must skip. the two checks below already go through `bun run`; this
+  # line now matches them, and the probe licenses all three for real.
+  run_check "tsc --noEmit" "$REPO_ROOT" bun x tsc --noEmit
   # tier 1, not tier 3: the whole suite is ~2.5s cold, which is inside the
   # noise of the tsc line above it, and a test you only run before a main
   # push is a test that tells you about a break one commit too late.
