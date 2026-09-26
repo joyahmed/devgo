@@ -1,8 +1,8 @@
 #!/bin/sh
 # devgo verification gate, tiered so the common case stays cheap.
 #
-#   sh scripts/verify.sh          tiers 1+2  (typecheck, fmt, clippy)   ~10s warm
-#   sh scripts/verify.sh --full   + tier 3   (bun run build, cargo test) ~10s more
+#   sh scripts/verify.sh          tiers 1+2  (typecheck, vitest, fmt, clippy) ~13s warm
+#   sh scripts/verify.sh --full   + tier 3   (bun run build, cargo test)      ~10s more
 #
 # the timings and the tier split were MEASURED against this tree, not guessed — and a
 # measurement goes stale the moment the toolchain moves, so re-time rather than trust.
@@ -172,6 +172,20 @@ fi
 echo "frontend:"
 if command -v bun >/dev/null 2>&1; then
   run_check "tsc --noEmit" "$REPO_ROOT" bunx tsc --noEmit
+  # tier 1, not tier 3: the whole suite is ~2.5s cold, which is inside the
+  # noise of the tsc line above it, and a test you only run before a main
+  # push is a test that tells you about a break one commit too late.
+  #
+  # the presence test is the BINARY, not `command -v vitest` and not the
+  # package.json script: vitest is a dev dep and never lands on PATH, and
+  # bunx would answer a missing one by DOWNLOADING it — a gate that installs
+  # packages behind your back is worse than one that skips. so a tree with no
+  # node_modules skips here the same way a shell with no bun skips above.
+  if [ -x "$REPO_ROOT/node_modules/.bin/vitest" ]; then
+    run_check "vitest run" "$REPO_ROOT" bun run test
+  else
+    skip "vitest run" "node_modules/.bin/vitest absent — run bun install"
+  fi
   if [ "$FULL" -eq 1 ]; then
     # dist/ is gitignored and no dev server reads it (vite serves :1420 from
     # memory), so this build cannot disturb anything and needs no scratch dir.
@@ -179,6 +193,7 @@ if command -v bun >/dev/null 2>&1; then
   fi
 else
   skip "tsc --noEmit" "bun not on PATH"
+  skip "vitest run" "bun not on PATH"
   [ "$FULL" -eq 1 ] && skip "bun run build" "bun not on PATH"
 fi
 
@@ -223,9 +238,12 @@ printf '%s' "$SUMMARY"
 # broader assurance than it is. every line below was checked against the tree, not guessed.
 echo ""
 echo "cannot verify:"
-echo "  - no JS/TS test runner at all (no vitest/jest/node:test, zero *.test.*):"
-echo "    every line of React/TS is verified only by tsc types and by bundling."
-echo "  - no E2E (no playwright config, no e2e/ or tests/ directory)."
+echo "  - the JS/TS suite is vitest + jsdom over TWO of 36 components (SearchBox,"
+echo "    Drawer, 21 cases). every other line of React/TS is still verified only by"
+echo "    tsc types and by bundling, and nothing here touches App's own state."
+echo "  - no E2E (no playwright config, no e2e/ or tests/ directory). jsdom lays"
+echo "    nothing out and paints nothing, so no test above can see a width, an"
+echo "    overlap or a colour — the container-query chip gates are unwatched."
 echo "  - no frontend linter (no eslint/biome/oxlint/prettier config, no lint script)."
 echo "  - nothing about the launch lanes: the v1.2.1 PATH bug was invisible to"
 echo "    cargo test on every platform. a green suite is not evidence for a"
