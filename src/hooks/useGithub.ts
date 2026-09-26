@@ -22,6 +22,21 @@ const RECENTS_KEY = 'devgo.githubRecents';
 const LIVE_DEBOUNCE_MS = 400;
 const LIVE_MIN_CHARS = 3;
 
+// the refresh runs on a rust thread and answers with an event; if that event
+// never comes — a panicked thread, or a `gh` child blocked on a socket that
+// Command::output() will wait on forever — the header used to spin for the
+// rest of the session. so the spinner gets a ceiling, and the number is
+// measured against the slow case rust documents itself: one `gh repo list`
+// per owner, "about six seconds for a few hundred repos on a good day and
+// twenty on a slow one", plus one `gh api user/orgs --paginate`. five
+// minutes is fourteen owners at the slow-day price; past that a refresh is
+// pathological, and under it a slow success gets called a failure, which is
+// the worse of the two bugs
+const REFRESH_CEILING_MS = 300_000;
+const REFRESH_TIMED_OUT = `GitHub refresh timed out after ${
+	REFRESH_CEILING_MS / 60_000
+} minutes; gh never answered`;
+
 const loadFolded = (): Set<string> => {
 	try {
 		const raw = JSON.parse(localStorage.getItem(FOLDED_KEY) ?? '[]');
@@ -60,11 +75,43 @@ export const useGithub = (
 	// one session however often the lane is toggled
 	const askedOnOpen = useRef(false);
 
+	// the spinner's ceiling, armed by every raise of `refreshing` and
+	// cleared by every lower, so the one and only way the header can spin
+	// forever is a timer that is never allowed to exist
+	const ceiling = useRef<number | null>(null);
+	const clearCeiling = () => {
+		if (ceiling.current === null) return;
+		window.clearTimeout(ceiling.current);
+		ceiling.current = null;
+	};
+	// the spinner goes up: whatever raised it, it comes down within
+	// REFRESH_CEILING_MS whether or not anything answers
+	const startRefreshing = () => {
+		clearCeiling();
+		ceiling.current = window.setTimeout(() => {
+			ceiling.current = null;
+			setRefreshing(false);
+			setLastError(REFRESH_TIMED_OUT);
+		}, REFRESH_CEILING_MS);
+		setRefreshing(true);
+	};
+	// the spinner comes down, and the clock with it: a ceiling that outlived
+	// its refresh would time out the next one early, or time out nothing at
+	// all and fire over an idle header
+	const stopRefreshing = () => {
+		clearCeiling();
+		setRefreshing(false);
+	};
+
 	const reload = () => {
 		invoke<GithubPayload>('get_github_repos')
 			.then(p => {
 				setPayload(p);
-				setRefreshing(p.refreshing);
+				// rust says whether a refresh is in flight, and that raise gets
+				// the same ceiling as ours: a thread already dead before this
+				// window opened must not hand us an unbounded spinner either
+				if (p.refreshing) startRefreshing();
+				else stopRefreshing();
 			})
 			.catch(() => {});
 	};
@@ -72,15 +119,19 @@ export const useGithub = (
 	// runs on a rust thread and returns at once; the answer is an event.
 	// refreshing flips here so the header can say so straight away
 	const refresh = () => {
-		setRefreshing(true);
-		invoke('refresh_github_repos').catch(() => setRefreshing(false));
+		startRefreshing();
+		invoke('refresh_github_repos').catch(stopRefreshing);
 	};
 
 	useEffect(() => {
 		const unlisten = listen<GithubUpdated>(
 			'devgo://github-updated',
 			({ payload: result }) => {
-				setRefreshing(false);
+				// the event is the answer whenever it lands, ceiling already
+				// fired or not; what a late one may NOT do is put the spinner
+				// back up unbounded, and it cannot: every raise left is
+				// startRefreshing's
+				stopRefreshing();
 				if (result.ok) {
 					setLastError(null);
 					reload();
@@ -93,6 +144,10 @@ export const useGithub = (
 			unlisten.then(f => f()).catch(() => {});
 		};
 	}, []);
+
+	// unmount: the ceiling is the only timer this hook owns outside an
+	// effect, and firing it on a gone component sets state nobody reads
+	useEffect(() => clearCeiling, []);
 
 	// mount: is gh there, and as whom. local, no network. this decides
 	// whether the lane renders at all before a cache exists, and which of
@@ -197,25 +252,46 @@ export const useGithub = (
 		query: '',
 		repos: []
 	});
+	// the query whose request came back with nothing usable: it failed, or it
+	// was stamped with a generation already left behind. that is not an
+	// answer, so it must never reach liveExtras — but it IS the end of the
+	// work, and a spinner outliving the work it stands for tells the user
+	// something is happening when nothing is
+	const [dropped, setDropped] = useState('');
 	const generation = useRef(0);
 	const liveOn = Boolean(payload?.live_search);
 	const q = query.trim();
 	const liveEligible =
 		liveOn && isOpen && q.length >= LIVE_MIN_CHARS && Boolean(status?.login);
-	// searching is not state: it is eligible and not yet answered, which
-	// falls out of the query and the last answer with no flag to clear
-	const searching = liveEligible && live.query !== q;
+	// searching is not state: it is eligible, unanswered and not dropped,
+	// which falls out of the query and the last request with no flag to clear
+	const searching = liveEligible && live.query !== q && dropped !== q;
+	// a new query is a new request's to answer: what the last one dropped
+	// says nothing about this one, so `dropped` only ever names the query on
+	// screen and a retyped query is searched again rather than left stalled
+	useEffect(() => setDropped(''), [q]);
 	useEffect(() => {
 		if (!searching) return;
 		const gen = ++generation.current;
 		const timer = window.setTimeout(() => {
 			invoke<SearchAnswer>('search_github', { query: q, generation: gen })
 				.then(answer => {
-					if (answer.generation !== generation.current) return;
+					// an answer to an older request: the newer one is still in
+					// flight and owns the spinner, so this only stops being
+					// searched for if q has not moved on
+					if (answer.generation !== generation.current) {
+						setDropped(q);
+						return;
+					}
 					setLive({ query: q, repos: answer.repos });
 				})
 				.catch(() => {
-					// searching stays on for this query; the next keystroke retries
+					// the request is over and answered nothing, so the spinner
+					// comes down and the query is left re-armed: this used to
+					// leave `searching` on for the rest of the query's life,
+					// waiting for a keystroke the user has no way to know is
+					// what clears it
+					setDropped(q);
 				});
 		}, LIVE_DEBOUNCE_MS);
 		return () => window.clearTimeout(timer);

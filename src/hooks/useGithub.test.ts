@@ -101,6 +101,11 @@ const called = (cmd: string) =>
 	invoke.mock.calls.filter(c => (c as unknown[])[0] === cmd).length;
 const arg = (cmd: string) =>
 	invoke.mock.calls.find(c => (c as unknown[])[0] === cmd)?.[1];
+// the newest call's payload, for the assertions about a second ask
+const lastArg = (cmd: string) => {
+	const all = invoke.mock.calls.filter(c => (c as unknown[])[0] === cmd);
+	return all[all.length - 1]?.[1];
+};
 
 // the status read sits behind a 250 ms defer and live search behind a 400 ms
 // one, so the clock is the test's to turn. advanceTimersByTimeAsync drains
@@ -537,8 +542,159 @@ describe('useGithub — what the live hits are allowed to add', () => {
 		await tick(400);
 		expect(called('search_github')).toBe(1);
 		expect(result.current.liveExtras).toEqual([]);
-		// and the query is still unanswered, so the next keystroke retries
+		// ⭐ and the spinner comes down with the request. it used to stay on
+		// for the life of the query, waiting for a keystroke the user has no
+		// way to know is what clears it: nothing is in flight, so a spinner
+		// is a claim that work is happening when none is
+		expect(result.current.searching).toBe(false);
+	});
+
+	// the same rule for the other way a request ends with nothing: gh was
+	// not there, the token was refused, rust said no
+	it('stops claiming to be searching when the search itself fails', async () => {
+		const { result } = await mount({
+			payload: PAYLOAD({
+				live_search: true,
+				cache: { repos: [REPO('joy/devgo')] }
+			}),
+			fail: ['search_github']
+		});
+
+		act(() => result.current.setQuery('devgo'));
+		await tick(400);
+		expect(called('search_github')).toBe(1);
+		expect(result.current.searching).toBe(false);
+		// the cache still answers: a dead live search costs the extras, not
+		// the rows the lane already had
+		expect(result.current.cacheMatches?.map(r => r.full_name)).toEqual([
+			'joy/devgo'
+		]);
+	});
+
+	// a query that came back with nothing is re-armed, not spent: the next
+	// keystroke is a new query and asks again
+	it('searches again on the next keystroke after a request came back empty-handed', async () => {
+		const { result } = await mount({
+			payload: PAYLOAD({
+				live_search: true,
+				cache: { repos: [REPO('joy/devgo')] }
+			}),
+			fail: ['search_github']
+		});
+
+		act(() => result.current.setQuery('devgo'));
+		await tick(400);
+		expect(result.current.searching).toBe(false);
+
+		act(() => result.current.setQuery('devgoz'));
 		expect(result.current.searching).toBe(true);
+		await tick(400);
+		expect(called('search_github')).toBe(2);
+		expect(lastArg('search_github')).toEqual({
+			query: 'devgoz',
+			generation: 2
+		});
+	});
+
+	// ⭐ and the same query typed again is a new ask, not a spent one: clear
+	// the box after a failure, type the very same word, and the lane must
+	// search rather than sit there with the results it never got
+	it('searches again when the query that came back empty-handed is retyped', async () => {
+		const { result } = await mount({
+			payload: PAYLOAD({
+				live_search: true,
+				cache: { repos: [REPO('joy/devgo')] }
+			}),
+			fail: ['search_github']
+		});
+
+		act(() => result.current.setQuery('devgo'));
+		await tick(400);
+		expect(called('search_github')).toBe(1);
+
+		// the box cleared: under three characters nothing is asked and
+		// nothing is claimed
+		act(() => result.current.setQuery(''));
+		expect(result.current.searching).toBe(false);
+
+		act(() => result.current.setQuery('devgo'));
+		expect(result.current.searching).toBe(true);
+		await tick(400);
+		expect(called('search_github')).toBe(2);
+	});
+});
+
+describe('useGithub — the refresh spinner has a ceiling', () => {
+	// ⭐ the event is the ONLY thing that used to lower it, and a gh child
+	// blocked on a socket never emits one: Command::output() waits forever,
+	// the thread never finishes, and the header spun for the whole session
+	it('brings the spinner down and names the timeout when nothing ever answers', async () => {
+		const { result } = await mount({ payload: PAYLOAD({ stale: true }) });
+		expect(result.current.refreshing).toBe(true);
+
+		// a slow success must not be called a failure: five minutes is
+		// fourteen owners at the slow-day price rust documents
+		await tick(299_999);
+		expect(result.current.refreshing).toBe(true);
+		expect(result.current.lastError).toBeNull();
+
+		await tick(1);
+		expect(result.current.refreshing).toBe(false);
+		expect(result.current.lastError).toBe(
+			'GitHub refresh timed out after 5 minutes; gh never answered'
+		);
+	});
+
+	// the clock belongs to one refresh: left running past the answer it
+	// would fire over an idle header and invent a failure out of nothing
+	it('clears the ceiling when the event answers in time', async () => {
+		const { result } = await mount({ payload: PAYLOAD({ stale: true }) });
+
+		await tick(120_000);
+		await emit({ ok: true, error: null });
+		expect(result.current.refreshing).toBe(false);
+
+		await tick(300_000);
+		expect(result.current.lastError).toBeNull();
+		expect(result.current.refreshing).toBe(false);
+	});
+
+	// the answer that turns up after the ceiling has fired is still the
+	// answer — it may repaint the rows and clear the error, but it may not
+	// put the spinner back up
+	it('lets a late event answer without resurrecting the spinner', async () => {
+		const { result } = await mount({ payload: PAYLOAD({ stale: true }) });
+		await tick(300_000);
+		const before = called('get_github_repos');
+
+		await emit({ ok: true, error: null });
+		expect(result.current.refreshing).toBe(false);
+		expect(result.current.lastError).toBeNull();
+		expect(called('get_github_repos')).toBe(before + 1);
+	});
+
+	// rust raises the spinner too: a payload saying a refresh is in flight
+	// is a thread this window never started and may already have lost
+	it('puts the same ceiling over a refresh rust says is already in flight', async () => {
+		const { result } = await mount({ payload: PAYLOAD({ refreshing: true }) });
+		expect(result.current.refreshing).toBe(true);
+
+		await tick(300_000);
+		expect(result.current.refreshing).toBe(false);
+		expect(result.current.lastError).toBe(
+			'GitHub refresh timed out after 5 minutes; gh never answered'
+		);
+	});
+
+	// a timer outliving its component is a state update nobody reads, and
+	// on a lane that unmounts and remounts, one per mount
+	it('leaves no timer behind when the lane unmounts mid-refresh', async () => {
+		const h = await mount({ payload: PAYLOAD({ stale: true }) });
+		expect(h.result.current.refreshing).toBe(true);
+		expect(vi.getTimerCount()).toBe(1);
+
+		h.unmount();
+		expect(vi.getTimerCount()).toBe(0);
 	});
 });
 
