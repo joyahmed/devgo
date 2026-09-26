@@ -172,7 +172,12 @@ fn reveal_path(
             target.name
         ))
     })?;
-    launcher::spawn_raw(&exe, &args)
+    // "reveal" whether or not the item is selected: what the user asked
+    // for was a file manager on this path, and the select flag is a
+    // detail of how. the path is the subject, since a reveal has no
+    // project behind it
+    let note = launcher::LaunchNote::of("reveal", &target, path);
+    launcher::spawn_raw(&note, &exe, &args)
 }
 
 /// Milliseconds since the process started: the startup budget's clock.
@@ -1143,7 +1148,10 @@ pub fn open_server(
         &running,
     )?;
     if !preview.unwrap_or(false) {
-        launcher::spawn_raw(&exe, &args)?;
+        // preview does not spawn, so it does not log: nothing was
+        // launched, and a line saying one was is worse than no line
+        let note = launcher::LaunchNote::of("server", &terminal, &server.name);
+        launcher::spawn_raw(&note, &exe, &args)?;
     }
     Ok(format!("{exe} {args}"))
 }
@@ -1620,7 +1628,9 @@ pub fn open_server_folder_in(
     };
     // the launcher's own door: the platform shell, the template's quoting
     // kept, and a missing code comes back as TargetNotInstalled
-    launcher::spawn_raw(exe, &args)
+    let subject = format!("{}:{path}", server.name);
+    let note = launcher::LaunchNote::bare("remote", "editor", exe, &subject);
+    launcher::spawn_raw(&note, exe, &args)
 }
 
 #[tauri::command]

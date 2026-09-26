@@ -6,6 +6,7 @@ use serde::Deserialize;
 use super::platform::Quiet;
 use super::platform::RuntimeInfo;
 use super::preferences::TmuxConfig;
+use super::runtime_log::log_line;
 use crate::error::AppError;
 use crate::models::target::LaunchTarget;
 use crate::models::Project;
@@ -53,7 +54,8 @@ fn distro_from_project(
         .ok_or_else(|| AppError::NoWslDistro(project.full_path.clone()))
 }
 
-/// Spawn a command line that is already quoted the way the target wants it.
+/// Spawn a command line that is already quoted the way the target wants it,
+/// and write both halves of it to the runtime log.
 ///
 /// `Command::args` re-quotes anything containing spaces, which turns
 /// `--folder-uri vscode-remote://…` into a single quoted argument and breaks
@@ -63,7 +65,31 @@ fn distro_from_project(
 /// `args_template` is the only thing deciding how it is split. pub(crate)
 /// because commands.rs launches a remote editor the same way and must not
 /// keep its own copy of the shell choice.
-pub(crate) fn spawn_raw(exe: &str, args: &str) -> Result<(), AppError> {
+///
+/// The `note` is not optional, and that is the point: this is the only door
+/// in the crate that starts a process for a launch, so a launch path that
+/// forgets to identify itself does not compile. See `intent_line`.
+pub(crate) fn spawn_raw(
+    note: &LaunchNote,
+    exe: &str,
+    args: &str,
+) -> Result<(), AppError> {
+    log_line!("{}", intent_line(note, exe, args));
+    match spawn_now(exe, args) {
+        Ok(pid) => {
+            log_line!("{}", started_line(note, pid));
+            Ok(())
+        }
+        Err(e) => {
+            log_line!("{}", refused_line(note, &e));
+            Err(e)
+        }
+    }
+}
+
+/// The spawn itself, with the pid the log wants. Split out of `spawn_raw`
+/// so there is exactly one `return` path the logging can sit across.
+fn spawn_now(exe: &str, args: &str) -> Result<u32, AppError> {
     // the process spawned below is the shell, which always exists, so a
     // missing editor "launched" fine: a console flashed, Ok came back, and a
     // frecency launch was recorded. wsl is exempt: the program it runs lives
@@ -82,9 +108,242 @@ pub(crate) fn spawn_raw(exe: &str, args: &str) -> Result<(), AppError> {
 
     let mut cmd = shell_command(exe, args);
     scrub_agent_env(&mut cmd);
-    cmd.spawn()
+    let child = cmd
+        .spawn()
         .map_err(|e| AppError::LaunchFailed(format!("{exe}: {e}")))?;
-    Ok(())
+    Ok(child.id())
+}
+
+// ── what the log is told about a launch ─────────────────────────────────
+
+/// Who asked for a launch, for the two lines the log gets about it.
+///
+/// Borrowed rather than owned: every field already exists on the caller's
+/// `LaunchTarget` and `Project`, and a launch is not the place to allocate
+/// five strings.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct LaunchNote<'a> {
+    /// What kind of launch this is, not what kind of program: `open`,
+    /// `run`, `reveal`, `server`. The same terminal row opens a project
+    /// and runs a dev script, and the log has to tell those apart.
+    pub action: &'a str,
+    /// The target's kind as the wire spells it: `editor`, `terminal`,
+    /// `agent`, `file_manager`.
+    pub kind: &'a str,
+    /// The target's stable id — the half that survives a rename, and the
+    /// half a reader matches the outcome line back to the intent line by.
+    pub id: &'a str,
+    /// The target's display name, which is what the user sees in Settings
+    /// and therefore what they will call it in a bug report.
+    pub name: &'a str,
+    /// What is being opened: a project name, a server name, a path.
+    pub subject: &'a str,
+    /// The session script this launch wrote, when it wrote one. Also
+    /// inside the command — the template substituted it in — but named
+    /// separately because the file is the next thing to look at, and a
+    /// reader should not have to find a path inside a quoted line.
+    pub script: Option<&'a str>,
+}
+
+impl<'a> LaunchNote<'a> {
+    /// The note for a launch that has a registered target behind it,
+    /// which is all of them but the two hardcoded remote editors.
+    pub(crate) fn of(
+        action: &'a str,
+        target: &'a LaunchTarget,
+        subject: &'a str,
+    ) -> Self {
+        Self {
+            action,
+            kind: target.kind.wire(),
+            id: &target.id,
+            name: &target.name,
+            subject,
+            script: None,
+        }
+    }
+
+    /// A note for a launch with no target row: `open_server_folder_in`
+    /// hardcodes `code` and `zed`, so the id and the name are the same
+    /// word and there is nothing to look up.
+    pub(crate) fn bare(
+        action: &'a str,
+        kind: &'a str,
+        id: &'a str,
+        subject: &'a str,
+    ) -> Self {
+        Self {
+            action,
+            kind,
+            id,
+            name: id,
+            subject,
+            script: None,
+        }
+    }
+
+    fn with_script(mut self, script: Option<&'a str>) -> Self {
+        self.script = script;
+        self
+    }
+}
+
+/// The longest command line the log keeps, in characters, not bytes: a
+/// cut has to land on a char boundary, and a Windows path is full of
+/// characters that are not one byte.
+///
+/// Every line DevGo builds itself is well under this; what it bounds is a
+/// user's own run command, which can be a whole shell pipeline. A cut line
+/// ends in `…` so a reader is never left guessing whether the log or the
+/// template stopped short.
+pub(crate) const MAX_COMMAND_CHARS: usize = 512;
+
+/// What replaces a value that looked like a secret.
+pub(crate) const REDACTED: &str = "<redacted>";
+
+/// Names whose value never reaches the log. Matched as substrings of the
+/// name uppercased with its separators dropped, so `AUTH` covers
+/// `--auth-token`, `TOKEN` covers `GITHUB_TOKEN`, and `APIKEY` covers
+/// `--api-key`, `api_key` and `APIKEY` with one entry instead of three.
+///
+/// The launcher never builds a line with a secret in it. A user's own
+/// server action or dev script can: `GITHUB_TOKEN=ghp_… gh release upload`
+/// is a normal thing to have in a run line, and an inline assignment like
+/// that is an environment variable, which this log does not write. The
+/// cost of a false positive is one hidden value in a line whose exe, path
+/// and script are all still there; the cost of a false negative is a token
+/// in a file the user is about to attach to a public issue.
+const SECRET_NAMES: &[&str] = &[
+    "TOKEN",
+    "SECRET",
+    "PASSWORD",
+    "PASSWD",
+    "PASSPHRASE",
+    "APIKEY",
+    "ACCESSKEY",
+    "PRIVATEKEY",
+    "CREDENTIAL",
+    "AUTH",
+];
+
+/// The line written *before* the spawn: what DevGo is about to run.
+///
+/// Before and not after, because the failure this whole facility exists
+/// for is the one where nothing comes back at all. A launch that hangs —
+/// a distro booting, a terminal waiting on a prompt no one can see —
+/// writes this line and never the next one, and that asymmetry is itself
+/// the diagnosis. One line written after the fact cannot say it.
+///
+/// The command is kept whole, path and all. The project path is the point
+/// of a launch record — "which directory did it actually open" is the
+/// first question asked of a wrong-window report — and the log already
+/// carries paths elsewhere. What is not kept is any value whose name says
+/// it is a secret; see `SECRET_NAMES`.
+fn intent_line(note: &LaunchNote, exe: &str, args: &str) -> String {
+    let command = command_for_log(exe, args);
+    let script = match note.script {
+        Some(path) => format!(" (script {path})"),
+        None => String::new(),
+    };
+    flatten(&format!(
+        "[DevGo] launch {} {} \"{}\" ({}) for \"{}\": {command}{script}",
+        note.action, note.kind, note.name, note.id, note.subject
+    ))
+}
+
+/// The line written after a spawn the OS accepted. The pid is what lets a
+/// reader take the report to Activity Monitor or Task Manager and say
+/// whether the thing is still there.
+fn started_line(note: &LaunchNote, pid: u32) -> String {
+    flatten(&format!(
+        "[DevGo] launch {} {} ({}) started pid {pid}",
+        note.action, note.kind, note.id
+    ))
+}
+
+/// The line written after a spawn that never happened — a missing exe, a
+/// folder in the executable field, an OS that refused. The error text is
+/// the one the user is shown, so the log and the toast agree.
+fn refused_line(note: &LaunchNote, err: &AppError) -> String {
+    flatten(&format!(
+        "[DevGo] launch {} {} ({}) refused: {err}",
+        note.action, note.kind, note.id
+    ))
+}
+
+/// The command as the log keeps it: redacted, then bounded.
+fn command_for_log(exe: &str, args: &str) -> String {
+    let joined = if args.is_empty() {
+        exe.to_string()
+    } else {
+        format!("{exe} {args}")
+    };
+    cut(&redact(&joined))
+}
+
+/// Replace the value of anything whose name reads like a secret's.
+///
+/// Two forms, because those are the two a shell line has: `NAME=value`
+/// (an inline environment assignment, or `--flag=value`) and `--flag
+/// value`. The second only fires on a word that starts with a dash, so a
+/// project living in `~/dev/oauth-server` is not mistaken for a flag.
+fn redact(command: &str) -> String {
+    let mut out: Vec<String> = Vec::new();
+    let mut hide_next = false;
+    for word in command.split(' ') {
+        if hide_next && !word.is_empty() {
+            hide_next = false;
+            out.push(REDACTED.to_string());
+            continue;
+        }
+        match word.split_once('=') {
+            Some((name, _)) if is_secret_name(name) => {
+                out.push(format!("{name}={REDACTED}"));
+            }
+            _ => {
+                if word.starts_with('-') && is_secret_name(word) {
+                    hide_next = true;
+                }
+                out.push(word.to_string());
+            }
+        }
+    }
+    out.join(" ")
+}
+
+/// Does this word name a secret? Leading dashes are not part of a name,
+/// case is not either, and neither is the separator a name is spelled
+/// with: `--api-key`, `API_KEY` and `apikey` are one name.
+fn is_secret_name(word: &str) -> bool {
+    let name: String = word
+        .trim_start_matches('-')
+        .chars()
+        .filter(|c| *c != '-' && *c != '_')
+        .map(|c| c.to_ascii_uppercase())
+        .collect();
+    !name.is_empty() && SECRET_NAMES.iter().any(|s| name.contains(s))
+}
+
+/// Cut at `MAX_COMMAND_CHARS` characters, saying so when it cuts.
+fn cut(command: &str) -> String {
+    if command.chars().count() <= MAX_COMMAND_CHARS {
+        return command.to_string();
+    }
+    let kept: String = command.chars().take(MAX_COMMAND_CHARS).collect();
+    format!("{kept}…")
+}
+
+/// Every control character becomes a space.
+///
+/// The file's unit is a line. A project folder can be named with a
+/// newline in it, and a user's run command certainly can contain one, so
+/// without this a launch could write a second line that reads as one this
+/// crate wrote — the same forgery `runtime_log::ui_line` refuses from the
+/// webview.
+fn flatten(line: &str) -> String {
+    line.chars()
+        .map(|c| if c.is_control() { ' ' } else { c })
+        .collect()
 }
 
 // the shell that splits a template's line on windows: cmd /c, the line
@@ -215,19 +474,21 @@ pub fn launch_target(
     // same config. until psmux the windows side was the `_` arm, and a
     // windows project opened one bare tab while the same launch on a wsl
     // project opened three
-    let args = match (&wsl, args.contains("{script}")) {
+    let (args, script) = match (&wsl, args.contains("{script}")) {
         (Some((distro, linux_path)), true) => {
             let script = write_tmux_script(project, distro, linux_path, tmux)?;
-            args.replace("{script}", &script)
+            (args.replace("{script}", &script), Some(script))
         }
         (None, true) => {
             let script = write_local_script(project, tmux)?;
-            args.replace("{script}", &script)
+            (args.replace("{script}", &script), Some(script))
         }
-        _ => args,
+        _ => (args, None),
     };
 
-    spawn_raw(&exe, &args)
+    let note = LaunchNote::of("open", target, &project.name)
+        .with_script(script.as_deref());
+    spawn_raw(&note, &exe, &args)
 }
 
 // the session script for a local project: psmux on windows. one cfg seam,
@@ -747,8 +1008,10 @@ pub fn launch_with_command(
     info: &RuntimeInfo,
     command: &str,
 ) -> Result<(), AppError> {
-    let (exe, args) = run_line(target, project, info, command)?;
-    spawn_raw(&exe, &args)
+    let (exe, args, script) = run_line_parts(target, project, info, command)?;
+    let note = LaunchNote::of("run", target, &project.name)
+        .with_script(script.as_deref());
+    spawn_raw(&note, &exe, &args)
 }
 
 // what launch_with_command spawns, before the spawn: a caller that only
@@ -759,6 +1022,20 @@ pub fn run_line(
     info: &RuntimeInfo,
     command: &str,
 ) -> Result<(String, String), AppError> {
+    let (exe, args, _) = run_line_parts(target, project, info, command)?;
+    Ok((exe, args))
+}
+
+// the same, plus the script this line wrote if it wrote one. only the
+// spawning caller wants that third value - it is already inside the args,
+// substituted for {script}, and a caller showing the line to a user does
+// not want it twice
+fn run_line_parts(
+    target: &LaunchTarget,
+    project: &Project,
+    info: &RuntimeInfo,
+    command: &str,
+) -> Result<(String, String, Option<String>), AppError> {
     let resolved = if is_wsl(project) {
         let distro = distro_from_project(project, info)?;
         let linux_path = super::platform::paths::windows_to_wsl_path(
@@ -777,8 +1054,8 @@ pub fn run_line(
     let (exe, args) = resolved
         .ok_or_else(|| AppError::TargetCannotRun(target.name.clone()))?;
 
-    let args = run_script_args(&args, project, command)?;
-    Ok((exe, args))
+    let (args, script) = run_script_args(&args, project, command)?;
+    Ok((exe, args, script))
 }
 
 // the line for a server through one of the local hosts. home is the
@@ -859,8 +1136,8 @@ fn run_script_args(
     args: &str,
     _project: &Project,
     _command: &str,
-) -> Result<String, AppError> {
-    Ok(args.to_string())
+) -> Result<(String, Option<String>), AppError> {
+    Ok((args.to_string(), None))
 }
 
 // a mac run template may ask for {script} instead: terminal.app cannot
@@ -872,16 +1149,16 @@ fn run_script_args(
     args: &str,
     project: &Project,
     command: &str,
-) -> Result<String, AppError> {
+) -> Result<(String, Option<String>), AppError> {
     if !args.contains("{script}") {
-        return Ok(args.to_string());
+        return Ok((args.to_string(), None));
     }
     let session = tmux_session_name(project);
     let script =
         build_mac_run_script(&project.name, &project.full_path, command);
     let path =
         write_command_file(&format!("devgo-run-{session}.command"), &script)?;
-    Ok(args.replace("{script}", &path))
+    Ok((args.replace("{script}", &path), Some(path)))
 }
 
 // the command sits inside a double-quoted bash -lc argument
@@ -913,6 +1190,12 @@ mod tests {
             enabled: true,
             window_names: names.iter().map(|n| n.to_string()).collect(),
         }
+    }
+
+    // the identity a test's spawn carries. nothing in the test binary
+    // calls runtime_log::init, so these lines reach stderr and no file
+    fn probe_note() -> LaunchNote<'static> {
+        LaunchNote::bare("open", "terminal", "probe", "probe")
     }
 
     // every caller below used to assert `script.starts_with(&mac_preamble())`,
@@ -1171,6 +1454,7 @@ mod tests {
         std::fs::write(&probe, "@echo landed\r\n").unwrap();
 
         spawn_raw(
+            &probe_note(),
             &probe.to_string_lossy(),
             &format!("> \"{}\"", marker.display()),
         )
@@ -2362,7 +2646,7 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let folder = dir.to_string_lossy().into_owned();
 
-        let err = spawn_raw(&folder, "").unwrap_err();
+        let err = spawn_raw(&probe_note(), &folder, "").unwrap_err();
         assert!(
             matches!(err, AppError::TargetNotRunnable(ref e) if *e == folder),
             "expected TargetNotRunnable, got {err:?}"
@@ -2370,7 +2654,8 @@ mod tests {
         assert!(!err.to_string().contains("not installed"), "{err}");
 
         // and the other half of the distinction still says what it said
-        let err = spawn_raw("devgo-no-such-program", "").unwrap_err();
+        let err =
+            spawn_raw(&probe_note(), "devgo-no-such-program", "").unwrap_err();
         assert!(matches!(err, AppError::TargetNotInstalled(_)), "{err:?}");
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -2884,5 +3169,172 @@ mod tests {
         launch_with_command(&terminal, &project, &no_distro(), "exit 0")
             .unwrap();
         assert!(!expected.exists(), "orphaned at {}", expected.display());
+    }
+
+    // ── the launch log ──────────────────────────────────────────────────
+
+    fn logged_target() -> LaunchTarget {
+        LaunchTarget {
+            id: "terminal_app".into(),
+            name: "Terminal".into(),
+            kind: TargetKind::Terminal,
+            executable: "open".into(),
+            args_template: "-a Terminal \"{path}\"".into(),
+            wsl_executable: None,
+            wsl_args_template: None,
+            run_args_template: None,
+            reveal_args_template: None,
+            wsl_run_args_template: None,
+        }
+    }
+
+    /// The whole point of the intent line: which target, by both the name
+    /// the user sees and the id prefs store, what it is opening, and the
+    /// command as handed to the shell.
+    #[test]
+    fn the_intent_line_names_the_target_the_subject_and_the_command() {
+        let target = logged_target();
+        let note = LaunchNote::of("open", &target, "devgo");
+        assert_eq!(
+            intent_line(&note, "open", "-a Terminal \"/Users/joy/dev/devgo\""),
+            "[DevGo] launch open terminal \"Terminal\" (terminal_app) \
+             for \"devgo\": open -a Terminal \"/Users/joy/dev/devgo\""
+        );
+    }
+
+    /// A launch that wrote a session script names the file, because that
+    /// file is the next thing a reader opens — the PATH the script sets is
+    /// inside it, and a `command not found` in a terminal that opened fine
+    /// is answered there and nowhere else.
+    #[test]
+    fn the_intent_line_names_the_script_when_one_was_written() {
+        let target = logged_target();
+        let script = "/var/folders/T/devgo-devgo.command";
+        let note =
+            LaunchNote::of("open", &target, "devgo").with_script(Some(script));
+        let line =
+            intent_line(&note, "open", &format!("-a Terminal \"{script}\""));
+        assert!(
+            line.ends_with(" (script /var/folders/T/devgo-devgo.command)"),
+            "{line}"
+        );
+    }
+
+    /// Two lines, not one, and both carry the id: a launch that hangs
+    /// writes the first and never the second, and two instances logging at
+    /// once still have their outcome matched back to their intent.
+    #[test]
+    fn the_outcome_lines_carry_the_id_of_the_intent_line() {
+        let target = logged_target();
+        let note = LaunchNote::of("open", &target, "devgo");
+        assert_eq!(
+            started_line(&note, 4412),
+            "[DevGo] launch open terminal (terminal_app) started pid 4412"
+        );
+        assert_eq!(
+            refused_line(&note, &AppError::TargetNotInstalled("open".into())),
+            "[DevGo] launch open terminal (terminal_app) refused: \
+             open is not installed, or not on PATH. Detect editors in \
+             Settings, or fix the executable"
+        );
+    }
+
+    /// The refusal the log shows is the one the user is shown, joined to
+    /// the error the spawn door really produces for a program that is not
+    /// there — the commonest silent launch failure there is.
+    #[test]
+    fn a_missing_program_refuses_with_a_line_naming_it() {
+        let err = spawn_now("devgo-no-such-program", "").unwrap_err();
+        let line = refused_line(&probe_note(), &err);
+        assert!(
+            line.starts_with("[DevGo] launch open terminal (probe) refused: "),
+            "{line}"
+        );
+        assert!(line.contains("devgo-no-such-program"), "{line}");
+    }
+
+    /// The pid in a started line is a real one, not a placeholder: the
+    /// spawn door hands back the child's id.
+    #[test]
+    fn a_spawn_the_os_accepted_reports_a_real_pid() {
+        #[cfg(windows)]
+        let (exe, args) = ("cmd", "/c exit 0");
+        #[cfg(not(windows))]
+        let (exe, args) = ("echo", "devgo");
+        let pid = spawn_now(exe, args).unwrap();
+        assert!(pid > 0, "pid {pid}");
+    }
+
+    /// A project path is kept — "which directory did it open" is the first
+    /// question a wrong-window report has to answer — and an inline
+    /// environment assignment that names a secret is not.
+    #[test]
+    fn a_path_is_kept_and_a_named_secret_is_not() {
+        assert_eq!(
+            redact(r#"code "G:\dev\oauth-server""#),
+            r#"code "G:\dev\oauth-server""#
+        );
+        assert_eq!(
+            redact("GITHUB_TOKEN=ghp_abc gh release upload"),
+            "GITHUB_TOKEN=<redacted> gh release upload"
+        );
+        assert_eq!(
+            redact("deploy --api-key=sk-live-1 --port=8080"),
+            "deploy --api-key=<redacted> --port=8080"
+        );
+    }
+
+    /// The other shape a secret comes in: the flag and its value as two
+    /// words. Only a word starting with a dash can be a flag, so a folder
+    /// named `auth` is not mistaken for one and the path after it survives.
+    #[test]
+    fn a_flag_hides_the_word_after_it_but_a_bare_word_does_not() {
+        assert_eq!(
+            redact("curl --auth-token abc123 https://example.com"),
+            "curl --auth-token <redacted> https://example.com"
+        );
+        assert_eq!(
+            redact("code /home/joy/auth /home/joy/secrets"),
+            "code /home/joy/auth /home/joy/secrets"
+        );
+        // the run of spaces a shell line can carry does not eat the hiding
+        assert_eq!(redact("x --password  hunter2"), "x --password  <redacted>");
+    }
+
+    /// A user's own run command can be a whole pipeline. It is cut at the
+    /// cap, and the cut says it happened.
+    #[test]
+    fn a_long_command_is_cut_by_characters_and_says_so() {
+        let at_cap = "a".repeat(MAX_COMMAND_CHARS);
+        assert_eq!(cut(&at_cap), at_cap);
+
+        let over = "a".repeat(MAX_COMMAND_CHARS + 1);
+        assert_eq!(cut(&over), format!("{at_cap}…"));
+
+        // characters, not bytes: a cut mid-character would panic the slice
+        let emoji = "🦀".repeat(MAX_COMMAND_CHARS + 1);
+        let trimmed = cut(&emoji);
+        assert!(trimmed.ends_with('…'), "{trimmed}");
+        assert_eq!(trimmed.chars().count(), MAX_COMMAND_CHARS + 1);
+    }
+
+    /// A project folder or a run command carrying a newline cannot write a
+    /// second line that reads as one this crate wrote.
+    #[test]
+    fn a_command_cannot_forge_a_second_log_line() {
+        let target = logged_target();
+        let note = LaunchNote::of("open", &target, "de\nvgo");
+        let line = intent_line(&note, "open", "-a Terminal\n[DevGo] all fine");
+        assert!(!line.contains('\n'), "{line}");
+        assert!(line.contains("open -a Terminal [DevGo] all fine"), "{line}");
+        assert!(line.contains("\"de vgo\""), "{line}");
+    }
+
+    /// An empty args template (an agent row, whose command is the
+    /// terminal's business) logs the exe alone rather than a trailing
+    /// space.
+    #[test]
+    fn a_command_with_no_arguments_has_no_trailing_space() {
+        assert_eq!(command_for_log("explorer.exe", ""), "explorer.exe");
     }
 }
