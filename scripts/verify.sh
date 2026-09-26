@@ -41,22 +41,64 @@ note() { SUMMARY="${SUMMARY}  $1
 
 # one line per check; the tool's real output only surfaces when it fails, so a
 # green run stays readable and a red run still tells you what broke.
+#
+# ⚠️ trap #3 — the redirect has to wrap the GROUP, not the tool. the old line was
+#     out=$(cd "$dir" && "$@" 2>&1)
+# and `2>&1` there binds to `"$@"` alone, so `cd` keeps the script's own stderr.
+# measured 2026-09-26 by driving run_check with a $dir that does not exist: the
+# cd error printed to the TERMINAL in the middle of the `  %-24s ` column that the
+# printf above had just opened —
+#     tsc --noEmit             /path/verify.sh: line 33: cd: /no/such/dir: No such file...
+#     RED
+# — and $out came back EMPTY, so the block under it was
+#     --- tsc --noEmit ---
+#
+#     --- end tsc --noEmit ---
+# a red with no cause inside it. that is the worst red this script can print: the
+# body of that block is the entire reason the block exists, and the one piece of
+# evidence was on the terminal two lines up, wearing the column it had just broken.
+# `{ ...; } 2>&1` puts the cd's stderr where every other word of this check goes.
+#
+# ⭐ and a bad $dir is NOT counted in EXECUTED, which is why the cd is probed on its
+# own line first. EXECUTED answers exactly one question — "did this gate verify
+# anything?" — and the bottom of the file leans on it to keep an all-skipped run
+# loud. a check whose directory could not be entered ran no tool, compiled nothing
+# and proved nothing; counting it as executed is the same lie as a silent skip, only
+# in the other direction, and it would let `EXECUTED=6` vouch for a run in which
+# nothing at all happened. so it scores RED (a missing src-tauri/ IS a broken tree,
+# not an absent optional tool, so it is not a trap #2 skip either) and leaves
+# EXECUTED alone. the probe is a second `cd` rather than a sentinel exit code
+# because no exit status is safely ours to reserve — `git bisect` means 125,
+# 126/127 are the shell's — and cd is a builtin, so the extra call costs nothing.
+# it runs inside $( ) so it cannot move the caller's cwd, and if the directory
+# disappears between the probe and the real run the group redirect above catches
+# that cd too: the error lands in the block, just labelled as a tool failure.
 run_check() {
   label=$1; dir=$2; shift 2
   printf '  %-24s ' "$label"
-  out=$(cd "$dir" && "$@" 2>&1)
-  rc=$?
-  EXECUTED=$((EXECUTED + 1))
-  if [ "$rc" -eq 0 ]; then
-    echo "green"
-    note "$(printf '%-24s green' "$label")"
-  else
+  if ! cd_err=$(cd "$dir" 2>&1); then
     echo "RED"
     echo "--- $label ---"
-    echo "$out"
+    printf '%s\n' "${cd_err:-cd: $dir: cannot enter (no message from cd)}"
+    echo "(nothing ran: the directory is the failure, not the tool. not counted in EXECUTED.)"
     echo "--- end $label ---"
     RED=$((RED + 1))
-    note "$(printf '%-24s red' "$label")"
+    note "$(printf '%-24s red (bad dir — did not run)' "$label")"
+  else
+    out=$( { cd "$dir" && "$@"; } 2>&1 )
+    rc=$?
+    EXECUTED=$((EXECUTED + 1))
+    if [ "$rc" -eq 0 ]; then
+      echo "green"
+      note "$(printf '%-24s green' "$label")"
+    else
+      echo "RED"
+      echo "--- $label ---"
+      echo "$out"
+      echo "--- end $label ---"
+      RED=$((RED + 1))
+      note "$(printf '%-24s red' "$label")"
+    fi
   fi
   # deliberately no early return: the report is only useful if every check ran.
 }
@@ -388,9 +430,17 @@ echo "    cargo test on every platform. a green suite is not evidence for a"
 echo "    launch lane — only an installed build, clicked, is."
 
 echo ""
-if [ "$EXECUTED" -eq 0 ]; then
+if [ "$EXECUTED" -eq 0 ] && [ "$RED" -eq 0 ]; then
   # skipping is fine per check; skipping ALL of them is a gate that verified
   # nothing, which is worse than no gate because it looks like a pass.
+  #
+  # ⭐ the `$RED -eq 0` half is what keeps this sentence TRUE now that a bad $dir
+  # scores red without scoring executed (see trap #3 in run_check). without it,
+  # six checks red on six missing directories would print "every check was
+  # skipped" — a sentence that sends the reader hunting for skip reasons that do
+  # not exist, and it would swallow the red count that names the real problem.
+  # both paths still exit 1 and both are still loud, which is the property this
+  # branch exists to hold; only the wording moves, to the branch that can count.
   echo "verify: FAIL — nothing was verified (every check was skipped)."
   exit 1
 fi
