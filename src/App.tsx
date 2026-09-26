@@ -1357,6 +1357,13 @@ const AppInner = () => {
 				run: () => openSettings('about')
 			},
 			{
+				id: 'settings.wsl',
+				title: 'Settings: WSL doctor',
+				subtitle: '.wslconfig and memory fragmentation, read-only',
+				keywords: ['wsl', 'wslconfig', 'memory', 'fragmentation', 'buddyinfo'],
+				run: () => openSettings('wsl')
+			},
+			{
 				id: 'settings.github',
 				title: 'Settings: GitHub',
 				keywords: ['gh', 'orgs', 'repos'],

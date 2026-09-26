@@ -24,6 +24,7 @@ import HelpPanel from './HelpPanel';
 import Kbd from './Kbd';
 import TargetManager from './TargetManager';
 import WorkspaceManager from './WorkspaceManager';
+import WslDoctor from './WslDoctor';
 
 // Which panel you last looked at is frontend-only UI state, like sortMode:
 // nothing in Rust reads it, so it never goes near prefs.json.
@@ -1120,6 +1121,11 @@ const Settings = ({
 			id: 'tmux',
 			label: isWindows ? 'tmux / psmux' : 'tmux',
 			render: () => <TmuxPanel {...{ onError }} />
+		},
+		{
+			id: 'wsl',
+			label: 'WSL doctor',
+			render: () => <WslDoctor {...{ onError }} />
 		},
 		{
 			id: 'github',
