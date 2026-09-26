@@ -319,15 +319,24 @@ export const useProjects = () => {
 	};
 	// the palette's matcher, a third time: `dvgo` finds `devgo-app`. while you
 	// type, the top hit belongs under Enter, so best match first
+	//
+	// `name` sorts here too rather than taking the payload's order on trust:
+	// the backend does hand its rows back alphabetical, but refreshWorkspace
+	// appends one workspace's rows after every other, so that order holds only
+	// until the first per-workspace refresh
 	const filtered = q
 		? projects
 				.map(p => ({ p, s: fuzzyScore(q, p.name) }))
 				.filter((x): x is { p: Project; s: number } => x.s !== null)
 				.sort((a, b) => (b.s !== a.s ? b.s - a.s : byName(a.p, b.p)))
 				.map(x => x.p)
-		: sortMode === 'name'
-			? projects
-			: [...projects].sort(sortMode === 'activity' ? byActivity : byFrecency);
+		: [...projects].sort(
+				sortMode === 'activity'
+					? byActivity
+					: sortMode === 'frecency'
+						? byFrecency
+						: byName
+			);
 
 	// Derived from `filtered`, not `projects`, so pins respect the search.
 	const pinnedProjects = filtered.filter(p => ranks.get(p.full_path)?.pinned);

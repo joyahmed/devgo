@@ -605,13 +605,9 @@ describe('useProjects — refreshing one workspace', () => {
 		expect(result.current.loading).toBe(false);
 	});
 
-	// ⛔ DOCUMENTS A DEFECT, it does not bless it. refreshWorkspace appends the
-	// refreshed workspace's rows after every other row, and `name` mode returns
-	// `projects` untouched on the assumption rust sorted them. so one
-	// per-workspace refresh leaves the alphabetical list unsorted until a full
-	// pass. correct behaviour: sort by name in name mode (byName already
-	// exists), or splice the rows back in order
-	it('leaves the name-sorted list out of order after one workspace refresh', async () => {
+	// refreshWorkspace appends the refreshed workspace's rows after every other
+	// row, so `name` mode cannot lean on rust's order: it sorts for itself
+	it('keeps the name-sorted list alphabetical after one workspace refresh', async () => {
 		wire({
 			list: twoWorkspaces,
 			workspace: payload([proj('beta', '//wsl/ubuntu')])
@@ -626,11 +622,11 @@ describe('useProjects — refreshing one workspace', () => {
 
 		await act(async () => { await result.current.refreshWorkspace('//wsl/ubuntu'); });
 
-		// beta belongs between alpha and gamma; it is last
+		// beta belongs between alpha and gamma, wherever the refresh put it
 		expect(result.current.filtered.map(p => p.name)).toEqual([
 			'alpha',
-			'gamma',
-			'beta'
+			'beta',
+			'gamma'
 		]);
 	});
 });
