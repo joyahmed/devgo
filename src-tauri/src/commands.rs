@@ -28,6 +28,7 @@ use crate::services::server_folders::{
 use crate::services::server_setup;
 use crate::services::servers::{Server, ServersStore};
 use crate::services::ssh_config;
+use crate::services::wsl_doctor::{fragmentation, wslconfig};
 use crate::services::GithubStore;
 use crate::services::PreferencesStore;
 use crate::services::ProjectCacheStore;
@@ -2590,6 +2591,31 @@ pub fn terminate_distro(distro: String) -> Result<String, AppError> {
 pub fn shutdown_wsl() -> Result<String, AppError> {
     let outcome = wsl::shutdown_all().map_err(AppError::WslStopFailed)?;
     describe(outcome, "WSL")
+}
+
+/// The `.wslconfig` validator: what WSL was told, and how much of it WSL is
+/// quietly throwing away.
+///
+/// The file, never the running VM. A key under the wrong heading leaves no
+/// trace in the VM's behaviour — it just never applies — which is exactly
+/// why it goes unnoticed for weeks. Reads one file and nothing else: no
+/// wsl.exe, so this is safe to run the moment the panel opens.
+#[tauri::command]
+pub fn wsl_config_report() -> wslconfig::ConfigReport {
+    wslconfig::report()
+}
+
+/// The free lists inside a running distro: is memory fragmented rather than
+/// gone.
+///
+/// Blocking, like the stop commands, and for the same reason — Tauri runs
+/// commands off the UI thread, so a wedged WSLService stalls this call and
+/// not the window. Asked for by a button, never on a clock. It will not
+/// start a distro to look inside one; a stopped distro comes back as a
+/// stated reason.
+#[tauri::command]
+pub fn wsl_fragmentation(distro: Option<String>) -> fragmentation::Report {
+    fragmentation::report(distro)
 }
 
 #[tauri::command]

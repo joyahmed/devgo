@@ -31,6 +31,76 @@ interface RuntimeInfo {
 	local_fs: string;
 }
 
+/// The WSL doctor's findings. `error` means WSL is not doing what the file
+/// says; `warning` means it is, but not the way this machine wants;
+/// `info` is a reading worth having.
+type WslSeverity = 'error' | 'warning' | 'info';
+
+/// One thing the doctor found: what it read, what is wrong with it, what it
+/// should be. Three fields rather than one blob so the row can set the quote
+/// in monospace and the advice in prose. `line` is a .wslconfig line number,
+/// null when the finding is about the file, the machine or a memory zone.
+interface WslFinding {
+	severity: WslSeverity;
+	line: number | null;
+	text: string;
+	problem: string;
+	fix: string;
+}
+
+/// `wsl_config_report`. `exists` false is not an error — it means WSL is
+/// running on its defaults, which the findings say out loud.
+interface WslConfigReport {
+	path: string;
+	exists: boolean;
+	host_memory_bytes: number | null;
+	host_processors: number | null;
+	findings: WslFinding[];
+}
+
+/// One memory zone's free lists out of /proc/buddyinfo. `free_blocks[n]` is
+/// how many free runs of 2^n pages the zone has left — the shape that says
+/// fragmented apart from out of memory.
+interface WslZone {
+	node: string;
+	name: string;
+	free_blocks: number[];
+	free_bytes: number;
+	largest_free_order: number | null;
+	high_order_bytes: number;
+}
+
+interface WslMeminfo {
+	total_bytes: number | null;
+	free_bytes: number | null;
+	available_bytes: number | null;
+	cached_bytes: number | null;
+	swap_total_bytes: number | null;
+	swap_free_bytes: number | null;
+}
+
+/// A high-order allocation failure already in the kernel ring — the crash,
+/// not a forecast of one.
+interface WslAllocFailure {
+	order: number;
+	text: string;
+}
+
+interface WslReadings {
+	zones: WslZone[];
+	meminfo: WslMeminfo;
+	failures: WslAllocFailure[];
+}
+
+/// `wsl_fragmentation`. `reason` carries why there is nothing to show — no
+/// distro running is the common one, and DevGo will not start one to look.
+interface WslFragmentationReport {
+	distro: string | null;
+	reason: string | null;
+	readings: WslReadings;
+	findings: WslFinding[];
+}
+
 type WorkspaceStatus = 'live' | 'cached' | 'unavailable';
 
 /// Why a workspace could not be read. "distro_stopped" is not a failure — it
@@ -726,6 +796,22 @@ interface OnboardingProps {
 interface ScanningPanelProps {
 	onSaved: () => void;
 	onError: (message: string) => void;
+}
+
+interface WslDoctorProps {
+	onError: (message: string) => void;
+}
+
+interface WslFindingProps {
+	finding: WslFinding;
+}
+
+interface WslFindingsProps {
+	findings: WslFinding[];
+}
+
+interface WslZoneProps {
+	zone: WslZone;
 }
 
 interface TmuxPanelProps {
