@@ -170,24 +170,91 @@ pub fn ui(raw: &str) {
 }
 
 /// The tag, then the line, as one line.
+pub fn ui_line(raw: &str) -> String {
+    format!("{UI_PREFIX} {}", flattened(raw, MAX_UI_CHARS))
+}
+
+/// One line's worth of text that came from the webview, made safe to be a
+/// line.
 ///
 /// Every control character becomes a space. A newline in particular: the
 /// file's unit is a line, a reader greps it by line, and a frontend that
 /// could send `\n[DevGo] everything is fine` could forge a backend line.
 /// Replacing rather than stripping keeps the length honest, so the `…`
-/// below means what it says.
-pub fn ui_line(raw: &str) -> String {
+/// means what it says. The cut counts characters, not bytes, because
+/// slicing a multi-byte character in half panics.
+fn flattened(raw: &str, max: usize) -> String {
     let kept: String = raw
         .chars()
         .map(|c| if c.is_control() { ' ' } else { c })
-        .take(MAX_UI_CHARS)
+        .take(max)
         .collect();
-    let cut = if raw.chars().count() > MAX_UI_CHARS {
-        "…"
-    } else {
-        ""
-    };
-    format!("{UI_PREFIX} {kept}{cut}")
+    let cut = if raw.chars().count() > max { "…" } else { "" };
+    format!("{kept}{cut}")
+}
+
+// ── the command boundary ────────────────────────────────────────────────
+
+/// One line per Tauri command invocation, so that "did the UI actually
+/// call this command?" has an answer on a machine we cannot attach a
+/// debugger to.
+///
+/// ⭐ The point is the *negative* case. A tester on macOS - where CDP
+/// cannot attach to a WKWebView - reported that she could not tell whether
+/// the WSL panel invokes `wsl_config_report` in the no-WSL state, because
+/// nothing logged any invocation at all: an empty log proved nothing,
+/// since the probe had no positive control. With this line, the log names
+/// every call, so a command that is *absent* from a window in which other
+/// commands appear is absent because it did not run.
+///
+/// ⛔ The command name, and nothing else. Arguments here carry filesystem
+/// paths, hostnames, ssh users and workspace names, and `devgo.log` is a
+/// file a user pastes into an issue on a public repo. There is no argument
+/// worth that.
+pub const INVOKE_PREFIX: &str = "[DevGo] invoke";
+
+/// Command names are `[a-z0-9_]` in this crate, but the name reaching the
+/// invoke handler is whatever the webview typed - an unknown command gets
+/// here before the dispatch table refuses it - so it is flattened like any
+/// other frontend string. 128 is four times the longest real name.
+pub const MAX_INVOKE_CHARS: usize = 128;
+
+/// How many invocations a session logs. `pty_write` fires once per
+/// keystroke in an attached terminal, so this is not a theoretical cap.
+///
+/// At roughly 55 bytes a line, 5000 lines is about 275 KiB - a quarter of
+/// `MAX_BYTES`, the same share the UI budget is allowed, so what the
+/// backend said about this session always survives. Past the cap the log
+/// says so in a line of its own: an instrument that stops recording
+/// silently would reintroduce exactly the bug this exists to fix, because
+/// absence after that point would once again mean nothing.
+pub const MAX_INVOKE_LINES: usize = 5_000;
+
+/// Invocations logged. Relaxed, like `UI_LINES`: the only question is
+/// "have we gone past the cap".
+static INVOKE_LINES: AtomicUsize = AtomicUsize::new(0);
+
+/// Record one invocation. File only, never stderr: one line per keystroke
+/// would make `tauri dev`'s output unreadable, and on the platforms this
+/// exists for (an app launched from the Dock) stderr goes nowhere anyway.
+pub fn invoked(command: &str) {
+    let spent = INVOKE_LINES.fetch_add(1, Ordering::Relaxed);
+    if spent > MAX_INVOKE_LINES {
+        return;
+    }
+    if spent == MAX_INVOKE_LINES {
+        append(&format!(
+            "{INVOKE_PREFIX} budget spent: {MAX_INVOKE_LINES} calls this \
+             session, later calls are not logged"
+        ));
+        return;
+    }
+    append(&invoke_line(command));
+}
+
+/// The tag, then the command name, and nothing else.
+pub fn invoke_line(command: &str) -> String {
+    format!("{INVOKE_PREFIX} {}", flattened(command, MAX_INVOKE_CHARS))
 }
 
 // ── the file ────────────────────────────────────────────────────────────
@@ -458,6 +525,51 @@ mod tests {
         assert!(!line.contains('\n'), "{line}");
         assert!(!line.contains('\r'), "{line}");
         assert_eq!(line, "[DevGo/ui] all fine [DevGo] nothing happened  ok ");
+    }
+
+    /// An invoke line is the tag and the command name, nothing more - in
+    /// particular no arguments, because the log is a file users paste into
+    /// public issues.
+    #[test]
+    fn an_invoke_line_is_the_tag_and_the_command_name_alone() {
+        assert_eq!(
+            invoke_line("wsl_config_report"),
+            "[DevGo] invoke wsl_config_report"
+        );
+    }
+
+    /// The name is whatever the webview sent, so it cannot be allowed to
+    /// carry a newline and forge a second line.
+    #[test]
+    fn an_invoke_line_cannot_forge_a_second_line() {
+        let line = invoke_line("ok\n[DevGo] invoke something_else\r\0");
+        assert!(!line.contains('\n'), "{line}");
+        assert!(!line.contains('\r'), "{line}");
+        assert_eq!(line, "[DevGo] invoke ok [DevGo] invoke something_else  ");
+    }
+
+    /// And it is cut at the cap, so a megabyte of "command name" costs one
+    /// bounded line.
+    #[test]
+    fn an_invoke_line_is_cut_at_the_cap_and_says_it_was() {
+        let at_cap = invoke_line(&"a".repeat(MAX_INVOKE_CHARS));
+        assert_eq!(
+            at_cap,
+            format!("{INVOKE_PREFIX} {}", "a".repeat(MAX_INVOKE_CHARS))
+        );
+        let over = invoke_line(&"a".repeat(MAX_INVOKE_CHARS + 1));
+        assert_eq!(
+            over,
+            format!("{INVOKE_PREFIX} {}…", "a".repeat(MAX_INVOKE_CHARS))
+        );
+    }
+
+    /// `invoked` before `init` must be a no-op too: commands can be
+    /// dispatched the moment the webview loads.
+    #[test]
+    fn invoked_before_init_is_a_no_op() {
+        assert!(log_path().is_none());
+        invoked("get_workspaces");
     }
 
     /// `append` before `init` - the window between process start and setup -
