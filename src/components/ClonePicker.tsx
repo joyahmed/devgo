@@ -260,8 +260,15 @@ const ClonePicker = ({
 							// the cursor's own ring, in the accent the rest of the app
 							// focuses in, and only while the list holds keyboard focus:
 							// the row is no longer a tab stop, so nothing else would
-							// say which one space is about to tick
-							className={`rounded-control ${i === active ? 'group-focus-visible:outline-2 group-focus-visible:outline-accent' : ''}`}
+							// say which one space is about to tick.
+							// the offset is NEGATIVE on purpose and must stay that way:
+							// a row fills the scroller's width, so a ring drawn outside
+							// it lands outside the scroll box and the clip eats its left
+							// and right sides on every row, its top on the first and its
+							// bottom on the last - all four edges gone at offset 0,
+							// reported from linux on 1.2.2-rc2. drawn inside the row,
+							// nothing leaves the box and nothing is clipped
+							className={`rounded-control ${i === active ? 'group-focus-visible:outline-2 group-focus-visible:outline-accent outline-offset-[-2px]' : ''}`}
 							onClick={() => setActive(i)}
 						>
 							<label
