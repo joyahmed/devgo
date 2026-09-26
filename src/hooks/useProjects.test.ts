@@ -158,6 +158,36 @@ const calls = (cmd: string) =>
 const called = (cmd: string) => calls(cmd).length;
 const argsOf = (cmd: string, nth = 0) => calls(cmd)[nth]?.[1];
 
+// ⭐ a requestAnimationFrame OUTLIVES the test that scheduled it. the hook
+// sends mark_startup from inside a frame, right after painting a non-empty
+// cache (useProjects.ts:243) — and jsdom runs that frame ~16 ms later, while
+// settle() below is a 0 ms macrotask. so a test that paints a cached list and
+// never waits for the marker ends with the frame still PENDING: it fires
+// during a later test, after beforeEach's invoke.mockReset(), and its invoke
+// lands in that test's call log. that is how `does not mark a first list that
+// never appeared` read one mark_startup for a state its own hook cannot send
+// one in — a foreign call, not a product bug. it needs the two tests adjacent,
+// which source order is not: `--sequence.shuffle --sequence.seed=20` is.
+//
+// so every frame is tracked and afterEach cancels whatever is still pending: a
+// frame dies with the test that asked for it. in afterEach rather than inside
+// the one guilty test on purpose — the next test someone writes over a cached
+// paint is covered without having to know any of this first.
+const frames = new Set<number>();
+const realFrame = globalThis.requestAnimationFrame.bind(globalThis);
+vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+	const id = realFrame(cb);
+	frames.add(id);
+	return id;
+});
+// only ever holds REAL ids: under fake timers vitest swaps the global out from
+// under the stub, and useRealTimers() drops that clock's frames with it — so
+// this runs after the clock is back, when the ids and the canceller match
+const dropPendingFrames = () => {
+	for (const id of frames) cancelAnimationFrame(id);
+	frames.clear();
+};
+
 // a macrotask inside act: the mount effect chains get_cached_projects, a pass
 // and get_last_project, and only a turn of the loop has drained all of it
 const settle = () => act(async () => { await new Promise(r => setTimeout(r, 0)); });
@@ -178,6 +208,7 @@ const deferred = <T,>() => {
 
 afterEach(() => {
 	vi.useRealTimers();
+	dropPendingFrames();
 	onFocus = null;
 });
 beforeEach(() => {
