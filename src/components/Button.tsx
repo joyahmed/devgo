@@ -39,6 +39,18 @@ const VARIANT: Record<ButtonVariant, string> = {
 	// is aria-current's: two meanings in one colour, and the one that had
 	// to stay legible — which target the keys will hit — was the one that
 	// lost.
+	// ⚠️ specificity trap, and it already bit once: hover:not-disabled:
+	// compiles to `:hover:not(:disabled)` — a class plus two pseudo-classes,
+	// (0,3,0) — while aria-[current=true]: compiles to `[aria-current=true]`
+	// — a class plus an attribute, (0,2,0). the hover rule therefore
+	// OVERRIDES the default's accent edge rather than sitting under it, and
+	// since it sets border-color and not only background, pointing at the
+	// default target erased the only mark that said it was the default. it
+	// is not an ordering question and reordering the classes cannot fix it:
+	// tailwind sorts utilities itself and 3 beats 2 either way. the last
+	// rule re-asserts the accent by stacking all three variants, so it
+	// lands at (0,4,0) and outranks the plain hover — verified in the
+	// emitted css, not inferred from the class name.
 	// the [&:disabled_kbd] rules reach the key chip inside a blocked
 	// button. Kbd fills itself with bg-raised at full ink, so the longest
 	// chip on the strip stayed the loudest thing on it while sitting in a
@@ -48,7 +60,7 @@ const VARIANT: Record<ButtonVariant, string> = {
 	// from the parent, so Kbd needs no prop and its six other callers see
 	// no change
 	launch:
-		'gap-1.5 h-9 px-3 text-13 border border-border-strong bg-bg-panel text-text-primary hover:not-disabled:border-text-muted hover:not-disabled:bg-bg-hover aria-[current=true]:border-accent aria-[current=true]:bg-bg-hover/40 disabled:border-border disabled:text-text-muted [&:disabled_kbd]:border-border [&:disabled_kbd]:bg-transparent [&:disabled_kbd]:text-text-muted',
+		'gap-1.5 h-9 px-3 text-13 border border-border-strong bg-bg-panel text-text-primary hover:not-disabled:border-text-muted hover:not-disabled:bg-bg-hover aria-[current=true]:border-accent aria-[current=true]:bg-bg-hover/40 hover:not-disabled:aria-[current=true]:border-accent disabled:border-border disabled:text-text-muted [&:disabled_kbd]:border-border [&:disabled_kbd]:bg-transparent [&:disabled_kbd]:text-text-muted',
 	// a door on the command row: + Workspace, + Add repo, + Add server.
 	// bordered, so it reads as a button and not a word
 	add: 'gap-1.5 h-9 pl-2.5 pr-3 border border-border-strong bg-transparent text-text-secondary hover:text-text-primary hover:border-accent hover:bg-bg-hover',

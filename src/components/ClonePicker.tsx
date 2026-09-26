@@ -35,6 +35,35 @@ const insideAny = (path: string, workspaces: string[]) => {
 const field =
 	'w-full px-3 py-2 bg-bg-panel border border-border-strong rounded-control text-15 text-text-primary outline-none focus:border-accent placeholder:text-text-muted';
 
+// the cursor's ring, in the accent the rest of the app focuses in, and
+// only while the list holds keyboard focus: the row is no longer a tab
+// stop, so nothing else would say which one space is about to tick.
+//
+// it is an overlay border on the row and NOT an outline on it, and that
+// has to stay that way. pickTone gives an already-cloned row opacity-60,
+// which makes the label a composited layer of its own — and chrome paints
+// that layer OVER the parent row's outline, so 60% of the label's own
+// panel ground was laid on top of the ring. measured headless at
+// device-scale 1: the same ring reads rgb(34,211,238) under an opaque
+// label and rgb(20,95,115) under the faded one, and rgb(23,118,139) once
+// the transparency knob thins the panel to 80% as well. a signal that
+// gets stronger when you make the window more see-through is an artifact,
+// not a decision. an ::after box is generated after the label in tree
+// order, so it paints above that layer and stays full accent — measured
+// the same way, all three cases at rgb(34,211,238).
+//
+// inset-0, so the ring lands INSIDE the row and not around it: a row
+// fills the scroller's width, so ink drawn outside it falls in the
+// overflow clip and loses its left and right sides on every row, its top
+// on the first and its bottom on the last — all four gone, reported from
+// linux on 1.2.2-rc2. same two pixels the old outline-offset-[-2px]
+// covered, so the geometry is unchanged.
+//
+// pointer-events-none: the box covers the whole row, and without it the
+// checkbox and the label under it stop taking clicks
+const ring =
+	'group-focus-visible:after:pointer-events-none group-focus-visible:after:absolute group-focus-visible:after:inset-0 group-focus-visible:after:rounded-control group-focus-visible:after:border-2 group-focus-visible:after:border-accent';
+
 // "scan with github" (joy): the ScanPicker shape pointed the other way.
 // tick the repositories you want on this disk, choose the workspace they
 // land in, clone them one after another. rows already cloned here are
@@ -265,18 +294,8 @@ const ClonePicker = ({
 							role='option'
 							aria-selected={on}
 							aria-disabled={here ? true : undefined}
-							// the cursor's own ring, in the accent the rest of the app
-							// focuses in, and only while the list holds keyboard focus:
-							// the row is no longer a tab stop, so nothing else would
-							// say which one space is about to tick.
-							// the offset is NEGATIVE on purpose and must stay that way:
-							// a row fills the scroller's width, so a ring drawn outside
-							// it lands outside the scroll box and the clip eats its left
-							// and right sides on every row, its top on the first and its
-							// bottom on the last - all four edges gone at offset 0,
-							// reported from linux on 1.2.2-rc2. drawn inside the row,
-							// nothing leaves the box and nothing is clipped
-							className={`rounded-control ${i === active ? 'group-focus-visible:outline-2 group-focus-visible:outline-accent outline-offset-[-2px]' : ''}`}
+							// relative, so the cursor ring above can sit on the row
+							className={`relative rounded-control ${i === active ? ring : ''}`}
 							onClick={() => setActive(i)}
 						>
 							<label
