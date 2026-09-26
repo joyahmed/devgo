@@ -150,9 +150,34 @@ if ($ours -gt 0) { "ours" } elseif ($other -gt 0) { "other" } else { "clear" }
     esac
   fi
   # not windows (or the query itself failed): ps sees the same paths.
+  #
+  # ⚠️ trap #1c — SNAPSHOT ps into a variable FIRST, then search the snapshot.
+  # the obvious one-liner
+  #     ps -eo args= | grep -F "$REPO_ROOT/src-tauri/target"
+  # is a self-match: the shell starts both halves of the pipe at once, so ps lists
+  # the very grep whose own argv is the pattern, and the test is true on a machine
+  # with no cargo anywhere. measured on a mac at 1be0e0a with `pgrep -fl 'cargo|rustc'`
+  # empty: fmt/clippy/test all "skipped" and verify exited 1, which copurge reads as
+  # a refusal. that is trap #1 arriving by another road — "the gate would quietly
+  # stop checking rust forever" — and it hit every mac and linux box, invisibly,
+  # because windows takes the powershell branch above. the snapshot is taken before
+  # any grep of ours exists, so nothing of ours can be in it; it needs no pid
+  # arithmetic and no $$ juggling, and `ps -eo args=` stays byte-identical, which
+  # is what keeps bsd (macos) and gnu (linux) both working.
   if command -v ps >/dev/null 2>&1; then
-    if ps -eo args= 2>/dev/null | grep -F "$REPO_ROOT/src-tauri/target" | grep -qv 'rust-analyzer'; then
-      printf 'ours'; return 0
+    procs=$(ps -eo args= 2>/dev/null)
+    if [ -n "$procs" ]; then
+      if printf '%s\n' "$procs" | grep -F "$REPO_ROOT/src-tauri/target" | grep -qv 'rust-analyzer'; then
+        printf 'ours'; return 0
+      fi
+      # trap #1b on this branch too: rust work that names no path of ours is not
+      # ours, so we RUN — but say so, exactly as the windows branch does. the
+      # rust-analyzer filter comes first for the same reason as above: the editor
+      # holds no build lock and would otherwise print that note on every run.
+      if printf '%s\n' "$procs" | grep -v 'rust-analyzer' \
+         | grep -Eq '(^|/)(cargo|cargo-clippy|rustc|rustdoc)([[:space:]]|$)'; then
+        printf 'other'; return 0
+      fi
     fi
   fi
   # no way to look. per trap #1 an unreadable answer must not become a skip.
@@ -205,6 +230,14 @@ if ! command -v cargo >/dev/null 2>&1; then
   skip "cargo clippy -D warnings" "cargo not on PATH"
   [ "$FULL" -eq 1 ] && skip "cargo test" "cargo not on PATH"
 elif [ "$RUST_STATE" = "ours" ]; then
+  # ⚠️ open question, measured on windows 2026-09-26 and NOT changed here: this
+  # skip is over-conservative even when the detection is right. with `tauri dev`
+  # live, cargo fmt/clippy/test invoked by hand all completed in seconds — cargo
+  # waited ~19s on the target lock once and then proceeded. "try, and report if it
+  # actually blocks" would be the honest behaviour; "skip pre-emptively" trades a
+  # real verification for a fear. left alone on purpose — the bug this commit fixes
+  # was the detection, and redesigning the guard in the same breath would make the
+  # fix unreviewable. own slice.
   echo "  !! RUST TIER SKIPPED — a cargo/rustc/target binary of THIS repo is live"
   echo "  !! (tauri dev?). cargo would BLOCK on the src-tauri/target lock, not fail."
   echo "  !! stop the dev server and re-run if you need rust verified."
@@ -238,10 +271,20 @@ printf '%s' "$SUMMARY"
 # broader assurance than it is. every line below was checked against the tree, not guessed.
 echo ""
 echo "cannot verify:"
-echo "  - the JS/TS suite is vitest + jsdom over THREE of 37 components (SearchBox,"
-echo "    Drawer, WslDoctor, 30 cases). every other line of React/TS is still"
-echo "    verified only by tsc types and by bundling, and nothing here touches"
-echo "    App's own state."
+# ⭐ COUNTED, not typed. this line carried "THREE of 37 components, 29 cases",
+# then "30 cases", and was stale twice in one day — a number that lies here is
+# worse than no number, because this block is the honesty the green verdict rests
+# on. the case count is gone for good: `it(` greps disagree with what vitest
+# actually runs (it.each, describe.each), and vitest prints the true figure two
+# lines up anyway. the file counts below are exact by construction.
+tested=$(ls "$REPO_ROOT"/src/components/*.test.tsx 2>/dev/null \
+         | sed 's#.*/##; s#\.test\.tsx$##' | tr '\n' ',' | sed 's/,$//; s/,/, /g')
+n_tested=$(ls "$REPO_ROOT"/src/components/*.test.tsx 2>/dev/null | wc -l | tr -d ' ')
+n_comp=$(ls "$REPO_ROOT"/src/components/*.tsx 2>/dev/null | grep -vc '\.test\.tsx$')
+echo "  - the JS/TS suite is vitest + jsdom over $n_tested of $n_comp components."
+echo "    tested: ${tested:-none}"
+echo "    every other line of React/TS is still verified only by tsc types and by"
+echo "    bundling, and nothing here touches App's own state."
 echo "  - no E2E (no playwright config, no e2e/ or tests/ directory). jsdom lays"
 echo "    nothing out and paints nothing, so no test above can see a width, an"
 echo "    overlap or a colour — the container-query chip gates are unwatched."
