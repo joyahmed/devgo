@@ -126,49 +126,46 @@ impl WindowState {
     /// lost every save, measured to the pixel on a 1920x1080 display at
     /// scale factor 1.
     ///
-    /// ⚠️ That tighter band is only earned where the work area is real. A
-    /// reported work area lets the slack shrink to frame slop because the
-    /// chrome is a number the platform gave us; a work area that is just
-    /// the panel again means the chrome is *unknown*, and then both arms
-    /// test one rectangle and 24px on the height is a guess that is too
-    /// small for a GNOME top bar. `work_area()` is
-    /// `gdk_monitor().workarea()` on Linux and cannot error or panic, so a
-    /// Wayland session — no work-area protocol at all — hands back monitor
-    /// geometry with nothing to say it did. So per monitor: informative
-    /// work area, symmetric band; uninformative one, the old asymmetric
-    /// band against the panel. The fallback is not a regression, it is the
-    /// behaviour before this guard was tightened, applied only where the
-    /// better information is missing.
+    /// ⚠️ The band stays symmetric even when the work area says nothing.
+    /// A monitor can report `work == full`: a Mac **second display** shows
+    /// no menu bar by default, `_HIHideMenuBar` with an auto-hidden Dock
+    /// does it on the primary, an auto-hidden Windows taskbar does it, and
+    /// Wayland has no work-area protocol for GDK to answer from. Then both
+    /// arms test one rectangle and the chrome really is unknown. A wider
+    /// height band for exactly that case was tried and reverted, because
+    /// it cannot tell a maximized window from a near-maximized one — it
+    /// only picks which way to fail. **The safe direction is to SAVE the
+    /// user's rectangle, not to discard it.** Dropping a real resize is
+    /// *silent* data loss: nothing on screen, nothing in the log, and the
+    /// next launch quietly opens at the stale size. Storing a maximize
+    /// artefact gives a screen-sized window the user can see and move.
+    ///
+    /// ⭐ And "only on degenerate monitors" is not a narrow exception:
+    /// this is an `.any()` over every screen, so ONE degenerate secondary
+    /// display would apply the wide band to a window on any screen. A
+    /// 24-wide by 96-high band is what the paragraph above describes —
+    /// vacuous for every ordinary macOS window — and confining it here
+    /// only makes that silent drop conditional: on a blind 1920x1080,
+    /// 1910x1000 (w 10, h 80) and 1897x1000 (w 23, h 80) are the measured
+    /// pair that defined the bug, and both would be condemned again.
+    ///
+    /// The cost of the symmetric band, stated rather than buried: on a
+    /// monitor that reports no work area, a genuine maximize artefact
+    /// about a taskbar-height short of the panel — 2560x1392 on a blind
+    /// 2560x1440, height delta 48 — is now SAVED rather than rejected.
+    /// That is the accepted trade, not an oversight: a visible, movable
+    /// full-size window beats a resize that vanishes without a trace.
     pub fn covers_a_monitor(&self, screens: &[Screen]) -> bool {
         // the frame's own slop, and nothing else
         const SLACK: i32 = 24;
-        // the height band for a monitor whose chrome nobody reports: sized
-        // to cover a panel or title bar we cannot measure, which is what it
-        // was sized for the first time round
-        const BLIND_SLACK_H: i32 = SLACK * 4;
-        let fills = |(_, _, rw, rh): MonitorRect, slack_h: i32| {
+        let fills = |(_, _, rw, rh): MonitorRect| {
             (self.width as i32 - rw as i32).abs() <= SLACK
-                && (self.height as i32 - rh as i32).abs() <= slack_h
+                && (self.height as i32 - rh as i32).abs() <= SLACK
         };
-        screens.iter().any(|s| {
-            // exact equality, not a tolerance: a platform with no work area
-            // returns the geometry itself, so the two rects are the same
-            // numbers rather than nearly the same, and nothing in between
-            // the calls can add noise. A tolerance would instead condemn
-            // real work areas that merely sit close to the panel — the
-            // mac's 25px menu bar is inside any tolerance worth having, and
-            // that is precisely the measured case the tight band exists
-            // for. Sizes only: a work area offset from the panel but the
-            // same size still reports no reserved strip, which is the one
-            // thing being asked.
-            let (_, _, fw, fh) = s.full;
-            let (_, _, ww, wh) = s.work;
-            if ww == fw && wh == fh {
-                fills(s.full, BLIND_SLACK_H)
-            } else {
-                fills(s.full, SLACK) || fills(s.work, SLACK)
-            }
-        })
+        // no special case for `work == full`: both arms then test the same
+        // rectangle against the same symmetric band, which is the right
+        // answer for a monitor whose chrome nobody reported
+        screens.iter().any(|s| fills(s.full) || fills(s.work))
     }
 
     /// Could a person have left the window here? A minimized window reports
@@ -875,13 +872,16 @@ mod tests {
         },
     ];
 
-    /// A platform that reports no work area at all: `work` is the panel,
-    /// dimension for dimension. Wayland has no work-area protocol, so GDK
-    /// hands `gdk_monitor().workarea()` back as the monitor geometry, and
-    /// `tauri::Monitor::work_area()` cannot tell us that it did — it cannot
-    /// error and cannot panic. A 1920x1080 panel under GNOME, whose ~32px
-    /// top bar is real chrome the platform never mentions. Scale factor 1,
-    /// like every fixture here.
+    /// A monitor that reports no work area at all: `work` is the panel,
+    /// dimension for dimension. This is the DEFAULT on a Mac second
+    /// display — no menu bar there, so `visibleFrame == frame` — and it
+    /// also happens with `_HIHideMenuBar` plus an auto-hidden Dock on the
+    /// primary, with an auto-hidden Windows taskbar, and under Wayland,
+    /// which has no work-area protocol for GDK to answer from. So the case
+    /// is reachable by configuration, not by exotic hardware, and
+    /// `covers_a_monitor` is an `.any()`: one of these in the list decides
+    /// for windows on every other screen too. A 1920x1080 panel at scale
+    /// factor 1, like every fixture here.
     const BLIND_SCREEN: [Screen; 1] = [Screen {
         full: (0, 0, 1920, 1080),
         work: (0, 0, 1920, 1080),
@@ -1013,30 +1013,68 @@ mod tests {
         );
     }
 
-    /// ⚠️ The case no verifying box can run: `work == full`, so both arms
-    /// of the guard test the same rectangle and the symmetric band decides
-    /// alone. A GNOME maximize race stores the panel width and the panel
-    /// height minus the top bar — 32px off, which the 24px band misses and
-    /// the old 96px one caught. The escape is silent: `maximized: false`
-    /// with a near-screen-size rect, and the next launch opens like that.
+    /// ⚠️ THE COST OF THE DECISION, ASSERTED SO IT CANNOT BE FORGOTTEN.
+    /// `work == full`, so both arms test one rectangle and the symmetric
+    /// 24 decides alone. A GNOME maximize race stores the panel width and
+    /// the panel height less a ~32px top bar, and a Windows maximize
+    /// artefact sits a 48px taskbar short of the panel: on a monitor that
+    /// reported no chrome, BOTH ARE SAVED. That is deliberate. With the
+    /// chrome unknown these rects are indistinguishable from a window
+    /// somebody dragged to nearly full height, and the trade is taken in
+    /// the direction that fails visibly — the user gets a screen-sized
+    /// window they can see and move, instead of a resize that disappears
+    /// with nothing on screen and nothing in the log. The alternative, a
+    /// wide height band, was measured to condemn ordinary windows (see
+    /// `a_vacuous_height_band_must_never_come_back`).
     #[test]
-    fn a_gnome_maximize_race_is_an_artefact_without_a_work_area() {
+    fn a_maximize_race_on_a_blind_monitor_is_saved_on_purpose() {
         assert!(
-            rect(1920, 1048, 0, 32).covers_a_monitor(&BLIND_SCREEN),
-            "panel width, panel height minus a 32px top bar: a maximize"
+            !rect(1920, 1048, 0, 32).covers_a_monitor(&BLIND_SCREEN),
+            "h delta 32 with no reported chrome: saved, the accepted cost"
         );
         assert!(
-            rect(2560, 1392, -8, -8).covers_a_monitor(&[Screen {
+            !rect(2560, 1392, -8, -8).covers_a_monitor(&[Screen {
                 full: (0, 0, 2560, 1440),
                 work: (0, 0, 2560, 1440),
             }]),
-            "the shipped artefact, on a platform that reported no taskbar"
+            "the shipped artefact on a blind screen: h delta 48, saved"
         );
     }
 
-    /// The artefact against the work area it actually had. Both arms are
-    /// live here, so this is the tight band doing the work: 2560x1392 is
-    /// the work area exactly, and the ordinary windows next to it stay.
+    /// ⭐⭐ THE REGRESSION GUARD FOR THIS WHOLE ARGUMENT. These two rows
+    /// are the pair that defined the original bug, and they were verified
+    /// a second time on a Mac against a 24-wide by 96-high band:
+    ///
+    ///   1910x1000  w delta 10 <= 24  h delta 80 <= 96  -> DROPPED
+    ///   1897x1000  w delta 23 <= 24  h delta 80 <= 96  -> DROPPED
+    ///
+    /// A 96px height band is vacuous for every ordinary window, so an AND
+    /// with a permanently-true half is its other half alone — width, which
+    /// was never enough to condemn a save. Confining that band to monitors
+    /// that report no work area does not make it safe, it makes the silent
+    /// drop conditional, and via `.any()` a single degenerate secondary
+    /// display reaches windows on every screen. So: if this test ever goes
+    /// red, a vacuous height band has come back and the 2026 silent
+    /// data-loss bug is back with it. Do not widen the band; the cautious
+    /// direction is SAVE, not DISCARD.
+    #[test]
+    fn a_vacuous_height_band_must_never_come_back() {
+        for (w, h, delta) in [
+            (1910, 1000, "w 10, h 80: dropped by the old 24x96 band"),
+            (1897, 1000, "w 23, h 80: dropped by the old 24x96 band"),
+        ] {
+            assert!(
+                !rect(w, h, 0, 30).covers_a_monitor(&BLIND_SCREEN),
+                "{w}x{h} must be SAVED even with no work area ({delta})"
+            );
+        }
+    }
+
+    /// The artefact against the work area it actually had, and the reason
+    /// a reported work area is worth so much: 2560x1392 IS that work area,
+    /// caught at delta 0x0 by the work arm, while the ordinary windows
+    /// beside it are still saved. Independent of the blind case — nothing
+    /// here is degenerate.
     #[test]
     fn the_shipped_artefact_matches_a_real_windows_work_area() {
         assert!(
@@ -1055,8 +1093,9 @@ mod tests {
         }
     }
 
-    /// The other side of that fallback: a wider band condemns more, so the
-    /// sizes a person actually drags a window to must still be saved.
+    /// The ordinary sizes, on the monitor with nothing to say about its
+    /// chrome: a person's own window size survives the missing work area
+    /// because the band did not widen to compensate for it.
     #[test]
     fn an_ordinary_window_survives_a_missing_work_area() {
         for (w, h) in [(900, 720), (1400, 900), (1600, 1000), (1200, 1080)] {
