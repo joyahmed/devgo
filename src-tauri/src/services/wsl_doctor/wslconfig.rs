@@ -431,14 +431,44 @@ fn shape_finding(pair: &Pair, key: &Key) -> Option<Finding> {
 
 // -------------------------------------------------------------- arithmetic
 
-// a memory= this far under wsl's own 50% default is worth a line; closer
+// a memory= this far under wsl's own default is worth a line; closer
 // than this and the user plainly meant it
 const STALE_MEMORY_FLOOR: u64 = 2 << 30;
 
+/// WSL2 never defaults `memory` above this, however large the host.
+const WSL_DEFAULT_MEMORY_CAP: u64 = 8 << 30;
+
+/// ⭐ WSL2's default `memory` — the ONE place this rule is written down.
+///
+/// Microsoft's `wsl-config` documentation: "50% of total memory on Windows,
+/// or 8GB, whichever is less". So a 64 GiB box does NOT get 32 GiB, it gets
+/// 8 GiB; only a host of 16 GiB or less has the half win the `min`.
+///
+/// ⚠️ Documentation-based, not measured. The rule cannot be observed on a
+/// box whose `.wslconfig` sets `memory=` (the cap is applied instead), and
+/// DevGo will not start a stopped distro to find out.
+///
+/// Not build-conditional, deliberately: the 8 GiB cap arrived in build
+/// 20175 and builds before it took 80% of host memory, but every Windows
+/// release DevGo supports is far past 20175, and this module does not know
+/// the build number — `Host` carries memory and processors only. Reading
+/// the build just to model a retired rule would cost more than it buys.
+fn wsl_default_memory(host_total: u64) -> u64 {
+    (host_total / 2).min(WSL_DEFAULT_MEMORY_CAP)
+}
+
 /// The class of bug a key table cannot catch: a value that was right on
-/// the machine it was written for. `memory=24GB` moved from a 32 GB box to
-/// a 64 GB one is still valid, still applied, and now caps WSL below the
-/// default it would have picked on its own.
+/// the machine it was written for. `memory=2GB` moved from a 4 GB box to a
+/// 16 GB one is still valid, still applied, and now caps WSL below the
+/// 8 GiB default it would have picked on its own.
+///
+/// ⚠️ Because the default is capped at 8 GiB (see `wsl_default_memory`),
+/// this fires far less often than the `host / 2` it replaced. On any host of
+/// 16 GiB or more the default is 8 GiB, so only a `memory=` of 6 GiB or less
+/// clears STALE_MEMORY_FLOOR beneath it. That is correct, not a regression:
+/// on a 64 GiB box a `memory=24GB` is three times WSL's default, so there
+/// is nothing to warn about — the old rule invented a 32 GiB default and
+/// warned anyway.
 fn arithmetic(pair: &Pair, key: &Key, host: Host) -> Option<Finding> {
     match key.name {
         "memory" => {
@@ -455,13 +485,13 @@ fn arithmetic(pair: &Pair, key: &Key, host: Host) -> Option<Finding> {
                         human(total)
                     ),
                     format!(
-                        "at most {} — or delete the line for WSL's 50% default, {}",
+                        "at most {} — or delete the line for WSL's own default, {}",
                         human(total),
-                        human(total / 2)
+                        human(wsl_default_memory(total))
                     ),
                 ));
             }
-            let default = total / 2;
+            let default = wsl_default_memory(total);
             (asked < default && default - asked >= STALE_MEMORY_FLOOR).then(
                 || {
                     let percent = asked as f64 / total as f64 * 100.0;
@@ -470,7 +500,7 @@ fn arithmetic(pair: &Pair, key: &Key, host: Host) -> Option<Finding> {
                         Some(pair.line),
                         pair.raw.clone(),
                         format!(
-                            "memory={} caps the VM at {percent:.0}% of this machine's {} — under WSL's own default of 50% ({})",
+                            "memory={} caps the VM at {percent:.0}% of this machine's {} — under WSL's own default of {}, the lesser of half the host and 8 GiB",
                             human(asked),
                             human(total),
                             human(default)
@@ -847,10 +877,11 @@ fn report_from(
                     .to_string(),
                 match host.memory_bytes {
                     Some(total) => format!(
-                        "half this machine's memory ({}) and every logical processor",
-                        human(total / 2)
+                        "{} of memory — the lesser of half this machine's {} and 8 GiB — and every logical processor",
+                        human(wsl_default_memory(total)),
+                        human(total)
                     ),
-                    None => "half the machine's memory and every logical processor"
+                    None => "the lesser of half the machine's memory and 8 GiB, and every logical processor"
                         .to_string(),
                 },
             )],
@@ -1080,18 +1111,42 @@ instanceIdleTimeout=-1
         assert!(found[0].problem.contains("set to nothing"));
     }
 
-    /// ⭐ The arithmetic class: joy's `memory=24GB` on the 64 GB machine it
-    /// moved to. Valid key, valid section, valid value, still wrong.
+    /// ⭐ The rule itself, pinned once, where the four copies used to be.
+    /// Microsoft: "50% of total memory on Windows, or 8GB, whichever is
+    /// less". Both branches of that `min`, and the hinge between them.
     #[test]
-    fn a_memory_cap_below_wsls_own_default_is_flagged() {
-        let found = only("[wsl2]\nmemory=24GB\n");
+    fn wsls_default_memory_is_half_the_host_capped_at_8_gib() {
+        // the cap wins on anything roomy — the bug this replaced said the
+        // 64 GiB box got 32 GiB, four times the truth
+        assert_eq!(wsl_default_memory(64 << 30), 8 << 30);
+        assert_eq!(wsl_default_memory(128 << 30), 8 << 30);
+        // the hinge: exactly 16 GiB is the largest host where half == cap
+        assert_eq!(wsl_default_memory(16 << 30), 8 << 30);
+        // ⭐ below the hinge the HALF wins, not the cap — the branch a
+        // fix applied in four separate places would have missed
+        assert_eq!(wsl_default_memory(8 << 30), 4 << 30);
+        assert_eq!(wsl_default_memory(4 << 30), 2 << 30);
+        assert_eq!(wsl_default_memory(1 << 30), 512 << 20);
+    }
+
+    /// ⭐ The arithmetic class on a SMALL host, which is the only place it
+    /// can still fire: 16 GiB halves to exactly the 8 GiB cap, so a
+    /// `memory=4GB` carried over from a 8 GB box caps the VM at half of
+    /// what WSL would have taken on its own.
+    #[test]
+    fn a_memory_cap_below_wsls_own_default_is_flagged_on_a_small_host() {
+        let host16 = Host {
+            memory_bytes: Some(16 << 30),
+            processors: Some(8),
+        };
+        let found = validate("[wsl2]\nmemory=4GB\n", host16);
         assert_eq!(found.len(), 1);
         assert_eq!(found[0].severity, Severity::Warning);
         // the three numbers that make the case: what is asked, what the
         // machine has, what wsl would have picked on its own
         // spelled in binary units, the same way the panel spells its own
         // numbers — two unit systems in one card is the bug this pins
-        for expected in ["24.0 GiB", "64.0 GiB", "32.0 GiB"] {
+        for expected in ["4.0 GiB", "16.0 GiB", "8.0 GiB"] {
             assert!(
                 found[0].problem.contains(expected),
                 "{expected} missing from: {}",
@@ -1101,12 +1156,71 @@ instanceIdleTimeout=-1
         assert!(found[0].fix.contains("smaller machine"));
     }
 
+    /// ⭐ The boundary the `min` exists for: a host too small for the cap to
+    /// apply, so the default is the HALF. 8 GiB host → 4 GiB default, and
+    /// `memory=1GB` is 3 GiB under it, clear of STALE_MEMORY_FLOOR.
+    #[test]
+    fn on_a_host_under_16_gib_the_default_is_the_half_not_the_cap() {
+        let host8 = Host {
+            memory_bytes: Some(8 << 30),
+            processors: Some(4),
+        };
+        let found = validate("[wsl2]\nmemory=1GB\n", host8);
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].severity, Severity::Warning);
+        // 4.0 GiB is half of 8, NOT the 8 GiB cap — if the cap leaked into
+        // this branch the finding would name 8.0 GiB as the default.
+        // ⚠️ match the phrase, not the bare number: "8.0 GiB" also appears
+        // here legitimately, as the host size
+        assert!(
+            found[0].problem.contains("default of 4.0 GiB"),
+            "expected the half as the default, got: {}",
+            found[0].problem
+        );
+        assert!(
+            !found[0].problem.contains("default of 8.0 GiB"),
+            "the 8 GiB cap must not govern an 8 GiB host: {}",
+            found[0].problem
+        );
+    }
+
+    /// The 64 GiB host: WSL's default is 8 GiB, so every one of these is
+    /// comfortably ABOVE it and none is worth a line. `memory=24GB` used to
+    /// be flagged here against a phantom 32 GiB default.
     #[test]
     fn a_memory_cap_at_or_above_the_default_is_left_alone() {
         assert_eq!(only("[wsl2]\nmemory=32GB\n"), Vec::new());
         assert_eq!(only("[wsl2]\nmemory=48GB\n"), Vec::new());
-        // just under half, but not by enough to be worth a line
         assert_eq!(only("[wsl2]\nmemory=31GB\n"), Vec::new());
+        // three times the real 8 GiB default — silence is the fix
+        assert_eq!(only("[wsl2]\nmemory=24GB\n"), Vec::new());
+        // exactly the default, and just over the floor beneath it
+        assert_eq!(only("[wsl2]\nmemory=8GB\n"), Vec::new());
+        assert_eq!(only("[wsl2]\nmemory=7GB\n"), Vec::new());
+    }
+
+    /// ⛔ The Info finding a user with no file actually reads. It used to
+    /// promise "half this machine's memory (32.0 GiB)" on this 64 GiB host —
+    /// four times what WSL hands out, and the opposite of the truth for
+    /// anyone sizing a workload against it.
+    #[test]
+    fn the_no_file_info_finding_quotes_the_capped_default() {
+        let r = report_from(
+            host64(),
+            true,
+            at("C:\\Users\\joy\\.wslconfig"),
+            |_| Err(io(std::io::ErrorKind::NotFound, "nope")),
+        );
+        assert_eq!(r.findings.len(), 1);
+        let fix = &r.findings[0].fix;
+        assert!(
+            fix.contains("8.0 GiB"),
+            "the capped default is missing from: {fix}"
+        );
+        assert!(
+            !fix.contains("32.0 GiB"),
+            "the phantom half-the-host default is still quoted: {fix}"
+        );
     }
 
     #[test]
@@ -1151,8 +1265,13 @@ instanceIdleTimeout=-1
 
     #[test]
     fn findings_come_back_in_file_order() {
+        // ⚠️ line 4 is `memory=2GB`, not the `memory=24GB` this used to
+        // carry. On the 64 GiB fixture host WSL's default is 8 GiB, so
+        // 24GB is ABOVE it and rightly draws no finding — this test only
+        // ever wanted *a* finding on line 4 to check ordering, so it takes
+        // one that is genuinely under the default.
         let lines: Vec<Option<u32>> = only(
-            "[wsl2]\nsparseVhd=true\nprocesors=8\nmemory=24GB\nguiApplications=yes\n",
+            "[wsl2]\nsparseVhd=true\nprocesors=8\nmemory=2GB\nguiApplications=yes\n",
         )
         .iter()
         .map(|f| f.line)
