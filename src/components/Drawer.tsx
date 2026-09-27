@@ -164,9 +164,31 @@ const Drawer = ({
 				head.focus();
 			}
 		};
+		// the backdrop below starts at top-12 so the title bar's drag region
+		// and its buttons (traffic-light stand-ins, Help, Settings) are never
+		// covered - see the comment on that div. that leaves the strip above
+		// it hit-testing to whatever real chrome sits there, and a click
+		// meant as "close this" lands on the drag region or a gap between
+		// buttons and does nothing. this does not paint anything over the
+		// strip - it reads where the click landed after the real chrome has
+		// already had it, so a press-drag-release on the drag region and a
+		// click on any of the title bar's own buttons behave exactly as if
+		// this listener were not here. FOCUSABLE is used only to name "one
+		// of the title bar's own controls", not to build a second panel
+		const closeFromTitleBar = (e: MouseEvent) => {
+			if (openDrawers[openDrawers.length - 1] !== token) return;
+			if (e.target instanceof Element && e.target.closest(FOCUSABLE)) return;
+			const bar = document.querySelector('header');
+			const bottom = bar?.getBoundingClientRect().bottom;
+			if (!bottom || e.clientY >= bottom) return;
+			reason.current = 'title bar click';
+			close.current();
+		};
 		window.addEventListener('keydown', handler);
+		window.addEventListener('click', closeFromTitleBar);
 		return () => {
 			window.removeEventListener('keydown', handler);
+			window.removeEventListener('click', closeFromTitleBar);
 			const at = openDrawers.indexOf(token);
 			if (at >= 0) openDrawers.splice(at, 1);
 			const back = returnTo.current;
@@ -198,7 +220,15 @@ const Drawer = ({
 
 	return (
 		// under the title bar (top-12), so the window's own chrome is never
-		// covered; settings sits at 40 so a confirm sheet (50) opens over it
+		// covered; settings sits at 40 so a confirm sheet (50) opens over it.
+		// top-12 matches the title bar's own h-12 (TitleBar.tsx) - that strip
+		// is a native drag region (appWindow.startDragging on mousedown) plus
+		// the window buttons and Help/Settings, and extending this backdrop
+		// over it would put a click-catcher on top of all of that. the click
+		// that strip still owes the user - an outside click there did nothing
+		// before this file's history has any comment on it - is handled by
+		// closeFromTitleBar above, which only reads where a click landed and
+		// paints nothing
 		<div
 			className={`fixed inset-x-0 bottom-0 top-12 bg-black/40 ${LAYER[z]}`}
 			onClick={closeFromBackdrop}

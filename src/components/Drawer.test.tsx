@@ -113,6 +113,114 @@ describe('Drawer — focus', () => {
 	});
 });
 
+// the backdrop starts at top-12 so the title bar's drag region and its own
+// buttons are never covered (see the comment on that div) - which leaves a
+// strip above it that hit-tests to whatever real chrome is there. a click
+// meant as "close this" that lands in that strip used to do nothing.
+// jsdom has no layout: `header` here never actually occupies the first 48px
+// of anything, so getBoundingClientRect is stubbed to say it does. that
+// makes this a test of the WIRING - the listener reads the right element,
+// respects the real chrome's own buttons, and honours the stack - not a
+// claim about real pixels, which still wants a human's eyes on a screen
+describe('Drawer — the title bar strip the backdrop leaves alone', () => {
+	const stubTitleBar = (bottom: number) =>
+		vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
+			bottom,
+			top: 0,
+			left: 0,
+			right: 0,
+			height: bottom,
+			width: 0,
+			x: 0,
+			y: 0,
+			toJSON() {}
+		});
+
+	it('closes on a click in the strip above the backdrop', async () => {
+		const user = userEvent.setup();
+		const onClose = vi.fn();
+		const getRect = stubTitleBar(48);
+		try {
+			render(
+				<>
+					<header>
+						<span>DevGo</span>
+					</header>
+					<Harness onClose={onClose} />
+				</>
+			);
+
+			await user.click(screen.getByText('DevGo'));
+			expect(onClose).toHaveBeenCalledTimes(1);
+			expect(screen.queryByRole('dialog')).toBeNull();
+		} finally {
+			getRect.mockRestore();
+		}
+	});
+
+	it("leaves the title bar's own buttons alone rather than also closing", async () => {
+		const user = userEvent.setup();
+		const onClose = vi.fn();
+		const getRect = stubTitleBar(48);
+		try {
+			render(
+				<>
+					<header>
+						<button>Settings</button>
+					</header>
+					<Harness onClose={onClose} />
+				</>
+			);
+
+			await user.click(screen.getByRole('button', { name: 'Settings' }));
+			expect(onClose).not.toHaveBeenCalled();
+			expect(screen.getByRole('dialog')).not.toBeNull();
+		} finally {
+			getRect.mockRestore();
+		}
+	});
+
+	it('leaves a click below the strip to the backdrop, not this listener', async () => {
+		const user = userEvent.setup();
+		const onClose = vi.fn();
+		// no stub: getBoundingClientRect answers 0 for everything in jsdom,
+		// so `bottom` reads as falsy and the strip listener no-ops - a click
+		// on the backdrop itself still closes the drawer, through its own
+		// onClick, same as the plain backdrop-click test above
+		render(
+			<>
+				<header>
+					<span>DevGo</span>
+				</header>
+				<Harness onClose={onClose} />
+			</>
+		);
+
+		await user.click(screen.getByRole('dialog').parentElement as HTMLElement);
+		expect(onClose).toHaveBeenCalledTimes(1);
+	});
+
+	it('names the title bar strip in devgo.log', async () => {
+		const user = userEvent.setup();
+		const getRect = stubTitleBar(48);
+		try {
+			render(
+				<>
+					<header>
+						<span>DevGo</span>
+					</header>
+					<Harness />
+				</>
+			);
+
+			await user.click(screen.getByText('DevGo'));
+			expect(logged().some(l => l.includes('closed: title bar click'))).toBe(true);
+		} finally {
+			getRect.mockRestore();
+		}
+	});
+});
+
 // the palette is itself a Drawer and is summoned from anywhere, so two
 // of these can be up at once. jsdom cannot judge which one is PAINTED on
 // top - that is z-index and compositing, and the z prop is asserted in
