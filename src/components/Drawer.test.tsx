@@ -11,7 +11,13 @@ const invoke = vi.fn(() => Promise.resolve());
 vi.mock('@tauri-apps/api/core', () => ({ invoke: (...a: unknown[]) => invoke(...(a as [])) }));
 
 afterEach(cleanup);
-beforeEach(() => invoke.mockClear());
+// ⚠️ braces, not a concise body: vitest treats a function RETURNED from a
+// beforeEach as that test's teardown, and mockClear() returns the mock — so
+// `beforeEach(() => invoke.mockClear())` registers invoke ITSELF as a cleanup
+// hook and calls it with no arguments after every test
+beforeEach(() => {
+	invoke.mockClear();
+});
 
 // the lines uiLog sent to rust, in order, so a test can ask what the log
 // will actually say rather than what the component meant to say

@@ -13,7 +13,14 @@ vi.mock('@tauri-apps/plugin-dialog', () => ({
 
 afterEach(cleanup);
 afterEach(() => openDialog.mockReset());
-beforeEach(() => openDialog.mockReset());
+// ⚠️ braces, not a concise body: vitest treats a function RETURNED from a
+// beforeEach as that test's teardown, and mockReset() returns the mock — so
+// `beforeEach(() => openDialog.mockReset())` registers openDialog ITSELF as a
+// cleanup hook and calls it with no arguments after every test. the afterEach
+// one line up is unaffected: a hook's return value is ignored there
+beforeEach(() => {
+	openDialog.mockReset();
+});
 
 // ⭐ every target id is a named const, referenced by name and never spelled
 // inline at a call site. src-tauri/src/commands.rs walks this directory and

@@ -67,7 +67,13 @@ const called = (cmd: string) =>
 	invoke.mock.calls.filter(c => (c as unknown[])[0] === cmd).length;
 
 afterEach(cleanup);
-beforeEach(() => invoke.mockReset());
+// ⚠️ braces, not a concise body: vitest treats a function RETURNED from a
+// beforeEach as that test's teardown, and mockReset() returns the mock — so
+// `beforeEach(() => invoke.mockReset())` registers invoke ITSELF as a cleanup
+// hook and calls it with no arguments after every test
+beforeEach(() => {
+	invoke.mockReset();
+});
 
 describe('WslDoctor — which probe runs when', () => {
 	// ⛔ the rule the rust module's own header states: the fragmentation

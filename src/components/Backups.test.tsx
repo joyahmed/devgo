@@ -75,7 +75,13 @@ const wire = (servers: Server[], listings: Record<string, ServerListing>) =>
 	});
 
 afterEach(cleanup);
-beforeEach(() => invoke.mockReset());
+// ⚠️ braces, not a concise body: vitest treats a function RETURNED from a
+// beforeEach as that test's teardown, and mockReset() returns the mock — so
+// `beforeEach(() => invoke.mockReset())` registers invoke ITSELF as a cleanup
+// hook and calls it with no arguments after every test
+beforeEach(() => {
+	invoke.mockReset();
+});
 
 // ⭐ these three describes ARE the slice. collapsing the first into the
 // third is the failure this panel exists to avoid, and if that is not
