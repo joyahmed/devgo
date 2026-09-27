@@ -2085,6 +2085,18 @@ pub fn open_url(url: String) -> Result<(), AppError> {
     open_in_browser(&url)
 }
 
+/// The git revision this binary was built from, for About's version line.
+///
+/// `build.rs` runs `git rev-parse --short HEAD` and hands the answer over
+/// as `DEVGO_GIT_SHA`, so this is a compile-time constant - there is no
+/// git call at runtime and no repository to be in. A build with no git or
+/// no `.git` compiles in `"unknown"`, which the frontend treats as no sha
+/// rather than as a value to print.
+#[tauri::command]
+pub fn get_git_sha() -> String {
+    env!("DEVGO_GIT_SHA").to_string()
+}
+
 /// Where the JSON files live, for Help's "where your config lives" line.
 /// The lock file sits in the app-data dir, so its parent is the answer.
 #[tauri::command]
@@ -3184,5 +3196,23 @@ mod tests {
         }
         assert!(files > 10, "the walk really found the frontend");
         assert_eq!(doors, 1, "one invoke of reveal_in_explorer, not {doors}");
+    }
+
+    /// `build.rs` shells out, and a shelling-out build script has two ways to
+    /// hand over rubbish that still compiles: the trailing newline `git`
+    /// prints, or a non-zero run whose stdout is empty. Both produce a string
+    /// the About line would render as a value. So the shape is asserted, not
+    /// the value: either the exact fallback word, or a short sha and nothing
+    /// else - no space, no newline, no `fatal:`.
+    #[test]
+    fn the_compiled_in_git_sha_is_a_sha_or_the_fallback() {
+        let sha = super::get_git_sha();
+        if sha == "unknown" {
+            return;
+        }
+        assert!(
+            sha.len() >= 7 && sha.chars().all(|c| c.is_ascii_hexdigit()),
+            "DEVGO_GIT_SHA is neither a short sha nor \"unknown\": {sha:?}"
+        );
     }
 }

@@ -20,6 +20,19 @@ const AboutPanel = () => {
 		getVersion().then(setVersion).catch(() => {});
 	}, []);
 
+	// the revision the binary was built from, compiled in by build.rs. the
+	// version number is hand-edited and sits still for dozens of commits, so
+	// it cannot identify a build; this can. 'unknown' is what a build with no
+	// git compiles in — kept out of the UI, like an empty answer or a failed
+	// call, so the line degrades to the version alone and never to a dangling
+	// separator
+	const [sha, setSha] = useState('');
+	useEffect(() => {
+		invoke<string>('get_git_sha')
+			.then(s => setSha(s === 'unknown' ? '' : s.trim()))
+			.catch(() => {});
+	}, []);
+
 	return (
 		<div className='flex flex-col gap-6'>
 			<div>
@@ -29,7 +42,10 @@ const AboutPanel = () => {
 					</span>
 					DevGo
 					{version && (
-						<span className='font-mono text-15 text-text-muted'>v{version}</span>
+						<span className='font-mono text-15 text-text-muted'>
+							v{version}
+							{sha && ` · ${sha}`}
+						</span>
 					)}
 				</h4>
 				<p className={PROSE}>

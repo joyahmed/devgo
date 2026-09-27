@@ -720,6 +720,7 @@ fn command_dispatch(
         commands::wsl_fragmentation,
         commands::open_remote,
         commands::open_url,
+        commands::get_git_sha,
         commands::get_app_data_dir,
         commands::reveal_app_data_dir,
         commands::get_remote_branches,
