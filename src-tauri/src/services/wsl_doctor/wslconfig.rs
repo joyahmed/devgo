@@ -1468,11 +1468,22 @@ instanceIdleTimeout=-1
         assert!(serde_json::to_value(&ok).unwrap()["reason"].is_null());
     }
 
-    // cargo test -- --ignored --nocapture real_wslconfig
+    // gated on an env var rather than #[ignore] -- see wsl_watch.rs and
+    // fragmentation.rs for the same reasoning: an #[ignore] nobody passes
+    // --ignored for is indistinguishable from no test, and this one reads
+    // the real .wslconfig and the real host memory, so the default
+    // `cargo test` (no WSL in CI) must never depend on it.
+    // run by hand with: DEVGO_WSL_HARDWARE=1 cargo test real_wslconfig
     #[cfg(windows)]
     #[test]
-    #[ignore]
     fn real_wslconfig_reads_on_this_machine() {
+        if std::env::var_os("DEVGO_WSL_HARDWARE").is_none() {
+            eprintln!(
+                "skipping real_wslconfig_reads_on_this_machine: set \
+                 DEVGO_WSL_HARDWARE=1 to run against a live WSL install"
+            );
+            return;
+        }
         let r = report();
         println!("path = {} (exists {})", r.path, r.exists);
         println!(
@@ -1496,5 +1507,32 @@ instanceIdleTimeout=-1
             r.host_memory_bytes.is_some(),
             "GlobalMemoryStatusEx gave nothing"
         );
+    }
+
+    // MEMORYSTATUSEX is hand-rolled here (host_memory_bytes keeps it
+    // local, same as wsl_watch's ProcessEntry32W), so nothing outside that
+    // function pins its layout. A wrong size makes GlobalMemoryStatusEx
+    // fail outright on a strict build and, on a lenient one, an
+    // under-sized `dw_length` gets the call to write past the struct's
+    // real bounds -- so this is checked the same way wsl_watch.rs checks
+    // ProcessEntry32W: a shadow struct of the same field types, sized.
+    #[cfg(all(windows, target_pointer_width = "64"))]
+    #[test]
+    fn memory_status_ex_is_64_bytes_on_x64() {
+        // same shape as inside host_memory_bytes, which keeps it local on
+        // purpose
+        #[repr(C)]
+        struct MemoryStatusEx {
+            _dw_length: u32,
+            _dw_memory_load: u32,
+            _ull_total_phys: u64,
+            _ull_avail_phys: u64,
+            _ull_total_page_file: u64,
+            _ull_avail_page_file: u64,
+            _ull_total_virtual: u64,
+            _ull_avail_virtual: u64,
+            _ull_avail_extended_virtual: u64,
+        }
+        assert_eq!(std::mem::size_of::<MemoryStatusEx>(), 64);
     }
 }

@@ -1,0 +1,96 @@
+# fixture: real fragmentation::PROBE output, captured against a running
+# distro instead of the hand-typed literals the rest of this module's
+# tests used until now.
+#
+# distro:   Ubuntu-26.04 (WSL2), already Running -- never started to look
+# kernel:   6.18.33.2-microsoft-standard-WSL2 (from dmesg's own boot line)
+# captured: 2026-09-27T10:41Z (host UTC, `wsl -d Ubuntu-26.04 -- date -u`)
+# commit:   09144bfe5e57bd7031feb7a86e999ede95bc2552
+#
+# how: ran the exact three lines of fragmentation::PROBE by hand --
+#   sed 's/^/buddy /' /proc/buddyinfo
+#   sed 's/^/mem /' /proc/meminfo
+#   dmesg | grep -iE 'order:[0-9]+' | tail -n 40 | sed 's/^/dmesg /'
+# -- against Ubuntu-26.04 and pasted stdout below verbatim. read-only,
+# nothing started, nothing written.
+#
+# getconf PAGESIZE on this distro: 4096 -- matches fragmentation::PAGE_SIZE.
+# see fixtures/real_pagesize_ubuntu_2604.txt for the fixture that pins this.
+#
+# dmesg: readable with no privilege error on this stock distro (exit 0,
+# ordinary stdout) -- so the empty dmesg section below is a real "nothing
+# in the ring", not a permission refusal. the parser (and the assessment
+# in fragmentation::assess) cannot tell those two cases apart from outside
+# the distro, which is documented at the "dmesg, high-order allocation
+# failures" Info finding -- this fixture exercises the "empty ring" half
+# of that finding, not the "restricted" half. no fixture in this repo yet
+# exercises an actual permission refusal; the existing hand-typed unit
+# tests already cover the empty-ring code path directly.
+#
+# scrubbed: nothing. neither /proc/buddyinfo nor /proc/meminfo carried a
+# home path or a personal name -- both are pure kernel counters. (unlike
+# `uname -a`, which was NOT captured into this fixture because it prints
+# this box's hostname.)
+#
+# this machine, right now: 32 GiB host, mostly idle, comfortably NOT
+# fragmented and NOT starved -- see the "healthy, real machine" property
+# test in fragmentation.rs that loads this file. it is not a stress case;
+# it is proof the parser survives a real kernel's actual column widths,
+# real KiB magnitudes, and a real (empty) dmesg grep, not just synthetic
+# strings shaped by the same person who wrote the parser.
+buddy Node 0, zone    DMA32      0      0      1      0      0      2      1      1      2      1    973
+buddy Node 0, zone   Normal  14000   6567   2431   5477   3664   2323   1215    583    341    267   6068
+mem MemTotal:       32866940 kB
+mem MemFree:        31205144 kB
+mem MemAvailable:   30805172 kB
+mem Buffers:           67960 kB
+mem Cached:           458340 kB
+mem SwapCached:        17224 kB
+mem Active:           462528 kB
+mem Inactive:         452228 kB
+mem Active(anon):     170864 kB
+mem Inactive(anon):   224628 kB
+mem Active(file):     291664 kB
+mem Inactive(file):   227600 kB
+mem Unevictable:           0 kB
+mem Mlocked:               0 kB
+mem SwapTotal:      16777216 kB
+mem SwapFree:       16595980 kB
+mem Dirty:              1736 kB
+mem Writeback:             0 kB
+mem AnonPages:        385064 kB
+mem Mapped:           122060 kB
+mem Shmem:              7084 kB
+mem KReclaimable:      87948 kB
+mem Slab:             175504 kB
+mem SReclaimable:      87948 kB
+mem SUnreclaim:        87556 kB
+mem KernelStack:        5024 kB
+mem PageTables:         9488 kB
+mem SecPageTables:         0 kB
+mem NFS_Unstable:          0 kB
+mem Bounce:                0 kB
+mem WritebackTmp:          0 kB
+mem CommitLimit:    33210684 kB
+mem Committed_AS:     998744 kB
+mem VmallocTotal:   34359738367 kB
+mem VmallocUsed:       43084 kB
+mem VmallocChunk:          0 kB
+mem Percpu:             6592 kB
+mem HardwareCorrupted:     0 kB
+mem AnonHugePages:         0 kB
+mem ShmemHugePages:        0 kB
+mem ShmemPmdMapped:        0 kB
+mem FileHugePages:         0 kB
+mem FilePmdMapped:         0 kB
+mem Unaccepted:            0 kB
+mem Balloon:               0 kB
+mem HugePages_Total:       0
+mem HugePages_Free:        0
+mem HugePages_Rsvd:        0
+mem HugePages_Surp:        0
+mem Hugepagesize:       2048 kB
+mem Hugetlb:               0 kB
+mem DirectMap4k:       58368 kB
+mem DirectMap2M:     6232064 kB
+mem DirectMap1G:    36700160 kB

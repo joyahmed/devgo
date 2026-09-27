@@ -1,0 +1,18 @@
+# fixture: `getconf PAGESIZE`, run inside the running distro -- the direct
+# test of fragmentation::PAGE_SIZE's hardcoded 4096.
+#
+# distro:   Ubuntu-26.04 (WSL2), already Running -- never started to look
+# kernel:   6.18.33.2-microsoft-standard-WSL2
+# captured: 2026-09-27T10:41Z (host UTC)
+# commit:   09144bfe5e57bd7031feb7a86e999ede95bc2552
+# command:  wsl -d Ubuntu-26.04 -- getconf PAGESIZE
+#
+# result on this machine: 4096. PAGE_SIZE = 4096 is CORRECT here today.
+# this fixture exists so that fact is a checked-in claim, not a memory --
+# the next capture (a different machine, a different WSL kernel, arm64)
+# either matches this file or the test fails and says why, instead of the
+# 4x-low panel this constant would silently produce on a 16K-page kernel.
+#
+# the value below is the only line read by the test; everything above is
+# provenance, same as the other fixture in this directory.
+4096

@@ -236,12 +236,21 @@ mod tests {
     }
 
     // the probe against the machine: vm_is_up must agree with tasklist.
-    // ignored because it depends on whether wsl happens to be up; run by
-    // hand with cargo test -- --ignored vm_probe
+    // gated on an env var rather than #[ignore] -- an #[ignore] nobody
+    // passes --ignored for is indistinguishable from no test, and this one
+    // depends on whether wsl happens to be up, so a default `cargo test`
+    // (no WSL in CI) must never depend on it.
+    // run by hand with: DEVGO_WSL_HARDWARE=1 cargo test vm_probe
     #[cfg(windows)]
     #[test]
-    #[ignore]
     fn vm_probe_agrees_with_tasklist() {
+        if std::env::var_os("DEVGO_WSL_HARDWARE").is_none() {
+            eprintln!(
+                "skipping vm_probe_agrees_with_tasklist: set \
+                 DEVGO_WSL_HARDWARE=1 to run against a live WSL install"
+            );
+            return;
+        }
         use crate::services::platform::Quiet;
         let out = std::process::Command::new("tasklist")
             .quiet()

@@ -681,6 +681,151 @@ mod tests {
         assert!(PROBE.contains("/proc/meminfo"));
     }
 
+    // ⭐ the real machine. captured from Ubuntu-26.04, already Running --
+    // see fixtures/real_probe_ubuntu_2604.txt for the how and the
+    // provenance header. properties, not a golden transcript: a
+    // byte-for-byte assertion on one machine's buddyinfo would fail on the
+    // next machine and teach nobody anything, so every test here recomputes
+    // its expectation from the same fixture text instead of hand-typing a
+    // number this parser produced.
+    mod real_capture {
+        use super::*;
+
+        const REAL_PROBE: &str =
+            include_str!("fixtures/real_probe_ubuntu_2604.txt");
+        const REAL_PAGESIZE: &str =
+            include_str!("fixtures/real_pagesize_ubuntu_2604.txt");
+
+        fn real_readings() -> Readings {
+            read_probe(&lines(REAL_PROBE))
+        }
+
+        /// The direct test of the hardcoded PAGE_SIZE: a real distro's own
+        /// `getconf PAGESIZE` must equal the constant every byte figure in
+        /// this module scales off. A 16K-page kernel would make this fail
+        /// loudly instead of the panel going silently 4x low.
+        #[test]
+        fn the_real_machines_page_size_matches_the_hardcoded_constant() {
+            let captured: u64 = REAL_PAGESIZE
+                .lines()
+                .map(str::trim)
+                .find(|l| !l.is_empty() && !l.starts_with('#'))
+                .expect("the fixture carries a value line")
+                .parse()
+                .expect("the value line is a plain integer");
+            assert_eq!(
+                captured, PAGE_SIZE,
+                "getconf PAGESIZE on the real machine no longer matches \
+                 the hardcoded PAGE_SIZE -- every byte figure this module \
+                 prints would now be wrong on that machine"
+            );
+        }
+
+        /// Nothing is silently dropped: every `buddy ` line in the capture
+        /// became a zone, and the recognised `mem ` keys present in the
+        /// capture all made it into Meminfo.
+        #[test]
+        fn every_real_row_the_probe_sent_was_read_not_dropped() {
+            let buddy_lines = REAL_PROBE
+                .lines()
+                .filter(|l| l.starts_with("buddy "))
+                .count();
+            let r = real_readings();
+            assert_eq!(
+                r.zones.len(),
+                buddy_lines,
+                "a real buddyinfo row was silently dropped"
+            );
+            assert!(r.meminfo.total_bytes.is_some());
+            assert!(r.meminfo.free_bytes.is_some());
+            assert!(r.meminfo.available_bytes.is_some());
+            assert!(r.meminfo.cached_bytes.is_some());
+            assert!(r.meminfo.swap_total_bytes.is_some());
+            assert!(r.meminfo.swap_free_bytes.is_some());
+        }
+
+        /// `kB` really is KiB: MemTotal's raw kB figure in the capture,
+        /// times 1024, must be the parsed byte count -- read straight out
+        /// of the fixture text rather than re-typed, so this fails if the
+        /// fixture is ever recaptured with a different value.
+        #[test]
+        fn the_kb_row_converts_to_the_kib_the_code_expects() {
+            let raw_kb: u64 = REAL_PROBE
+                .lines()
+                .find_map(|l| l.strip_prefix("mem MemTotal:"))
+                .and_then(|rest| rest.split_whitespace().next())
+                .expect("MemTotal is in the real capture")
+                .parse()
+                .unwrap();
+            assert_eq!(
+                real_readings().meminfo.total_bytes,
+                Some(raw_kb * 1024)
+            );
+        }
+
+        /// Every zone's free_bytes and high_order_bytes reconcile against
+        /// its own free_blocks column-by-column -- the general formula,
+        /// re-derived independently here, not the golden number one
+        /// machine happened to produce. Also: a plausible order count,
+        /// the kernel's own MAX_ORDER rather than a hand-picked width.
+        #[test]
+        fn every_real_zones_totals_reconcile_with_its_own_columns() {
+            let zones = real_readings().zones;
+            assert!(!zones.is_empty(), "the real capture must yield zones");
+            for zone in &zones {
+                let expected_free: u64 = zone
+                    .free_blocks
+                    .iter()
+                    .enumerate()
+                    .map(|(order, &count)| count * (PAGE_SIZE << order))
+                    .sum();
+                assert_eq!(
+                    zone.free_bytes, expected_free,
+                    "node {} {} free_bytes does not reconcile",
+                    zone.node, zone.name
+                );
+                let expected_high: u64 = zone
+                    .free_blocks
+                    .iter()
+                    .enumerate()
+                    .skip(HIGH_ORDER)
+                    .map(|(order, &count)| count * (PAGE_SIZE << order))
+                    .sum();
+                assert_eq!(
+                    zone.high_order_bytes, expected_high,
+                    "node {} {} high_order_bytes does not reconcile",
+                    zone.node, zone.name
+                );
+                assert!(
+                    !zone.free_blocks.is_empty()
+                        && zone.free_blocks.len() <= MAX_SANE_ORDER,
+                    "node {} {} has an implausible order count: {}",
+                    zone.node,
+                    zone.name,
+                    zone.free_blocks.len()
+                );
+            }
+        }
+
+        /// The assessment on real input produces a headline, not silence:
+        /// this machine, at capture time, was neither fragmented nor
+        /// starved, so assess() must say so -- an Info headline and no
+        /// Error finding -- rather than a panel that looks the same
+        /// whether it looked or not.
+        #[test]
+        fn assessing_the_real_capture_gives_a_healthy_headline() {
+            let findings = assess(&real_readings());
+            assert!(
+                !findings.iter().any(|f| f.severity == Severity::Error),
+                "the real machine should not be flagged: {findings:#?}"
+            );
+            assert!(
+                findings.iter().any(|f| f.fix.contains("not starved")),
+                "a healthy real machine still needs its headline stated"
+            );
+        }
+    }
+
     // off windows there is no distro to read, and the report must say so
     // rather than produce an empty-but-healthy-looking one
     #[cfg(not(windows))]
@@ -692,13 +837,22 @@ mod tests {
         assert_eq!(r.readings, Readings::default());
     }
 
-    // the probe against a real distro. ignored because it depends on
-    // whether wsl happens to be up, and it shells to wsl.exe; run by hand
-    // with cargo test -- --ignored --nocapture real_fragmentation
+    // the probe against a real distro. gated on an env var rather than
+    // #[ignore]: an #[ignore] nobody ever passes --ignored for is
+    // indistinguishable from no test at all, and this one shells to
+    // wsl.exe and depends on whatever happens to be Running right now, so
+    // it must never run as part of a default `cargo test` (no WSL in CI).
+    // run by hand with: DEVGO_WSL_HARDWARE=1 cargo test real_fragmentation
     #[cfg(windows)]
     #[test]
-    #[ignore]
     fn real_fragmentation_reads_on_this_machine() {
+        if std::env::var_os("DEVGO_WSL_HARDWARE").is_none() {
+            eprintln!(
+                "skipping real_fragmentation_reads_on_this_machine: set \
+                 DEVGO_WSL_HARDWARE=1 to run against a live WSL install"
+            );
+            return;
+        }
         let r = report(None);
         println!("distro = {:?} reason = {:?}", r.distro, r.reason);
         println!("zones = {}", r.readings.zones.len());
