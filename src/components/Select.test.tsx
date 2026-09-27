@@ -177,3 +177,58 @@ describe('Select — the first-letter jump cycles', () => {
 		expect(chosen()).toBe('03_ai');
 	});
 });
+
+// ⛔ THE TRAP. wrapping this control in a <label> is legitimate HTML — the
+// trigger is a <button>, which IS a labelable element, so the label names the
+// combobox and clicking its word opens the list. but label activation
+// RE-DISPATCHES the click on that button: an option click that bubbles out of
+// the listbox reaches the label, the label clicks the trigger, and the list
+// the pick just shut opens again. ClonePicker's 'into' row is wrapped exactly
+// this way, so the fix lives here rather than in the caller — the next caller
+// would fall into it too
+describe('Select — a <label> around it must not re-open it', () => {
+	const Labelled = () => {
+		const [value, setValue] = useState('/g/01_tauri');
+		return (
+			<label>
+				<span>into</span>
+				<Select
+					value={value}
+					options={WORKSPACES}
+					onChange={setValue}
+					label='into'
+				/>
+			</label>
+		);
+	};
+
+	it('shuts for good when an option is clicked', async () => {
+		const user = userEvent.setup();
+		render(<Labelled />);
+
+		await user.click(combo());
+		expect(screen.getByRole('listbox')).toBeTruthy();
+
+		await user.click(screen.getByText('02_next'));
+
+		// the pick landed
+		expect(chosen()).toContain('02_next');
+		// and it is SHUT. both readings: the flag the assistive tree sees and
+		// the list a user sees
+		expect(combo().getAttribute('aria-expanded')).toBe('false');
+		expect(screen.queryByRole('listbox')).toBeNull();
+	});
+
+	// and the label still earns its keep: its text opens the list, which is
+	// the affordance a native <select> label gives and the reason not to
+	// simply unwrap the caller
+	it('still opens when the label text is clicked', async () => {
+		const user = userEvent.setup();
+		render(<Labelled />);
+
+		await user.click(screen.getByText('into'));
+
+		expect(combo().getAttribute('aria-expanded')).toBe('true');
+		expect(screen.getByRole('listbox')).toBeTruthy();
+	});
+});

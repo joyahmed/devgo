@@ -184,6 +184,23 @@ describe('ClonePicker — what crosses to onStart', () => {
 		expect(onStart).toHaveBeenCalledWith([ALPHA], '/g/02_next', false);
 	});
 
+	// ⭐ the destination row is a <label> wrapping the Select, so a click on an
+	// option used to bubble to the label, which re-dispatched it on the trigger
+	// and re-opened the list the pick had just shut. on screen: you chose a
+	// folder and the dropdown was still hanging over the repo list, needing a
+	// second click or Escape to get rid of. Select.tsx now keeps the option
+	// click inside the listbox; this is the caller that was hurt by it
+	it('shuts the destination list when a destination is picked', async () => {
+		const user = userEvent.setup();
+		picker();
+
+		await chooseInto(user, '02_next');
+
+		const trigger = screen.getByRole('combobox', { name: 'into' });
+		expect(trigger.getAttribute('aria-expanded')).toBe('false');
+		expect(screen.queryByRole('listbox', { name: 'into' })).toBeNull();
+	});
+
 	// a folder aimed at here and now is the user's own choice, so the offer
 	// to add it as a workspace starts ticked — otherwise the clone lands
 	// somewhere no lane ever scans and reads as a clone that did nothing
@@ -256,10 +273,8 @@ describe('ClonePicker — what crosses to onStart', () => {
 		await chooseInto(user, 'Choose a folder…');
 		await waitFor(() => expect(localStorage.getItem(INTO_KEY)).not.toBeNull());
 
-		// shut it and open it again, so the assertion below reads a list that
-		// was built after the pick. Escape is the Select's own close and is a
-		// no-op on a shut one, so this lands open either way
-		await user.keyboard('{Escape}');
+		// open it again, so the assertion below reads a list that was built
+		// after the pick — the pick itself shut it
 		await user.click(screen.getByRole('combobox', { name: 'into' }));
 		// one row per folder, counted inside the open list: the shut trigger
 		// carries the same label and would be a third match

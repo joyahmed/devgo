@@ -171,6 +171,21 @@ const Select = ({ value, options, onChange, label, title }: SelectProps) => {
 						up ? 'bottom-full mb-1' : 'top-full mt-1'
 					}`}
 					style={{ maxHeight: MAX }}
+					// a click inside the list belongs to the list, and must not
+					// leave it. an ancestor <label> is the reason: this trigger is a
+					// <button>, a labelable element, so a label around the control
+					// names it — and a label's activation behaviour RE-DISPATCHES
+					// the click on the control it labels. so picking an option sent
+					// a second click to the trigger, which re-opened the list the
+					// pick had just shut (ClonePicker's 'into' row is wrapped that
+					// way). preventDefault is what suppresses that activation
+					// behaviour; stopPropagation keeps any other ancestor handler
+					// out of a pick. neither costs the list anything: an option div
+					// has no default action of its own
+					onClick={e => {
+						e.preventDefault();
+						e.stopPropagation();
+					}}
 				>
 					{options.map((o, i) => (
 						<div
