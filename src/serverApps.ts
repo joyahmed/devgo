@@ -2,7 +2,11 @@
 // app can fill. the rust side fills the line for real when an action
 // runs; this mirror only decides what the menu shows, by the contract's
 // rule: an action whose placeholder is null for a row is hidden on that
-// row. keep placeholders in step with server_apps::placeholders
+// row. the two sides answer the same questions, they do not do the same
+// job — so every function here that answers one server_apps.rs also
+// answers must give the rust's answer: placeholders, whenHolds and
+// site_type today, and whatever lands beside them. whenHolds splits on the
+// first '=' only, matching split_once — that is where they had drifted
 
 export const appForFolder = (
 	listing: ServerListing | undefined,
@@ -86,10 +90,12 @@ export const whenHolds = (
 	values: Record<string, string>
 ) => {
 	if (!when) return true;
-	const [k, v] = when.split('=');
-	return v === undefined
-		? values[k.trim()] === 'true'
-		: values[k.trim()] === v.trim();
+	// the FIRST '=' only, as the rust's split_once does: `k=a=b` asks for
+	// 'a=b', not 'a'. no '=' at all is the bare-key bool clause
+	const i = when.indexOf('=');
+	return i === -1
+		? values[when.trim()] === 'true'
+		: values[when.slice(0, i).trim()] === when.slice(i + 1).trim();
 };
 
 // a label with its placeholders filled: Logs · {pm2_api} → Logs · erp-api.
