@@ -470,7 +470,8 @@ interface LaneSection {
 	group: string | null;
 	rows: GithubRepo[];
 	gone: Set<string>;
-	/// for the tail: how many ungrouped repos exist beyond the ones shown
+	/// how many repos the section covers, shown or not: for the tail that is
+	/// every ungrouped repo, which the footer reads as 20 most recent of total
 	total: number;
 }
 
