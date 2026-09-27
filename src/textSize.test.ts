@@ -100,19 +100,24 @@ describe('savedTextScale', () => {
 		expect(savedTextScale()).toBe(1.1);
 	});
 
-	// ⚠️ today's behaviour, and the one place this file is less careful than
-	// the rest of the app: App.tsx and useGithub.ts wrap every localStorage
-	// read in try/catch because a webview with site data blocked THROWS on
-	// access rather than answering null. this one does not, so the throw
-	// travels out of savedTextScale — and out of stepTextScale with it
-	it('throws when localStorage itself throws, unlike the guarded readers elsewhere', () => {
+	// ⭐ a webview with site data blocked THROWS on access rather than
+	// answering null, which is why App.tsx and useGithub.ts wrap every
+	// localStorage read in try/catch. this one does too, so an unreadable
+	// setting is worth exactly what an unset one is — and the throw no longer
+	// travels out of savedTextScale, or out of stepTextScale with it
+	it('falls back to 1 when localStorage itself throws, like the guarded readers elsewhere', () => {
 		const spy = vi
 			.spyOn(Storage.prototype, 'getItem')
 			.mockImplementation(() => {
 				throw new Error('site data blocked');
 			});
-		expect(() => savedTextScale()).toThrow('site data blocked');
-		spy.mockRestore();
+		// restored in a finally: a failure here would otherwise leave getItem
+		// throwing for every test after it in the file
+		try {
+			expect(savedTextScale()).toBe(1);
+		} finally {
+			spy.mockRestore();
+		}
 	});
 });
 
@@ -158,6 +163,27 @@ describe('applyTextScale', () => {
 		await expect(applyTextScale(1.35)).rejects.toThrow('webview is gone');
 		expect(localStorage.getItem(KEY)).toBe('1.35');
 		expect(scaleAnnounced).not.toHaveBeenCalled();
+	});
+
+	// ⭐ the same blocked webview that throws on read throws on write, and the
+	// write is guarded the way every setItem in the app is: the size still
+	// zooms and the panel is still told, it simply will not survive a restart
+	it('still zooms and announces when localStorage refuses the write', async () => {
+		const spy = vi
+			.spyOn(Storage.prototype, 'setItem')
+			.mockImplementation(() => {
+				throw new Error('site data blocked');
+			});
+		try {
+			await expect(applyTextScale(1.2)).resolves.toBe(1.2);
+		} finally {
+			spy.mockRestore();
+		}
+		expect(setZoom).toHaveBeenCalledWith(1.2);
+		expect(scaleAnnounced).toHaveBeenCalledTimes(1);
+		// nothing was persisted, so the next launch is back at 100%
+		expect(localStorage.getItem(KEY)).toBeNull();
+		expect(savedTextScale()).toBe(1);
 	});
 });
 
@@ -216,5 +242,31 @@ describe('stepTextScale', () => {
 
 	it('steps from 100% on a machine that has never set a size', async () => {
 		await expect(stepTextScale(1)).resolves.toBe(1.1);
+	});
+
+	// ⭐ the whole reason both sides are guarded: on a webview with site data
+	// blocked every access throws, and ctrl+= used to throw with it. now the
+	// shortcut still works — it just starts from 100% every session
+	it('still works with storage throwing on both read and write', async () => {
+		const read = vi
+			.spyOn(Storage.prototype, 'getItem')
+			.mockImplementation(() => {
+				throw new Error('site data blocked');
+			});
+		const write = vi
+			.spyOn(Storage.prototype, 'setItem')
+			.mockImplementation(() => {
+				throw new Error('site data blocked');
+			});
+		try {
+			await expect(stepTextScale(1)).resolves.toBe(1.1);
+			await expect(stepTextScale(-1)).resolves.toBe(0.9);
+		} finally {
+			read.mockRestore();
+			write.mockRestore();
+		}
+		expect(setZoom).toHaveBeenNthCalledWith(1, 1.1);
+		expect(setZoom).toHaveBeenNthCalledWith(2, 0.9);
+		expect(scaleAnnounced).toHaveBeenCalledTimes(2);
 	});
 });
