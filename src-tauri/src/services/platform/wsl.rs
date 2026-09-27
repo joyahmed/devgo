@@ -75,10 +75,11 @@ fn parse_list(text: &str) -> Vec<String> {
         .collect()
 }
 
-// a mac's detect_runtime is a constant and never asks, so these two have
-// no caller there; they stay so the stubs beneath them are exercised by
-// the same tests on every platform
-#[cfg_attr(target_os = "macos", allow(dead_code))]
+// only the windows host asks: off windows detect_runtime never calls these
+// (a mac and a native linux box have no wsl.exe to ask, and inside a distro
+// the distro is the answer). they stay so the stubs beneath them are
+// exercised by the same tests on every platform
+#[cfg_attr(not(windows), allow(dead_code))]
 pub fn list_distros() -> Vec<String> {
     run(&["-l", "-q"])
         .as_deref()
@@ -90,7 +91,7 @@ pub fn list_distros() -> Vec<String> {
 /// display language. Parsing `wsl --status` for the literal
 /// "Default Distribution:" is localized and never matches on a non-English
 /// install.
-#[cfg_attr(target_os = "macos", allow(dead_code))]
+#[cfg_attr(not(windows), allow(dead_code))]
 pub fn default_distro() -> Option<String> {
     if let Some(text) = run(&["-l", "-v"]) {
         for line in text.lines() {

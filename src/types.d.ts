@@ -24,7 +24,7 @@ interface WslState {
 // what the machine is, from the cached probe: the name of its own file
 // system as rust spells it, and whether wsl is there at all
 interface RuntimeInfo {
-	runtime: 'windows' | 'wsl';
+	runtime: 'windows' | 'wsl' | 'linux' | 'macos';
 	wsl_available: boolean;
 	distros: string[];
 	default_distro: string | null;
