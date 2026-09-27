@@ -162,6 +162,13 @@ impl WindowState {
 /// One call the startup restore makes on the window. The restore is
 /// expressed as data so its ORDER is testable: on a live window it is two
 /// side effects with no return value, and the order was the bug.
+// macOS is the only caller (`lib.rs`, behind its own cfg), but the tests run
+// on every platform: the step order is pure data, and a Windows or Linux CI
+// run asserting it is worth more than a lint silenced with `allow(dead_code)`.
+// Without the `test` arm the lib target has no consumer off macOS and
+// `clippy -D warnings` fails the build there while `cargo test` stays green —
+// a red gate no macOS box can reproduce.
+#[cfg(any(target_os = "macos", test))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RestoreStep {
     Position { x: i32, y: i32 },
@@ -185,6 +192,7 @@ pub enum RestoreStep {
 /// hidden. That is why the caller applies these steps a second time once
 /// the window is visible — see `lib.rs`. A window that is already on
 /// screen keeps what these steps set.
+#[cfg(any(target_os = "macos", test))]
 pub fn macos_restore_steps(s: &WindowState) -> [RestoreStep; 2] {
     [
         RestoreStep::Position { x: s.x, y: s.y },
