@@ -675,6 +675,8 @@ It has to be separate state. `ContextMenu` calls `onClose()` right after an item
 
 > `✅UI: run dev script` → `✅FIX: rebind keeps its keys`
 
+Later addition: the empty-menu toast was blaming the project for a WSL distro that was never asked. `scripts.rs`'s `for_project` returned a bare `Vec<DevScript>`, so a stopped distro and a project that genuinely declares no scripts arrived as the same empty vec, and both surfaced as `'No dev scripts found for this project'`. It now returns `ScriptList { scripts, reason }` — the same shape as `wsl_doctor`'s `ConfigReport`, where `reason: None` is the only thing that licenses a claim about what was found. A stopped distro sets the reason to *"The WSL distro Ubuntu is not running, so this project's package.json was not read — this is not a claim that the project has no scripts. Start the distro and try again."*, naming the distro rather than the project. `App.tsx`'s `openScripts` reads `readScripts()` over the `DevScript[] | ScriptList` union (a bare array still arrives with a `reason: null`), toasts `emptyScriptsMessage(list)` — the reason when there is one, the original sentence only when there is not — and writes `scriptsLogLine(p.name, list)` to `devgo.log` through the existing `logLine` helper before the empty-list return, so the count, every script name and the reason all reach the log from the one array they share, whether the menu ends up empty or not.
+
 ---
 
 ## 20.8 — Verify

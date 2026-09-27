@@ -1,7 +1,7 @@
 # Known issues
 
 What DevGo gets wrong today, what you will see when it happens, and what to do instead. The current
-release is v1.2.1.
+release is v1.2.3.
 
 Shipping a list like this is cheaper than the alternative for both of us: if you hit something here,
 it is known and you do not need to write it up. Everything else is worth an
