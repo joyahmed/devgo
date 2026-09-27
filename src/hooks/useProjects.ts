@@ -52,6 +52,17 @@ export const useProjects = () => {
 	// here (a workspace that just attached) is the one case a non-explicit
 	// refresh still pays for git
 	const badgedPaths = useRef<Set<string>>(new Set());
+	// the list as it stands NOW, for the one reader that runs after an await.
+	// `projects` in a render closure is the list as of that render, and
+	// refreshWorkspace decides which ranks its answer replaces only once the
+	// IPC is back — by then a focus pass or a retry may have replaced the list
+	// under it. written by putProjects, in the same breath as the state, so the
+	// two cannot disagree
+	const projectsRef = useRef<Project[]>([]);
+	const putProjects = (next: Project[]) => {
+		projectsRef.current = next;
+		setProjects(next);
+	};
 
 	// Git and stack detection both spawn processes, so neither gates the list.
 	// These fire after the payload is already on screen and merge in as they
@@ -108,7 +119,7 @@ export const useProjects = () => {
 	// into three backend commands; get_git_info's own comment said "only on
 	// an explicit refresh" for ten chapters
 	const paint = (payload: ProjectsPayload) => {
-		setProjects(payload.projects);
+		putProjects(payload.projects);
 		setWorkspaceStates(payload.workspaces);
 		setRanks(new Map(payload.ranks.map(r => [r.full_path, r])));
 	};
@@ -155,8 +166,12 @@ export const useProjects = () => {
 			workspace: ws
 		});
 		const state = payload.workspaces.find(s => s.workspace === ws);
-		setProjects(prev => [
-			...prev.filter(p => p.workspace !== ws),
+		// one read of the ref for both: the rows this answer replaces are the
+		// ones listed for `ws` at THIS moment, and they are exactly the ranks
+		// that have to go
+		const before = projectsRef.current;
+		putProjects([
+			...before.filter(p => p.workspace !== ws),
 			...payload.projects
 		]);
 		setWorkspaceStates(prev =>
@@ -167,7 +182,7 @@ export const useProjects = () => {
 				: prev
 		);
 		const gone = new Set(
-			projects.filter(p => p.workspace === ws).map(p => p.full_path)
+			before.filter(p => p.workspace === ws).map(p => p.full_path)
 		);
 		setRanks(prev => {
 			const next = new Map([...prev].filter(([k]) => !gone.has(k)));
@@ -287,14 +302,28 @@ export const useProjects = () => {
 
 	// Patch one rank from the command's answer rather than rescanning every
 	// workspace to change a star.
+	//
+	// the patch used to be skipped when the map held no rank for the path,
+	// which meant the pin was on disk and the star was off until the next full
+	// pass — a write the screen silently disagreed with. rust sends one rank
+	// per project so no payload gets there today, but the star may not depend
+	// on that: a synthesised rank says what a pass with no frecency history for
+	// this path would have said, and the next pass overwrites it with rust's.
 	const togglePin = async (project: Project) => {
 		const pinned = await invoke<boolean>('toggle_pin', {
 			fullPath: project.full_path
 		});
 		setRanks(prev => {
 			const next = new Map(prev);
-			const existing = prev.get(project.full_path);
-			if (existing) next.set(project.full_path, { ...existing, pinned });
+			const existing: ProjectRank = prev.get(project.full_path) ?? {
+				full_path: project.full_path,
+				score: 0,
+				launch_count: 0,
+				last_opened: 0,
+				hint: null,
+				pinned
+			};
+			next.set(project.full_path, { ...existing, pinned });
 			return next;
 		});
 	};

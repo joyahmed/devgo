@@ -592,6 +592,62 @@ describe('useProjects — refreshing one workspace', () => {
 		expect(result.current.ranks.get('C:/dev/alpha')?.score).toBe(9);
 	});
 
+	// ⭐ this function AWAITS the backend before it decides which ranks to drop,
+	// so the list it compares against must be the one on screen WHEN THE ANSWER
+	// LANDS, not the one that was there when the button was pressed. anything
+	// that replaces the list mid-flight — a focus pass, a retry, an explicit
+	// refresh — moves it: here beta leaves and zeta takes its place while
+	// refresh_workspace is still out. dropping "beta" then is dropping a rank
+	// that is already gone, and zeta's rank — a row no longer on the list —
+	// survives in the map until the next full pass replaces the whole thing
+	it('drops the ranks the answer actually replaces when the list moved while it was in flight', async () => {
+		const slow = deferred<ProjectsPayload>();
+		const answer = payload([proj('delta', '//wsl/ubuntu')], {
+			ranks: [rank('//wsl/ubuntu/delta', { score: 3 })]
+		});
+		wire({
+			list: payload([proj('alpha', 'C:/dev'), proj('beta', '//wsl/ubuntu')], {
+				ranks: [
+					rank('C:/dev/alpha', { score: 9 }),
+					rank('//wsl/ubuntu/beta', { score: 5 })
+				]
+			}),
+			// the pass that lands mid-flight: beta is gone, zeta is in its place
+			next: payload([proj('alpha', 'C:/dev'), proj('zeta', '//wsl/ubuntu')], {
+				ranks: [
+					rank('C:/dev/alpha', { score: 9 }),
+					rank('//wsl/ubuntu/zeta', { score: 7 })
+				]
+			})
+		});
+		const base = invoke.getMockImplementation()!;
+		invoke.mockImplementation((cmd: string, args?: unknown) =>
+			cmd === 'refresh_workspace' ? slow.promise : base(cmd, args)
+		);
+		const { result } = await mounted();
+
+		let pending!: Promise<unknown>;
+		await act(async () => {
+			pending = result.current.refreshWorkspace('//wsl/ubuntu');
+		});
+		await act(async () => { await result.current.refresh(); });
+		expect([...result.current.ranks.keys()]).toEqual([
+			'C:/dev/alpha',
+			'//wsl/ubuntu/zeta'
+		]);
+
+		await act(async () => {
+			slow.resolve(answer);
+			await pending;
+		});
+
+		expect(result.current.projects.map(p => p.name)).toEqual(['alpha', 'delta']);
+		expect([...result.current.ranks.keys()]).toEqual([
+			'C:/dev/alpha',
+			'//wsl/ubuntu/delta'
+		]);
+	});
+
 	// merge, not replace: a one-workspace pass asks for that workspace's
 	// badges only, and replacing the map would strip every other row's branch
 	it('merges the badges so no other row goes bare', async () => {
@@ -993,12 +1049,16 @@ describe('useProjects — pinning', () => {
 		expect(result.current.pinnedProjects).toEqual([]);
 	});
 
-	// ⛔ DOCUMENTS CURRENT BEHAVIOUR, which is arguably wrong: `if (existing)`
-	// means a project rust sent no rank for gets its star flipped on disk and
-	// nothing on screen until the next full pass. every payload in this app
-	// carries a rank per project, so it is unreachable today — and the guard is
-	// the reason a missing one fails silently rather than loudly
-	it('writes the pin but cannot show it for a project with no rank', async () => {
+	// ⭐ REPLACES a test that asserted the bug: `if (existing)` meant a project
+	// with no rank in the map got its star flipped on disk and nothing on
+	// screen until the next full pass — a write the UI silently disagrees with.
+	// rust does send one rank per project (commands.rs rank_projects maps over
+	// projects), so the payload path cannot reach it today; the map is also
+	// written by refreshWorkspace, and the star must not depend on which of the
+	// two put the row there. a rank synthesised here says exactly what a pass
+	// with no frecency history for the path would have said, and the next full
+	// pass overwrites it with rust's own
+	it('lights the star even for a project the map holds no rank for', async () => {
 		wire({
 			list: payload([proj('alpha')], { ranks: [] }),
 			pin: true
@@ -1010,7 +1070,33 @@ describe('useProjects — pinning', () => {
 		});
 
 		expect(called('toggle_pin')).toBe(1);
-		expect(result.current.ranks.has('C:/dev/alpha')).toBe(false);
+		expect(result.current.ranks.get('C:/dev/alpha')?.pinned).toBe(true);
+		expect(result.current.pinnedProjects.map(p => p.name)).toEqual(['alpha']);
+		// invented, not guessed: no launch history is score 0 and no hint
+		expect(result.current.ranks.get('C:/dev/alpha')).toEqual({
+			full_path: 'C:/dev/alpha',
+			score: 0,
+			launch_count: 0,
+			last_opened: 0,
+			hint: null,
+			pinned: true
+		});
+	});
+
+	// the other half of the same guard: an unpin for a row with no rank must
+	// not invent a PINNED one, and must leave the strip empty
+	it('does not light a star the command just took away', async () => {
+		wire({
+			list: payload([proj('alpha')], { ranks: [] }),
+			pin: false
+		});
+		const { result } = await mounted();
+
+		await act(async () => {
+			await result.current.togglePin(proj('alpha'));
+		});
+
+		expect(result.current.ranks.get('C:/dev/alpha')?.pinned).toBe(false);
 		expect(result.current.pinnedProjects).toEqual([]);
 	});
 });
