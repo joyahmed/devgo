@@ -284,12 +284,47 @@ if ($ours -gt 0) { "ours" } elseif ($other -gt 0) { "other" } else { "clear" }
   # column on macos). that is what trap #1d above needs: the args column alone cannot
   # tell our own caller apart from a real build.
   #
-  # ⚠️ and argv CAN CONTAIN NEWLINES. an agent's `bash -c '<multi-line script>'` is
-  # exactly that, and ps prints those bytes raw, so ONE process can occupy several
-  # output lines with the pid on only the first of them. measured here: the ancestor
-  # line that produced the false "ours" spanned four printed lines. hence the awk
-  # below is a record parser, not a line grep — a line that does not open with a pid
-  # is a continuation of the argv above it and inherits that pid.
+  # ⚠️ argv CAN CONTAIN NEWLINES, and a newline inside a record would be fatal to a
+  # one-line-per-process reading — so this was once a record parser: a line that did
+  # not open with a pid was folded into the argv above it as a continuation. THAT
+  # PARSER IS GONE, and it is gone on measurement, not on taste:
+  #
+  #   linux  procps-ng 4.0.4       a newline in argv prints as a SPACE.
+  #                                `bash -c 'sleep 3<NL>LINE2'` reads back out of
+  #                                `ps -o args=` as `bash -c sleep 3 LINE2`
+  #                                (measured on zettaserver, confirmed with od -c).
+  #   macos  27.0 / darwin 27.0.0  a newline in argv prints as the LITERAL four
+  #          /bin/ps               characters \012. od -c shows `\ 0 1 2`, `wc -l`
+  #                                says 1, and `sed -n l` ends the line at `LINE2$`
+  #                                (measured on a real mac).
+  #   msys   ps                    supports neither `-o` nor `args`, so it writes a
+  #                                usage message to stderr and nothing to stdout —
+  #                                the shape check below catches that and we RUN.
+  #
+  # so NO ps on any platform devgo supports splits one process across printed lines:
+  # one printed line is one process, everywhere. the four-line argv record the parser
+  # was built for was an artifact of the INSTRUMENT — msys ps has no `-o` and no
+  # `args`, so the agent doing that measuring wrote a STAND-IN ps on windows out of
+  # `/proc/*/cmdline`, and the shim emitted the embedded newline RAW. no real ps does.
+  # ⭐ do not re-add the parser on a hunch. it was unreachable on both platforms, and
+  # while it existed it carried a hole of its own: a continuation line that happened
+  # to open with digits and whitespace (`123 files in <root>/src-tauri/target`) was
+  # read as a record of pid 123, escaped the ancestor filter, and brought the false
+  # "ours" — i.e. the rust skip — straight back.
+  #
+  # ⚠️ what the macos escape DOES change is MATCHING: those four characters travel
+  # into whatever we compare against, so a pattern anchored on a SPACE matches on
+  # linux and misses on a mac, and a test asserting "a newline becomes a space" would
+  # pass on ci and fail there. checked for this function: the two tests that can
+  # produce a skip — `index(a, <root>/src-tauri/target)` and the rust-analyzer name —
+  # are literal substrings containing no whitespace, so neither is affected on either
+  # platform. only the cargo/rustc TOKEN regex has whitespace in it, and the worst the
+  # escape can do there is miss a token and so lose the `other` NOTE: the verdict then
+  # falls to clear, which RUNS the checks. it cannot turn into a skip.
+  #
+  # ⚠️ scope of the macos measurement, honestly: one os version (27.0), /bin/ps, one
+  # shell-quoted newline. a NUL or a tab in argv, `ps -ww`, and other `-o` formats
+  # were NOT tested. nothing below depends on any of those.
   if command -v ps >/dev/null 2>&1; then
     procs=$(ps -eo pid= -o args= 2>/dev/null)
     # ⭐ validate the SHAPE before trusting a byte of it. msys ps answers `-o` with a
@@ -309,30 +344,31 @@ if ($ours -gt 0) { "ours" } elseif ($other -gt 0) { "other" } else { "clear" }
           n = split(chain, c, " ")
           for (i = 1; i <= n; i++) if (c[i] != "") mine[c[i]] = 1
           target = root "/src-tauri/target"
+          ours = 0; other = 0
         }
+        # one line, one process. a line that does not open with a pid is attributable
+        # to nobody, so it is DROPPED — never folded into the record above it. that
+        # fold was the deleted parser, and folding argv onto a pid that did not print
+        # it is exactly how a poisoned ancestor used to score ours.
         {
-          line = $0
-          if (match(line, /^[ \t]*[0-9][0-9]*[ \t]/)) {
-            cur = $1 + 0
-            sub(/^[ \t]*[0-9][0-9]*[ \t]/, "", line)
-          }
-          if (cur == "") next
-          argv[cur] = argv[cur] " " line
+          if (!match($0, /^[ \t]*[0-9][0-9]*[ \t]/)) next
+          # trap #1d: our OWN argv can name the target — an agent invokes verify with
+          # the repo path on its command line — so every ancestor of this shell is
+          # dropped before a byte of its argv is read. this is the whole reason the
+          # pid column is requested at all.
+          if (($1 + 0) in mine) next
+          a = $0
+          sub(/^[ \t]*[0-9][0-9]*[ \t]/, "", a)
+          # the rust-analyzer filter comes first for the same reason as in the
+          # windows branch: the editor holds no build lock, and the transient
+          # cargo check it spawns would otherwise print a note on every run.
+          if (a ~ /rust-analyzer/) next
+          if (index(a, target) > 0) { ours++; next }
+          # trap #1b on this branch too: rust work that names no path of ours is
+          # not ours, so we RUN — but say so, exactly as the windows branch does.
+          if (a ~ /(^|[\/ \t])(cargo|cargo-clippy|rustc|rustdoc)([ \t]|$)/) other++
         }
         END {
-          ours = 0; other = 0
-          for (p in argv) {
-            if (p in mine) continue
-            a = argv[p]
-            # the rust-analyzer filter comes first for the same reason as in the
-            # windows branch: the editor holds no build lock, and the transient
-            # cargo check it spawns would otherwise print a note on every run.
-            if (a ~ /rust-analyzer/) continue
-            if (index(a, target) > 0) { ours++; continue }
-            # trap #1b on this branch too: rust work that names no path of ours is
-            # not ours, so we RUN — but say so, exactly as the windows branch does.
-            if (a ~ /(^|[\/ \t])(cargo|cargo-clippy|rustc|rustdoc)([ \t]|$)/) other++
-          }
           if (ours > 0) print "ours"
           else if (other > 0) print "other"
           else print "clear"
