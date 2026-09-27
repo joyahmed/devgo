@@ -1,0 +1,128 @@
+name: Bug report
+description: Something in DevGo did not do what you expected.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting — a rough edge reported beats one worked around in silence.
+
+        Before filing: check **[docs/KNOWN-ISSUES.md](https://github.com/joyahmed/devgo/blob/main/docs/KNOWN-ISSUES.md)**
+        for the current release. If it is already listed there, a comment on this issue saying
+        "me too, on <platform>" is more useful than a new one.
+
+        The fields below are the handful of things that turn a report into something fixable on
+        arrival, rather than a round trip of follow-up questions.
+
+  - type: input
+    id: version-sha
+    attributes:
+      label: Version and build sha
+      description: >
+        Settings › About shows both, as "vX.Y.Z · <sha>". The sha is the important half — it is
+        compiled in from the exact commit the build came from, so it pins a report to a revision
+        in a way the version number alone cannot (the version can sit unchanged across dozens of
+        commits).
+      placeholder: "v1.2.1 · a1b2c3d"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      description: DevGo behaves differently enough per platform that this is not a formality.
+      options:
+        - Windows
+        - macOS
+        - Linux
+    validations:
+      required: true
+
+  - type: input
+    id: os-version
+    attributes:
+      label: OS version
+      placeholder: "e.g. Windows 11 23H2, macOS 14.5, Ubuntu 24.04"
+    validations:
+      required: true
+
+  - type: input
+    id: targets
+    attributes:
+      label: Editor / terminal / agent configured
+      description: >
+        Settings › Editors & Terminals. Launching into one of these is the most
+        platform-fragile path in the app, so name what was set for the key you pressed.
+      placeholder: "e.g. editor: VS Code, terminal: Windows Terminal, agent: Claude Code"
+    validations:
+      required: true
+
+  - type: input
+    id: wsl
+    attributes:
+      label: WSL distro and state (leave blank if not relevant)
+      description: >
+        Only if this touches a WSL workspace or launch. Name the distro and whether it was
+        running — a stopped distro changes behaviour on purpose (DevGo never boots one just to
+        read it), so say which case you were in.
+      placeholder: "e.g. Ubuntu-24.04, running / Ubuntu-24.04, stopped"
+    validations:
+      required: false
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual
+    validations:
+      required: true
+
+  - type: textarea
+    id: log
+    attributes:
+      label: Log (last 20-40 lines)
+      description: >
+        Windows: %APPDATA%\app.zetta.devgo\devgo.log — macOS:
+        ~/Library/Application Support/app.zetta.devgo/devgo.log — Linux:
+        ~/.local/share/app.zetta.devgo/devgo.log (or $XDG_DATA_HOME/app.zetta.devgo/devgo.log).
+        Settings › Help › "Reveal in Explorer" (Finder, your file manager) opens the folder.
+        Timestamps are UTC. A launch or dev-script bug is usually diagnosable from the last 20
+        lines alone — paste those rather than the whole file. The log holds paths you opened and
+        target names you configured and nothing else; read it before pasting if that matters.
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: screenshot
+    attributes:
+      label: Screenshot
+      description: Encouraged, not required. Drag an image into this box.
+    validations:
+      required: false
+
+  - type: markdown
+    attributes:
+      value: |
+        This release carries real automated coverage — 939 frontend tests, 422 Rust tests — but
+        no systematic click-through of the UI yet; a harness for that exists and has not been run.
+        The project would rather hear about a rough edge than have you work around it quietly.

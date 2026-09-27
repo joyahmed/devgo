@@ -1,0 +1,39 @@
+name: Feature request
+description: Something DevGo does not do yet that you wish it did.
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Feedback and ideas are just as welcome as bug reports — thanks for taking the time.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do
+      description: >
+        The task or workflow this gets in the way of, rather than the feature itself — that
+        leaves room for a different fix to count too.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you have in mind
+      description: Optional. A sketch, a comparison to another tool, anything concrete helps.
+    validations:
+      required: false
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform (if it matters)
+      options:
+        - Windows
+        - macOS
+        - Linux
+        - All / not platform-specific
+    validations:
+      required: false

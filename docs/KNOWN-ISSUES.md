@@ -8,6 +8,10 @@ it is known and you do not need to write it up. Everything else is worth an
 [issue](https://github.com/joyahmed/devgo/issues) — including the one entry below I have seen only
 once and could not reproduce, where a second sighting is the whole thing that is missing.
 
+Filing one: the [bug report form](https://github.com/joyahmed/devgo/issues/new/choose) asks for the
+version and build sha (Settings › About), the platform, and the log (below) — that is what turns a
+report into something fixable on arrival rather than a round trip to establish them first.
+
 ## The bottom action bar drops its key hints on a narrow window
 
 All platforms. The footer measures the room it has and, when the strip no longer fits on one line, it

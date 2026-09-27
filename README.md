@@ -168,6 +168,37 @@ scripts/build-linux.sh --deps --install
 
 What it gets wrong today is written down rather than left to be discovered: [`docs/KNOWN-ISSUES.md`](docs/KNOWN-ISSUES.md) lists the rough edges in the current release, what you will see when you hit one, and the way round it. Issues are welcome — anything that is not on that list especially.
 
+## 🐞 Feedback and bug reports
+
+I would rather hear about a rough edge than have you work around it in silence. This release
+carries real automated coverage — 939 frontend tests, 422 Rust tests — but no systematic
+click-through of the UI yet; a harness for that exists and has not been run. So there is a real
+chance something slipped through that the tests do not reach.
+
+Check [`docs/KNOWN-ISSUES.md`](docs/KNOWN-ISSUES.md) first — a report of something already listed
+there costs you a write-up for nothing. Anything else, [open an issue](https://github.com/joyahmed/devgo/issues/new/choose);
+the bug report form asks for the handful of things that make a report fixable on arrival rather
+than a round trip of follow-up questions:
+
+- **Version and build sha**, from Settings › About (`vX.Y.Z · <sha>`). The sha is the important
+  half — it pins a report to the exact revision the build came from, which the version number
+  alone cannot: before it was added, every build reported the same version string and an install
+  could not be traced back to a commit at all.
+- **Platform and OS version** — DevGo behaves differently enough per platform that this is not a
+  formality.
+- **Which editor, terminal and agent you had configured** (Settings › Editors & Terminals) —
+  launching into one of them is the most platform-fragile path in the app.
+- **The WSL distro and whether it was running**, when it's relevant — a stopped distro changes
+  behaviour on purpose, and a reporter would not otherwise know that is expected.
+- **The last 20 to 40 lines of the log**, timestamps in UTC: `%APPDATA%\app.zetta.devgo\devgo.log`
+  on Windows, `~/Library/Application Support/app.zetta.devgo/devgo.log` on a Mac,
+  `~/.local/share/app.zetta.devgo/devgo.log` on Linux. A launch or dev-script bug is usually
+  diagnosable from those lines alone.
+
+Feature ideas and general feedback are just as welcome as bug reports — the same
+[new issue](https://github.com/joyahmed/devgo/issues/new/choose) page offers a lighter form for
+those, or a blank issue if neither template fits.
+
 ## 📖 Chapters
 
 DevGo was built one chapter at a time, and every chapter is a branch: the tree at `NN.name` builds and runs exactly as chapter `NN` leaves it, with the chapter's own text at `docs/chapters/NN-name.md` beside the code it describes. The full set — 76 chapters, the prerequisites and the Rust and Tauri appendices — is in [`docs/chapters/`](docs/chapters/README.md).
