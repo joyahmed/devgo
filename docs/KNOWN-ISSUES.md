@@ -52,6 +52,12 @@ placeholder is the half that gives way.
 The box itself is fine: click it or press `Ctrl+K`, type, and it filters normally. The text only
 looks cut before you have typed anything.
 
+## Typing a letter does not jump to the next project
+
+The project list does not respond to typing a letter to navigate to the next project starting with that letter — there is no type-to-jump feature here. All movement through the list uses arrow keys only.
+
+To find a project by name, press `Ctrl+K` to open the search box and type there. The search filters the list as you type.
+
 ## The clone drawer has closed by itself once, and it has not happened again
 
 I saw this once, on an installed 1.2.1 build: the GitHub *Clone into…* drawer was open, and about
@@ -66,20 +72,6 @@ unexplained rather than as a defect, because saying nothing would be worse.
 If you see it: DevGo now writes a line to its log every time a drawer opens and closes, naming which
 drawer, why it closed and how long it was open. Attach the log (below) to the issue and that line
 says more than any description could.
-
-## Keyboard navigation in the clone drawer
-
-I hit these on Linux against v1.2.1, with a large repository list:
-
-- With a few hundred repositories in the list, `Tab` cycles inside the list and never reaches the
-  destination field below it. With one repository shown it reaches it fine. Use the pointer to reach
-  the destination, or filter the list down first.
-- A focused repository row draws no visible focus ring, so there is nothing on screen saying where
-  `Tab` has got to.
-- Typing a letter jumps to the first repository starting with it, but typing the same letter again
-  does not advance to the next one. Type more of the name instead.
-
-None of these lose data and none of them block cloning; they make it slower than it should be.
 
 ## Installers are unsigned
 
