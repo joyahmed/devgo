@@ -18,6 +18,7 @@ import NameDialog from './components/NameDialog';
 import Onboarding from './components/Onboarding';
 import ProjectTree from './components/ProjectTree';
 import RefreshIcon from './components/RefreshIcon';
+import ResizeHandles from './components/ResizeHandles';
 import {
 	laneGrid,
 	MID_QUERY,
@@ -2815,6 +2816,14 @@ const AppInner = () => {
 					onServerAttach: attachServer
 				}}
 			/>
+
+			{/* last in the tree, and on linux only: the eight edge and corner
+			    grabs that are the window's ONLY way to be resized there. on
+			    windows and macOS this renders nothing at all — both already
+			    resize, and an invisible click target over a working edge can
+			    only take clicks away. ResizeHandles.tsx carries the whole
+			    diagnosis */}
+			<ResizeHandles />
 		</div>
 	);
 };
