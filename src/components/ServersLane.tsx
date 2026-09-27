@@ -561,7 +561,12 @@ const ServersLane = ({
 								<span className='font-mono'>~/.ssh/config</span>.
 							</div>
 						)}
-						{q && visible.length === 0 && (
+						{/* only when there IS something the query could have matched. a
+						    query outlives the removal of the last server (useServers never
+						    clears it, and the command row's box is not count-gated), and
+						    both notes at once had the lane saying two things: "none yet"
+						    is the actionable one, so the filter note yields to it */}
+						{all.length > 0 && q && visible.length === 0 && (
 							<div className={`${rowFlat} py-3 text-13 text-text-muted`}>
 								Nothing matches <span className='font-mono'>{q}</span>.
 							</div>

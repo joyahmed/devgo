@@ -225,6 +225,18 @@ describe('ServersLane — the heading', () => {
 		expect(screen.getByText(/Nothing matches/).textContent).toContain('zeta');
 	});
 
+	// ⭐ a query outlives the last server — the hook never clears it, and the
+	// command row's box is not gated on the count — so the lane is handed
+	// all.length === 0 WITH a live q. it printed both notes then, telling the
+	// reader "add your first server" and "your filter matched nothing" at once.
+	// the empty-inventory note is the only one that is actionable, so it wins
+	// and the filter note stays quiet until there is something to filter
+	it('never prints both notes: none-yet wins over a query on an empty lane', () => {
+		lane({ servers: [], query: 'zeta', visible: [] });
+		expect(screen.getByText(/No servers yet/)).not.toBeNull();
+		expect(screen.queryByText(/Nothing matches/)).toBeNull();
+	});
+
 	// the whole heading line is the collapse target, so anything interactive
 	// sitting IN it has to stop the click. a box that folded the lane away as
 	// you clicked into it is the failure
