@@ -23,14 +23,37 @@ const readInto = (): string => {
 	}
 };
 
+// the spelling two paths are compared by, and the only one in this file:
+// the workspace store's own normalization (paths::normalize — forward
+// slashes, no trailing separator) with case folded on top, since the os
+// hands the same folder back in either case
+const pathKey = (path: string) => normalizePath(path).toLowerCase();
+
 // a path under one of the workspaces is scanned already; one outside
 // needs adding to show up in a lane
 const insideAny = (path: string, workspaces: string[]) => {
-	const p = normalizePath(path).toLowerCase();
+	const p = pathKey(path);
 	return workspaces.some(w => {
-		const n = normalizePath(w).toLowerCase();
+		const n = pathKey(w);
 		return p === n || p.startsWith(`${n}/`);
 	});
+};
+
+// the workspace a path IS, in the spelling the store holds it under, or
+// undefined for a folder under none of them. the store pushes a root
+// exactly as it was typed (workspace.rs) while the os dialog answers in its
+// own spelling, so one folder arrives as '/g/ws' and as '/g/ws/'. compared
+// exactly, the second reads as a new folder: it got a second row of its own
+// in the destination list, offering the same place twice
+const storedAs = (path: string, workspaces: string[]) =>
+	workspaces.find(w => pathKey(w) === pathKey(path));
+
+// the destination as it was left, under the workspace's own spelling when
+// it is one of them — so the value the Select holds always matches a row it
+// can point at, however the folder was spelled when it was stored
+const savedInto = (workspaces: string[]) => {
+	const saved = readInto();
+	return saved ? (storedAs(saved, workspaces) ?? saved) : '';
 };
 
 const field =
@@ -101,15 +124,15 @@ const ClonePicker = ({
 	const [active, setActive] = useState(0);
 	const activeRef = useRef<HTMLLIElement>(null);
 	const [workspace, setWorkspace] = useState<string>(
-		() => readInto() || (workspaces[0] ?? '')
+		() => savedInto(workspaces) || (workspaces[0] ?? '')
 	);
 	// a folder chosen through the os picker, listed as its own option. a
 	// remembered destination outside every workspace starts here too: the
 	// list has no row to show it on otherwise, and it fell back to the
 	// first workspace the moment the drawer was reopened
 	const [chosen, setChosen] = useState<string | null>(() => {
-		const saved = readInto();
-		return saved && !workspaces.includes(saved) ? saved : null;
+		const saved = savedInto(workspaces);
+		return saved && !storedAs(saved, workspaces) ? saved : null;
 	});
 	// a folder chosen through the picker in this session is one the user
 	// just aimed at, so offering to add it is a favour and starts ticked. a
@@ -130,22 +153,32 @@ const ClonePicker = ({
 		}
 	};
 
+	// no staleness guard on the answer, on purpose: the tauri folder dialog
+	// is modal, so there is no second destination to arrive while it is up
+	// and nothing later to overwrite. a guard here would be code no test can
+	// reach; if the dialog is ever opened non-modally, this is the comment
+	// that says the guard has to come back with it (useClone.ts has the same
+	// shape over a NON-modal call, and there it is a live bug)
 	const pickInto = (value: string) => {
 		if (value !== PICK) return remember(value);
 		openDialog({ directory: true, defaultPath: workspace || undefined })
 			.then(picked => {
 				if (typeof picked !== 'string') return;
-				setChosen(picked);
+				// the dialog's spelling of a folder that is already a workspace
+				// is still that workspace: take the store's spelling, or the
+				// same place is listed twice and the list holds neither row
+				const dest = storedAs(picked, workspaces) ?? picked;
+				setChosen(dest);
 				// picked here and now, so the tick is the user's own choice
 				// again even if the drawer opened on a remembered folder
 				setAddAsWorkspace(true);
-				remember(picked);
+				remember(dest);
 			})
 			.catch(e => setError(String(e)));
 	};
 	const folders = [
 		...workspaces,
-		...(chosen !== null && !workspaces.includes(chosen) ? [chosen] : [])
+		...(chosen !== null && !storedAs(chosen, workspaces) ? [chosen] : [])
 	];
 	// a folder by its name, the path behind it, and last the door back to
 	// the os picker
@@ -195,7 +228,11 @@ const ClonePicker = ({
 		ArrowDown: () => step(1),
 		ArrowUp: () => step(-1),
 		Home: () => setActive(0),
-		End: () => setActive(visible.length - 1),
+		// a step far enough to land on the clamp step already carries, rather
+		// than a second copy of it: setActive(visible.length - 1) put the
+		// cursor on -1 over a filter that matches nothing, and -1 is not an
+		// index into anything
+		End: () => step(visible.length),
 		Enter: () => toggleAt(active),
 		' ': () => toggleAt(active)
 	};

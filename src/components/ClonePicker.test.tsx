@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {
 	afterAll,
@@ -67,6 +67,9 @@ const ALPHA = repo('alpha');
 const BRAVO = repo('bravo');
 const CHARLIE = repo('charlie');
 const REPOS = [ALPHA, BRAVO, CHARLIE];
+// a fourth name none of the three can fuzzy-match, for the one test that
+// needs a filter that matches nothing and then matches something
+const ZULU = repo('zzz');
 
 const WORKSPACES = ['/g/01_tauri', '/g/02_next'];
 // a folder under no workspace at all — the case the add-as-workspace tick
@@ -77,7 +80,7 @@ const OUTSIDE = '/g/scratch';
 const picker = (over: Partial<ClonePickerProps> = {}) => {
 	const onStart = vi.fn();
 	const onDone = vi.fn();
-	render(
+	const at = (extra: Partial<ClonePickerProps>) => (
 		<ClonePicker
 			repos={REPOS}
 			local={{}}
@@ -85,9 +88,13 @@ const picker = (over: Partial<ClonePickerProps> = {}) => {
 			onStart={onStart}
 			onDone={onDone}
 			{...over}
+			{...extra}
 		/>
 	);
-	return { onStart, onDone };
+	const { rerender } = render(at({}));
+	// the drawer stays open while the github cache refreshes behind it, so
+	// repos is a live prop: rerender is how a test says the list grew
+	return { onStart, onDone, again: (extra: Partial<ClonePickerProps>) => rerender(at(extra)) };
 };
 
 const tick = async (user: ReturnType<typeof userEvent.setup>, name: string) =>
@@ -235,6 +242,60 @@ describe('ClonePicker — what crosses to onStart', () => {
 		expect(onStart).toHaveBeenCalledWith([ALPHA], '/g/01_tauri/nested', false);
 	});
 
+	// ⭐ one folder, one row. the workspace store keeps a root exactly as it
+	// was typed (workspace.rs) while the os dialog answers in its own
+	// spelling, so the same folder arrives as '/g/02_next' and '/g/02_next/'.
+	// insideAny already reads those as one path; the de-dupe that builds the
+	// destination list has to agree, or the dropdown offers the same folder
+	// twice and the destination it holds matches neither row
+	it('lists a picked folder that is already a workspace only once', async () => {
+		const user = userEvent.setup();
+		openDialog.mockResolvedValue(`${WORKSPACES[1]}/`);
+		const { onStart } = picker();
+
+		await chooseInto(user, 'Choose a folder…');
+		await waitFor(() => expect(localStorage.getItem(INTO_KEY)).not.toBeNull());
+
+		// shut it and open it again, so the assertion below reads a list that
+		// was built after the pick. Escape is the Select's own close and is a
+		// no-op on a shut one, so this lands open either way
+		await user.keyboard('{Escape}');
+		await user.click(screen.getByRole('combobox', { name: 'into' }));
+		// one row per folder, counted inside the open list: the shut trigger
+		// carries the same label and would be a third match
+		const menu = screen.getByRole('listbox', { name: 'into' });
+		expect(within(menu).getAllByText('02_next')).toHaveLength(1);
+		// the same folder as a workspace, so there is nothing to add
+		expect(screen.queryByRole('checkbox', { name: 'Add as workspace' })).toBeNull();
+		await user.keyboard('{Escape}');
+
+		await tick(user, 'alpha');
+		await user.click(clone());
+		// the store's spelling, not the dialog's: the destination has to be a
+		// row the dropdown can point at
+		expect(onStart).toHaveBeenCalledWith([ALPHA], WORKSPACES[1], false);
+	});
+
+	// the other way the same folder arrives twice: a destination remembered
+	// under a spelling the workspace list does not use. one row for that
+	// folder, and the destination has to BE that row — a value no row carries
+	// leaves the trigger reading the first workspace while the clone goes
+	// somewhere else, which is worse than the duplicate row it replaced
+	it('opens a remembered workspace spelled another way on its own row', async () => {
+		const user = userEvent.setup();
+		localStorage.setItem(INTO_KEY, `${WORKSPACES[1]}/`);
+		const { onStart } = picker();
+
+		const trigger = screen.getByRole('combobox', { name: 'into' });
+		expect(trigger.textContent).toContain('02_next');
+		expect(trigger.textContent).not.toContain('01_tauri');
+		expect(screen.queryByRole('checkbox', { name: 'Add as workspace' })).toBeNull();
+
+		await tick(user, 'alpha');
+		await user.click(clone());
+		expect(onStart).toHaveBeenCalledWith([ALPHA], WORKSPACES[1], false);
+	});
+
 	// cancelling the os picker resolves with null, and the row that opened it
 	// is a sentinel — a destination of '__pick__' reaching the backend is the
 	// failure this guards
@@ -290,6 +351,31 @@ describe('ClonePicker — the list is one tab stop', () => {
 
 		expect(screen.getByText('3 of 3').textContent).not.toContain('ticked');
 		expect((clone() as HTMLButtonElement).disabled).toBe(true);
+	});
+
+	// the cursor is an index into the rows on screen, so it has to stay one.
+	// End took visible.length - 1 with no clamp, which is -1 over a filter
+	// that matches nothing — and -1 outlives the empty list: the cache
+	// refreshing behind the open drawer brings rows back without touching the
+	// cursor, and the cursor then points at no row at all
+	it('keeps the cursor on a real row when End is pressed over an empty list', async () => {
+		const user = userEvent.setup();
+		const { onStart, again } = picker();
+
+		await user.type(screen.getByPlaceholderText('Find a repo…'), 'zzz');
+		expect(screen.getByText('No repository matches.')).not.toBeNull();
+
+		list().focus();
+		await user.keyboard('{End}');
+
+		// the cache refreshes behind the drawer and the filter now has a match
+		again({ repos: [...REPOS, ZULU] });
+		expect(activeRow()?.textContent).toContain('zzz');
+
+		await user.keyboard(' ');
+		expect(row('zzz').getAttribute('aria-selected')).toBe('true');
+		await user.click(clone());
+		expect(onStart).toHaveBeenCalledWith([ZULU], '/g/01_tauri', false);
 	});
 
 	// the lanes behind the drawer listen on window for the same arrows, so a
