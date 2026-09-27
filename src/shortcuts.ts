@@ -247,10 +247,14 @@ export const labelFor = (
 	const s = SHORTCUTS.find(x => x.id === id);
 	if (!s) return '';
 	const manager = opts?.manager ?? builtInManager();
+	// filled literally, in one pass. a string replacement would expand $&, $1,
+	// $` and $$ inside a manager name or a workspace name — both come from
+	// outside — and a second pass would read a value it had just filled in as
+	// another placeholder. a function replacement is never pattern-interpreted
 	if (s.managerLabel && manager)
-		return s.managerLabel
-			.replace('{subject}', opts?.subject ? ` ${opts.subject}` : '')
-			.replace('{manager}', manager);
+		return s.managerLabel.replace(/\{manager\}|\{subject\}/g, m =>
+			m === '{manager}' ? manager : opts?.subject ? ` ${opts.subject}` : ''
+		);
 	return (isMac && s.macLabel) || (isLinux && s.linuxLabel) || s.label;
 };
 
