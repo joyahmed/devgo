@@ -383,8 +383,10 @@ describe('CommandPalette — the cursor', () => {
 
 		rerender(<CommandPalette commands={found} onClose={vi.fn()} />);
 		// the box still holds `zzzz` and the new row matches it. with the floor
-		// the cursor is index 0 and lands on that row; without it the index
-		// would be -2 and no row would be current at all
+		// the cursor is index 0 and lands on that row; without it the ceiling
+		// pins the index at -1 and every further press keeps it there — it never
+		// walks deeper negative, because min(i + 1, -1) is -1 from any index — so
+		// no row would be current at all
 		expect(titles()).toEqual(['Zzzz terminal']);
 		expect(cursor()).toBe('Zzzz terminal');
 	});
