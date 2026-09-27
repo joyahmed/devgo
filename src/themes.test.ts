@@ -242,22 +242,56 @@ describe('savedThemeId', () => {
 		expect(savedThemeId()).toBe('neon');
 	});
 
-	// ⚠️ TODAY'S BEHAVIOUR, reported as a finding and NOT fixed here. the house
-	// pattern is try/catch around localStorage (src/App.tsx:263-267,
-	// src/hooks/useGithub.ts:41-47); themes.ts:155 has no guard, so a webview
-	// with storage denied throws out of savedThemeId — and main.tsx:12 calls it
-	// before the first paint, with nothing above it to catch
-	it('throws, today, when localStorage itself refuses to be read', () => {
+	// ⭐ the boot guard. main.tsx:12 is `applyTheme(savedThemeId())` before the
+	// first paint, with nothing above it to catch — so a throw out of here is not
+	// a wrong theme, it is a window that never opens. a webview with site data
+	// blocked throws on access rather than answering null, and a read that
+	// refuses is the same as an unset one: DEFAULT, exactly as textSize.ts:19
+	// returns its unset 1
+	it('falls back to the default when localStorage itself refuses to be read', () => {
 		const spy = vi
 			.spyOn(Storage.prototype, 'getItem')
 			.mockImplementation(() => {
 				throw new Error('storage is denied');
 			});
 		try {
-			expect(() => savedThemeId()).toThrow('storage is denied');
+			expect(savedThemeId()).toBe('neon');
 		} finally {
 			spy.mockRestore();
 		}
+	});
+
+	it('returns the same value on a refused read as on an absent one', () => {
+		const absent = savedThemeId();
+		const spy = vi
+			.spyOn(Storage.prototype, 'getItem')
+			.mockImplementation(() => {
+				throw new Error('storage is denied');
+			});
+		try {
+			expect(savedThemeId()).toBe(absent);
+		} finally {
+			spy.mockRestore();
+		}
+	});
+
+	// the whole point of the guard: the composed boot call paints rather than
+	// throwing, and it paints the palette a fresh install gets
+	it('lets the main.tsx boot call paint on a storage-denied webview', () => {
+		const spy = vi
+			.spyOn(Storage.prototype, 'getItem')
+			.mockImplementation(() => {
+				throw new Error('storage is denied');
+			});
+		try {
+			expect(() => applyTheme(savedThemeId())).not.toThrow();
+		} finally {
+			spy.mockRestore();
+		}
+		const fromDeniedStorage = vars();
+		root().removeAttribute('style');
+		applyTheme(THEMES[0].id);
+		expect(fromDeniedStorage).toEqual(vars());
 	});
 });
 
@@ -472,12 +506,12 @@ describe('setTheme', () => {
 		expect(localStorage.length).toBe(1);
 	});
 
-	// ⚠️ TODAY'S BEHAVIOUR, reported and NOT fixed. themes.ts:173 has no
-	// try/catch, and the persist runs FIRST — so on a storage-denied webview
-	// setTheme throws before applyTheme is reached, and the theme is neither
-	// stored nor painted. the throw escapes Settings' pick() (Settings.tsx:713),
-	// where nothing catches it
-	it('throws and paints nothing, today, when localStorage refuses the write', () => {
+	// ⭐ a refused write still paints. the user picked a theme; storage being
+	// unavailable costs them persistence across restarts, not the theme itself —
+	// the same trade textSize.ts:26-28 makes (a refused write still zooms) and
+	// App.tsx:270-277 makes (a refused write still flips the hints). the persist
+	// runs FIRST, so this only holds because the throw is swallowed
+	it('still paints the palette when localStorage refuses the write', () => {
 		applyTheme('neon');
 		const spy = vi
 			.spyOn(Storage.prototype, 'setItem')
@@ -485,10 +519,47 @@ describe('setTheme', () => {
 				throw new Error('storage is full');
 			});
 		try {
-			expect(() => setTheme('matrix')).toThrow('storage is full');
+			expect(() => setTheme('matrix')).not.toThrow();
 		} finally {
 			spy.mockRestore();
 		}
-		expect(cssVar('--color-accent')).toBe('#22d3ee');
+		expect(cssVar('--color-accent')).toBe('#22c55e');
+		expect(cssVar('--solid-bg-primary')).toBe('#000000');
+		expect(cssVar('--solid-danger-bg')).toBe('#ef4444');
+	});
+
+	// nothing is persisted, so the next launch is the default again: the cost of
+	// a refused write is exactly that and nothing more
+	it('persists nothing when the write is refused, so the choice is for this run only', () => {
+		const spy = vi
+			.spyOn(Storage.prototype, 'setItem')
+			.mockImplementation(() => {
+				throw new Error('storage is full');
+			});
+		try {
+			setTheme('matrix');
+		} finally {
+			spy.mockRestore();
+		}
+		expect(localStorage.length).toBe(0);
+		expect(savedThemeId()).toBe('neon');
+	});
+
+	// the caller: Settings.tsx:713 calls setTheme(id) inside pick() with no
+	// try/catch, so an escaping throw would take the panel down on a click
+	it('lets a refused write escape nothing to its caller, and still applies every theme', () => {
+		const spy = vi
+			.spyOn(Storage.prototype, 'setItem')
+			.mockImplementation(() => {
+				throw new Error('storage is full');
+			});
+		try {
+			for (const t of THEMES) {
+				expect(() => setTheme(t.id), t.id).not.toThrow();
+				expect(cssVar('--color-accent'), t.id).toBe(t.colors.accent);
+			}
+		} finally {
+			spy.mockRestore();
+		}
 	});
 });

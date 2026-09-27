@@ -152,7 +152,18 @@ export const THEMES: Theme[] = [
 const THEME_KEY = 'devgo.theme';
 const DEFAULT = 'neon';
 
-export const savedThemeId = () => localStorage.getItem(THEME_KEY) ?? DEFAULT;
+// the stored id, or DEFAULT when nothing is stored — or when storage refuses
+// us: a webview with site data blocked throws on access rather than answering
+// null, and an unreadable setting is the same as an unset one. main.tsx:12
+// calls this before the first paint with nothing above it to catch, so a throw
+// here is not a wrong theme, it is a window that never opens
+export const savedThemeId = () => {
+	try {
+		return localStorage.getItem(THEME_KEY) ?? DEFAULT;
+	} catch {
+		return DEFAULT;
+	}
+};
 
 export const applyTheme = (id: string) => {
 	const theme = THEMES.find(t => t.id === id) ?? THEMES[0];
@@ -170,6 +181,10 @@ export const applyTheme = (id: string) => {
 
 // the variables are live: the whole window recolours as they change
 export const setTheme = (id: string) => {
-	localStorage.setItem(THEME_KEY, id);
+	try {
+		localStorage.setItem(THEME_KEY, id);
+	} catch {
+		// per-viewer convenience only: the theme still paints for this run
+	}
 	applyTheme(id);
 };
