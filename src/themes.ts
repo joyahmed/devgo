@@ -150,7 +150,12 @@ export const THEMES: Theme[] = [
 ];
 
 const THEME_KEY = 'devgo.theme';
-const DEFAULT = 'neon';
+// derived, not a second copy of 'neon': applyTheme below falls back to
+// THEMES[0] and savedThemeId falls back to this, and main.tsx:12 composes the
+// two — so a reorder of the table that moved only one of them would store one
+// theme's id and paint another's colours. safe to read here because the THEMES
+// literal above is fully initialised by this line
+const DEFAULT = THEMES[0].id;
 
 // the stored id, or DEFAULT when nothing is stored — or when storage refuses
 // us: a webview with site data blocked throws on access rather than answering

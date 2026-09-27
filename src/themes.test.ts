@@ -160,25 +160,30 @@ describe('THEMES', () => {
 	});
 });
 
-// ⭐ the highest-value assertions in this file. themes.ts carries TWO defaults
-// that nothing connects: a private `DEFAULT = 'neon'` string (themes.ts:153)
-// that savedThemeId falls back to, and `THEMES[0]` (themes.ts:158) that
-// applyTheme falls back to. They agree today by coincidence of ordering.
-describe('the default theme, which the module names twice', () => {
+// ⭐ the highest-value assertions in this file. themes.ts reaches the default
+// down two paths — savedThemeId falls back to the private `DEFAULT`
+// (themes.ts:158) and applyTheme falls back to `THEMES[0]` (themes.ts:163) —
+// and main.tsx:12 composes them as `applyTheme(savedThemeId())`. They agree by
+// derivation now, not by coincidence: `DEFAULT = THEMES[0].id`. What these
+// tests guard is that the derivation stays, and that a reorder of the table
+// still moves both halves together.
+describe('the default theme, which the module reaches two ways', () => {
 	it('is neon when nothing has been stored', () => {
 		expect(savedThemeId()).toBe('neon');
 	});
 
-	it('is the same theme both fallbacks choose, and only because THEMES[0] is it', () => {
+	it('is the same theme both fallbacks choose, because DEFAULT derives from THEMES[0]', () => {
 		expect(
 			THEMES[0].id,
-			'BROKEN COUPLING: themes.ts has two independent defaults — ' +
-				"savedThemeId() falls back to the private DEFAULT = 'neon' " +
-				'(themes.ts:153) and applyTheme() falls back to THEMES[0] ' +
-				'(themes.ts:158). Nothing links them; they agreed only because ' +
-				'THEMES[0].id === DEFAULT. This failed because one of them moved: ' +
-				'either THEMES was reordered or DEFAULT was renamed. Change BOTH, ' +
-				'or make one derive from the other (DEFAULT = THEMES[0].id).'
+			'BROKEN DERIVATION: themes.ts:158 is meant to read ' +
+				'`const DEFAULT = THEMES[0].id`, so savedThemeId()\'s fallback and ' +
+				"applyTheme()'s `?? THEMES[0]` fallback (themes.ts:163) cannot " +
+				'disagree. This failed because the derivation was undone — almost ' +
+				'certainly someone re-hardcoded the string (back to DEFAULT = ' +
+				"'neon' or another id) and then the table was reordered, or " +
+				'savedThemeId stopped returning DEFAULT. Restore the derivation ' +
+				'rather than re-syncing two literals: main.tsx:12 composes both ' +
+				'fallbacks, so a split stores one theme and paints another.'
 		).toBe(savedThemeId());
 	});
 
