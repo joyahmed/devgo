@@ -53,6 +53,11 @@ jobs:
       - run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
         shell: bash
       - run: bun install --frozen-lockfile
+      # the frontend suite ran nowhere but a laptop until now, so a broken
+      # component test merged green. it comes before the build so a red test is
+      # never hidden behind a build failure, and it runs in all three jobs
+      # because jsdom is portable but this repo's path handling has not been
+      - run: bun run test
       # dist/ is gitignored, and generate_context! wants frontendDist to exist,
       # so the frontend build comes before anything that compiles the crate
       - run: bun run build
@@ -71,6 +76,8 @@ jobs:
         with:
           workspaces: src-tauri
       - run: bun install --frozen-lockfile
+      # see the gate job: the frontend suite runs everywhere, before the build
+      - run: bun run test
       - run: bun run build
       - run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
       # clippy compiles every target but runs no test, so the #[cfg(unix)]
@@ -98,6 +105,8 @@ jobs:
             libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev libgtk-3-dev \
             libxdo-dev libayatana-appindicator3-dev librsvg2-dev
       - run: bun install --frozen-lockfile
+      # see the gate job: the frontend suite runs everywhere, before the build
+      - run: bun run test
       - run: bun run build
       - run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
       # see the mac job: clippy is not a test run
