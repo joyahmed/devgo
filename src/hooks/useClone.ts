@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from 'react';
 // starts the next queued job when devgo://clone-done arrives for the
 // current one. a refusal (destination exists, distro stopped) fails that
 // job at once and the queue moves on; nothing is retried on its own.
-// every ending, the refusals too, reaches onDone
+// every ending, the refusals too, reaches onDone — exactly once per job
 export const useClone = (onDone: (done: CloneDone) => void): CloneState => {
 	const [jobs, setJobs] = useState<Map<string, CloneJob>>(new Map());
 	// refs, so the listeners below see the live queue without resubscribing
@@ -17,6 +17,23 @@ export const useClone = (onDone: (done: CloneDone) => void): CloneState => {
 	useEffect(() => {
 		onDoneRef.current = onDone;
 	});
+	// ⛔ THE STALENESS GUARD. clone_repo's answer is provisional — rust picks
+	// the folder before the clone runs and clone-done carries the one it landed
+	// in — so an answer is only worth applying while the start it belongs to is
+	// still the current one. every start takes a ticket; an ending or a restart
+	// takes it away, and an answer holding a spent ticket is dropped. keyed by
+	// full_name is NOT enough on its own: a retry makes the same repo current
+	// again, and attempt one's answer would land on attempt two's row
+	const ticket = useRef<Map<string, number>>(new Map());
+	const issued = useRef(0);
+	// ⛔ ONE ENDING PER JOB. the caller adds the cloned folder to a workspace
+	// off the back of onDone, so a second report is a second add of the same
+	// folder. two writers can reach it for one job — the .catch below, where
+	// rust refused clone_repo outright and no event is ever coming, and the
+	// clone-done listener, which a repeated event reaches twice on its own.
+	// the FIRST ending is the ending, on the row as well as in the report.
+	// cleared in enqueue: picking the same repo again is a new job
+	const ended = useRef<Set<string>>(new Set());
 
 	const update = (full_name: string, patch: Partial<CloneJob>) => {
 		setJobs(prev => {
@@ -32,16 +49,28 @@ export const useClone = (onDone: (done: CloneDone) => void): CloneState => {
 		const job = queue.current.shift();
 		if (!job) return;
 		running.current = job.full_name;
+		const mine = ++issued.current;
+		ticket.current.set(job.full_name, mine);
+		// this start is still the one the job is waiting on
+		const current = () => ticket.current.get(job.full_name) === mine;
 		update(job.full_name, { status: 'running', phase: 'Starting', percent: null });
 		invoke<CloneStarted>('clone_repo', {
 			fullName: job.full_name,
 			workspace: job.workspace,
 			name: null
 		})
-			.then(started => update(job.full_name, { dest: started.dest }))
+			.then(started => {
+				if (!current()) return;
+				update(job.full_name, { dest: started.dest });
+			})
 			.catch(e => {
+				// a refusal is stale the same way an answer is: a job that has
+				// already ended must not be re-failed, and must not release the
+				// queue a second time — that is two git processes at once
+				if (!current()) return;
 				const error = String(e);
 				update(job.full_name, { status: 'failed', error });
+				ended.current.add(job.full_name);
 				onDoneRef.current({
 					full_name: job.full_name,
 					ok: false,
@@ -63,6 +92,8 @@ export const useClone = (onDone: (done: CloneDone) => void): CloneState => {
 			dest: null,
 			error: null
 		}));
+		// a fresh job for a repo that already ended gets its own ending
+		for (const j of fresh) ended.current.delete(j.full_name);
 		setJobs(prev => {
 			const next = new Map(prev);
 			for (const j of fresh) next.set(j.full_name, j);
@@ -82,6 +113,12 @@ export const useClone = (onDone: (done: CloneDone) => void): CloneState => {
 				})
 		);
 		const done = listen<CloneDone>('devgo://clone-done', ({ payload }) => {
+			// the ending takes the ticket: whatever clone_repo still owes this
+			// job is stale from here on
+			ticket.current.delete(payload.full_name);
+			// this job has already ended: a repeat is not a second ending
+			if (ended.current.has(payload.full_name)) return;
+			ended.current.add(payload.full_name);
 			update(payload.full_name, {
 				status: payload.ok ? 'done' : 'failed',
 				dest: payload.dest,

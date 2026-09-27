@@ -271,6 +271,41 @@ describe('useClone — how a job ends', () => {
 		expect(onDone).toHaveBeenCalledWith(payload);
 	});
 
+	// ⛔ ONE ENDING PER JOB. the caller adds the cloned folder to a workspace
+	// off the back of onDone, so a second report is a second add of the same
+	// folder. the `running.current === payload.full_name` guard below stops a
+	// repeated event pulling the next job forward, but it sits AFTER the
+	// report and never guarded the report itself
+	it('reports a repeated ending for the same job only once', async () => {
+		const h = await mounted();
+		await push(h, [repo('a/one')]);
+		const ending: CloneDone = {
+			full_name: 'a/one',
+			ok: true,
+			dest: 'C:/dev/one',
+			error: null
+		};
+
+		await finished(ending);
+		await finished(ending);
+
+		expect(onDone).toHaveBeenCalledTimes(1);
+	});
+
+	// per JOB, not per repo forever: picking the same repo again is a new job
+	// and its ending is the caller's to hear
+	it('reports the ending again for a repo enqueued a second time', async () => {
+		const h = await mounted();
+		await push(h, [repo('a/one')]);
+		await finished({ full_name: 'a/one', ok: true, dest: 'C:/dev/one', error: null });
+
+		await push(h, [repo('a/one')]);
+		await finished({ full_name: 'a/one', ok: true, dest: 'C:/dev/one-2', error: null });
+
+		expect(onDone).toHaveBeenCalledTimes(2);
+		expect(job(h, 'a/one')?.dest).toBe('C:/dev/one-2');
+	});
+
 	// ⛔ the queue draining is the whole contract: a batch of five that stops
 	// after one is the failure this sequencing exists to avoid
 	it('starts the next queued job when the current one ends', async () => {
@@ -415,10 +450,13 @@ describe('useClone — a clone rust refused outright', () => {
 		expect(job(h, 'a/two')?.status).toBe('running');
 	});
 
-	// a refusal followed by an event for the same repo is what rust does NOT
-	// do, but the two reports would double-count the ending. current
-	// behaviour: onDone is called twice. documented, not asserted as right
-	it('cannot tell a refusal from a later event for the same repo', async () => {
+	// ⛔ the refusal IS the ending. rust rejecting clone_repo means no thread
+	// started, so no clone-done can follow — but this is the one path where two
+	// writers reach onDone for a single job, and an event arriving after it used
+	// to be reported as a second ending AND flip the row to done while the
+	// caller had already been told it failed. the first ending is the ending,
+	// on the row as well as in the report
+	it('does not report a refused job again if an event arrives for it', async () => {
 		refuse('a/one');
 		const h = await mounted();
 		await push(h, [repo('a/one')]);
@@ -426,37 +464,84 @@ describe('useClone — a clone rust refused outright', () => {
 
 		await finished({ full_name: 'a/one', ok: true, dest: 'C:/dev/one', error: null });
 
-		// ⚠️ two endings for one job. harmless only because rust never emits
-		// clone-done for a clone_repo it rejected
-		expect(onDone).toHaveBeenCalledTimes(2);
-		expect(job(h, 'a/one')?.status).toBe('done');
+		expect(onDone).toHaveBeenCalledTimes(1);
+		expect(job(h, 'a/one')?.status).toBe('failed');
 	});
 
-	// ⚠️ useClone.ts:41 — `.then(started => update(..., { dest: started.dest }))`
-	// writes the destination with no check that the job is still the running
-	// one. rust answers clone_repo before it emits anything, so today the two
-	// can never land in this order; if they ever did, the FINAL destination
-	// would be overwritten by the provisional one and the row would point at a
-	// folder the clone did not land in. asserted as it is, not as it should be
-	it('lets a late clone_repo answer overwrite the final destination', async () => {
-		let answer: ((s: CloneStarted) => void) | null = null;
-		invoke.mockReturnValue(new Promise<CloneStarted>(r => (answer = r)));
-		const h = await mounted();
+});
 
-		// enqueue WITHOUT draining: clone_repo has not answered yet
+// ⛔ clone_repo's answer is PROVISIONAL — rust picks the folder before the
+// clone runs, and clone-done carries the destination the clone actually landed
+// in. so the answer is only worth writing while the start it belongs to is
+// still the current one; landing later it would point the row at a folder the
+// clone did not use. rust answers before it emits anything, so a slow answer
+// is what reproduces this, and the guard is what makes the order not matter
+describe('useClone — a clone_repo answer that lands too late', () => {
+	// each start gets its own resolver, so a test can answer attempt one after
+	// attempt two has begun
+	const slowly = () => {
+		const answers: ((s: CloneStarted) => void)[] = [];
+		invoke.mockImplementation(
+			() => new Promise<CloneStarted>(r => void answers.push(r))
+		);
+		return answers;
+	};
+
+	// enqueue WITHOUT draining: clone_repo has not answered yet
+	const pushUnanswered = async (h: Mounted, repos: GithubRepo[]) => {
 		await act(async () => {
-			h.result.current.enqueue([repo('a/one')], 'C:/dev');
+			h.result.current.enqueue(repos, 'C:/dev');
 		});
+	};
+
+	it('keeps the destination the ending reported', async () => {
+		const answers = slowly();
+		const h = await mounted();
+		await pushUnanswered(h, [repo('a/one')]);
+
 		await finished({ full_name: 'a/one', ok: true, dest: 'C:/dev/one', error: null });
 		expect(job(h, 'a/one')?.dest).toBe('C:/dev/one');
 
 		await act(async () => {
-			answer?.(started('a/one', 'C:/dev/provisional'));
+			answers[0]?.(started('a/one', 'C:/dev/provisional'));
 			await Promise.resolve();
 		});
 
-		// the correct destination would still be C:/dev/one here
-		expect(job(h, 'a/one')?.dest).toBe('C:/dev/provisional');
+		expect(job(h, 'a/one')?.dest).toBe('C:/dev/one');
 		expect(job(h, 'a/one')?.status).toBe('done');
+	});
+
+	// ⭐ why the guard cannot be "is this repo the running one": a retry makes
+	// the same full_name running again, so attempt one's answer would be
+	// written onto attempt two's row. the ticket is per START, not per repo
+	it('keeps an earlier attempt at the same repo off the retry row', async () => {
+		const answers = slowly();
+		const h = await mounted();
+		await pushUnanswered(h, [repo('a/one')]);
+
+		// attempt one ends, then the user picks the same repo again
+		await finished({
+			full_name: 'a/one',
+			ok: false,
+			dest: 'C:/dev',
+			error: 'destination exists'
+		});
+		await pushUnanswered(h, [repo('a/one')]);
+		expect(cloneCalls()).toHaveLength(2);
+		expect(job(h, 'a/one')?.status).toBe('running');
+
+		await act(async () => {
+			answers[0]?.(started('a/one', 'C:/dev/stale'));
+			await Promise.resolve();
+		});
+
+		expect(job(h, 'a/one')?.dest).toBeNull();
+
+		// and attempt two's own answer is still taken
+		await act(async () => {
+			answers[1]?.(started('a/one', 'C:/dev/one-2'));
+			await Promise.resolve();
+		});
+		expect(job(h, 'a/one')?.dest).toBe('C:/dev/one-2');
 	});
 });
