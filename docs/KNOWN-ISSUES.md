@@ -94,7 +94,7 @@ directory — but the empty field accepts the row in the first place, so it is e
 
 Fill the arguments template in, usually `"{path}"`.
 
-## On macOS the window came back the wrong size — Stage Manager (fixed, with 41px left over)
+## On macOS the window came back the wrong size — Stage Manager (fixed, with a loose end)
 
 macOS only, and only with Stage Manager turned on. In v1.2.1: resize DevGo's window, quit, open it
 again, and the window is not the one you left. Most often it comes back filling the screen — the
@@ -104,10 +104,12 @@ a 1920-wide display, 1686 wide no matter how wide you had made it. Either way th
 gone for good rather than just for that launch: the wrong window is what gets written back to disk,
 so the next start repeats it instead of recovering.
 
-Two separate faults were behind that and **both are fixed after v1.2.1 — one of them not quite
-exactly.** Your window now comes back where you left it and very nearly as wide as you left it, about
-41px short on a 1920-wide display. If that last part is what you are seeing, it is known and it is the
-second-to-last paragraph here.
+Two separate faults were behind that and **both are fixed after v1.2.1 — with one loose end.** Your
+window now comes back where you left it, and at the width you left it or a sliver under: an
+**intermittent shortfall of 16 to 41px** on a 1920-wide display, which I cannot make happen on demand
+and which is absent entirely most of the time I look. Nothing is lost in either case — the rectangle
+on disk is correct and the window is in the right position; it is the width, sometimes, and only by a
+sliver. The paragraph on it below says what would actually help.
 
 **The cause is Stage Manager, which is also the workaround.** Stage Manager owns a strip down the left
 of the display for its shelf of windows, and at the moment DevGo's window is first shown the window
@@ -130,26 +132,40 @@ screen and nothing in the log said the save had been dropped. DevGo now measures
 area of the screen as well as the whole panel, with the same 24px of slack on both, so an ordinary
 window a few pixels short of full width is saved as what it is.
 
-**The restart half, fixed after v1.2.1, and 41px short of right.** Fixing the save alone changed
-nothing you could see, because one relaunch then destroyed the value: the shelf clamp above rewrote
-the window, and the resize the window server had just performed looked exactly like one you had asked
-for, so it was saved over the good rectangle in `prefs.json`. DevGo now applies your position and size
-a second time, once the window is actually on screen — the only moment at which they stick. Measured on
-the real app, not assumed: the left edge is back to 0 where I left it, and the width comes back 1869
-rather than the 1910 I saved. **That is 41px narrower than you asked for**, the same 41px across five
-restarts with no drift, and **I do not know yet where those 41px go** — it is written down as its own
-problem rather than counted as finished. So: much better than 1686, and not exact. If you set the
-window to the full width of your screen and it opens a finger's width short of it, that is this and
-you do not need to report it.
+**The restart half, fixed after v1.2.1, with an intermittent shortfall nobody has pinned down yet.**
+Fixing the save alone changed nothing you could see, because one relaunch then destroyed the value: the
+shelf clamp above rewrote the window, and the resize the window server had just performed looked
+exactly like one you had asked for, so it was saved over the good rectangle in `prefs.json`. DevGo now
+applies your position and size a second time, once the window is actually on screen — the only moment
+at which they stick. That is measured on the real app rather than reasoned about, and the position half
+of it is solid: the left edge comes back at 0 where I left it, never at 234.
 
-**Workaround: turn Stage Manager off**, in System Settings › Desktop & Dock. It is the thing doing the
-clamping, so a Mac that never had it on never had any of this, and turning it off should take the
-leftover 41px with it too — the shelf is the only thing known to be shrinking the window, so with the
-shelf gone there should be nothing left to shrink. ⚠️ I measured the 41px with Stage Manager on and
-have not measured a run with it off, so read that second half as following from the cause rather than
-as a result I have. If you want Stage Manager, you keep the 41px; there is nothing in DevGo's settings
-that changes it. Leaving the window maximised sidesteps the whole entry — that path stores a flag
-rather than a rectangle, and a maximised window opens maximised.
+The width is the loose end, and the numbers refuse to line up into one story. Saving 1910, on one
+machine, one display and one build: five restarts in a row gave 1869, 41px short and byte-identical
+every time; a live `prefs.json` was later seen holding 1894, 16px short; and nine restarts in a row
+gave 1910 exactly, with nothing changed between them and the five. **So the shortfall is not a fixed
+amount, it is not always there, and I do not know what makes the difference.** It does not creep during
+a session either, and that part I did go and check: a window measured at 1894×1000 @(0,30) was still
+exactly that after switching away to Finder and back, and still that after eight seconds away. Whatever
+this is happens at restore, once, and then holds.
+
+What that means for you. If your window opens exactly as you left it, this entry is not stale — you are
+in the case that works, which is the one I get every time I try at the moment. If it opens 16 to 41px
+narrow, that is known: it costs you a sliver of width and nothing else, the position is right and the
+file on disk is right. And the useful thing then is not a report saying *"16px short"* — I have that
+number — but **a note of what you were doing**: how you had resized the window, what else was on
+screen, whether the Mac had slept, how long DevGo had been closed. The trigger is the only missing
+piece, and one clear account of it is worth more than the measurements above.
+
+**Workaround for the clamp: turn Stage Manager off**, in System Settings › Desktop & Dock. It is the
+thing that was doing the clamping, so a Mac that never had it on never had the 234px-and-1686-wide
+window at all, and one with it turned off cannot get it again.
+
+⚠️ That is **not** a fix for the intermittent shortfall, and I am not going to imply it is. The
+shortfall comes and goes with Stage Manager left exactly as it was, so it is not simply the shelf in
+miniature, and I have no measurement of it with Stage Manager off — I have no way to ask for it at all.
+Leaving the window maximised does sidestep this entry end to end: that path stores a flag rather than a
+rectangle, and a maximised window opens maximised.
 
 What I measured, and what I did not. An M1 Max, **one** 1920×1080 display, scale factor 1.0, Dock set
 to auto-hide, Stage Manager on. **This is not a Retina or scaling bug** — all of it fires at scale
