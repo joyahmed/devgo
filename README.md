@@ -170,15 +170,24 @@ What it gets wrong today is written down rather than left to be discovered: [`do
 
 ## 🐞 Feedback and bug reports
 
-I would rather hear about a rough edge than have you work around it in silence. This release
-carries real automated coverage — 939 frontend tests, 422 Rust tests — but no systematic
-click-through of the UI yet; a harness for that exists and has not been run. So there is a real
-chance something slipped through that the tests do not reach.
+One person builds DevGo — there is no team behind it and no queue triaging reports before they
+reach me. That is a fact about how this gets made, not an apology for it: a solo project still owes
+you a real answer, it just takes a few days to land rather than a few hours, and Windows is what I
+use every day, so that is where I catch things fastest — other platforms wait longer behind it.
+
+A bug report and a suggestion get the same welcome here. I would rather hear about a rough edge
+than have you work around it in silence, and an idea from someone who actually runs this launcher
+day to day is worth as much to me as a bug — I only see DevGo the way I use it, and you may not.
+
+This release carries real automated coverage — 939 frontend tests, 422 Rust tests — but no
+systematic click-through of the UI yet; a harness for that exists and has not been run. So there is
+a real chance something slipped through that the tests do not reach.
 
 Check [`docs/KNOWN-ISSUES.md`](docs/KNOWN-ISSUES.md) first — a report of something already listed
 there costs you a write-up for nothing. Anything else, [open an issue](https://github.com/joyahmed/devgo/issues/new/choose);
 the bug report form asks for the handful of things that make a report fixable on arrival rather
-than a round trip of follow-up questions:
+than a round trip of follow-up questions — a well-formed report gets fixed far faster than a vague
+one, because I am not chasing the details down myself first:
 
 - **Version and build sha**, from Settings › About (`vX.Y.Z · <sha>`). The sha is the important
   half — it pins a report to the exact revision the build came from, which the version number
@@ -195,9 +204,9 @@ than a round trip of follow-up questions:
   `~/.local/share/app.zetta.devgo/devgo.log` on Linux. A launch or dev-script bug is usually
   diagnosable from those lines alone.
 
-Feature ideas and general feedback are just as welcome as bug reports — the same
-[new issue](https://github.com/joyahmed/devgo/issues/new/choose) page offers a lighter form for
-those, or a blank issue if neither template fits.
+Feature ideas and general feedback use the same door — the same
+[new issue](https://github.com/joyahmed/devgo/issues/new/choose) page has a lighter template for
+those, or a blank issue if neither fits.
 
 ## 📖 Chapters
 
