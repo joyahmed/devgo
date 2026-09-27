@@ -38,11 +38,14 @@ export const scoreCommand = (
 	query: string,
 	cmd: PaletteCommand
 ): number | null => {
-	if (!query.trim()) return 0;
+	// trim once, then match on the trimmed string: surrounding whitespace must
+	// not decide the answer, while whitespace INSIDE the query still counts
+	const q = query.trim();
+	if (!q) return 0;
 
-	let best: number | null = fuzzyScore(query, cmd.title);
+	let best: number | null = fuzzyScore(q, cmd.title);
 	for (const kw of cmd.keywords ?? []) {
-		const s = fuzzyScore(query, kw);
+		const s = fuzzyScore(q, kw);
 		if (s !== null) {
 			const weighted = s * 0.9;
 			best = best === null ? weighted : Math.max(best, weighted);

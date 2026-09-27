@@ -60,7 +60,9 @@ const CommandPalette = ({ commands, onClose }: CommandPaletteProps) => {
 	};
 
 	const keys: Record<string, () => void> = {
-		ArrowDown: () => setActive(i => Math.min(i + 1, list.length - 1)),
+		// floor of 0: on an empty list `list.length - 1` is -1, an index no row
+		// can ever have
+		ArrowDown: () => setActive(i => Math.max(0, Math.min(i + 1, list.length - 1))),
 		ArrowUp: () => setActive(i => Math.max(i - 1, 0)),
 		Enter: () => run(list[active])
 	};
