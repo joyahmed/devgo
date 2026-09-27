@@ -7,7 +7,7 @@ mod tray;
 
 use commands::AppState;
 use services::platform::detection;
-use services::preferences::{MonitorRect, WindowState};
+use services::preferences::{Screen, WindowState};
 use services::runtime_log;
 use services::runtime_log::log_line;
 use services::single_instance;
@@ -194,7 +194,7 @@ fn remember_geometry(window: &tauri::Window) {
         // restore rect
         let monitors = window
             .available_monitors()
-            .map(|m| monitor_rects(&m))
+            .map(|m| screen_rects(&m))
             .unwrap_or_default();
         if candidate.covers_a_monitor(&monitors) {
             return;
@@ -204,12 +204,20 @@ fn remember_geometry(window: &tauri::Window) {
     let _ = prefs.set_window_state(next);
 }
 
-fn monitor_rects(monitors: &[tauri::Monitor]) -> Vec<MonitorRect> {
+// both rects, because the guard needs the difference between them: the
+// panel is what a full-screen window fills, the work area is what a
+// maximized one fills, and the strip between the two is the taskbar or the
+// menu bar — a number only the platform knows
+fn screen_rects(monitors: &[tauri::Monitor]) -> Vec<Screen> {
     monitors
         .iter()
         .map(|m| {
             let (p, s) = (m.position(), m.size());
-            (p.x, p.y, s.width, s.height)
+            let w = m.work_area();
+            Screen {
+                full: (p.x, p.y, s.width, s.height),
+                work: (w.position.x, w.position.y, w.size.width, w.size.height),
+            }
         })
         .collect()
 }
@@ -445,7 +453,7 @@ pub fn run() {
                 // the window; maximized is recoverable
                 let monitors = window
                     .available_monitors()
-                    .map(|m| monitor_rects(&m))
+                    .map(|m| screen_rects(&m))
                     .unwrap_or_default();
                 match saved {
                     // set_size is ignored on a maximized window

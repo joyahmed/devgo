@@ -81,6 +81,18 @@ impl Default for TmuxConfig {
 /// A monitor as (x, y, width, height).
 pub type MonitorRect = (i32, i32, u32, u32);
 
+/// A monitor and the part of it a window is allowed to fill. `full` is the
+/// panel; `work` is the panel minus whatever the platform reserves — the
+/// Windows taskbar, the macOS menu bar and dock. Both come from the
+/// platform, because that reserved strip is not a number this code can
+/// guess: it is 0 with the taskbar auto-hidden, ~48px at 100% scale, ~96px
+/// at 200%, and ~25px of menu bar plus up to ~90px of dock on a mac.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Screen {
+    pub full: MonitorRect,
+    pub work: MonitorRect,
+}
+
 // below this the rect is a placeholder something wrote, not a window
 // somebody left
 const MIN_RESTORE_W: u32 = 320;
@@ -90,25 +102,44 @@ impl WindowState {
     /// Does this rect look like a maximized window rather than a restored
     /// one? Maximizing is not atomic: a Resized arrives while is_maximized()
     /// still says false, and the screen-filling rect would be stored as the
-    /// restore rect. Windows overhangs a maximized window by its invisible
-    /// border, hence the slack.
-    pub fn covers_a_monitor(&self, monitors: &[MonitorRect]) -> bool {
+    /// restore rect. So the question is asked of the geometry, not of
+    /// is_maximized() — inside the branch that calls this, is_maximized()
+    /// has already said false, which is exactly the answer this cannot
+    /// trust.
+    ///
+    /// A maximized window fills the **work area**; a full-screen one fills
+    /// the **panel**. Both are compared, both with the same tight slack,
+    /// because the only fuzziness left is the frame itself: Windows
+    /// overhangs a maximized window by its invisible border (the recorded
+    /// artefact was 2560x1392 against a 2560x1400 work area), and edges
+    /// round. The reserved strip — taskbar, menu bar, dock — is not in the
+    /// slack any more; `work` already accounts for it.
+    ///
+    /// It used to be: width within 24 of the panel AND height within 96 of
+    /// it. That second band is wider than a mac's menu bar, so it was true
+    /// for every ordinary macOS window, and an AND with a vacuous half is
+    /// its other half alone — any window within 24px of the panel width
+    /// lost every save, measured to the pixel on a 1920x1080 display at
+    /// scale factor 1.
+    pub fn covers_a_monitor(&self, screens: &[Screen]) -> bool {
+        // the frame's own slop, and nothing else
         const SLACK: i32 = 24;
-        monitors.iter().any(|&(_, _, mw, mh)| {
-            (self.width as i32 - mw as i32).abs() <= SLACK
-                && (self.height as i32 - mh as i32).abs() <= SLACK * 4
-        })
+        let fills = |(_, _, rw, rh): MonitorRect| {
+            (self.width as i32 - rw as i32).abs() <= SLACK
+                && (self.height as i32 - rh as i32).abs() <= SLACK
+        };
+        screens.iter().any(|s| fills(s.full) || fills(s.work))
     }
 
     /// Could a person have left the window here? A minimized window reports
     /// (-32000, -32000) at about 144x19, and a monitor can be unplugged; a
     /// rect that fails either check strands the window off every screen,
     /// with a taskbar entry and nothing to click.
-    pub fn is_restorable(&self, monitors: &[MonitorRect]) -> bool {
+    pub fn is_restorable(&self, screens: &[Screen]) -> bool {
         if self.width < MIN_RESTORE_W || self.height < MIN_RESTORE_H {
             return false;
         }
-        if monitors.is_empty() {
+        if screens.is_empty() {
             // no monitor info: the size check alone, rather than refusing
             // every restore
             return true;
@@ -118,7 +149,8 @@ impl WindowState {
         const MARGIN: i32 = 80;
         let (l, t) = (self.x, self.y);
         let (r, b) = (l + self.width as i32, t + self.height as i32);
-        monitors.iter().any(|&(mx, my, mw, mh)| {
+        screens.iter().any(|s| {
+            let (mx, my, mw, mh) = s.full;
             let (mr, mb) = (mx + mw as i32, my + mh as i32);
             let ox = r.min(mr) - l.max(mx);
             let oy = b.min(mb) - t.max(my);
@@ -714,10 +746,49 @@ mod tests {
         }
     }
 
-    const THREE_SCREENS: [MonitorRect; 3] = [
-        (0, 0, 2560, 1440),
-        (-1920, 360, 1920, 1080),
-        (2560, 0, 2560, 1440),
+    /// Windows, scale factor 1, a 40px taskbar on the primary and on the
+    /// monitor to the left: hence a work area 40px shorter than the panel.
+    const THREE_SCREENS: [Screen; 3] = [
+        Screen {
+            full: (0, 0, 2560, 1440),
+            work: (0, 0, 2560, 1400),
+        },
+        Screen {
+            full: (-1920, 360, 1920, 1080),
+            work: (-1920, 360, 1920, 1040),
+        },
+        Screen {
+            full: (2560, 0, 2560, 1440),
+            work: (2560, 0, 2560, 1400),
+        },
+    ];
+
+    /// The mac the dropped saves were measured on: an M1 Max with ONE
+    /// 1920x1080 display at **scale factor 1** — no Retina, no scaling at
+    /// any point, so no unit mismatch anywhere. Deliberately scale 1: a
+    /// scale-2 fixture would encode the mechanism the measurements
+    /// DISPROVED and leave the case that actually bit the user untested.
+    /// A 25px menu bar at the top and a dock out of the way, so a zoomed
+    /// window fills 1920x1055 at (0, 25).
+    const MAC_SCREEN: [Screen; 1] = [Screen {
+        full: (0, 0, 1920, 1080),
+        work: (0, 25, 1920, 1055),
+    }];
+
+    /// Laptop plus external, the common real setup and the one neither
+    /// verifying box has the hardware for. `covers_a_monitor` is an
+    /// `.any()` over every screen, so a second monitor is a second chance
+    /// to trip the guard: a rect that is plainly a resize against the
+    /// 2560x1440 panel is within 10px of the 1920x1080 one's width.
+    const MIXED_SCREENS: [Screen; 2] = [
+        Screen {
+            full: (0, 0, 2560, 1440),
+            work: (0, 0, 2560, 1400),
+        },
+        Screen {
+            full: (2560, 180, 1920, 1080),
+            work: (2560, 205, 1920, 1055),
+        },
     ];
 
     /// The poisoned config, byte for byte: a minimized window's placeholder
@@ -750,6 +821,87 @@ mod tests {
                 "{w}x{h} is a real window size"
             );
         }
+    }
+
+    /// The five rows measured against installed v1.2.2 on the mac above,
+    /// literally: each rect was asked for, the window became it, and
+    /// prefs.json kept the previous one or did not. The old guard compared
+    /// width against 24 and height against 96, and a mac window is
+    /// permanently inside that height band — the menu bar guarantees it —
+    /// so width decided alone and anything within 24px of the panel width
+    /// lost every save.
+    ///
+    /// ⭐ 1897x1000 (w delta 23, inside) and 1895x1000 (delta 25, outside)
+    /// are the regression test: the boundary sat exactly on SLACK=24, to
+    /// the pixel, and 1897 saving is what says the guard no longer decides
+    /// on width alone.
+    #[test]
+    fn a_full_width_mac_resize_is_not_a_maximize_artefact() {
+        for (w, h, was) in [
+            (1600, 1050, "saved before: w delta 320, outside the band"),
+            (1910, 900, "saved before: h delta 180, outside the band"),
+            (1910, 1000, "DROPPED before"),
+            (1897, 1000, "DROPPED before: w delta 23, inside SLACK"),
+            (1895, 1000, "saved before: w delta 25, just outside"),
+        ] {
+            assert!(
+                !rect(w, h, 0, 30).covers_a_monitor(&MAC_SCREEN),
+                "{w}x{h} is a resize somebody asked for ({was})"
+            );
+        }
+    }
+
+    /// Two monitors, two chances for `.any()` to condemn one save. The
+    /// 1910x1000 window lives on the 2560x1440 panel, where it is plainly
+    /// a resize; the guard must not reach over to the 1920x1080 one and
+    /// call it an artefact because the widths nearly match there.
+    #[test]
+    fn a_second_monitor_must_not_condemn_a_resize_on_the_first() {
+        assert!(
+            !rect(1910, 1000, 100, 100).covers_a_monitor(&MIXED_SCREENS),
+            "innocuous against monitor A, near-width against monitor B"
+        );
+        assert!(
+            !rect(1897, 1000, 100, 100).covers_a_monitor(&MIXED_SCREENS),
+            "the boundary case, with a second monitor to trip on"
+        );
+        assert!(
+            rect(1920, 1055, 2560, 205).covers_a_monitor(&MIXED_SCREENS),
+            "a real maximize on the second monitor is still an artefact"
+        );
+    }
+
+    /// The other half of the same guard: on that mac a zoomed window fills
+    /// the work area and a full-screen one fills the panel, and neither may
+    /// become the restore rect.
+    #[test]
+    fn a_zoomed_or_full_screen_mac_window_is_still_an_artefact() {
+        assert!(
+            rect(1920, 1055, 0, 25).covers_a_monitor(&MAC_SCREEN),
+            "the work area, filled: that is what zoom does"
+        );
+        assert!(
+            rect(1920, 1080, 0, 0).covers_a_monitor(&MAC_SCREEN),
+            "the whole panel: full screen, and is_maximized() says false"
+        );
+    }
+
+    /// The shape of the bug as a rule, on Windows numbers so it holds on
+    /// every platform: the two conditions are an AND, so a band loose
+    /// enough to be true for every ordinary window leaves the other one
+    /// deciding alone. Full panel width plus a height no reserved strip
+    /// can explain is a resize, not a maximize.
+    #[test]
+    fn full_width_alone_does_not_condemn_a_save() {
+        let screens = &THREE_SCREENS[..1];
+        assert!(
+            !rect(2560, 1100, 0, 0).covers_a_monitor(screens),
+            "full width, 300px short: a resize"
+        );
+        assert!(
+            rect(2560, 1392, -8, -8).covers_a_monitor(screens),
+            "full width and the work area's height: the artefact"
+        );
     }
 
     #[test]
