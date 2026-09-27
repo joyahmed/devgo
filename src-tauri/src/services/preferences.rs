@@ -110,10 +110,14 @@ impl WindowState {
     /// A maximized window fills the **work area**; a full-screen one fills
     /// the **panel**. Both are compared, both with the same tight slack,
     /// because the only fuzziness left is the frame itself: Windows
-    /// overhangs a maximized window by its invisible border (the recorded
-    /// artefact was 2560x1392 against a 2560x1400 work area), and edges
+    /// overhangs a maximized window by its invisible border, and edges
     /// round. The reserved strip — taskbar, menu bar, dock — is not in the
-    /// slack any more; `work` already accounts for it.
+    /// slack any more; `work` already accounts for it. The recorded
+    /// artefact, 2560x1392 at (-8, -8) on the 2560x1440 screen these docs
+    /// are shot on, is the work area exactly: a 48px Windows 11 taskbar at
+    /// scale factor 1 leaves 2560x1392, which is why every maximized
+    /// screenshot in `docs/` is that size. The -8 is the invisible border
+    /// in the position, which this compares nothing against.
     ///
     /// It used to be: width within 24 of the panel AND height within 96 of
     /// it. That second band is wider than a mac's menu bar, so it was true
@@ -121,14 +125,50 @@ impl WindowState {
     /// its other half alone — any window within 24px of the panel width
     /// lost every save, measured to the pixel on a 1920x1080 display at
     /// scale factor 1.
+    ///
+    /// ⚠️ That tighter band is only earned where the work area is real. A
+    /// reported work area lets the slack shrink to frame slop because the
+    /// chrome is a number the platform gave us; a work area that is just
+    /// the panel again means the chrome is *unknown*, and then both arms
+    /// test one rectangle and 24px on the height is a guess that is too
+    /// small for a GNOME top bar. `work_area()` is
+    /// `gdk_monitor().workarea()` on Linux and cannot error or panic, so a
+    /// Wayland session — no work-area protocol at all — hands back monitor
+    /// geometry with nothing to say it did. So per monitor: informative
+    /// work area, symmetric band; uninformative one, the old asymmetric
+    /// band against the panel. The fallback is not a regression, it is the
+    /// behaviour before this guard was tightened, applied only where the
+    /// better information is missing.
     pub fn covers_a_monitor(&self, screens: &[Screen]) -> bool {
         // the frame's own slop, and nothing else
         const SLACK: i32 = 24;
-        let fills = |(_, _, rw, rh): MonitorRect| {
+        // the height band for a monitor whose chrome nobody reports: sized
+        // to cover a panel or title bar we cannot measure, which is what it
+        // was sized for the first time round
+        const BLIND_SLACK_H: i32 = SLACK * 4;
+        let fills = |(_, _, rw, rh): MonitorRect, slack_h: i32| {
             (self.width as i32 - rw as i32).abs() <= SLACK
-                && (self.height as i32 - rh as i32).abs() <= SLACK
+                && (self.height as i32 - rh as i32).abs() <= slack_h
         };
-        screens.iter().any(|s| fills(s.full) || fills(s.work))
+        screens.iter().any(|s| {
+            // exact equality, not a tolerance: a platform with no work area
+            // returns the geometry itself, so the two rects are the same
+            // numbers rather than nearly the same, and nothing in between
+            // the calls can add noise. A tolerance would instead condemn
+            // real work areas that merely sit close to the panel — the
+            // mac's 25px menu bar is inside any tolerance worth having, and
+            // that is precisely the measured case the tight band exists
+            // for. Sizes only: a work area offset from the panel but the
+            // same size still reports no reserved strip, which is the one
+            // thing being asked.
+            let (_, _, fw, fh) = s.full;
+            let (_, _, ww, wh) = s.work;
+            if ww == fw && wh == fh {
+                fills(s.full, BLIND_SLACK_H)
+            } else {
+                fills(s.full, SLACK) || fills(s.work, SLACK)
+            }
+        })
     }
 
     /// Could a person have left the window here? A minimized window reports
@@ -835,6 +875,31 @@ mod tests {
         },
     ];
 
+    /// A platform that reports no work area at all: `work` is the panel,
+    /// dimension for dimension. Wayland has no work-area protocol, so GDK
+    /// hands `gdk_monitor().workarea()` back as the monitor geometry, and
+    /// `tauri::Monitor::work_area()` cannot tell us that it did — it cannot
+    /// error and cannot panic. A 1920x1080 panel under GNOME, whose ~32px
+    /// top bar is real chrome the platform never mentions. Scale factor 1,
+    /// like every fixture here.
+    const BLIND_SCREEN: [Screen; 1] = [Screen {
+        full: (0, 0, 1920, 1080),
+        work: (0, 0, 1920, 1080),
+    }];
+
+    /// The screen the 2560x1392 artefact was recorded on, with the work
+    /// area it really had: a 48px Windows 11 taskbar at scale factor 1
+    /// leaves 2560x1392 of 2560x1440, which is why every maximized
+    /// screenshot under `docs/` measures 2560x1392. So the artefact is the
+    /// work area to the pixel — the work arm catches it at delta 0x0, and
+    /// the panel arm never would (height delta 48). `THREE_SCREENS` keeps a
+    /// 40px taskbar instead, where the same rect is delta 0x8: caught by
+    /// the same arm, with slack to spare.
+    const WIN_SCREEN: [Screen; 1] = [Screen {
+        full: (0, 0, 2560, 1440),
+        work: (0, 0, 2560, 1392),
+    }];
+
     /// The poisoned config, byte for byte: a minimized window's placeholder
     /// rect, saved, restored a window with a taskbar entry and no screen.
     #[test]
@@ -946,6 +1011,60 @@ mod tests {
             rect(2560, 1392, -8, -8).covers_a_monitor(screens),
             "full width and the work area's height: the artefact"
         );
+    }
+
+    /// ⚠️ The case no verifying box can run: `work == full`, so both arms
+    /// of the guard test the same rectangle and the symmetric band decides
+    /// alone. A GNOME maximize race stores the panel width and the panel
+    /// height minus the top bar — 32px off, which the 24px band misses and
+    /// the old 96px one caught. The escape is silent: `maximized: false`
+    /// with a near-screen-size rect, and the next launch opens like that.
+    #[test]
+    fn a_gnome_maximize_race_is_an_artefact_without_a_work_area() {
+        assert!(
+            rect(1920, 1048, 0, 32).covers_a_monitor(&BLIND_SCREEN),
+            "panel width, panel height minus a 32px top bar: a maximize"
+        );
+        assert!(
+            rect(2560, 1392, -8, -8).covers_a_monitor(&[Screen {
+                full: (0, 0, 2560, 1440),
+                work: (0, 0, 2560, 1440),
+            }]),
+            "the shipped artefact, on a platform that reported no taskbar"
+        );
+    }
+
+    /// The artefact against the work area it actually had. Both arms are
+    /// live here, so this is the tight band doing the work: 2560x1392 is
+    /// the work area exactly, and the ordinary windows next to it stay.
+    #[test]
+    fn the_shipped_artefact_matches_a_real_windows_work_area() {
+        assert!(
+            rect(2560, 1392, -8, -8).covers_a_monitor(&WIN_SCREEN),
+            "delta 0x0 against the work area: this is the maximize"
+        );
+        assert!(
+            rect(2560, 1372, 0, 0).covers_a_monitor(&WIN_SCREEN),
+            "20px off the work area is the invisible border, not a resize"
+        );
+        for (w, h) in [(2560, 1100), (1400, 900), (2400, 1000)] {
+            assert!(
+                !rect(w, h, 0, 0).covers_a_monitor(&WIN_SCREEN),
+                "{w}x{h} is a resize somebody asked for"
+            );
+        }
+    }
+
+    /// The other side of that fallback: a wider band condemns more, so the
+    /// sizes a person actually drags a window to must still be saved.
+    #[test]
+    fn an_ordinary_window_survives_a_missing_work_area() {
+        for (w, h) in [(900, 720), (1400, 900), (1600, 1000), (1200, 1080)] {
+            assert!(
+                !rect(w, h, 100, 100).covers_a_monitor(&BLIND_SCREEN),
+                "{w}x{h} is a real window size"
+            );
+        }
     }
 
     #[test]
