@@ -311,9 +311,14 @@ describe('useServers — expanding is the ask, once', () => {
 	it('remembers which servers were expanded across a session', async () => {
 		const { result } = await mount({ servers: [SERVER()] });
 
+		// ⛔ flush after the toggle, not just around it: the first expand IS the
+		// ask, so toggleExpanded fires listFolders, whose two `.then` setStates
+		// land after this synchronous act has exited — updates outside act
 		act(() => result.current.toggleExpanded('a'));
+		await flush();
 		expect(localStorage.getItem('devgo.serversExpanded')).toBe('["a"]');
 		act(() => result.current.toggleExpanded('a'));
+		await flush();
 		expect(localStorage.getItem('devgo.serversExpanded')).toBe('[]');
 	});
 

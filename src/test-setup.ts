@@ -33,6 +33,23 @@
 import { cleanup } from '@testing-library/react';
 import { afterEach } from 'vitest';
 
+// react only emits "An update to X inside a test was not wrapped in act(...)"
+// when this global is truthy, and nothing in the tree ever set it.
+// @testing-library/react v16 does NOT set it for you: act-compat.js flips it to
+// true for the duration of one act() call and then restores whatever was there
+// before — `undefined` — so the check was never armed outside an act(). every
+// unwrapped state update in the suite passed silently.
+// this is the one line that arms it. it belongs here and not in a test file
+// because a per-file version is a convention with nothing enforcing it.
+// react reads it as a BARE global (`typeof IS_REACT_ACT_ENVIRONMENT`), which is
+// why it is declared rather than only assigned: without this tsc has no index
+// signature for typeof globalThis and fails with TS7017.
+declare global {
+	// eslint-disable-next-line no-var
+	var IS_REACT_ACT_ENVIRONMENT: boolean;
+}
+globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+
 afterEach(() => {
 	cleanup();
 });

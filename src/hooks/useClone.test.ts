@@ -23,10 +23,23 @@ vi.mock('@tauri-apps/api/event', () => ({
 	}
 }));
 
-const progress = (p: CloneProgress) =>
-	act(() => handlers.get('devgo://clone-progress')?.(p));
-const finished = (p: CloneDone) =>
-	act(() => handlers.get('devgo://clone-done')?.(p));
+// ⛔ the microtask drain INSIDE the act is the point, and it is why these are
+// async: the clone-done handler starts the next job, and clone_repo's answer
+// lands its `.then(setJobs)` a microtask later. a synchronous `act(() => …)`
+// has already exited by then, so that setState was an update outside act — the
+// warning src/test-setup.ts arms. same shape as `push` below
+const progress = async (p: CloneProgress) => {
+	await act(async () => {
+		handlers.get('devgo://clone-progress')?.(p);
+		await Promise.resolve();
+	});
+};
+const finished = async (p: CloneDone) => {
+	await act(async () => {
+		handlers.get('devgo://clone-done')?.(p);
+		await Promise.resolve();
+	});
+};
 
 const repo = (full_name: string): GithubRepo => ({
 	full_name,
