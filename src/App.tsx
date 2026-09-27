@@ -34,6 +34,11 @@ import TitleBar from './components/TitleBar';
 import TrafficPopover from './components/TrafficPopover';
 import FileSystems from './components/FileSystems';
 import ToastProvider, { useToast } from './components/Toast';
+import {
+	emptyScriptsMessage,
+	readScripts,
+	scriptsLogLine
+} from './devScripts';
 import { useAttach } from './hooks/useAttach';
 import { useClone } from './hooks/useClone';
 import { useGithub } from './hooks/useGithub';
@@ -50,7 +55,7 @@ import { useRuntime } from './hooks/useRuntime';
 import { useWsl } from './hooks/useWsl';
 import { lastSegment, namesOf, parentOf } from './paths';
 import { isMac, isWindows } from './platform';
-import { closingBecause } from './uiLog';
+import { closingBecause, logLine } from './uiLog';
 import {
 	appForFolder,
 	canFill,
@@ -1714,11 +1719,17 @@ const AppInner = () => {
 	} | null>(null);
 	const openScripts = async (p: Project, x: number, y: number) => {
 		try {
-			const scripts = await invoke<DevScript[]>('get_project_scripts', {
-				project: p
-			});
+			const list = readScripts(
+				await invoke<DevScript[] | ScriptList>('get_project_scripts', {
+					project: p
+				})
+			);
+			const scripts = list.scripts;
+			// ⭐ the one line that covers every entry in the dev section, and
+			// the whole reason this is one slice: see src/devScripts.ts
+			logLine(scriptsLogLine(p.name, list));
 			if (scripts.length === 0) {
-				toast('No dev scripts found for this project', 'info');
+				toast(emptyScriptsMessage(list), 'info');
 				return;
 			}
 			setScriptMenu({
@@ -1728,12 +1739,20 @@ const AppInner = () => {
 					label: s.name,
 					hint: s.command,
 					onClick: () =>
-						invoke('run_script', { project: p, command: s.command }).catch(
-							e => toast(showError(e), 'error')
-						)
+						invoke('run_script', {
+							project: p,
+							command: s.command
+						}).catch(e => {
+							// a refusal is logged on the rust side; this is the
+							// one that never reached it, and until now it left
+							// only a toast the user had already dismissed
+							logLine(`run_script ${s.command}: ${showError(e)}`);
+							toast(showError(e), 'error');
+						})
 				}))
 			});
 		} catch (e) {
+			logLine(`get_project_scripts ${p.name}: ${showError(e)}`);
 			toast(showError(e), 'error');
 		}
 	};

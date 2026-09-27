@@ -14,6 +14,23 @@ pub struct DevScript {
     pub command: String,
 }
 
+/// The scripts, and the reason there are none when "none" is not this
+/// project's own answer.
+///
+/// Two unrelated situations used to arrive as the same empty vec: a project
+/// that declares no scripts, and a project whose package.json was never
+/// opened because its distro is asleep. The caller could only say "No dev
+/// scripts found for this project" — a claim about the project in the exact
+/// case where nothing about the project was looked at. Same field, same
+/// name and same rule as `wsl_doctor::wslconfig::ConfigReport::reason`:
+/// `reason: None` is the only thing that licenses a claim about what was
+/// found, and a reason is never also a health claim.
+#[derive(Debug, Clone, Serialize)]
+pub struct ScriptList {
+    pub scripts: Vec<DevScript>,
+    pub reason: Option<String>,
+}
+
 // tolerant on purpose: a package.json we half understand still yields its
 // scripts
 fn parse_scripts(json: &str, runner: &str) -> Vec<DevScript> {
@@ -91,23 +108,34 @@ pub fn for_project(
     tags: &[String],
     package_manager: Option<&str>,
     running: &[String],
-) -> Vec<DevScript> {
+) -> ScriptList {
     let runner = package_manager.unwrap_or("npm");
 
+    let mut reason = None;
     let json = match distro_of(&project.full_path) {
         Some(distro) if wsl::is_running(&distro, running) => {
             let linux = paths::windows_to_wsl_path(&project.full_path, &distro);
             read_wsl(&distro, &linux)
         }
-        // stopped distro: no scripts, same rule as everywhere else
-        Some(_) => None,
+        // a stopped distro is still no scripts — booting a vm for a menu is
+        // the one thing this whole module is written to avoid — but it is
+        // not an ANSWER about the project, and it used to be reported as
+        // one. the reason travels out so the caller can say which it is
+        Some(distro) => {
+            reason = Some(format!(
+                "The WSL distro {distro} is not running, so this project's \
+                 package.json was not read — this is not a claim that the \
+                 project has no scripts. Start the distro and try again."
+            ));
+            None
+        }
         None => read_windows(&project.full_path),
     };
 
     let mut scripts =
         json.map(|j| parse_scripts(&j, runner)).unwrap_or_default();
     scripts.extend(conventional(tags));
-    scripts
+    ScriptList { scripts, reason }
 }
 
 pub fn run(
@@ -144,6 +172,88 @@ mod tests {
     fn malformed_json_degrades_quietly() {
         assert!(parse_scripts("{ not json", "npm").is_empty());
         assert!(parse_scripts("", "npm").is_empty());
+    }
+
+    fn wsl_project(distro: &str) -> Project {
+        Project::new(
+            "med-store-management".to_string(),
+            format!(
+                "\\\\wsl.localhost\\{distro}\\home\\dev\\med-store-management"
+            ),
+            format!("\\\\wsl.localhost\\{distro}\\home\\dev"),
+            distro.to_string(),
+        )
+    }
+
+    /// ⭐ The reported failure. A WSL project whose distro is not in
+    /// `running` reads no package.json, and the empty list that came back
+    /// was indistinguishable from "this project declares no scripts" — so
+    /// the UI said exactly that, and the user retried and it worked because
+    /// by then the 5s running-distro memo had refreshed.
+    ///
+    /// No `wsl.exe` runs here: the stopped arm returns before `read_wsl`.
+    #[test]
+    fn a_stopped_distro_is_a_reason_and_never_a_claim_about_the_project() {
+        let got = for_project(&wsl_project("Ubuntu"), &[], Some("pnpm"), &[]);
+
+        assert!(got.scripts.is_empty(), "a stopped distro reads nothing");
+        let reason = got
+            .reason
+            .expect("a distro that was never asked must state why");
+        assert!(reason.contains("Ubuntu"), "name the distro: {reason}");
+        assert!(
+            reason.contains("not running"),
+            "say what is wrong: {reason}"
+        );
+        assert!(
+            reason.contains("not a claim"),
+            "must disown the old verdict, not restate it: {reason}"
+        );
+        assert!(
+            !reason.contains("No dev scripts found"),
+            "the sentence this replaces must not survive inside it: {reason}"
+        );
+    }
+
+    /// The other half of the distinction: a running distro that genuinely
+    /// has nothing to offer carries NO reason, so the caller is free to say
+    /// "this project has no dev scripts" and mean it.
+    #[test]
+    fn a_windows_project_with_no_package_json_carries_no_reason() {
+        let dir = std::env::temp_dir().join("devgo-scripts-empty");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let project = Project::new(
+            "empty".to_string(),
+            dir.to_string_lossy().into_owned(),
+            dir.to_string_lossy().into_owned(),
+            "Windows".to_string(),
+        );
+
+        let got = for_project(&project, &[], None, &[]);
+
+        assert!(got.scripts.is_empty());
+        assert_eq!(
+            got.reason, None,
+            "nothing stopped us looking; the empty list IS the answer"
+        );
+    }
+
+    /// A stopped distro withholds package.json, not `cargo run` — that one
+    /// needs no file read at all, so the conventional entries still render.
+    /// The reason rides along regardless, because the npm scripts really
+    /// are missing and the log is the only place that can say so.
+    #[test]
+    fn conventional_commands_survive_a_stopped_distro() {
+        let got = for_project(
+            &wsl_project("Debian"),
+            &["rust".to_string()],
+            None,
+            &[],
+        );
+
+        assert!(got.scripts.iter().any(|s| s.command == "cargo run"));
+        assert!(got.reason.is_some(), "the package.json was still not read");
     }
 
     #[test]

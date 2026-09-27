@@ -172,6 +172,16 @@ interface DevScript {
 	command: string;
 }
 
+/// the scripts, and the reason there are none when "none" is not the
+/// project's own answer - a sleeping distro withholds package.json, and an
+/// empty list used to be reported as "this project has no scripts". same
+/// rule as WslConfigReport.reason: a null reason is the only thing that
+/// licenses a claim about what was found
+interface ScriptList {
+	scripts: DevScript[];
+	reason: string | null;
+}
+
 /// bare folder names the scan skips, on top of dotfolders, and how many
 /// levels deep to look (1 = immediate children only)
 interface ScanConfig {

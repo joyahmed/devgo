@@ -842,24 +842,61 @@ pub fn get_default_targets(
 /// spawns processes, and the project list must render immediately from cache
 /// without waiting on them. The frontend calls this after the list is on
 /// screen, and again only on an explicit refresh.
+/// The cached stack verdict for one project — detected on the spot when the
+/// cache has none, rather than defaulted.
+///
+/// A miss used to yield `(vec![], None)`, and neither half of that is a
+/// neutral default. `for_project` reads `package_manager: None` as **npm**,
+/// so a pnpm project got `npm run dev`: a command that launches cleanly,
+/// puts a terminal on screen, and fails inside it — where DevGo cannot see
+/// it and has already logged a success. The empty `tags` is wrong the other
+/// way, and silently: a rust, go or docker project loses every conventional
+/// entry, and those need no package.json at all.
+///
+/// The cache is filled by `get_project_tech`, which the frontend fires
+/// *after* the project list renders, so a right-click during that window is
+/// a guaranteed miss on exactly the projects a user opens first.
+///
+/// Detecting here is one directory listing — the same `detect::collect` the
+/// cache is filled from, for one project — on a click that is already
+/// spending a `wsl cat` on the package.json. The lock is held across it so
+/// the answer and the insert cannot disagree; the only cost is that a
+/// concurrent badge pass waits, on a mutex otherwise held for microseconds.
+fn tech_parts(
+    cache: &mut HashMap<String, ProjectTech>,
+    full_path: &str,
+    detect: impl FnOnce() -> Vec<ProjectTech>,
+) -> (Vec<String>, Option<String>) {
+    if !cache.contains_key(full_path) {
+        for t in detect() {
+            cache.insert(t.full_path.clone(), t.clone());
+        }
+    }
+    cache
+        .get(full_path)
+        .map(|t| {
+            (
+                t.tags.iter().map(|s| s.to_string()).collect(),
+                t.package_manager.map(|s| s.to_string()),
+            )
+        })
+        .unwrap_or_default()
+}
+
 /// The running-distro list, fetched only when some project actually needs it.
 // one project, one read, at the moment of the click
 #[tauri::command]
 pub fn get_project_scripts(
     project: Project,
     state: State<AppState>,
-) -> Result<Vec<crate::services::scripts::DevScript>, AppError> {
-    let (tags, pm) = {
-        let cache = state.tech_cache.lock().map_err(lock_err)?;
-        match cache.get(&project.full_path) {
-            Some(t) => (
-                t.tags.iter().map(|s| s.to_string()).collect::<Vec<_>>(),
-                t.package_manager.map(|s| s.to_string()),
-            ),
-            None => (Vec::new(), None),
-        }
-    };
+) -> Result<crate::services::scripts::ScriptList, AppError> {
     let running = running_for(std::slice::from_ref(&project));
+    let (tags, pm) = {
+        let mut cache = state.tech_cache.lock().map_err(lock_err)?;
+        tech_parts(&mut cache, &project.full_path, || {
+            detect::collect(std::slice::from_ref(&project), &running)
+        })
+    };
     Ok(crate::services::scripts::for_project(
         &project,
         &tags,
@@ -2801,6 +2838,66 @@ mod tests {
         )
     }
 
+    fn tech(full_path: &str, pm: Option<&'static str>) -> ProjectTech {
+        ProjectTech {
+            full_path: full_path.to_string(),
+            package_manager: pm,
+            ..Default::default()
+        }
+    }
+
+    /// ⭐ The silent half of the reported failure. The tech cache is filled
+    /// by `get_project_tech`, which fires AFTER the list renders, so an
+    /// early right-click misses. A miss used to hand `for_project` a
+    /// `package_manager: None`, which it reads as npm — and `npm run dev`
+    /// in a pnpm repo launches a terminal successfully and fails inside it,
+    /// where DevGo logs nothing but success.
+    #[test]
+    fn a_tech_cache_miss_detects_rather_than_defaulting_to_npm() {
+        let mut cache = HashMap::new();
+        let path = r"\\wsl.localhost\Ubuntu\home\dev\med-store-management";
+
+        let (_, pm) =
+            tech_parts(&mut cache, path, || vec![tech(path, Some("pnpm"))]);
+
+        assert_eq!(
+            pm.as_deref(),
+            Some("pnpm"),
+            "a miss must ask, not guess; None here becomes npm downstream"
+        );
+        assert!(cache.contains_key(path), "and the answer is kept");
+    }
+
+    /// The detection is the expensive half — one directory listing, over 9p
+    /// for a WSL project. A hit must never pay it.
+    #[test]
+    fn a_tech_cache_hit_never_runs_detection() {
+        let path = r"C:\Users\Dev\code\devgo";
+        let mut cache = HashMap::new();
+        cache.insert(path.to_string(), tech(path, Some("bun")));
+
+        let (_, pm) = tech_parts(&mut cache, path, || {
+            panic!("a hit must not spawn a listing")
+        });
+
+        assert_eq!(pm.as_deref(), Some("bun"));
+    }
+
+    /// Detection that comes back empty — a stopped distro, which
+    /// `detect::collect` skips for the same reason this does — must not
+    /// wedge or invent. It falls through to the old empty answer, and
+    /// `ScriptList::reason` is what explains it to the user.
+    #[test]
+    fn detection_that_finds_nothing_leaves_the_tech_unknown() {
+        let mut cache = HashMap::new();
+        let path = r"\\wsl.localhost\Debian\home\dev\api";
+
+        let (tags, pm) = tech_parts(&mut cache, path, Vec::new);
+
+        assert!(tags.is_empty());
+        assert_eq!(pm, None);
+    }
+
     /// A portable config carries one default per kind, and `defaults()` is
     /// the single list import walks: a kind missing from it travels in
     /// neither direction and nothing says so. The agent's default did
@@ -3160,13 +3257,23 @@ mod tests {
         assert_eq!(checked, 2, "reveal_in_explorer and reveal_app_data_dir");
     }
 
-    /// The frontend half of the same rule. It cannot spawn anything, so the
-    /// bypass available to it is narrower and just as visible in a menu: a
-    /// second `invoke` door beside `reveal()`, or a row that pins a manager's
-    /// id rather than letting the backend resolve the default. Both are one
-    /// string, and both are what "except one" looked like from the outside.
+    /// The frontend half of the same rule, over its **production** files
+    /// only. It cannot spawn anything, so the bypass available to it is
+    /// narrower and just as visible in a menu: a second `invoke` door beside
+    /// `reveal()`, or a row that pins a manager's id rather than letting the
+    /// backend resolve the default. Both are one string, and both are what
+    /// "except one" looked like from the outside.
+    ///
+    /// Vitest specs are skipped, and the skip is the point rather than a
+    /// loophole: a spec that proves the menu sends the right payload has to
+    /// write that payload out - `targetId: 'trove'` - and has to name the
+    /// command it expects - `calls('reveal_in_explorer')`. Both literals are
+    /// the assertion, not a bypass; nothing under a `*.test.*` file ships.
+    /// The predicate is `.test.` in the file name plus the vitest harness by
+    /// name, not a bare `test` substring, which would excuse a production
+    /// `src/testing.ts`.
     #[test]
-    fn the_frontend_has_one_reveal_door_and_pins_no_manager() {
+    fn the_frontend_has_one_reveal_door_and_pins_no_manager_in_production() {
         let mut stack = vec![std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .parent()
             .expect("the repo root")
@@ -3181,6 +3288,13 @@ mod tests {
                     continue;
                 }
                 if !path.extension().is_some_and(|e| e == "ts" || e == "tsx") {
+                    continue;
+                }
+                let name = path
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or_default();
+                if name.contains(".test.") || name == "test-setup.ts" {
                     continue;
                 }
                 let text = std::fs::read_to_string(&path).expect("a ui file");
