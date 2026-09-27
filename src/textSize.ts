@@ -8,13 +8,24 @@ export const TEXT_STEPS = [0.85, 0.9, 1, 1.1, 1.2, 1.35, 1.5] as const;
 type TextStep = (typeof TEXT_STEPS)[number];
 const KEY = 'devgo.textScale';
 
+// the stored step, or 100% when nothing is stored — or when storage refuses
+// us: a webview with site data blocked throws on access rather than answering
+// null, and an unreadable setting is the same as an unset one
 export const savedTextScale = (): number => {
-	const n = Number(localStorage.getItem(KEY));
-	return TEXT_STEPS.includes(n as TextStep) ? n : 1;
+	try {
+		const n = Number(localStorage.getItem(KEY));
+		return TEXT_STEPS.includes(n as TextStep) ? n : 1;
+	} catch {
+		return 1;
+	}
 };
 
 export const applyTextScale = async (scale: number): Promise<number> => {
-	localStorage.setItem(KEY, String(scale));
+	try {
+		localStorage.setItem(KEY, String(scale));
+	} catch {
+		// per-viewer convenience only: the size still applies for this run
+	}
 	await getCurrentWebview().setZoom(scale);
 	// the settings panel shows the number; a shortcut must move it too
 	window.dispatchEvent(new Event('devgo:textscale'));
