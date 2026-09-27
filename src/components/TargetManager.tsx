@@ -14,6 +14,28 @@ const LABELS: Record<TargetKind, string> = {
 	file_manager: 'file manager'
 };
 
+// which of the optional halves each kind is allowed to carry across the wire.
+// the three fields above them — name, executable, args_template — belong to
+// every kind. the draft deliberately keeps every field while the form is open,
+// so flipping a tab is not destructive, which makes submit the only place a
+// field the chosen kind has no use for can be dropped: add_target stores the
+// struct as given and scrubs nothing, so an editor that arrived carrying a run
+// template is wrong data at rest that the next reader of that field inherits.
+// the wsl pair is kind-based and not platform-based on purpose — the rows are
+// only drawn on windows, and elsewhere the draft holds them blank, which lands
+// as the same null
+const OPTIONAL_FIELDS: Record<TargetKind, (keyof TargetDraft)[]> = {
+	editor: ['wsl_executable', 'wsl_args_template'],
+	terminal: [
+		'wsl_executable',
+		'wsl_args_template',
+		'run_args_template',
+		'wsl_run_args_template'
+	],
+	agent: ['wsl_executable', 'wsl_args_template'],
+	file_manager: ['reveal_args_template']
+};
+
 const BLANK: TargetDraft = {
 	name: '',
 	executable: '',
@@ -317,6 +339,15 @@ const TargetManager = ({
 			onError('A target needs a name and an executable');
 			return;
 		}
+		// Empty means "not configured", which is what None means on the Rust
+		// side — a target with no WSL form refuses WSL projects rather than
+		// opening the wrong directory. A field the chosen kind does not own
+		// reads as blank too, whatever the draft still holds for it: the
+		// payload is the thing that gets persisted, so it is scrubbed here
+		// rather than by throwing the draft away under the user's cursor.
+		const optional = OPTIONAL_FIELDS[kind];
+		const half = (key: keyof TargetDraft) =>
+			optional.includes(key) ? draft[key].trim() || null : null;
 		// close is chained INSIDE the guard, not after it: guard is a .catch,
 		// which resolves once it has handled the rejection, so anything after
 		// it runs on the failure path too. A refused add — a path with no
@@ -330,14 +361,11 @@ const TargetManager = ({
 				kind,
 				executable: draft.executable.trim(),
 				args_template: draft.args_template,
-				// Empty means "not configured", which is what None means on the
-				// Rust side — a target with no WSL form refuses WSL projects
-				// rather than opening the wrong directory.
-				wsl_executable: draft.wsl_executable.trim() || null,
-				wsl_args_template: draft.wsl_args_template.trim() || null,
-				run_args_template: draft.run_args_template.trim() || null,
-				wsl_run_args_template: draft.wsl_run_args_template.trim() || null,
-				reveal_args_template: draft.reveal_args_template.trim() || null
+				wsl_executable: half('wsl_executable'),
+				wsl_args_template: half('wsl_args_template'),
+				run_args_template: half('run_args_template'),
+				wsl_run_args_template: half('wsl_run_args_template'),
+				reveal_args_template: half('reveal_args_template')
 			}).then(close)
 		);
 	};
@@ -397,7 +425,7 @@ const TargetManager = ({
 									</span>
 								</span>
 								<span className={`${badge} text-text-muted border-border-strong shrink-0`}>
-									{d.target.kind}
+									{LABELS[d.target.kind]}
 								</span>
 								<Button
 									variant='ghost'

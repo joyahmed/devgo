@@ -30,6 +30,7 @@ const TROVE = 'file_manager:trove';
 // and the only thing the detected rows hand back
 const FOUND_KITTY = 'terminal:kitty';
 const FOUND_NVIM = 'editor:nvim-in-distro';
+const FOUND_TROVE = 'file_manager:trove-on-path';
 
 const target = (
 	id: string,
@@ -260,6 +261,85 @@ describe('TargetManager — what the add form hands to onAdd', () => {
 		);
 	});
 
+	// ⭐ the draft keeps every field so flipping tabs is not destructive, which
+	// makes submit the only place a field that does not belong to the chosen
+	// kind can be dropped. add_target stores the struct as given, with no
+	// kind-based scrubbing of its own: an editor that arrived carrying a run
+	// template is wrong data at rest, and the next reader of that field
+	// inherits the bug
+	it('drops a run template typed under terminal once the kind became editor', async () => {
+		const user = userEvent.setup();
+		const { onAdd, onError } = manager();
+
+		await openForm(user);
+		await user.click(kindTab('terminal'));
+		// `{{` is how userEvent types a literal brace — see the terminal test
+		await user.type(runBox(), '-e {{command}');
+		await user.click(kindTab('editor'));
+		await user.type(nameBox(), 'Zed');
+		await user.type(exeBox(), 'zed');
+		await user.click(addButton());
+
+		expect(onAdd).toHaveBeenCalledTimes(1);
+		expect(onAdd).toHaveBeenCalledWith({
+			name: 'Zed',
+			kind: 'editor',
+			executable: 'zed',
+			args_template: '"{path}"',
+			wsl_executable: null,
+			wsl_args_template: null,
+			run_args_template: null,
+			wsl_run_args_template: null,
+			reveal_args_template: null
+		});
+		expect(onError).not.toHaveBeenCalled();
+	});
+
+	// the same leak the other way round: a reveal template belongs to a file
+	// manager alone, and a terminal keeps the run template it does own
+	it('drops a reveal template typed under file manager once the kind became terminal', async () => {
+		const user = userEvent.setup();
+		const { onAdd } = manager();
+
+		await openForm(user);
+		await user.click(kindTab('file manager'));
+		await user.type(revealBox(), '--select {{path}');
+		await user.click(kindTab('terminal'));
+		await user.type(nameBox(), 'Kitty');
+		await user.type(exeBox(), 'kitty');
+		await user.type(runBox(), '-e {{command}');
+		await user.click(addButton());
+
+		expect(onAdd).toHaveBeenCalledWith(
+			expect.objectContaining({
+				kind: 'terminal',
+				name: 'Kitty',
+				run_args_template: '-e {command}',
+				reveal_args_template: null
+			})
+		);
+	});
+
+	// ⭐ and the scrub is on the payload, not on the draft: flipping a tab to
+	// read another kind's rows must not throw away what was typed, so every
+	// box still holds it when the tab comes back
+	it('keeps the typed fields across a tab flip', async () => {
+		const user = userEvent.setup();
+		manager();
+
+		await openForm(user);
+		await user.click(kindTab('terminal'));
+		await user.type(nameBox(), 'Kitty');
+		await user.type(runBox(), '-e {{command}');
+
+		await user.click(kindTab('editor'));
+		expect(nameBox().value).toBe('Kitty');
+		await user.click(kindTab('terminal'));
+
+		expect(nameBox().value).toBe('Kitty');
+		expect(runBox().value).toBe('-e {command}');
+	});
+
 	// the form only offers the rows the chosen kind has: a run template on an
 	// editor is not a field the user can reach
 	it('offers run and reveal rows only to the kinds that have them', async () => {
@@ -477,6 +557,13 @@ describe('TargetManager — detection proposes, a specific Add writes', () => {
 		'Ubuntu-26.04',
 		'Ubuntu-26.04 · nvim'
 	);
+	const MANAGER_ON_PATH = detected(
+		FOUND_TROVE,
+		'Trove',
+		'file_manager',
+		'path',
+		'/opt/trove/trove'
+	);
 
 	// never scanned and scanned-with-nothing-new are different answers and
 	// must read differently: null is "we have not looked", [] is "we looked"
@@ -519,6 +606,22 @@ describe('TargetManager — detection proposes, a specific Add writes', () => {
 		expect(screen.getByText('in Ubuntu-26.04')).not.toBeNull();
 		expect(screen.queryByText(NEVER_SCANNED)).toBeNull();
 		expect(screen.getAllByRole('listitem')).toHaveLength(2);
+	});
+
+	// the badge on a found row is a label a person reads, and the wire name is
+	// snake_case: the form's own tab for that kind says 'file manager', so a
+	// row reading 'file_manager' is the same kind named two ways in one panel
+	it('badges a found row with the kind label the form uses, not the wire name', async () => {
+		const user = userEvent.setup();
+		const onDetect = vi.fn().mockResolvedValue([MANAGER_ON_PATH]);
+		manager({ onDetect });
+
+		await user.click(screen.getByRole('button', { name: 'Scan' }));
+		await screen.findByText('/opt/trove/trove');
+
+		const row = within(foundRow('Trove'));
+		expect(row.getByText('file manager')).not.toBeNull();
+		expect(row.queryByText('file_manager')).toBeNull();
 	});
 
 	// the row leaves only once the add succeeded, and it leaves by its own id:
