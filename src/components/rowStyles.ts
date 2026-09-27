@@ -11,6 +11,25 @@ export const rowInner = 'w-full flex items-center gap-4 text-15';
 export const rowFlat = `${rowInner} px-4`;
 export const rowIndented = `${rowInner} pl-10 pr-4 border-l`;
 
+// the selected row's second cue, next to the fill. selecting a project is
+// this app's primary gesture (themes.ts), but the fill alone is Pure
+// Black's 1.35:1 against the ground it actually renders on (themes.ts,
+// bg-selected) — and it cannot go any lighter without breaking a rule
+// that already passes at exactly 3.000:1 with zero slack (border-strong
+// on bg-selected, check-contrast.mjs RULES). so "selected" cannot be
+// fill-only on every theme: it needs a mark whose own contrast is
+// already guaranteed. border-strong is that mark — check-contrast.mjs
+// gates it at >=3:1 against every surface a row wears, bg-selected
+// included, and (as CUE_MIN) against the composited ground too — drawn
+// on the row's RIGHT edge, deliberately not the left: pinned rows below
+// already own the left edge (border-l-accent/60), and a row that is both
+// selected and pinned has to show both cues, not collapse into one. 2px,
+// not 1: the card's own identity strips (fsEdge, below) are 2px, and a
+// cue thinner than the thing it sits beside reads as an accident, not a
+// signal. applied whenever selected is true, quiet included: quiet only
+// dims the fill and drops the glow, it does not mean "less selected"
+export const selectedCue = 'border-r-2 border-r-border-strong';
+
 // 34% of a lane, not of the window: a lane is about half as wide, and a
 // name that still gets a third of it leaves the meta within an eye
 // movement instead of a screen away

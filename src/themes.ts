@@ -91,8 +91,21 @@ export const THEMES: Theme[] = [
 			'bg-hover': '#434c5e',
 			// a saturated blue, not a lightness step: the old #4c566a was
 			// lighter than this palette's own hover, so a selected row read
-			// as weaker than a hovered one
-			'bg-selected': '#2f4a66',
+			// as weaker than a hovered one. lightened again (#2f4a66 ->
+			// #355372, same hue, scaled up in linear light): the darker
+			// version was 1.40:1 against the lane-card ground it actually
+			// sits on (bg-secondary/50 over bg-primary) — a selected row is
+			// this app's primary gesture, and 1.40:1 is not a visible one.
+			// WCAG 1.4.11's 3:1 non-text floor is the honest target, but
+			// this palette cannot reach it by lightening bg-selected alone:
+			// the fs-badge text (fuchsia-300, the Network warning) painted
+			// on a selected row already needs 4.5:1, and that ceiling caps
+			// bg-selected below 3:1 against this ground. #355372 is the
+			// max this token can reach with every existing ink-on-selected
+			// rule kept at a safety margin (measured 1.61:1 against
+			// ground, up from 1.40) — short of 3:1, reported as such, not
+			// silently declared fixed
+			'bg-selected': '#355372',
 			'bg-raised': '#586174',
 			'text-primary': '#eceff4',
 			'text-secondary': '#dfe4ed',
@@ -134,6 +147,30 @@ export const THEMES: Theme[] = [
 			'bg-secondary': '#000000',
 			'bg-panel': '#0a0a0a',
 			'bg-hover': '#1a1a1a',
+			// the FILL is NOT fixed — left at the original value on
+			// purpose, and re-verified: #242424 is 1.35:1 against the
+			// lane-card ground (bg-secondary/50 over bg-primary), still
+			// next to invisible by itself. it cannot be lightened at all,
+			// by any amount, without breaking a rule that already passes:
+			// border-strong (#6d6d6d) on bg-selected sits at exactly
+			// 3.000:1 today — the floor check-contrast.mjs already
+			// enforces, with zero slack — and bg-primary here is literal
+			// #000000, so ANY lighter bg-selected moves toward
+			// border-strong's own luminance and drops that ratio under 3.
+			// clearing 3:1 against the ground by lightening the fill needs
+			// touching border-strong (or another token) too, still out of
+			// scope here. instead: selection now carries a SECOND cue that
+			// does not depend on the fill at all — every row gets a
+			// border-strong-coloured right edge when selected
+			// (rowStyles.ts `selectedCue`, the same device pinned rows use
+			// on the left with border-l-accent/60), applied to every
+			// theme, not just this one. that edge measures 3.000:1 against
+			// this ground's own bg-selected (the existing border-strong
+			// rule, above) and 4.06:1 against the ground itself — both
+			// gated (check-contrast.mjs CUE_MIN) — so "selected" here is
+			// real even though the fill alone still is not. GROUND_MIN
+			// below documents Pure Black as the one named exemption from
+			// the raw-fill floor, on exactly that basis
 			'bg-selected': '#242424',
 			'bg-raised': '#353535',
 			'text-primary': '#ffffff',

@@ -15,6 +15,7 @@ import {
 	row,
 	rowFlat,
 	rowIndented,
+	selectedCue,
 	zebra
 } from './rowStyles';
 
@@ -263,9 +264,14 @@ const ProjectRow = ({
 			launching ? 'animate-launch' : ''
 		} ${
 			selected
-				? quiet
-					? 'bg-bg-selected/40 text-text-primary'
-					: 'bg-bg-selected text-text-primary shadow-[var(--color-glow)]'
+				? // fill and cue both: quiet only dims the fill and drops the
+					// glow, the row is still the selected one and still needs
+					// its edge (selectedCue, rowStyles.ts)
+					`${
+						quiet
+							? 'bg-bg-selected/40'
+							: 'bg-bg-selected shadow-[var(--color-glow)]'
+					} text-text-primary ${selectedCue}`
 				: `text-text-primary hover:bg-bg-hover/50 ${pinned ? '' : zebra(i)}`
 		}`}
 		// select first so the menu and the keyboard agree on the row

@@ -172,3 +172,95 @@ describe('ProjectTree — Enter in the servers box always acts', () => {
 		expect(onServerOpen.mock.calls[0][0].id).toBe(BETA.id);
 	});
 });
+
+// the selected row's second cue (rowStyles.ts `selectedCue`): a
+// border-strong-coloured right edge, next to the fill, so a theme whose
+// fill is faint (Pure Black, 1.35:1 against its ground) still marks
+// "selected" with something check-contrast.mjs holds to a real 3:1+.
+// pinned rows already carry a left-edge cue (border-l-accent/60) — the
+// point of putting the new one on the RIGHT is that a row which is both
+// selected and pinned must show both, not one swallowing the other
+describe('ProjectTree — the selected row draws its own edge, not just a fill', () => {
+	const project = (name: string): Project => ({
+		name,
+		full_path: `/w/${name}`,
+		workspace: 'W',
+		file_system: 'Windows'
+	});
+
+	const alpha = project('alpha-proj');
+	const beta = project('beta-proj');
+
+	// the outer row div (bg-bg-selected, the new cue) is the name's
+	// grandparent: name -> rowIndented (pinned's border-l) -> the row.
+	// no jest-dom in this suite (test-setup.ts registers only RTL's
+	// cleanup), so classes are read off className directly
+	const rowOf = (label: string) => screen.getByText(label).parentElement!.parentElement!;
+	const indentedOf = (label: string) => screen.getByText(label).parentElement!;
+	const classesOf = (el: HTMLElement) => el.className.split(/\s+/);
+
+	it('gives an ordinary selected row the right-edge cue', () => {
+		render(
+			<ProjectTree
+				{...{
+					projects: [alpha, beta],
+					selected: beta,
+					onSelect: () => {},
+					onDoubleClick: () => {},
+					onLaunch: () => {},
+					query: ''
+				}}
+			/>
+		);
+
+		const rowClasses = classesOf(rowOf('beta-proj'));
+		expect(rowClasses).toContain('border-r-2');
+		expect(rowClasses).toContain('border-r-border-strong');
+		// not pinned: the left edge stays the quiet divider, not the accent
+		const indentedClasses = classesOf(indentedOf('beta-proj'));
+		expect(indentedClasses).toContain('border-l-border');
+		expect(indentedClasses).not.toContain('border-l-accent/60');
+	});
+
+	it('keeps the pinned cue on a pinned, unselected row — and nothing on the right', () => {
+		render(
+			<ProjectTree
+				{...{
+					projects: [alpha, beta],
+					selected: null,
+					onSelect: () => {},
+					onDoubleClick: () => {},
+					onLaunch: () => {},
+					query: '',
+					pinnedProjects: [alpha]
+				}}
+			/>
+		);
+
+		expect(classesOf(indentedOf('alpha-proj'))).toContain('border-l-accent/60');
+		expect(classesOf(rowOf('alpha-proj'))).not.toContain('border-r-border-strong');
+	});
+
+	it('shows BOTH cues on a row that is selected and pinned at once', () => {
+		render(
+			<ProjectTree
+				{...{
+					projects: [alpha, beta],
+					selected: alpha,
+					onSelect: () => {},
+					onDoubleClick: () => {},
+					onLaunch: () => {},
+					query: '',
+					pinnedProjects: [alpha]
+				}}
+			/>
+		);
+
+		// pinned's left edge survives selection...
+		expect(classesOf(indentedOf('alpha-proj'))).toContain('border-l-accent/60');
+		// ...and selection's right edge is not swallowed by it
+		const rowClasses = classesOf(rowOf('alpha-proj'));
+		expect(rowClasses).toContain('border-r-2');
+		expect(rowClasses).toContain('border-r-border-strong');
+	});
+});

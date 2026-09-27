@@ -19,6 +19,19 @@ const ratio = (a, b) => {
 	return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
 };
 
+// linear sRGB alpha compositing (src-over): a token painted at N% opacity
+// (a Tailwind `/N` modifier) over an opaque ground, both read straight out
+// of the palette. this is what a selected-row's real ground is made of —
+// the lane card itself is bg-secondary at less than full opacity over
+// bg-primary — so checking bg-selected against bg-primary or bg-secondary
+// alone would grade it against a surface nothing on screen ever shows
+const compositeOver = (fgHex, alpha, bgHex) => {
+	const chan = hex => [0, 2, 4].map(i => parseInt(hex.replace('#', '').slice(i, i + 2), 16));
+	const [fg, bg] = [chan(fgHex), chan(bgHex)];
+	const mixed = fg.map((c, i) => alpha * c + (1 - alpha) * bg[i]);
+	return '#' + mixed.map(v => Math.round(v).toString(16).padStart(2, '0')).join('');
+};
+
 // hue angle in degrees, for the separation rule
 const hue = hex => {
 	const h = hex.replace('#', '');
@@ -61,6 +74,63 @@ const STEPS = [
 	{ token: 'bg-raised', over: 'bg-panel', min: 1.6 },
 	{ token: 'bg-raised', over: 'bg-hover', min: 1.35 }
 ];
+
+// selecting a row is this app's primary gesture, and every prior rule
+// above checks ink ON bg-selected, never bg-selected against the ground it
+// actually renders on: the lane card (rowStyles.ts `card`, bg-secondary at
+// CARD_ALPHA over bg-primary — parsed out, not retyped, same reason
+// parseFsTone reads TAG_TONE out of rowStyles instead of here). Pure Black
+// and Nord shipped a selected row at 1.35:1 and 1.40:1 against that ground
+// — next to invisible — and this is the rule that would have caught it.
+//
+// WCAG 1.4.11 (3:1) is the honest target for a non-text state indicator.
+// Nord was raised toward it (1.61:1) as far as it can go without breaking
+// an ink-on-selected rule already above (a fs badge painted on a selected
+// row needs 4.5:1, and that caps how light bg-selected can get here).
+// Pure Black could not be raised AT ALL: border-strong on bg-selected
+// already sits at exactly 3.000:1 with zero slack, and bg-primary there is
+// literal #000000, so any lighter bg-selected pulls that pair under 3.
+// fixing THIS rule for black by lightening the fill needs a second token
+// or a different cue — so ProjectRow now draws one (rowStyles.ts
+// `selectedCue`, a border-strong-coloured edge on every selected row, on
+// every theme, not a per-theme patch): a row this rule still finds too
+// faint by fill is still a real, gated 3:1+ edge (CUE_MIN, below).
+// GROUND_MIN is set at 1.45, not 3: the other three shipped themes (neon
+// 1.47:1, dracula 1.64:1, matrix 1.74:1) sit under 3:1 too and nobody has
+// asked for those repainted, so a literal 3:1 floor here would fail three
+// themes this change does not touch. 1.45 sits in the gap between the
+// original defects (1.35, 1.40) and the weakest theme above them (neon,
+// 1.47) — it catches a selected row that bad again, and it still correctly
+// fails Pure Black today, because Pure Black's FILL is still that bad.
+// raising this toward 3:1 for every theme, by lightening the fill, is
+// still the owner's call, theme by theme.
+//
+// GROUND_EXEMPT is the honest way to let the gate pass anyway: not a
+// lower GROUND_MIN (that would make the gate agree the fill is fine, and
+// it is not), a named exemption for the one theme that carries the cue's
+// proof of visibility instead. an id in this set without CUE_MIN also
+// passing for it below would be a gate that only claims the cue exists —
+// this repo has no rule that reads that back, so the exemption is a
+// standing claim, re-earned every run by CUE_MIN, not a one-time waiver
+const GROUND_MIN = 1.45;
+const GROUND_EXEMPT = new Set(['black']);
+
+// the cue itself (rowStyles.ts `selectedCue`): border-strong, on the
+// row's right edge, on every theme, whenever a row is selected — so a row
+// GROUND_MIN found too faint by fill is still found by a real edge.
+// checked against the same composited ground GROUND_MIN uses, because
+// that is what actually borders the row on screen; border-strong against
+// bg-selected ITSELF is already covered by the RULES entry above (also
+// >=3, also every theme). WCAG 1.4.11's 3:1 is the floor for both
+const CUE_MIN = 3;
+const parseCardAlpha = src => {
+	const m = src.match(/export const card =[\s\S]*?bg-bg-secondary\/(\d+)/);
+	if (!m) {
+		console.error('check-contrast: card\'s bg-secondary opacity not found, the file shape changed');
+		process.exit(1);
+	}
+	return Number(m[1]) / 100;
+};
 
 // the lane hues are fixed tailwind colours, not tokens: a file system is
 // a fact about the machine, not a theme accent. read out of rowStyles
@@ -117,7 +187,9 @@ const parseCssTheme = src => {
 };
 
 const palettes = [parseCssTheme(read('../src/index.css')), ...parseThemes(read('../src/themes.ts'))];
-const literals = parseFsTone(read('../src/components/rowStyles.ts'));
+const rowStylesSrc = read('../src/components/rowStyles.ts');
+const literals = parseFsTone(rowStylesSrc);
+const CARD_ALPHA = parseCardAlpha(rowStylesSrc);
 
 if (palettes.length < 2) {
 	console.error('check-contrast: parsed no palettes, the file shape changed');
@@ -173,6 +245,26 @@ for (const { id, colors } of palettes) {
 			}
 		}
 	}
+	const sel = colors['bg-selected'];
+	const sec = colors['bg-secondary'];
+	const prim = colors['bg-primary'];
+	const strong = colors['border-strong'];
+	if (sel && sec && prim) {
+		const ground = compositeOver(sec, CARD_ALPHA, prim);
+		const r = ratio(sel, ground);
+		if (r < GROUND_MIN && !GROUND_EXEMPT.has(id)) {
+			failures.push(`${id}: bg-selected (${sel}) on the lane-card ground (${ground}, bg-secondary/${CARD_ALPHA * 100} over bg-primary) is ${r.toFixed(2)}:1, needs ${GROUND_MIN}:1`);
+		}
+		// the cue's own proof: whether or not this theme is exempted above,
+		// the edge every selected row draws (rowStyles.ts `selectedCue`)
+		// has to actually clear the non-text floor against what borders it
+		if (strong) {
+			const cueR = ratio(strong, ground);
+			if (cueR < CUE_MIN) {
+				failures.push(`${id}: selected-row cue border-strong (${strong}) on the lane-card ground (${ground}) is ${cueR.toFixed(2)}:1, needs ${CUE_MIN}:1 (WCAG 1.4.11)`);
+			}
+		}
+	}
 }
 
 if (failures.length) {
@@ -183,5 +275,5 @@ if (failures.length) {
 }
 
 console.log(
-	`contrast ok: ${palettes.length} palettes x ${RULES.length + STEPS.length} rules, ${seen.length} lane hues`
+	`contrast ok: ${palettes.length} palettes x ${RULES.length + STEPS.length + 2} rules, ${seen.length} lane hues`
 );
