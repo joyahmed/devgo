@@ -204,6 +204,47 @@ describe('CommandPalette — what the empty box shows', () => {
 		expect(titles()).toEqual(ALL);
 		expect(screen.queryByText('Recent')).toBeNull();
 	});
+
+	it('treats a box holding only spaces as an empty box', async () => {
+		// the gate is `query.trim()`, not `query`, and the difference is visible:
+		// a space is what you get from a fat thumb or a paste, and scoring it
+		// would be scoring the empty string against every title. the recents have
+		// to come back instead, seam and all
+		seed([TERMINAL_ID, CLONE_ID]);
+		mount();
+		const user = userEvent.setup();
+		await user.type(box(), '   ');
+
+		// no jest-dom in this suite, so the value is read off the node
+		expect((box() as HTMLInputElement).value).toBe('   ');
+		expect(titles()).toEqual([
+			'Open terminal',
+			'Clone from GitHub',
+			'Refresh projects',
+			'Open Settings',
+			'Configure roots',
+			'Open in VS Code'
+		]);
+		expect(screen.getByText('Recent')).toBeTruthy();
+		expect(screen.getByText('All commands')).toBeTruthy();
+	});
+
+	it('draws no second heading when every row is already a recent', () => {
+		// heading() finds the seam by index — `i === recentCount` — so when the
+		// recents ARE the whole list no index can equal it and "All commands"
+		// is never drawn. that is the right answer and not a miss: an empty
+		// section header under the last recent would be a promise of rows that
+		// do not exist
+		seed([TERMINAL_ID, REFRESH_ID]);
+		mount([
+			{ id: REFRESH_ID, title: 'Refresh projects', run: vi.fn() },
+			{ id: TERMINAL_ID, title: 'Open terminal', run: vi.fn() }
+		]);
+
+		expect(titles()).toEqual(['Open terminal', 'Refresh projects']);
+		expect(screen.getByText('Recent')).toBeTruthy();
+		expect(screen.queryByText('All commands')).toBeNull();
+	});
 });
 
 describe('CommandPalette — what typing does to the list', () => {
@@ -297,6 +338,121 @@ describe('CommandPalette — the cursor', () => {
 		await user.type(box(), '{Enter}');
 		expect(order).toEqual([CLOSE, `${RUN}${CLONE_ID}`]);
 		expect(onClose).toHaveBeenCalledTimes(1);
+	});
+
+	it('comes back from an arrow pressed while nothing matched', async () => {
+		// the path this pins: an arrow pressed while the list is EMPTY has no row
+		// to move to, and backspacing to a query that does match has to put a
+		// usable cursor back on screen, because the only thing a person can do
+		// next is press Enter. it holds for two independent reasons — the
+		// ArrowDown clamp's floor of 0, and onChange resetting the cursor on
+		// every keystroke — and it passed even before the floor existed, which
+		// is why the floor has a pin of its own below
+		const { order } = mount();
+		const user = userEvent.setup();
+		await user.type(box(), 'zzzz{ArrowDown}{ArrowDown}');
+		expect(screen.getByText('No matching commands')).toBeTruthy();
+
+		// four backspaces, then a query that matches one row
+		await user.type(box(), '{Backspace>4/}vs code');
+		expect(titles()).toEqual(['Open in VS Code']);
+		// the cursor is ON that row, not stranded at a negative index where
+		// Enter would silently do nothing
+		expect(cursor()).toBe('Open in VS Code');
+
+		// and the row it landed on is the disabled one, so Enter is still a
+		// no-op — for the disabled reason, which is the correct one
+		await user.type(box(), '{Enter}');
+		expect(order).toEqual([]);
+	});
+
+	it('never lets ArrowDown leave the cursor at a negative index', async () => {
+		// the ArrowDown clamp has a FLOOR as well as a ceiling, because on an
+		// empty list the ceiling `list.length - 1` is -1 — an index no row can
+		// ever have. onChange hides it (every keystroke resets the cursor to 0),
+		// so the only way to SEE the index an arrow left behind is to make the
+		// list non-empty without touching the box — which a new `commands` prop
+		// does, since react keeps the component's state across it
+		const found: PaletteCommand[] = [
+			{ id: TERMINAL_ID, title: 'Zzzz terminal', run: vi.fn() }
+		];
+		const { rerender } = render(<CommandPalette commands={[]} onClose={vi.fn()} />);
+		const user = userEvent.setup();
+		await user.type(box(), 'zzzz{ArrowDown}{ArrowDown}');
+		expect(screen.getByText('No matching commands')).toBeTruthy();
+
+		rerender(<CommandPalette commands={found} onClose={vi.fn()} />);
+		// the box still holds `zzzz` and the new row matches it. with the floor
+		// the cursor is index 0 and lands on that row; without it the index
+		// would be -2 and no row would be current at all
+		expect(titles()).toEqual(['Zzzz terminal']);
+		expect(cursor()).toBe('Zzzz terminal');
+	});
+});
+
+describe('CommandPalette — the keys it takes and the keys it leaves alone', () => {
+	it('has the box focused on mount, so the first keystroke is a query', () => {
+		mount();
+		// autoFocus, and it matters: the palette opens on a shortcut with no
+		// click anywhere, so a box that is not focused is a palette you cannot
+		// type into
+		expect(document.activeElement).toBe(box());
+	});
+
+	it('swallows the three keys it owns and lets every other key through', async () => {
+		// a keydown listener on document sees the event AFTER react's handler has
+		// run at the root container, so defaultPrevented reads react's decision.
+		// this is the only observable difference between "handled" and "passed
+		// on" — and the one that matters, because Escape belongs to the drawer
+		// mounting this and a prevented Escape would never reach it
+		const seen: Record<string, boolean> = {};
+		const spy = (e: KeyboardEvent) => {
+			seen[e.key] = e.defaultPrevented;
+		};
+		document.addEventListener('keydown', spy);
+		try {
+			mount();
+			const user = userEvent.setup();
+			// the letter goes in BEFORE Tab: Tab is a real focus move in jsdom, so
+			// anything typed after it lands on whatever Tab reached, not the box
+			await user.type(box(), '{ArrowDown}{ArrowUp}{Escape}a{Tab}');
+
+			// the palette's own three: prevented, or ArrowUp/ArrowDown would also
+			// drag the text caret and Enter could submit an enclosing form
+			expect(seen.ArrowDown).toBe(true);
+			expect(seen.ArrowUp).toBe(true);
+
+			// not the palette's: Escape is the drawer's close, Tab is the focus
+			// cycle, and a letter has to reach the box or nothing can be typed
+			expect(seen.Escape).toBe(false);
+			expect(seen.Tab).toBe(false);
+			expect(seen.a).toBe(false);
+			// the letter actually landed
+			expect((box() as HTMLInputElement).value).toBe('a');
+		} finally {
+			document.removeEventListener('keydown', spy);
+		}
+	});
+
+	it('prevents Enter only when there is a row for it to run', async () => {
+		let enterPrevented: boolean | undefined;
+		const spy = (e: KeyboardEvent) => {
+			if (e.key === 'Enter') enterPrevented = e.defaultPrevented;
+		};
+		document.addEventListener('keydown', spy);
+		try {
+			const { order } = mount();
+			const user = userEvent.setup();
+			await user.type(box(), '{Enter}');
+
+			// Enter is in the key map, so it is prevented before run() is even
+			// consulted — the guard against an empty list lives inside run(),
+			// not in whether the key is claimed
+			expect(enterPrevented).toBe(true);
+			expect(order).toEqual([CLOSE, `${RUN}${REFRESH_ID}`]);
+		} finally {
+			document.removeEventListener('keydown', spy);
+		}
 	});
 });
 
