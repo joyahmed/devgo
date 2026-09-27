@@ -67,12 +67,29 @@ jobs:
       # tells a race from a failure
       - run: cargo test --manifest-path src-tauri/Cargo.toml || cargo test --manifest-path src-tauri/Cargo.toml -- --test-threads=1
         shell: bash
+      # tauri-action's releaseBody has no default of its own — it does not
+      # read the tag — so without this the draft ships with an empty body.
+      # the tag is pushed annotated with the changelog as its message; fetch
+      # it explicitly since a shallow checkout of the triggering ref does not
+      # reliably carry the annotated tag object along with it
+      - name: read release notes from the tag
+        id: tagbody
+        shell: bash
+        run: |
+          git fetch --force --tags origin "refs/tags/${{ github.ref_name }}"
+          delim="body_$(date +%s)_$RANDOM"
+          {
+            echo "body<<$delim"
+            git tag -l --format='%(contents)' "${{ github.ref_name }}"
+            echo "$delim"
+          } >> "$GITHUB_OUTPUT"
       - uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: DevGo ${{ github.ref_name }}
+          releaseBody: ${{ steps.tagbody.outputs.body }}
           releaseDraft: true
           prerelease: false
           args: --bundles nsis
@@ -99,12 +116,26 @@ jobs:
       - run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
       - run: cargo test --manifest-path src-tauri/Cargo.toml || cargo test --manifest-path src-tauri/Cargo.toml -- --test-threads=1
         shell: bash
+      # see the windows job: releaseBody has no default and does not read the
+      # tag on its own, so this reads the annotated tag's own message
+      - name: read release notes from the tag
+        id: tagbody
+        shell: bash
+        run: |
+          git fetch --force --tags origin "refs/tags/${{ github.ref_name }}"
+          delim="body_$(date +%s)_$RANDOM"
+          {
+            echo "body<<$delim"
+            git tag -l --format='%(contents)' "${{ github.ref_name }}"
+            echo "$delim"
+          } >> "$GITHUB_OUTPUT"
       - uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: DevGo ${{ github.ref_name }}
+          releaseBody: ${{ steps.tagbody.outputs.body }}
           releaseDraft: true
           prerelease: false
           args: --target aarch64-apple-darwin --bundles dmg
@@ -138,12 +169,26 @@ jobs:
       - run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
       - run: cargo test --manifest-path src-tauri/Cargo.toml || cargo test --manifest-path src-tauri/Cargo.toml -- --test-threads=1
         shell: bash
+      # see the windows job: releaseBody has no default and does not read the
+      # tag on its own, so this reads the annotated tag's own message
+      - name: read release notes from the tag
+        id: tagbody
+        shell: bash
+        run: |
+          git fetch --force --tags origin "refs/tags/${{ github.ref_name }}"
+          delim="body_$(date +%s)_$RANDOM"
+          {
+            echo "body<<$delim"
+            git tag -l --format='%(contents)' "${{ github.ref_name }}"
+            echo "$delim"
+          } >> "$GITHUB_OUTPUT"
       - uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: DevGo ${{ github.ref_name }}
+          releaseBody: ${{ steps.tagbody.outputs.body }}
           releaseDraft: true
           prerelease: false
           args: --bundles deb
