@@ -151,6 +151,77 @@ repo_root_win() {
 # and a block is loud: it never prints OK and never lets a commit through, where a
 # silent skip did exactly that. fail toward the noisy failure.
 #
+# ⛔ trap #1d — THE ps SNAPSHOT CONTAINS OUR OWN ANCESTORS, AND AN AGENT'S SHELL
+# CARRIES THE WHOLE COMMAND TEXT IN ITS argv. this is the reason the function below
+# filters by pid, and it is not hypothetical: measured 2026-09-27 on this tree with
+# nothing rust-shaped running anywhere. `sh scripts/verify.sh` run from a claude code
+# Bash call has an ancestor `/usr/bin/bash -c ...<the entire command>...`, so a call
+# as ordinary as
+#     ls -d /abs/path/devgo/src-tauri/target && sh scripts/verify.sh
+# puts our own target path into the ps listing verify.sh is about to search. the old
+# `grep -F "$REPO_ROOT/src-tauri/target"` then matched the caller, called it "ours",
+# and skipped fmt+clippy+test — INCOMPLETE, exit 1, on an idle machine. false REFUSAL,
+# not a false pass (a skip is loud), but it costs the whole rust tier and it may be
+# behind some of the "3 green, 3 skipped" runs that were blamed on a live `tauri dev`.
+#
+# ⛔ the tempting alternative — only look at argv[0], so a path merely MENTIONED in a
+# command line stops counting — was considered and REJECTED: a genuine `cargo build`
+# has argv[0] of plain `cargo` and names our target nowhere in argv[0], so that rule
+# stops recognising the exact case this whole function exists to detect.
+#
+# so: the pid chain from this script up to init, one pid per line, self first. those
+# pids are the processes that STARTED us; none of them can be a build of ours that we
+# would deadlock against, and every one of them may quote our paths.
+#
+# ⚠️ portability, probed 2026-09-27 rather than assumed, because this runs on windows
+# (msys), macos and linux and the three do not agree on ANY single mechanism:
+#   msys/cygwin  /proc/<pid>/ppid exists, is a one-line file, and works. `ps -o` does
+#                NOT exist here at all — msys ps takes only -aefls/-u/-p/-W, so it
+#                answers `-o` with a usage message on stderr and nothing on stdout.
+#   linux        no /proc/<pid>/ppid file; /proc/<pid>/status has "PPid:<tab><n>".
+#                /proc/<pid>/stat is deliberately NOT used — its second field is the
+#                comm in parens, which may itself contain spaces and parens and so
+#                shifts every column after it.
+#   macos/bsd    no /proc at all; `ps -p <pid> -o ppid=` is the only way.
+# an unreadable ppid ends the walk quietly, and the chain always contains at least
+# $$ itself. a SHORT chain would be the one unsafe degradation — fewer lines dropped
+# means erring back toward "ours", which is the bug — and the invariant that rules it
+# out is this: the caller only reaches the walk after `ps -eo pid= -o args=` produced
+# a pid-shaped listing, so this ps understands `-o`, so the macos arm of the walk
+# (`ps -p <pid> -o ppid=`) understands it too. where `-o` is absent — msys — the
+# listing never validates and we return "clear" without walking anything. that is the
+# other half of the safety: a failed validation falls through to "clear" = the checks
+# RUN. every failure path in this pair leans toward running the checks, never toward
+# skipping them.
+#
+# the windows/powershell branch needs NO ancestor filter and deliberately does not get
+# one: there, a command line only counts when the process is ALSO named cargo/rustc/
+# rustdoc/rustup ($isRust) or its executable itself lives under our target/, and an
+# agent's ancestor is bash.exe or node.exe, so it is discarded before its argv is ever
+# read. do not "unify" the two branches by relaxing that test — the name check is what
+# makes trap #1d impossible on windows.
+verify_pid_chain() {
+  _p=$$
+  _n=0
+  while [ "$_n" -lt 24 ]; do
+    case "$_p" in
+      ''|*[!0-9]*) break ;;
+    esac
+    [ "$_p" = 0 ] && break
+    printf '%s\n' "$_p"
+    if [ -r "/proc/$_p/ppid" ]; then
+      _pp=$(cat "/proc/$_p/ppid" 2>/dev/null | tr -d '[:space:]')
+    elif [ -r "/proc/$_p/status" ]; then
+      _pp=$(awk '/^PPid:/ { print $2; exit }' "/proc/$_p/status" 2>/dev/null)
+    else
+      _pp=$(ps -p "$_p" -o ppid= 2>/dev/null | tr -d '[:space:]')
+    fi
+    [ "$_pp" = "$_p" ] && break
+    _p=$_pp
+    _n=$((_n + 1))
+  done
+}
+
 # ⭐ rust-analyzer never causes a skip. the editor itself holds no build lock, and
 # the transient cargo check/rustc it spawns hold ours for seconds — long enough to
 # make cargo wait and print "Blocking waiting for file lock", not long enough to
@@ -204,22 +275,72 @@ if ($ours -gt 0) { "ours" } elseif ($other -gt 0) { "other" } else { "clear" }
   # stop checking rust forever" — and it hit every mac and linux box, invisibly,
   # because windows takes the powershell branch above. the snapshot is taken before
   # any grep of ours exists, so nothing of ours can be in it; it needs no pid
-  # arithmetic and no $$ juggling, and `ps -eo args=` stays byte-identical, which
-  # is what keeps bsd (macos) and gnu (linux) both working.
+  # arithmetic, and `ps -eo args=` stays byte-identical, which is what keeps bsd
+  # (macos) and gnu (linux) both working.
+  #
+  # ⚠️ the snapshot now carries pids (`-o pid=` then `-o args=`, as two separate -o
+  # flags: on bsd ps a `=` inside a COMMA list — `-o pid=,args=` — is read as "the
+  # header of pid is the text ,args=", so the comma form silently loses the second
+  # column on macos). that is what trap #1d above needs: the args column alone cannot
+  # tell our own caller apart from a real build.
+  #
+  # ⚠️ and argv CAN CONTAIN NEWLINES. an agent's `bash -c '<multi-line script>'` is
+  # exactly that, and ps prints those bytes raw, so ONE process can occupy several
+  # output lines with the pid on only the first of them. measured here: the ancestor
+  # line that produced the false "ours" spanned four printed lines. hence the awk
+  # below is a record parser, not a line grep — a line that does not open with a pid
+  # is a continuation of the argv above it and inherits that pid.
   if command -v ps >/dev/null 2>&1; then
-    procs=$(ps -eo args= 2>/dev/null)
+    procs=$(ps -eo pid= -o args= 2>/dev/null)
+    # ⭐ validate the SHAPE before trusting a byte of it. msys ps answers `-o` with a
+    # usage message; some other ps could answer with something else again. if the
+    # first line does not open with a pid we did not get a process listing, and the
+    # only safe reading of "I could not look" is "clear" → the checks RUN.
+    if ! printf '%s\n' "$procs" | head -n 1 \
+         | grep -Eq '^[[:space:]]*[0-9][0-9]*[[:space:]]'; then
+      procs=''
+    fi
     if [ -n "$procs" ]; then
-      if printf '%s\n' "$procs" | grep -F "$REPO_ROOT/src-tauri/target" | grep -qv 'rust-analyzer'; then
-        printf 'ours'; return 0
-      fi
-      # trap #1b on this branch too: rust work that names no path of ours is not
-      # ours, so we RUN — but say so, exactly as the windows branch does. the
-      # rust-analyzer filter comes first for the same reason as above: the editor
-      # holds no build lock and would otherwise print that note on every run.
-      if printf '%s\n' "$procs" | grep -v 'rust-analyzer' \
-         | grep -Eq '(^|/)(cargo|cargo-clippy|rustc|rustdoc)([[:space:]]|$)'; then
-        printf 'other'; return 0
-      fi
+      # the chain is read AFTER the snapshot on purpose: a `ps -p` spawned by the walk
+      # cannot appear in a listing that was already taken.
+      chain=$(verify_pid_chain | tr '\n' ' ')
+      verdict=$(printf '%s\n' "$procs" | awk -v chain="$chain" -v root="$REPO_ROOT" '
+        BEGIN {
+          n = split(chain, c, " ")
+          for (i = 1; i <= n; i++) if (c[i] != "") mine[c[i]] = 1
+          target = root "/src-tauri/target"
+        }
+        {
+          line = $0
+          if (match(line, /^[ \t]*[0-9][0-9]*[ \t]/)) {
+            cur = $1 + 0
+            sub(/^[ \t]*[0-9][0-9]*[ \t]/, "", line)
+          }
+          if (cur == "") next
+          argv[cur] = argv[cur] " " line
+        }
+        END {
+          ours = 0; other = 0
+          for (p in argv) {
+            if (p in mine) continue
+            a = argv[p]
+            # the rust-analyzer filter comes first for the same reason as in the
+            # windows branch: the editor holds no build lock, and the transient
+            # cargo check it spawns would otherwise print a note on every run.
+            if (a ~ /rust-analyzer/) continue
+            if (index(a, target) > 0) { ours++; continue }
+            # trap #1b on this branch too: rust work that names no path of ours is
+            # not ours, so we RUN — but say so, exactly as the windows branch does.
+            if (a ~ /(^|[\/ \t])(cargo|cargo-clippy|rustc|rustdoc)([ \t]|$)/) other++
+          }
+          if (ours > 0) print "ours"
+          else if (other > 0) print "other"
+          else print "clear"
+        }
+      ')
+      case "$verdict" in
+        ours|other|clear) printf '%s' "$verdict"; return 0 ;;
+      esac
     fi
   fi
   # no way to look. per trap #1 an unreadable answer must not become a skip.
