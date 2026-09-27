@@ -1,7 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 const STOPPED: WslState = { up: false, distros: [] };
 
@@ -11,9 +11,20 @@ const STOPPED: WslState = { up: false, distros: [] };
 // answer themselves (the stop commands, the passes)
 export const useWsl = () => {
 	const [wsl, setWsl] = useState<WslState>(STOPPED);
+	// a request token, not an in-flight flag: a flag would turn a focus
+	// event that lands mid-read into a no-op, leaving the chip stale until
+	// the *next* event — the very bug this guards against. bumping a ref
+	// per call and checking it in the `.then` instead lets the last-issued
+	// read always win, however the reads settle
+	const requestId = useRef(0);
 
 	const refreshWsl = () => {
-		invoke<WslState>('get_wsl_state').then(setWsl).catch(() => {});
+		const id = ++requestId.current;
+		invoke<WslState>('get_wsl_state')
+			.then(state => {
+				if (id === requestId.current) setWsl(state);
+			})
+			.catch(() => {});
 	};
 
 	useEffect(() => {

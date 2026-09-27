@@ -194,32 +194,33 @@ describe('useWsl — the failure path', () => {
 });
 
 describe('useWsl — races', () => {
-	// no request token, no AbortController, no in-flight guard anywhere in
-	// useWsl.ts: two overlapping refreshWsl() calls race on setWsl, and
-	// whichever promise settles last wins regardless of which was fired
-	// first. documenting today's behaviour, not asserting a guard that does
-	// not exist
-	it('has no guard against a slower earlier read clobbering a faster later one', async () => {
+	// a request token in a ref: refreshWsl bumps it per call, and the
+	// `.then` discards its answer unless the token still matches current —
+	// so the *last-issued* read wins, never merely the last to settle
+	it('the last-issued read wins, and a focus event mid-flight still asks again', async () => {
 		let resolveFirst!: (v: WslState) => void;
 		const first = new Promise<WslState>(r => { resolveFirst = r; });
 		invoke.mockReturnValueOnce(first);
 		const { result } = renderHook(() => useWsl());
+		expect(called('get_wsl_state')).toBe(1);
 
-		invoke.mockResolvedValueOnce(STOPPED);
+		// an in-flight flag would swallow this: the mount read above is
+		// still outstanding. a token does not care — it fires anyway
+		invoke.mockResolvedValueOnce(UP(['Ubuntu']));
 		await act(async () => {
-			result.current.refreshWsl();
+			onFocus?.({ payload: true });
 			await Promise.resolve();
 		});
-		expect(result.current.wsl).toEqual(STOPPED);
+		expect(called('get_wsl_state')).toBe(2);
+		expect(result.current.wsl).toEqual(UP(['Ubuntu']));
 
-		// the mount's own read, fired before the second, resolves after it
+		// the mount's read, fired first but settling last, must not clobber
+		// the fresher answer that already landed
 		await act(async () => {
-			resolveFirst(UP(['Ubuntu']));
+			resolveFirst(STOPPED);
 			await Promise.resolve();
 			await Promise.resolve();
 		});
-
-		// the stale answer overwrote the fresher one — no guard exists
 		expect(result.current.wsl).toEqual(UP(['Ubuntu']));
 	});
 });
