@@ -5,8 +5,8 @@ release is v1.2.1.
 
 Shipping a list like this is cheaper than the alternative for both of us: if you hit something here,
 it is known and you do not need to write it up. Everything else is worth an
-[issue](https://github.com/joyahmed/devgo/issues) — including the two entries below marked *not
-reproduced*, where a second sighting is the whole thing that is missing.
+[issue](https://github.com/joyahmed/devgo/issues) — including the one entry below I have seen only
+once and could not reproduce, where a second sighting is the whole thing that is missing.
 
 ## The bottom action bar drops its key hints on a narrow window
 
@@ -93,6 +93,71 @@ the wrong thing. That message is correct — a program name on its own does not 
 directory — but the empty field accepts the row in the first place, so it is easy to arrive here.
 
 Fill the arguments template in, usually `"{path}"`.
+
+## On macOS the window came back the wrong size — Stage Manager (fixed, with 41px left over)
+
+macOS only, and only with Stage Manager turned on. In v1.2.1: resize DevGo's window, quit, open it
+again, and the window is not the one you left. Most often it comes back filling the screen — the
+restore path's last resort is to maximise, so this usually presents as *"it came back maximized and
+ignored my resize"*. Otherwise it comes back pushed 234px in from the left edge of the screen and, on
+a 1920-wide display, 1686 wide no matter how wide you had made it. Either way the size you chose is
+gone for good rather than just for that launch: the wrong window is what gets written back to disk,
+so the next start repeats it instead of recovering.
+
+Two separate faults were behind that and **both are fixed after v1.2.1 — one of them not quite
+exactly.** Your window now comes back where you left it and very nearly as wide as you left it, about
+41px short on a 1920-wide display. If that last part is what you are seeing, it is known and it is the
+second-to-last paragraph here.
+
+**The cause is Stage Manager, which is also the workaround.** Stage Manager owns a strip down the left
+of the display for its shelf of windows, and at the moment DevGo's window is first shown the window
+server pins the window's left edge to the right of that shelf — 234px on my display — and cuts the
+width down to what is left, 1920 − 234 = 1686. Nothing DevGo can read predicts it: macOS reports the
+usable area of the screen as 1920×1050 and says nothing about the shelf. That is why the left edge came
+back at 234 whatever I had saved — 0, 100 and 109 all became 234, at 1400, 1811 and 1910 wide — it is
+the edge of the shelf, not a number derived from the window. It is not `center: true` either: centring
+the configured 900-wide window on a 1920-wide screen gives 510, and only a 1452-wide window centres at
+234. I proved the shelf with a small AppKit program of about forty lines, no DevGo and no Tauri in the
+picture: setting size and position while the window is hidden is exact to the pixel, showing the
+window is what turns 1910×1000 at (0,30) into 1686×1000 at (234,30), and setting the size once more
+afterwards sticks.
+
+**The save half, fixed after v1.2.1.** A resize that took the window close to the full width of your
+monitor was saved nowhere at all — DevGo read it as the window having been maximised, and a maximised
+window's own size is not a choice worth storing. Within 24px of the monitor's width was enough to
+trigger that: on my 1920-wide display, 1897×1000 was discarded and 1895×1000 was kept. Nothing on
+screen and nothing in the log said the save had been dropped. DevGo now measures against the usable
+area of the screen as well as the whole panel, with the same 24px of slack on both, so an ordinary
+window a few pixels short of full width is saved as what it is.
+
+**The restart half, fixed after v1.2.1, and 41px short of right.** Fixing the save alone changed
+nothing you could see, because one relaunch then destroyed the value: the shelf clamp above rewrote
+the window, and the resize the window server had just performed looked exactly like one you had asked
+for, so it was saved over the good rectangle in `prefs.json`. DevGo now applies your position and size
+a second time, once the window is actually on screen — the only moment at which they stick. Measured on
+the real app, not assumed: the left edge is back to 0 where I left it, and the width comes back 1869
+rather than the 1910 I saved. **That is 41px narrower than you asked for**, the same 41px across five
+restarts with no drift, and **I do not know yet where those 41px go** — it is written down as its own
+problem rather than counted as finished. So: much better than 1686, and not exact. If you set the
+window to the full width of your screen and it opens a finger's width short of it, that is this and
+you do not need to report it.
+
+**Workaround: turn Stage Manager off**, in System Settings › Desktop & Dock. It is the thing doing the
+clamping, so a Mac that never had it on never had any of this, and turning it off should take the
+leftover 41px with it too — the shelf is the only thing known to be shrinking the window, so with the
+shelf gone there should be nothing left to shrink. ⚠️ I measured the 41px with Stage Manager on and
+have not measured a run with it off, so read that second half as following from the cause rather than
+as a result I have. If you want Stage Manager, you keep the 41px; there is nothing in DevGo's settings
+that changes it. Leaving the window maximised sidesteps the whole entry — that path stores a flag
+rather than a rectangle, and a maximised window opens maximised.
+
+What I measured, and what I did not. An M1 Max, **one** 1920×1080 display, scale factor 1.0, Dock set
+to auto-hide, Stage Manager on. **This is not a Retina or scaling bug** — all of it fires at scale
+factor 1.0, and the Retina theory was disproved by measurement rather than left open. Two or more
+monitors, and a scale-2 display, are covered by unit fixtures and not by hardware, and a green fixture
+is not a machine. Windows and Linux never had this and are not changed by the fix: the shelf is a macOS
+feature, and on those two platforms the restore still runs the original code, kept verbatim behind a
+compile-time guard.
 
 ## Launching an agent or a dev script on macOS (v1.2.1 and earlier)
 
