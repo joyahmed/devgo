@@ -1,14 +1,26 @@
 #!/bin/sh
 # devgo verification gate, tiered so the common case stays cheap.
 #
-#   sh scripts/verify.sh          tiers 1+2  (typecheck, vitest, fmt, clippy) ~13s warm
-#   sh scripts/verify.sh --full   + tier 3   (bun run build, cargo test)      ~10s more
+#   sh scripts/verify.sh            tiers 1+2  (typecheck, vitest, fmt, clippy) ~13s warm
+#   sh scripts/verify.sh --full     + tier 3   (bun run build, cargo test)      ~10s more
+#   sh scripts/verify.sh --release  + tier 4   (scripts/preflight-release.sh, gates a tag)
 #
 # the timings and the tier split were MEASURED against this tree, not guessed — and a
 # measurement goes stale the moment the toolchain moves, so re-time rather than trust.
 # exit 0 = every check ran and every check was green. exit 1 = something was red,
 # or something was SKIPPED, or nothing ran — a partial run is not a pass.
 # copurge reads that exit code, so keep it honest.
+#
+# ⭐ tier 4 (--release) is deliberately its own script, scripts/preflight-release.sh,
+# not inlined here: it checks things this file has no vocabulary for (origin/main
+# ancestry, version agreement across three manifests, an existing tag, doc staleness)
+# and it must be runnable on its own before a tag, by hand, with no tier-1/2 noise
+# around it. verify.sh --release only exists so the release gate is not a script
+# nobody remembers to run — it implies --full (tier 4 needs tier 3 green first) and
+# then hands off. it is NOT wired into the plain `verify.sh` or `verify.sh --full`
+# paths that copurge/pre-push use: preflight-release.sh runs a full build and cargo
+# test on top of what tier 3 already ran, and that cost has no business being paid
+# on every ordinary push. --release is something you type when you are about to tag.
 
 set -u
 
@@ -18,13 +30,22 @@ REPO_ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd) || exit 1
 cd "$REPO_ROOT" || exit 1
 
 FULL=0
+RELEASE=0
+ACK_DOCS=0
 for arg in "$@"; do
   case "$arg" in
     # --main is the same thing said in copurge's vocabulary: tier 3 is the
     # "before a main push" tier, nothing else distinguishes it.
     --full|--main) FULL=1 ;;
+    # tier 4: implies --full (preflight-release.sh's own gate is redundant with
+    # tier 3 otherwise), then calls scripts/preflight-release.sh once tiers 1-3
+    # are green — see the header comment for why that script stays separate.
+    --release) FULL=1; RELEASE=1 ;;
+    # passed straight through to preflight-release.sh; meaningless without
+    # --release, harmless if given anyway.
+    --ack-docs) ACK_DOCS=1 ;;
     -h|--help)
-      echo "usage: sh scripts/verify.sh [--full|--main]"
+      echo "usage: sh scripts/verify.sh [--full|--main] [--release [--ack-docs]]"
       exit 0
       ;;
     *) echo "verify: unknown argument '$arg'" >&2; exit 2 ;;
@@ -616,4 +637,14 @@ if [ "$SKIPPED" -gt 0 ]; then
   exit 1
 fi
 echo "verify: OK — $EXECUTED check(s) green, 0 skipped."
+if [ "$RELEASE" -eq 1 ]; then
+  echo ""
+  echo "tier 4 — release: scripts/preflight-release.sh"
+  if [ "$ACK_DOCS" -eq 1 ]; then
+    sh "$REPO_ROOT/scripts/preflight-release.sh" --ack-docs
+  else
+    sh "$REPO_ROOT/scripts/preflight-release.sh"
+  fi
+  exit $?
+fi
 exit 0
