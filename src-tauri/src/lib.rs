@@ -222,6 +222,78 @@ fn screen_rects(monitors: &[tauri::Monitor]) -> Vec<Screen> {
         .collect()
 }
 
+// ⛔ macOS only, and it has to happen twice.
+//
+// The startup restore used to set the size and then the position on the
+// window while it was still hidden (`visible: false`; the frontend calls
+// show() when the ground is loaded). Measured with a native AppKit probe
+// on a 1920x1080 panel at scale factor 1:
+//
+//   born hidden, centered   900x720   @(510,195)
+//   setContentSize 1910x1000          @(510,195)  hidden: exact
+//   setFrameTopLeftPoint(0,30)        @(0,30)     hidden: exact
+//   makeKeyAndOrderFront    1686x1000 @(234,30)   ⛔ every value gone
+//
+// The show is the thief. Stage Manager is on on this display
+// (`com.apple.WindowManager` GloballyEnabled=1, AutoHide=0) and its shelf
+// takes the left of the screen, so when a window is first ordered on
+// screen the window server pins x to the shelf's right edge (234 here,
+// which is why a saved x of 0, 100 and 109 all came back as 234) and
+// clamps the width to what is left (1920-234 = 1686). y is untouched.
+// NSScreen's visibleFrame does not report the shelf at all — it still
+// says 1920x1050 — so no monitor rect this code can read predicts it.
+// Another app's window sat at exactly (234, 30) 1686x1050 at the same
+// moment, which is what makes it the machine's stage rect and not ours.
+//
+// So: apply once before the show, so the first paint is as close to right
+// as the platform allows, and once more the first time the window is
+// actually on screen, which the probe showed does stick. Position before
+// size in both passes — a window sized from x=234 is clamped to 1686 and
+// no later move gives the width back.
+#[cfg(target_os = "macos")]
+fn macos_restore_geometry(window: &tauri::WebviewWindow, saved: WindowState) {
+    use services::preferences::{macos_restore_steps, RestoreStep};
+
+    fn apply(window: &tauri::WebviewWindow, saved: &WindowState) {
+        for step in macos_restore_steps(saved) {
+            let _ = match step {
+                RestoreStep::Position { x, y } => {
+                    window.set_position(tauri::PhysicalPosition::new(x, y))
+                }
+                RestoreStep::Size { width, height } => {
+                    window.set_size(tauri::PhysicalSize::new(width, height))
+                }
+            };
+        }
+    }
+
+    apply(window, &saved);
+
+    // the second pass, once and only once: the first event that arrives
+    // with the window visible is the show having happened. every path that
+    // shows it lands here — the frontend's show(), the tray, the hotkey.
+    // ⚠️ the flag is set before the calls: set_position and set_size
+    // themselves produce Moved and Resized, and this must not answer its
+    // own events
+    let done = std::sync::atomic::AtomicBool::new(false);
+    let w = window.clone();
+    window.on_window_event(move |event| {
+        match event {
+            tauri::WindowEvent::Focused(true)
+            | tauri::WindowEvent::Moved(_)
+            | tauri::WindowEvent::Resized(_) => {}
+            _ => return,
+        }
+        if !w.is_visible().unwrap_or(false) {
+            return;
+        }
+        if done.swap(true, std::sync::atomic::Ordering::SeqCst) {
+            return;
+        }
+        apply(&w, &saved);
+    });
+}
+
 // the os half of the transparency knob: no dwm effect, ever. the window
 // is created transparent, so what is behind it shows through the ground's
 // own alpha (the frontend's half of the same number), sharp and tinted
@@ -459,12 +531,22 @@ pub fn run() {
                     // set_size is ignored on a maximized window
                     Some(s) if !s.maximized && s.is_restorable(&monitors) => {
                         let _ = window.unmaximize();
-                        let _ = window.set_size(tauri::PhysicalSize::new(
-                            s.width, s.height,
-                        ));
-                        let _ = window.set_position(
-                            tauri::PhysicalPosition::new(s.x, s.y),
-                        );
+                        // ⛔ windows and linux keep the original two calls,
+                        // in the original order, verbatim: the defect this
+                        // guards is macOS window clamping, neither platform
+                        // was ever affected, and neither can be eyeballed
+                        // from here
+                        #[cfg(not(target_os = "macos"))]
+                        {
+                            let _ = window.set_size(
+                                tauri::PhysicalSize::new(s.width, s.height),
+                            );
+                            let _ = window.set_position(
+                                tauri::PhysicalPosition::new(s.x, s.y),
+                            );
+                        }
+                        #[cfg(target_os = "macos")]
+                        macos_restore_geometry(&window, s);
                     }
                     // `maximized: true` in the config does not survive
                     // `visible: false`; this line is what actually does it

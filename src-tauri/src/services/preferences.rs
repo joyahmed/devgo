@@ -159,6 +159,42 @@ impl WindowState {
     }
 }
 
+/// One call the startup restore makes on the window. The restore is
+/// expressed as data so its ORDER is testable: on a live window it is two
+/// side effects with no return value, and the order was the bug.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RestoreStep {
+    Position { x: i32, y: i32 },
+    Size { width: u32, height: u32 },
+}
+
+/// The restore, as data — macOS only, and position comes FIRST.
+///
+/// ⛔ The order is not cosmetic. macOS refuses to let a window extend past
+/// the right edge of the region it is allowed to occupy, so `set_size` is
+/// clamped to the distance from wherever the window currently sits to that
+/// edge. Sized first, a 1910-wide rect asked for from x=234 came back 1686
+/// wide (measured, 1920x1080 panel, scale factor 1); positioned first, the
+/// window is at x=0 when the width is asked for and there is room for all
+/// of it.
+///
+/// ⚠️ Ordering alone is not the whole fix: with Stage Manager on, macOS
+/// rewrites the frame again when the window is first ordered on screen
+/// (x pinned to the stage rect's left edge, width clamped to its width,
+/// y untouched), which discards everything set while the window was still
+/// hidden. That is why the caller applies these steps a second time once
+/// the window is visible — see `lib.rs`. A window that is already on
+/// screen keeps what these steps set.
+pub fn macos_restore_steps(s: &WindowState) -> [RestoreStep; 2] {
+    [
+        RestoreStep::Position { x: s.x, y: s.y },
+        RestoreStep::Size {
+            width: s.width,
+            height: s.height,
+        },
+    ]
+}
+
 // the configured 900x720, so a maximized window that was never restored
 // has somewhere to go
 impl Default for WindowState {
@@ -993,5 +1029,175 @@ mod tests {
         assert_eq!(s.pinned(), vec![r"G:\a".to_string()]);
         assert!(s.window_state().is_none());
         assert!(!dir.join("prefs.json.bak").exists(), "nothing to back up");
+    }
+
+    // ── the macOS restore order, and the show that undoes it ──────────
+    //
+    // ⚠️ Honest limit: `remember_geometry` and the restore block in
+    // `lib.rs` take a live `tauri::Window` and have no test seam — there
+    // is no way from a unit test to place a real window, show it and read
+    // the frame back. What IS testable is the restore expressed as data,
+    // and the order was half the bug. The model below is not invented: it
+    // is what a native AppKit probe measured on this display (1920x1080
+    // panel, 1920x1050 work area, scale factor 1, Stage Manager on with
+    // its shelf on the left, so the region a window may occupy is
+    // x >= 234, width <= 1686):
+    //
+    //   born hidden        900x720  @(510,195)
+    //   setContentSize     1910x1000 @(510,195)  hidden: exact, no clamp
+    //   setFrameTopLeft    1910x1000 @(0,30)     hidden: exact
+    //   orderFront         1686x1000 @(234,30)   ⛔ the whole bug
+    //   setFrameTopLeft    1686x1000 @(0,30)     visible: exact
+    //   setContentSize     1910x1000 @(0,30)     visible: and it sticks
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    struct Rect {
+        x: i32,
+        y: i32,
+        w: u32,
+        h: u32,
+    }
+
+    // the measured region a window is allowed to occupy on this display
+    const STAGE_X: i32 = 234;
+    const SCREEN_RIGHT: i32 = 1920;
+
+    fn step(rect: &mut Rect, s: RestoreStep, visible: bool) {
+        match s {
+            RestoreStep::Position { x, y } => {
+                rect.x = x;
+                rect.y = y;
+            }
+            RestoreStep::Size { width, height } => {
+                rect.h = height;
+                // a visible window cannot be grown past the right edge of
+                // the region it sits in; a hidden one is not clamped
+                rect.w = if visible {
+                    width.min((SCREEN_RIGHT - rect.x).max(0) as u32)
+                } else {
+                    width
+                };
+            }
+        }
+    }
+
+    // what the window server does the first time the window is shown
+    fn order_front(rect: &mut Rect) {
+        rect.x = rect.x.max(STAGE_X);
+        rect.w = rect.w.min((SCREEN_RIGHT - rect.x).max(0) as u32);
+    }
+
+    fn saved() -> WindowState {
+        WindowState {
+            maximized: false,
+            width: 1910,
+            height: 1000,
+            x: 0,
+            y: 30,
+        }
+    }
+
+    // the window as `visible: false` leaves it: centered at the configured
+    // 900x720 on a 1920x1080 panel under a 30px menu bar
+    fn born() -> Rect {
+        Rect {
+            x: 510,
+            y: 195,
+            w: 900,
+            h: 720,
+        }
+    }
+
+    /// ⛔ the shipped bug, in the shape the fix has to beat: size first,
+    /// position second, applied once while the window is still hidden.
+    /// Every value lands, and the show throws them all away.
+    #[test]
+    fn geometry_set_before_the_show_is_lost_to_the_show() {
+        let s = saved();
+        let mut r = born();
+        step(
+            &mut r,
+            RestoreStep::Size {
+                width: s.width,
+                height: s.height,
+            },
+            false,
+        );
+        step(&mut r, RestoreStep::Position { x: s.x, y: s.y }, false);
+        assert_eq!(
+            r,
+            Rect {
+                x: 0,
+                y: 30,
+                w: 1910,
+                h: 1000
+            },
+            "hidden, both calls land exactly"
+        );
+        order_front(&mut r);
+        assert_eq!(
+            r,
+            Rect {
+                x: 234,
+                y: 30,
+                w: 1686,
+                h: 1000
+            },
+            "and the show rewrites it: this is the measured defect"
+        );
+    }
+
+    /// the fix: the same steps again, once the window is on screen
+    #[test]
+    fn restoring_again_after_the_show_lands_the_saved_rect() {
+        let s = saved();
+        let mut r = born();
+        for st in macos_restore_steps(&s) {
+            step(&mut r, st, false);
+        }
+        order_front(&mut r);
+        for st in macos_restore_steps(&s) {
+            step(&mut r, st, true);
+        }
+        assert_eq!(
+            r,
+            Rect {
+                x: s.x,
+                y: s.y,
+                w: s.width,
+                h: s.height
+            },
+            "position then size, after the show, restores the rect exactly"
+        );
+    }
+
+    /// and the order within the pass is load-bearing: sizing first, from
+    /// the x the show imposed, loses 224px of width that no later move
+    /// gives back
+    #[test]
+    fn size_before_position_loses_the_width() {
+        let s = saved();
+        let mut r = born();
+        for st in macos_restore_steps(&s) {
+            step(&mut r, st, false);
+        }
+        order_front(&mut r);
+        // the wrong order, deliberately
+        step(
+            &mut r,
+            RestoreStep::Size {
+                width: s.width,
+                height: s.height,
+            },
+            true,
+        );
+        step(&mut r, RestoreStep::Position { x: s.x, y: s.y }, true);
+        assert_eq!(r.w, 1686, "clamped by the x it was sized from");
+        assert_ne!(r.w, s.width);
+        // and the shipped plan is the other way round
+        assert_eq!(
+            macos_restore_steps(&s)[0],
+            RestoreStep::Position { x: s.x, y: s.y },
+            "position is the first step of the restore"
+        );
     }
 }
