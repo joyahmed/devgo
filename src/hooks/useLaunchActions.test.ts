@@ -176,6 +176,10 @@ describe('useLaunchActions — which project a launch acts on', () => {
 // user clicked
 describe('useLaunchActions — the payload on the wire', () => {
 	const p = proj('app');
+	// the id a menu row was built from, named once. the launch lane only ever
+	// forwards whatever it was handed, so every assertion below compares
+	// against this same value rather than spelling a target out inline
+	const wt = 'path:wt';
 
 	it.each([
 		['openEditor', 'open_editor'],
@@ -200,10 +204,10 @@ describe('useLaunchActions — the payload on the wire', () => {
 
 		(result.current[fn] as (project?: Project, targetId?: string) => unknown)(
 			undefined,
-			'path:wt'
+			wt
 		);
 
-		expect(only()).toEqual([cmd, { project: p, targetId: 'path:wt' }]);
+		expect(only()).toEqual([cmd, { project: p, targetId: wt }]);
 	});
 
 	// ⛔ openBoth is the odd one: two ids, and NEITHER of them is spelled
@@ -276,15 +280,15 @@ describe('useLaunchActions — the payload on the wire', () => {
 		invoke.mockResolvedValue('');
 
 		await result.current.openServer(server('srv-1'), {
-			id: 'path:wt',
+			id: wt,
 			name: 'Windows Terminal',
-			targetId: 'path:wt',
+			targetId: wt,
 			via: 'psmux'
 		});
 
 		expect(only()[1]).toEqual({
 			id: 'srv-1',
-			targetId: 'path:wt',
+			targetId: wt,
 			via: 'psmux',
 			preview: false
 		});
