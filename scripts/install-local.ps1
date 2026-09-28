@@ -46,15 +46,23 @@ $InstalledExe = Join-Path $InstallDir 'DevGo.exe'
 if ($SkipBuild) {
 	Step '1/4 skip build (--skip-build): reinstalling the bundle already on disk'
 } else {
+	# node_modules first: a pull can name a package this box never fetched,
+	# and the build's `tsc` then fails on the missing import before cargo runs
+	Step '1/4 bun install --frozen-lockfile'
 	Step '1/4 bun run tauri build'
 	if (-not $DryRun) {
 		Push-Location $RepoRoot
 		try {
-			& bun run tauri build
-			$buildExit = $LASTEXITCODE
+			& bun install --frozen-lockfile
+			$installExit = $LASTEXITCODE
+			if ($installExit -eq 0) {
+				& bun run tauri build
+				$buildExit = $LASTEXITCODE
+			}
 		} finally {
 			Pop-Location
 		}
+		if ($installExit -ne 0) { throw "bun install --frozen-lockfile failed (exit $installExit)" }
 		if ($buildExit -ne 0) { throw "bun run tauri build failed (exit $buildExit)" }
 	}
 }

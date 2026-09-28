@@ -105,10 +105,14 @@ mod tests {
         let stale = r#"{"runtime":"wsl","wsl_available":true,"distros":["Ubuntu"],"default_distro":"Ubuntu","local_fs":"Mac"}"#;
         let back: RuntimeInfo = serde_json::from_str(stale).unwrap();
         assert_eq!(back.runtime, native_runtime());
-        assert!(
-            !matches!(back.runtime, Runtime::Wsl),
-            "a machine that is not inside a distro must not come back as one"
-        );
+        // run inside a distro (cargo test in WSL), "wsl" is the true word and
+        // re-deriving it gives it back, so the refusal only holds outside one
+        if inside_distro().is_none() {
+            assert!(
+                !matches!(back.runtime, Runtime::Wsl),
+                "a machine that is not inside a distro must not come back as one"
+            );
+        }
     }
 
     // detection and the record agree with each other on whatever platform

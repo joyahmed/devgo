@@ -71,6 +71,12 @@ const plan = platform === 'darwin' ? macPlan() : linuxPlan();
 if (skipBuild) {
 	step('1/4 skip build (--skip-build): reinstalling the bundle already on disk');
 } else {
+	// node_modules first: a checkout pulled since the last install can name
+	// a package the box never fetched, and then the build's `tsc` fails on
+	// the missing import (exit 2) before cargo ever runs. that is how the
+	// first mac run of this script died, on the test deps from 69d7adb
+	step('1/4 bun install --frozen-lockfile');
+	if (!dryRun) run('bun', ['install', '--frozen-lockfile'], { cwd: root });
 	step(`1/4 bun run tauri build --bundles ${plan.bundles}`);
 	if (!dryRun) run('bun', ['run', 'tauri', 'build', '--bundles', plan.bundles], { cwd: root });
 }
