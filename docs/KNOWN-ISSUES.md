@@ -1,7 +1,7 @@
 # Known issues
 
 What DevGo gets wrong today, what you will see when it happens, and what to do instead. The current
-release is v1.2.3.
+release is v1.2.4.
 
 Shipping a list like this is cheaper than the alternative for both of us: if you hit something here,
 it is known and you do not need to write it up. Everything else is worth an
@@ -174,14 +174,45 @@ compile-time guard.
 ## Launching an agent or a dev script on macOS (v1.2.1 and earlier)
 
 On a Mac, an app started from the Dock inherits launchd's four directories, not the PATH your shell
-has. In v1.2.1 that reaches some launches: *Open in agent* (`Ctrl+Alt+Enter`) or *Run dev script…*
-(`Ctrl+Shift+D`) can open a terminal that immediately says `command not found` for `claude`, `node`
-or whatever the script calls, even though the same command works when you type it yourself.
+has. In v1.2.1 that reached some launches: *Open in agent* (`Ctrl+Alt+Enter`) or *Run dev script…*
+(`Ctrl+Shift+D`) could open a terminal that immediately said `command not found` for `claude`, `node`
+or whatever the script calls, even though the same command worked when you typed it yourself.
+Terminal.app and iTerm2 were fixed after v1.2.1.
 
-It is worst on Ghostty, where the terminal is opened through `open` and the PATH repair never runs at
-all. The next release fixes both halves. Until then, use Terminal.app or iTerm2 as the terminal
-target for agent and dev-script launches — Settings › Editors & Terminals, or the footer's Terminal
-group, which names the one each key will use.
+Ghostty, WezTerm, Kitty and Alacritty kept a smaller version of it through v1.2.3: a dev script ran
+on the emulator's own command line with no shell around it, so nvm, fnm or `brew shellenv` in your
+`~/.zshrc` never loaded, and the window closed the moment the script ended. **v1.2.4 fixes that**:
+those four now run a dev script the way Terminal.app does — through your own shell, which reads your
+rc file first, and then leave you at your login shell in the project when the script stops.
+
+⚠️ **The loose end: I have not run those four on a real Mac or a real Linux desktop.** The change is
+covered by tests and it is the same run script Terminal.app already uses, but a green test
+is not a window I have watched. If one of them opens and the script does not start, that is the
+report I want — the log section below says what to attach. Until one is confirmed, Terminal.app or
+iTerm2 are the safe targets for dev-script launches: Settings › Editors & Terminals, or the footer's
+Terminal group, which names the one each key will use.
+
+## A dev script inside WSL could not find node (v1.2.3 and earlier)
+
+Windows with WSL. *Run dev script…* on a project inside a distro opened a tab that failed at once
+with `exec: node: not found`, or ran a `pnpm` that was not yours. The run line started a login shell
+but not an interactive one, and Ubuntu's `~/.bashrc` stops early in a shell that is not interactive
+— so nvm never loaded, and `pnpm` fell through to the Windows copy under `/mnt/c`, which cannot find
+a node. **Fixed in v1.2.4**: the line now runs your interactive shell, finds the distro's own nvm
+node, and when the script stops the tab stays in your login shell — zsh if zsh is yours — rather than
+a bare bash.
+
+One thing to know if you ever edited a terminal row by hand. DevGo moves the rows it shipped to the
+new line on first launch, but only rows that still match what it shipped byte for byte, and it saves
+a copy of `targets.json` beside the original before it touches anything. A row you changed yourself
+is left exactly as you wrote it, which also means it keeps the old behaviour. If a WSL dev script
+still says `node: not found` on v1.2.4, check that row first in Settings › Editors & Terminals.
+
+## macOS builds are Apple Silicon only
+
+The macOS download is built for arm64. There is no Intel build and no universal one yet — an Intel
+Mac cannot run it, and I have not decided which of the two to add. Building from source (README,
+**Install**) works on either.
 
 ## What I have actually launched, and what DevGo only detects
 
@@ -206,8 +237,8 @@ all of it, here is what I have and have not.
 
 Two things that table does not say on its own.
 
-The macOS run was on a build carrying the PATH repair, and **v1.2.1 does not have it** — on the
-release you downloaded, that lane is the entry above this one. And GNOME Terminal, the terminal a
+The macOS run was on a build carrying the PATH repair, which v1.2.1 did not have and every release
+since does. And GNOME Terminal, the terminal a
 stock GNOME desktop actually ships, *does* get started by DevGo on my Linux machine, but I have only
 driven it over a remote X session, where it is a D-Bus-activated client and paints its window on
 another seat. That is not DevGo's fault and it is not proof either, so I count it unconfirmed.
@@ -233,8 +264,9 @@ them because if one misbehaves you should know it is unproven rather than conclu
 The failure to watch for is a quiet one: **a window opens and the command does not run**. Your editor
 or terminal appears, in the right directory or the wrong one, and the agent or dev script you asked
 for never starts, with no error — because DevGo has handed off by then, and what happens inside that
-window belongs to the program that owns it. On a Mac, read the PATH entry above first: that is the
-known cause, and Ghostty is the target I know is bad there.
+window belongs to the program that owns it. On a Mac, read the macOS entry above first: Ghostty,
+WezTerm, Kitty and Alacritty had exactly this failure through v1.2.3, and v1.2.4's fix for it is
+tested but not yet watched on real hardware.
 
 The log will go a long way here. Every launch you ask for writes two lines: what DevGo was about to
 run, and whether the spawn was accepted or refused. Between them they say which of the two failures
@@ -249,6 +281,16 @@ the first.
 
 Until then, Settings › Editors & Terminals will point the agent and dev-script keys at anything in
 the first table.
+
+## `bun run smoke` has not been run on macOS or Linux yet
+
+For anyone building DevGo themselves. `bun run install:local` rebuilds, reinstalls and relaunches
+DevGo on all three platforms, and `bun run smoke` then checks, without driving a window, that the
+running build is the one you just made and that its dev menu lines find your node. At the time
+v1.2.4 was tagged, smoke had been run only on Windows, and not yet on a Mac or a
+Linux desktop, so its macOS and Linux paths are written and reviewed but not yet exercised. If it
+reports something that is plainly wrong on one of those, that is a bug in the check, and worth an
+issue.
 
 ## The log, and why attaching it helps
 

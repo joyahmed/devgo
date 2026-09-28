@@ -595,7 +595,7 @@ dependencies = [
 
 [[package]]
 name = "devgo"
-version = "1.2.3"
+version = "1.2.4"
 dependencies = [
  "portable-pty",
  "serde",
