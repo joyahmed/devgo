@@ -1064,7 +1064,7 @@ pub fn run_line(
 // spawning caller wants that third value - it is already inside the args,
 // substituted for {script}, and a caller showing the line to a user does
 // not want it twice
-fn run_line_parts(
+pub(crate) fn run_line_parts(
     target: &LaunchTarget,
     project: &Project,
     info: &RuntimeInfo,

@@ -158,6 +158,8 @@ scripts/build-linux.sh --deps --install
 
 `bun run install:local` replaces the four manual steps of a local reinstall — build, stop the running DevGo, install, relaunch — with one, and prints the commit it was built at. On **Windows** it builds the NSIS installer and runs it with `/S` (`scripts/install-local.ps1`). On **macOS** it builds the `.app`, quits DevGo, replaces `/Applications/DevGo.app`, strips the quarantine flag and opens it. On **Linux** it builds the `.deb`, stops DevGo and runs `sudo apt install` on it — sudo asks for your password in the terminal — then starts `DevGo` detached. `--skip-build`, `--no-launch` and `--dry-run` work on all three; see `scripts/install-local.mjs`.
 
+`bun run smoke` then proves this box works with no window driven: the last DevGo started is HEAD's build (the sha in `devgo.log`'s start line), `targets.json` has no migration left, and the dev menu's `dev` and Install lines — built by the app itself via `DevGo --smoke-probe` — find the user's node (on WSL, nvm's, not `/mnt/c`) and end in their login shell; `--full` adds the repo gates, `--json` is for agents.
+
 ## 🧭 Platform notes
 
 - **WSL never boots on launch.** Reading a WSL workspace whose distro is off would start the VM, so DevGo does not: it shows the cached list and marks it. Only Refresh and opening a project are allowed to start a distro, because you asked. Runtime detection (which distros exist, whether `wsl.exe` is there) runs on the first launch and on Refresh, never on every start.

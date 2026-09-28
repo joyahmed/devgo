@@ -2,6 +2,7 @@ mod commands;
 mod error;
 mod models;
 mod services;
+mod smoke_probe;
 mod summon;
 mod tray;
 
@@ -333,6 +334,12 @@ static HIDE_AFTER_FULLSCREEN: std::sync::atomic::AtomicBool =
 
 pub fn launched_transparent() -> bool {
     LAUNCHED_TRANSPARENT.get().copied().unwrap_or(false)
+}
+
+/// The windowless `--smoke-probe` mode, `Some(exit code)` when argv asked
+/// for it. `main` calls this before `run`, so nothing of tauri starts.
+pub fn smoke_probe() -> Option<i32> {
+    smoke_probe::from_args()
 }
 
 pub fn run() {

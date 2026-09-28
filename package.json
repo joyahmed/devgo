@@ -10,7 +10,8 @@
     "test": "vitest run",
     "preview": "vite preview",
     "tauri": "tauri",
-    "install:local": "bun scripts/install-local.mjs"
+    "install:local": "bun scripts/install-local.mjs",
+    "smoke": "bun scripts/smoke.mjs"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.3",

@@ -105,13 +105,31 @@ pub(crate) use log_line;
 
 /// What a session opens with. Without the version and the os, a report of
 /// "the window did not come up" costs a round trip before it says anything.
+///
+/// The sha is the build's own (`build.rs`, the one About shows), so the
+/// newest start line answers "is the DevGo that ran last the build of
+/// HEAD" without a window: `bun run smoke` reads it for exactly that.
 pub fn session_header(version: &str) {
-    append(&format!(
-        "[DevGo] --- start: v{version} {} {} pid {} ---",
+    append(&session_header_line(
+        version,
+        env!("DEVGO_GIT_SHA"),
         std::env::consts::OS,
         std::env::consts::ARCH,
-        std::process::id()
+        std::process::id(),
     ));
+}
+
+/// The start line, pure. The shape is parsed by `scripts/smoke.mjs`:
+/// `--- start: v<version> · <sha> <os> <arch> pid <pid> ---`, every field
+/// one space-free word, so a change here is a change there.
+pub fn session_header_line(
+    version: &str,
+    sha: &str,
+    os: &str,
+    arch: &str,
+    pid: u32,
+) -> String {
+    format!("[DevGo] --- start: v{version} · {sha} {os} {arch} pid {pid} ---")
 }
 
 // ── the ui's half ───────────────────────────────────────────────────────
@@ -570,6 +588,16 @@ mod tests {
     fn invoked_before_init_is_a_no_op() {
         assert!(log_path().is_none());
         invoked("get_workspaces");
+    }
+
+    /// The start line carries the build's sha beside the version, in the
+    /// shape `scripts/smoke.mjs` parses.
+    #[test]
+    fn the_start_line_names_version_sha_os_arch_and_pid() {
+        assert_eq!(
+            session_header_line("1.2.3", "5907e2b", "windows", "x86_64", 42),
+            "[DevGo] --- start: v1.2.3 · 5907e2b windows x86_64 pid 42 ---"
+        );
     }
 
     /// `append` before `init` - the window between process start and setup -
