@@ -156,6 +156,8 @@ scripts/build-linux.sh --deps --install
 
 `bun run build` runs the contrast gate, `tsc` and Vite; `cargo test` in `src-tauri` runs the Rust tests. CI runs both on every push and pull request, and the tag build runs them on each platform before it bundles.
 
+On **Windows**, `bun run install:local` replaces the four manual steps of a local reinstall — build, stop the running DevGo, run the NSIS installer with `/S`, relaunch — with one (`--skip-build`, `--no-launch` and `--dry-run` are also available; see `scripts/install-local.ps1`).
+
 ## 🧭 Platform notes
 
 - **WSL never boots on launch.** Reading a WSL workspace whose distro is off would start the VM, so DevGo does not: it shows the cached list and marks it. Only Refresh and opening a project are allowed to start a distro, because you asked. Runtime detection (which distros exist, whether `wsl.exe` is there) runs on the first launch and on Refresh, never on every start.

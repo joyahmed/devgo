@@ -9,7 +9,8 @@
     "check:contrast": "bun scripts/check-contrast.mjs",
     "test": "vitest run",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "install:local": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install-local.ps1"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.3",
