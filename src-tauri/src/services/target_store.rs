@@ -3,9 +3,10 @@ use std::path::{Path, PathBuf};
 
 use crate::error::AppError;
 use crate::models::target::{
-    defaults, LaunchTarget, TargetKind, LINUX_ARGS_PRE_TMUX, MAC_TERMINAL_ARGS,
-    MAC_TERMINAL_RUN_ARGS, VSCODE_WSL_ARGS, VSCODE_WSL_ARGS_PRE,
-    WSL_RUN_ARGS_PRE_INTERACTIVE, WT_ARGS, WT_ARGS_PRE_PSMUX, WT_RUN_ARGS,
+    defaults, LaunchTarget, TargetKind, LINUX_ARGS_PRE_TMUX,
+    LINUX_RUN_ARGS_PRE_SCRIPT, MAC_TERMINAL_ARGS, MAC_TERMINAL_RUN_ARGS,
+    VSCODE_WSL_ARGS, VSCODE_WSL_ARGS_PRE, WSL_RUN_ARGS_PRE_INTERACTIVE,
+    WSL_RUN_ARGS_PRE_LOGIN_SHELL, WT_ARGS, WT_ARGS_PRE_PSMUX, WT_RUN_ARGS,
     WT_RUN_ARGS_PRE, WT_WSL_RUN_ARGS, WT_WSL_RUN_ARGS_PRE,
 };
 
@@ -52,10 +53,12 @@ impl TargetStore {
         store.adopt_run_template()?;
         store.adopt_wt_semicolon_escape()?;
         store.adopt_interactive_wsl_run()?;
+        store.adopt_login_shell_wsl_run()?;
         store.adopt_remote_uri_quotes()?;
         store.adopt_mac_ghostty_bundle()?;
         store.adopt_linux_session_script()?;
         store.adopt_linux_terminal_row()?;
+        store.adopt_linux_run_script()?;
         store.adopt_file_manager_row(knows_file_managers)?;
         Ok(store)
     }
@@ -167,13 +170,37 @@ impl TargetStore {
     /// keyed to an id: wt, Alacritty and WezTerm each shipped a form, and
     /// the exact old bytes are what mark a row nobody edited.
     fn adopt_interactive_wsl_run(&mut self) -> Result<(), AppError> {
+        self.adopt_wsl_run_table(
+            WSL_RUN_ARGS_PRE_INTERACTIVE,
+            "pre-interactive-run",
+        )
+    }
+
+    /// The WSL run line ended in `exec bash`, so a zsh user whose dev
+    /// script stopped was left in a bash tab. Runs after the adoption
+    /// above, whose output is this table's input, and keeps its own backup
+    /// so a machine that already took that step keeps the file it found.
+    fn adopt_login_shell_wsl_run(&mut self) -> Result<(), AppError> {
+        self.adopt_wsl_run_table(
+            WSL_RUN_ARGS_PRE_LOGIN_SHELL,
+            "pre-login-shell-run",
+        )
+    }
+
+    // the two WSL run adoptions are one shape: every row whose WSL run
+    // line is a shipped old form moves to its new one, one backup first
+    fn adopt_wsl_run_table(
+        &mut self,
+        table: &[(&str, &'static str)],
+        suffix: &str,
+    ) -> Result<(), AppError> {
         let stale: Vec<(usize, &'static str)> = self
             .targets
             .iter()
             .enumerate()
             .filter_map(|(i, t)| {
                 let old = t.wsl_run_args_template.as_deref()?;
-                WSL_RUN_ARGS_PRE_INTERACTIVE
+                table
                     .iter()
                     .find(|(pre, _)| *pre == old)
                     .map(|(_, new)| (i, *new))
@@ -183,12 +210,54 @@ impl TargetStore {
             return Ok(());
         }
         if self.file_path.exists() {
-            let backup =
-                format!("{}.pre-interactive-run", self.file_path.display());
+            let backup = format!("{}.{suffix}", self.file_path.display());
             fs::copy(&self.file_path, backup)?;
         }
         for (pos, new) in stale {
             self.targets[pos].wsl_run_args_template = Some(new.to_string());
+        }
+        self.save()
+    }
+
+    /// A linux terminal ran a dev script as `bash -lc {command}` straight on
+    /// its line, which /bin/sh split into words, so `pnpm run dev` ran a
+    /// bare `pnpm`, without nvm, in a tab that closed when it ended. The
+    /// row's run form is its session form now, and the launcher writes the
+    /// command into the script. Not on windows: the launcher writes no run
+    /// script there, and these bytes can only be a row someone typed.
+    fn adopt_linux_run_script(&mut self) -> Result<(), AppError> {
+        if cfg!(windows) {
+            return Ok(());
+        }
+        self.replace_linux_run_lines()
+    }
+
+    /// The work of the adoption above, on every platform, so the tests can
+    /// drive it from a windows box too. Keyed on the id and the old bytes,
+    /// the same rule as the session script.
+    fn replace_linux_run_lines(&mut self) -> Result<(), AppError> {
+        let stale: Vec<(usize, &str)> = self
+            .targets
+            .iter()
+            .enumerate()
+            .filter_map(|(i, t)| {
+                let old = t.run_args_template.as_deref()?;
+                LINUX_RUN_ARGS_PRE_SCRIPT
+                    .iter()
+                    .find(|(id, pre, _)| *id == t.id && *pre == old)
+                    .map(|(_, _, new)| (i, *new))
+            })
+            .collect();
+        if stale.is_empty() {
+            return Ok(());
+        }
+        if self.file_path.exists() {
+            let backup =
+                format!("{}.pre-linux-run-script", self.file_path.display());
+            fs::copy(&self.file_path, backup)?;
+        }
+        for (pos, new) in stale {
+            self.targets[pos].run_args_template = Some(new.to_string());
         }
         self.save()
     }
@@ -753,7 +822,8 @@ mod tests {
     }
 
     /// An install whose wt row carries the shipped `bash -lc` run line - the
-    /// file on every machine today - moves to `-lic`, with a backup. An
+    /// file on every released machine - moves to `-lic` and on to the login
+    /// shell in one load, the first step's backup the file it found. An
     /// Alacritty row added from detection moves too; a hand-written WSL run
     /// line that merely mentions -lc is the user's and stays.
     #[test]
@@ -791,7 +861,7 @@ mod tests {
         }
         assert_eq!(
             s.get("alacritty").unwrap().wsl_run_args_template.as_deref(),
-            Some(WSL_RUN_ARGS_PRE_INTERACTIVE[1].1)
+            Some(WSL_RUN_ARGS_PRE_LOGIN_SHELL[1].1)
         );
         assert_eq!(
             s.get("mine").unwrap().wsl_run_args_template.as_deref(),
@@ -814,7 +884,7 @@ mod tests {
                 .unwrap()
                 .wsl_run_args_template
                 .as_deref(),
-            Some(WSL_RUN_ARGS_PRE_INTERACTIVE[1].1)
+            Some(WSL_RUN_ARGS_PRE_LOGIN_SHELL[1].1)
         );
         assert!(!dir.join("targets.json.pre-interactive-run").exists());
     }
@@ -828,6 +898,172 @@ mod tests {
             assert_eq!(pre.replace("bash -lc", "bash -lic"), *new);
         }
         assert!(WT_WSL_RUN_ARGS.contains("bash -lic"));
+    }
+
+    /// The second step is `exec bash` made the login shell and nothing else
+    /// moved, and it reads exactly what the first step writes: a row from
+    /// before -lic lands on the current line, not halfway.
+    #[test]
+    fn each_interactive_run_line_hands_the_tab_to_the_login_shell() {
+        for (pre, new) in WSL_RUN_ARGS_PRE_LOGIN_SHELL {
+            assert!(pre.ends_with("exec bash\""), "{pre}");
+            assert_eq!(
+                pre.replace("exec bash\"", "exec ${SHELL:-bash} -l\""),
+                *new
+            );
+        }
+        for (_, step) in WSL_RUN_ARGS_PRE_INTERACTIVE {
+            assert!(
+                WSL_RUN_ARGS_PRE_LOGIN_SHELL
+                    .iter()
+                    .any(|(pre, _)| pre == step),
+                "{step} is written and never read"
+            );
+        }
+        assert_eq!(WSL_RUN_ARGS_PRE_LOGIN_SHELL[0].1, WT_WSL_RUN_ARGS);
+    }
+
+    /// An install that already took the -lic step - a dev build from
+    /// before this one - moves on to the login shell with a backup of its
+    /// own, and the older backup is not written over. A hand-written line
+    /// that also ends in `exec bash` is the user's.
+    #[test]
+    fn an_interactive_wsl_run_line_moves_to_the_login_shell_with_a_backup() {
+        let dir = std::env::temp_dir().join("devgo-targets-login-shell-run");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let mut rows: Vec<LaunchTarget> = defaults();
+        if let Some(wt) = rows.iter_mut().find(|t| t.id == "wt") {
+            wt.wsl_run_args_template =
+                Some(WSL_RUN_ARGS_PRE_LOGIN_SHELL[0].0.into());
+        }
+        let mut wezterm = editor("WezTerm");
+        wezterm.id = "wezterm".into();
+        wezterm.kind = TargetKind::Terminal;
+        wezterm.wsl_run_args_template =
+            Some(WSL_RUN_ARGS_PRE_LOGIN_SHELL[2].0.into());
+        let custom = "wsl -d {distro} -e bash -lic \"{command}; exec bash\"";
+        let mut mine = editor("Mine");
+        mine.id = "mine".into();
+        mine.kind = TargetKind::Terminal;
+        mine.wsl_run_args_template = Some(custom.into());
+        rows.push(wezterm);
+        rows.push(mine);
+        let original = serde_json::to_string_pretty(&rows).unwrap();
+        fs::write(dir.join("targets.json"), &original).unwrap();
+
+        let s = TargetStore::new(dir.clone()).unwrap();
+        if let Some(wt) = s.get("wt") {
+            assert_eq!(
+                wt.wsl_run_args_template.as_deref(),
+                Some(WT_WSL_RUN_ARGS)
+            );
+        }
+        assert_eq!(
+            s.get("wezterm").unwrap().wsl_run_args_template.as_deref(),
+            Some(WSL_RUN_ARGS_PRE_LOGIN_SHELL[2].1)
+        );
+        assert_eq!(
+            s.get("mine").unwrap().wsl_run_args_template.as_deref(),
+            Some(custom),
+            "a template the user wrote is theirs"
+        );
+        assert_eq!(
+            fs::read_to_string(dir.join("targets.json.pre-login-shell-run"))
+                .unwrap(),
+            original,
+            "the pre-migration file is kept verbatim"
+        );
+        assert!(
+            !dir.join("targets.json.pre-interactive-run").exists(),
+            "nothing here was -lc, so that step wrote nothing"
+        );
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// Each linux run line lands on the row's own session form - the
+    /// launcher writes the command into that script - and the old line is
+    /// the new one with the script spelled as `-lc {command}`, nothing else.
+    #[test]
+    fn each_linux_run_line_becomes_its_session_form() {
+        for (id, pre, new) in LINUX_RUN_ARGS_PRE_SCRIPT {
+            let (_, _, seam) = LINUX_ARGS_PRE_TMUX
+                .iter()
+                .find(|(t, _, _)| t == id)
+                .unwrap_or_else(|| panic!("{id} has no session form"));
+            assert_eq!(new, seam, "{id}");
+            assert!(!new.contains("{command}"), "{id}: {new}");
+            assert_eq!(
+                new.replace("bash \"{script}\"", "bash -lc {command}"),
+                *pre,
+                "{id}"
+            );
+        }
+    }
+
+    /// Only the shipped bytes under their own id move: a Kitty row carrying
+    /// GNOME Terminal's old line would get a flag Kitty does not take, and
+    /// a line the user extended is theirs. Driven through the platform-free
+    /// half, so a windows run proves it too.
+    #[test]
+    fn a_linux_run_line_moves_to_the_run_script_with_a_backup() {
+        let dir = std::env::temp_dir().join("devgo-targets-linux-run");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let row = |id: &str, run: &str| {
+            let mut t = editor(id);
+            t.id = id.into();
+            t.kind = TargetKind::Terminal;
+            t.run_args_template = Some(run.into());
+            t
+        };
+        let mut rows: Vec<LaunchTarget> = LINUX_RUN_ARGS_PRE_SCRIPT
+            .iter()
+            .map(|(id, pre, _)| row(id, pre))
+            .collect();
+        let gnome_pre = LINUX_RUN_ARGS_PRE_SCRIPT[0].1;
+        rows.push(row("kitty", gnome_pre));
+        let custom = "-e bash -lc {command} -hold";
+        rows.push(row("my-xterm", custom));
+        let original = serde_json::to_string_pretty(&rows).unwrap();
+        fs::write(dir.join("targets.json"), &original).unwrap();
+
+        // on linux and a mac new() has already done it; here it is the call
+        let mut s = TargetStore::new(dir.clone()).unwrap();
+        s.replace_linux_run_lines().unwrap();
+
+        for (id, _, new) in LINUX_RUN_ARGS_PRE_SCRIPT {
+            assert_eq!(
+                s.get(id).unwrap().run_args_template.as_deref(),
+                Some(*new),
+                "{id}"
+            );
+        }
+        assert_eq!(
+            s.get("kitty").unwrap().run_args_template.as_deref(),
+            Some(gnome_pre)
+        );
+        assert_eq!(
+            s.get("my-xterm").unwrap().run_args_template.as_deref(),
+            Some(custom)
+        );
+        assert_eq!(
+            fs::read_to_string(dir.join("targets.json.pre-linux-run-script"))
+                .unwrap(),
+            original,
+            "the pre-migration file is kept verbatim"
+        );
+
+        // persisted, and a second pass has nothing left to adopt
+        let _ = fs::remove_file(dir.join("targets.json.pre-linux-run-script"));
+        let mut again = TargetStore::new(dir.clone()).unwrap();
+        again.replace_linux_run_lines().unwrap();
+        assert_eq!(
+            again.get("xterm").unwrap().run_args_template.as_deref(),
+            Some("-e bash \"{script}\"")
+        );
+        assert!(!dir.join("targets.json.pre-linux-run-script").exists());
+        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]

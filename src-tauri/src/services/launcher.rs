@@ -2414,14 +2414,18 @@ mod tests {
         assert_eq!(
             args,
             format!(
-                r#"wsl -d Ubuntu --cd "~" -e bash -lic "{SSH}\; exec bash""#
+                r#"wsl -d Ubuntu --cd "~" -e bash -lic "{SSH}\; exec ${{SHELL:-bash}} -l""#
             )
         );
     }
 
     // a wsl project's dev script runs in an interactive login bash. under
     // -lc ubuntu's ~/.bashrc returns before nvm loads, `pnpm` resolved to
-    // the windows shim on /mnt/c, and the tab said "exec: node: not found"
+    // the windows shim on /mnt/c, and the tab said "exec: node: not found".
+    // when it stops, the tab is the user's login shell, not bash: a zsh
+    // user was left at a bash prompt. the whole line, byte for byte, is
+    // what wt is handed: `\;` so wt does not split it into a second tab,
+    // and the dollar bare, because nothing between here and bash reads one
     #[cfg(windows)]
     #[test]
     fn a_wsl_dev_script_runs_where_the_distros_nvm_is_loaded() {
@@ -2435,9 +2439,59 @@ mod tests {
         assert_eq!(exe, "wt");
         assert_eq!(
             args,
-            r#"wsl -d Ubuntu --cd "/home/user/projects/zettabyte" -e bash -lic "pnpm run dev\; exec bash""#
+            r#"wsl -d Ubuntu --cd "/home/user/projects/zettabyte" -e bash -lic "pnpm run dev\; exec ${SHELL:-bash} -l""#
         );
         assert!(!args.contains("bash -lc "), "{args}");
+        assert!(!args.contains("exec bash"), "{args}");
+        // and cmd /c hands it to wt unchanged: cmd reads none of $ { } :
+        assert_eq!(cmd_line(&exe, &args), format!("/c wt {args}"));
+    }
+
+    // a linux terminal's dev script goes through the run script, not onto
+    // the line: /bin/sh split `bash -lc pnpm run dev` into words and bash
+    // ran a bare `pnpm`. the script runs it in the user's own interactive
+    // shell, where nvm is, and leaves the tab in their login shell
+    #[cfg(not(windows))]
+    #[test]
+    fn a_linux_dev_script_runs_in_the_users_shell_and_stays_open() {
+        let project = local_project("linux-run", "work");
+        let gnome = LaunchTarget {
+            id: "gnome-terminal".into(),
+            name: "GNOME Terminal".into(),
+            kind: TargetKind::Terminal,
+            executable: "gnome-terminal".into(),
+            args_template: String::new(),
+            wsl_executable: None,
+            wsl_args_template: None,
+            run_args_template: Some(
+                crate::models::target::LINUX_RUN_ARGS_PRE_SCRIPT[0].2.into(),
+            ),
+            reveal_args_template: None,
+            wsl_run_args_template: None,
+        };
+        let (exe, args, script) =
+            run_line_parts(&gnome, &project, &no_distro(), "pnpm run dev")
+                .unwrap();
+        let script = script.expect("a run script");
+        assert_eq!(exe, "gnome-terminal");
+        assert_eq!(
+            args,
+            format!(
+                "--working-directory \"{}\" -- bash \"{script}\"",
+                project.full_path
+            )
+        );
+        assert!(!args.contains("pnpm"), "{args}");
+        let body = std::fs::read_to_string(&script).unwrap();
+        assert!(
+            body.contains(&format!(
+                "\"${{SHELL:-bash}}\" -ic {}\n",
+                sh_quote(&format!("{}pnpm run dev", mac_run_header()))
+            )),
+            "{body}"
+        );
+        assert!(body.ends_with("exec \"${SHELL:-bash}\" -l\n"), "{body}");
+        let _ = std::fs::remove_file(&script);
     }
 
     // never a boot: a stopped default distro is a refusal that names it,

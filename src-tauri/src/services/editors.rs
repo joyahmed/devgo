@@ -246,7 +246,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_args: Some("-e wsl -d {distro} bash \"{script}\""),
         run_args: Some("--working-directory \"{path}\" -e cmd /k {command}"),
         wsl_run_args: Some(
-            "-e wsl -d {distro} --cd \"{linux_path}\" -e bash -lic \"{command}; exec bash\"",
+            "-e wsl -d {distro} --cd \"{linux_path}\" -e bash -lic \"{command}; exec ${SHELL:-bash} -l\"",
         ),
         reveal_args: None,
         app: None,
@@ -261,7 +261,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_args: Some("start -- wsl -d {distro} bash \"{script}\""),
         run_args: Some("start --cwd \"{path}\" -- cmd /k {command}"),
         wsl_run_args: Some(
-            "start -- wsl -d {distro} --cd \"{linux_path}\" -e bash -lic \"{command}; exec bash\"",
+            "start -- wsl -d {distro} --cd \"{linux_path}\" -e bash -lic \"{command}; exec ${SHELL:-bash} -l\"",
         ),
         reveal_args: None,
         app: None,
@@ -584,7 +584,13 @@ const CANDIDATES: &[Candidate] = &[
     // that IS native here: without it a linux launch opened a bare shell
     // while windows and a mac both got the three named windows. the flag
     // differs per emulator and a wrong one fails silently, so each is the
-    // one its own man page documents, and it is always last
+    // one its own man page documents, and it is always last.
+    //
+    // the run form is the session form's bytes: the launcher writes the
+    // command into the script, which runs it through "$SHELL" -ic and then
+    // execs "$SHELL" -l, as a mac's does. `bash -lc {command}` on the line
+    // was split into words by /bin/sh, ran without ~/.bashrc and closed
+    // the tab when it ended. see LINUX_RUN_ARGS_PRE_SCRIPT
     Candidate {
         id: "gnome-terminal",
         name: "GNOME Terminal",
@@ -593,7 +599,7 @@ const CANDIDATES: &[Candidate] = &[
         // -- and not -e: -e is deprecated and reads the rest as one string
         args: "--working-directory \"{path}\" -- bash \"{script}\"",
         wsl_args: None,
-        run_args: Some("--working-directory \"{path}\" -- bash -lc {command}"),
+        run_args: Some("--working-directory \"{path}\" -- bash \"{script}\""),
         wsl_run_args: None,
         reveal_args: None,
         app: None,
@@ -607,7 +613,7 @@ const CANDIDATES: &[Candidate] = &[
         // -e catches every following argument, so nothing may follow it
         args: "--workdir \"{path}\" -e bash \"{script}\"",
         wsl_args: None,
-        run_args: Some("--workdir \"{path}\" -e bash -lc {command}"),
+        run_args: Some("--workdir \"{path}\" -e bash \"{script}\""),
         wsl_run_args: None,
         reveal_args: None,
         app: None,
@@ -621,7 +627,7 @@ const CANDIDATES: &[Candidate] = &[
         // -x is the remainder of the line; -e would be one string to parse
         args: "--working-directory=\"{path}\" -x bash \"{script}\"",
         wsl_args: None,
-        run_args: Some("--working-directory=\"{path}\" -x bash -lc {command}"),
+        run_args: Some("--working-directory=\"{path}\" -x bash \"{script}\""),
         wsl_run_args: None,
         reveal_args: None,
         app: None,
@@ -635,7 +641,7 @@ const CANDIDATES: &[Candidate] = &[
         // -e runs all text after it, so the man page calls it the last one
         args: "--working-directory=\"{path}\" -e bash \"{script}\"",
         wsl_args: None,
-        run_args: Some("--working-directory=\"{path}\" -e bash -lc {command}"),
+        run_args: Some("--working-directory=\"{path}\" -e bash \"{script}\""),
         wsl_run_args: None,
         reveal_args: None,
         app: None,
@@ -649,7 +655,7 @@ const CANDIDATES: &[Candidate] = &[
         // foot takes the command as trailing words, with no flag at all
         args: "--working-directory=\"{path}\" bash \"{script}\"",
         wsl_args: None,
-        run_args: Some("--working-directory=\"{path}\" bash -lc {command}"),
+        run_args: Some("--working-directory=\"{path}\" bash \"{script}\""),
         wsl_run_args: None,
         reveal_args: None,
         app: None,
@@ -663,7 +669,7 @@ const CANDIDATES: &[Candidate] = &[
         // -x is the rest of the line; -e is a single command string
         args: "--working-directory=\"{path}\" -x bash \"{script}\"",
         wsl_args: None,
-        run_args: Some("--working-directory=\"{path}\" -x bash -lc {command}"),
+        run_args: Some("--working-directory=\"{path}\" -x bash \"{script}\""),
         wsl_run_args: None,
         reveal_args: None,
         app: None,
@@ -678,7 +684,7 @@ const CANDIDATES: &[Candidate] = &[
         // by hand; the script does its own cd, so -e is the whole line now
         args: "-e bash \"{script}\"",
         wsl_args: None,
-        run_args: Some("-e bash -lc {command}"),
+        run_args: Some("-e bash \"{script}\""),
         wsl_run_args: None,
         reveal_args: None,
         app: None,
@@ -1545,6 +1551,12 @@ mod tests {
         // migration compares bytes, so a bare seam here is a bad match
         templates
             .extend(LINUX_ARGS_PRE_TMUX.iter().map(|(_, p, _)| p.to_string()));
+        for (_, pre, new) in crate::models::target::LINUX_RUN_ARGS_PRE_SCRIPT {
+            templates.extend([pre.to_string(), new.to_string()]);
+        }
+        for (pre, new) in crate::models::target::WSL_RUN_ARGS_PRE_LOGIN_SHELL {
+            templates.extend([pre.to_string(), new.to_string()]);
+        }
         for c in CANDIDATES {
             templates.push(c.args.to_string());
             templates.extend(c.wsl_args.map(str::to_string));
@@ -1567,6 +1579,27 @@ mod tests {
                     "{seam} is bare, so a space in it splits the line: {template}"
                 );
             }
+        }
+    }
+
+    /// Every WSL run line detection offers is one an upgrade also lands on,
+    /// so an added Alacritty and a migrated one are the same bytes, and
+    /// none of them leaves the tab in bash when the user's shell is zsh.
+    #[cfg(windows)]
+    #[test]
+    fn every_offered_wsl_run_line_ends_in_the_login_shell() {
+        use crate::models::target::WSL_RUN_ARGS_PRE_LOGIN_SHELL;
+        let offered: Vec<&str> =
+            CANDIDATES.iter().filter_map(|c| c.wsl_run_args).collect();
+        assert_eq!(offered.len(), WSL_RUN_ARGS_PRE_LOGIN_SHELL.len());
+        for line in offered {
+            assert!(
+                WSL_RUN_ARGS_PRE_LOGIN_SHELL
+                    .iter()
+                    .any(|(_, new)| *new == line),
+                "{line}"
+            );
+            assert!(line.ends_with("exec ${SHELL:-bash} -l\""), "{line}");
         }
     }
 
@@ -1782,6 +1815,11 @@ mod tests {
                 .find(|c| c.id == *id)
                 .unwrap_or_else(|| panic!("{id} left the table"));
             assert_eq!(&c.args, args, "{id}");
+        }
+        // and the run form is where an upgrade lands it
+        for (id, _, new) in crate::models::target::LINUX_RUN_ARGS_PRE_SCRIPT {
+            let c = CANDIDATES.iter().find(|c| c.id == *id).unwrap();
+            assert_eq!(c.run_args, Some(*new), "{id}");
         }
         for c in CANDIDATES
             .iter()

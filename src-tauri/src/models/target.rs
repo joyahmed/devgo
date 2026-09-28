@@ -208,19 +208,32 @@ pub const WT_RUN_ARGS_PRE: &str = "-d \"{path}\" cmd /k {command}";
 /// through to the Windows shim on the /mnt/c interop PATH, and that shim's
 /// `exec node` found nothing: "/mnt/c/Users/<you>/AppData/Roaming/npm/pnpm:
 /// 15: exec: node: not found", in a distro whose prompt says node v24.
+///
+/// `exec ${SHELL:-bash} -l`, not `exec bash`: the tab a dev script leaves
+/// behind is the user's own shell, so a zsh user is not dropped into bash
+/// when the script stops. bash sets $SHELL from the passwd entry when wsl
+/// does not pass it, so the default is a floor that should never be read.
+/// Bare, not quoted: this already sits inside one pair of double quotes
+/// that wt, cmd and wsl each parse, and a login shell's path has no space.
+///
+/// The command itself still runs under bash, not $SHELL: running it in the
+/// user's shell would put a second layer of quoting round {command} inside
+/// that same double-quoted argument, and escape() provides one layer.
 pub const WT_WSL_RUN_ARGS: &str =
-    "wsl -d {distro} --cd \"{linux_path}\" -e bash -lic \"{command}\\; exec bash\"";
+    "wsl -d {distro} --cd \"{linux_path}\" -e bash -lic \"{command}\\; exec ${SHELL:-bash} -l\"";
 pub const WT_WSL_RUN_ARGS_PRE: &str =
     "wsl -d {distro} --cd \"{linux_path}\" -e bash -lc \"{command}; exec bash\"";
 
 /// Every WSL run line that shipped under `bash -lc`, next to the `-lic`
 /// form that replaces it: wt's own, and the two detection offers the same
 /// line to. A row still carrying the old bytes is a row nobody edited, so
-/// the store rewrites it once; any other template is the user's.
+/// the store rewrites it once; any other template is the user's. The
+/// `-lic` forms here still end in `exec bash`: they are the bytes the next
+/// table reads, so an old row takes both steps, one change each.
 pub const WSL_RUN_ARGS_PRE_INTERACTIVE: &[(&str, &str)] = &[
     (
         "wsl -d {distro} --cd \"{linux_path}\" -e bash -lc \"{command}\\; exec bash\"",
-        WT_WSL_RUN_ARGS,
+        "wsl -d {distro} --cd \"{linux_path}\" -e bash -lic \"{command}\\; exec bash\"",
     ),
     (
         "-e wsl -d {distro} --cd \"{linux_path}\" -e bash -lc \"{command}; exec bash\"",
@@ -230,6 +243,71 @@ pub const WSL_RUN_ARGS_PRE_INTERACTIVE: &[(&str, &str)] = &[
         "start -- wsl -d {distro} --cd \"{linux_path}\" -e bash -lc \"{command}; exec bash\"",
         "start -- wsl -d {distro} --cd \"{linux_path}\" -e bash -lic \"{command}; exec bash\"",
     ),
+];
+
+/// Every WSL run line that shipped ending in `exec bash`, next to the form
+/// that hands the tab to the user's login shell instead. The same three
+/// rows as the table above, read after it: a zsh user whose dev script
+/// stopped was left in bash, without their prompt, aliases or history.
+pub const WSL_RUN_ARGS_PRE_LOGIN_SHELL: &[(&str, &str)] = &[
+    (
+        "wsl -d {distro} --cd \"{linux_path}\" -e bash -lic \"{command}\\; exec bash\"",
+        WT_WSL_RUN_ARGS,
+    ),
+    (
+        "-e wsl -d {distro} --cd \"{linux_path}\" -e bash -lic \"{command}; exec bash\"",
+        "-e wsl -d {distro} --cd \"{linux_path}\" -e bash -lic \"{command}; exec ${SHELL:-bash} -l\"",
+    ),
+    (
+        "start -- wsl -d {distro} --cd \"{linux_path}\" -e bash -lic \"{command}; exec bash\"",
+        "start -- wsl -d {distro} --cd \"{linux_path}\" -e bash -lic \"{command}; exec ${SHELL:-bash} -l\"",
+    ),
+];
+
+/// Every native linux run line as it shipped, `bash -lc {command}`, next
+/// to the {script} form that replaces it. Three things were wrong with the
+/// old line: the launcher hands it to /bin/sh, so `pnpm run dev` split
+/// into words and bash ran `pnpm` alone, with `run` as its $0; -lc stops
+/// at the top of ~/.bashrc, where nvm lives; and nothing kept the tab open
+/// once the script ended. The script is the mac's run script: it runs the
+/// command through "$SHELL" -ic, so nvm is found whether it was installed
+/// into ~/.bashrc or ~/.zshrc, then execs "$SHELL" -l. The new bytes are
+/// the row's session form, as Terminal.app's are, because the file carries
+/// the command. Keyed on the id and the bytes, as LINUX_ARGS_PRE_TMUX is:
+/// each emulator takes its own flag, and xfce4-terminal and Terminator
+/// shipped the same line.
+pub const LINUX_RUN_ARGS_PRE_SCRIPT: &[(&str, &str, &str)] = &[
+    (
+        "gnome-terminal",
+        "--working-directory \"{path}\" -- bash -lc {command}",
+        "--working-directory \"{path}\" -- bash \"{script}\"",
+    ),
+    (
+        "konsole",
+        "--workdir \"{path}\" -e bash -lc {command}",
+        "--workdir \"{path}\" -e bash \"{script}\"",
+    ),
+    (
+        "xfce4-terminal",
+        "--working-directory=\"{path}\" -x bash -lc {command}",
+        "--working-directory=\"{path}\" -x bash \"{script}\"",
+    ),
+    (
+        "tilix",
+        "--working-directory=\"{path}\" -e bash -lc {command}",
+        "--working-directory=\"{path}\" -e bash \"{script}\"",
+    ),
+    (
+        "foot",
+        "--working-directory=\"{path}\" bash -lc {command}",
+        "--working-directory=\"{path}\" bash \"{script}\"",
+    ),
+    (
+        "terminator",
+        "--working-directory=\"{path}\" -x bash -lc {command}",
+        "--working-directory=\"{path}\" -x bash \"{script}\"",
+    ),
+    ("xterm", "-e bash -lc {command}", "-e bash \"{script}\""),
 ];
 
 /// Terminal.app's arguments for a local project on a Mac. `open -a Terminal
@@ -746,7 +824,10 @@ mod tests {
             .resolve_run("x", Some(("Ubuntu", "/home/user/app")), "bun run dev")
             .unwrap();
         assert!(args.contains(r#"--cd "/home/user/app""#));
-        assert!(args.ends_with("\"bun run dev\\; exec bash\""), "{args}");
+        assert!(
+            args.ends_with("\"bun run dev\\; exec ${SHELL:-bash} -l\""),
+            "{args}"
+        );
     }
 
     /// An editor has no run form; asking is a refusal, not a plain open.
