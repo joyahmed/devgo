@@ -219,6 +219,8 @@ type Wiring = {
 	live?: boolean;
 	tmux?: boolean;
 	scripts?: DevScript[];
+	/// the backend's install entry; set, the answer is the full ScriptList
+	install?: DevScript;
 	/// command name → the value it rejects with
 	fail?: Record<string, string>;
 };
@@ -271,7 +273,11 @@ const wire = (w: Wiring = {}) => {
 					window_names: ['dev']
 				});
 			case 'get_project_scripts':
-				return Promise.resolve(w.scripts ?? []);
+				return Promise.resolve(
+					w.install
+						? { scripts: w.scripts ?? [], reason: null, install: w.install }
+						: (w.scripts ?? [])
+				);
 			case 'get_wsl_path':
 				return Promise.resolve('/home/dev/code/devgo');
 			case 'pty_open':
@@ -898,6 +904,53 @@ describe('project menu › dev section — "Run dev script…"', () => {
 
 		expect(row.isConnected).toBe(false);
 		expect(calls('run_script').length).toBe(1);
+	});
+
+	// ── Install: the backend sends `{pm} install` when it read a package.json
+	it('Install tops the dev menu, split from the scripts by a separator', async () => {
+		await openMenu({
+			scripts: [
+				{ name: 'dev', command: 'pnpm run dev' },
+				{ name: 'build', command: 'pnpm run build' }
+			],
+			install: { name: 'Install', command: 'pnpm install' }
+		});
+		await pick('Run dev script…');
+		await untilRows(3);
+
+		expect(structure()).toEqual(['Install', 'separator', 'dev', 'build']);
+		expect(hintOf('Install')).toBe('pnpm install');
+	});
+
+	it('picking Install sends its command through run_script, the dev-script launcher', async () => {
+		const p = await openMenu({
+			scripts: [{ name: 'dev', command: 'bun run dev' }],
+			install: { name: 'Install', command: 'bun install' }
+		});
+		await pick('Run dev script…');
+		await untilRows(2);
+		await pick('Install');
+
+		expect(calls('run_script')).toEqual([{ project: p, command: 'bun install' }]);
+	});
+
+	it('a package.json with no scripts still offers Install instead of "No dev scripts"', async () => {
+		await openMenu({
+			scripts: [],
+			install: { name: 'Install', command: 'npm install' }
+		});
+		await pick('Run dev script…');
+		await untilRows(1);
+
+		expect(labels()).toEqual(['Install']);
+	});
+
+	it('no package.json, no Install row', async () => {
+		await openMenu({ scripts: [{ name: 'cargo run', command: 'cargo run' }] });
+		await pick('Run dev script…');
+		await untilRows(1);
+
+		expect(labels()).toEqual(['cargo run']);
 	});
 
 	it('"Open remote" is ABSENT for a project with no git remote', async () => {

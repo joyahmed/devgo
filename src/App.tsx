@@ -35,6 +35,8 @@ import TrafficPopover from './components/TrafficPopover';
 import FileSystems from './components/FileSystems';
 import ToastProvider, { useToast } from './components/Toast';
 import {
+	devMenuIsEmpty,
+	devMenuRows,
 	emptyScriptsMessage,
 	readScripts,
 	scriptsLogLine
@@ -1724,32 +1726,37 @@ const AppInner = () => {
 					project: p
 				})
 			);
-			const scripts = list.scripts;
 			// ⭐ the one line that covers every entry in the dev section, and
 			// the whole reason this is one slice: see src/devScripts.ts
 			logLine(scriptsLogLine(p.name, list));
-			if (scripts.length === 0) {
+			if (devMenuIsEmpty(list)) {
 				toast(emptyScriptsMessage(list), 'info');
 				return;
 			}
 			setScriptMenu({
 				x,
 				y,
-				items: scripts.map(s => ({
-					label: s.name,
-					hint: s.command,
-					onClick: () =>
-						invoke('run_script', {
-							project: p,
-							command: s.command
-						}).catch(e => {
-							// a refusal is logged on the rust side; this is the
-							// one that never reached it, and until now it left
-							// only a toast the user had already dismissed
-							logLine(`run_script ${s.command}: ${showError(e)}`);
-							toast(showError(e), 'error');
-						})
-				}))
+				// Install and the scripts alike go through run_script: one
+				// launcher path, one terminal, one login shell
+				items: devMenuRows(list).map(s =>
+					s === 'separator'
+						? s
+						: {
+								label: s.name,
+								hint: s.command,
+								onClick: () =>
+									invoke('run_script', {
+										project: p,
+										command: s.command
+									}).catch(e => {
+										// a refusal is logged on the rust side; this is
+										// the one that never reached it, and until now it
+										// left only a toast the user had already dismissed
+										logLine(`run_script ${s.command}: ${showError(e)}`);
+										toast(showError(e), 'error');
+									})
+							}
+				)
 			});
 		} catch (e) {
 			logLine(`get_project_scripts ${p.name}: ${showError(e)}`);

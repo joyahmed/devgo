@@ -180,6 +180,9 @@ interface DevScript {
 interface ScriptList {
 	scripts: DevScript[];
 	reason: string | null;
+	/// `{pm} install` under the detected package manager, present exactly
+	/// when a package.json was read - the dev menu's Install entry
+	install: DevScript | null;
 }
 
 /// bare folder names the scan skips, on top of dotfolders, and how many

@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+	devMenuIsEmpty,
+	devMenuRows,
 	emptyScriptsMessage,
 	readScripts,
 	scriptsLogLine
@@ -41,7 +43,7 @@ const ASLEEP =
 
 describe('readScripts', () => {
 	it('passes the reason-bearing shape through untouched', () => {
-		const list: ScriptList = { scripts: two, reason: ASLEEP };
+		const list: ScriptList = { scripts: two, reason: ASLEEP, install: null };
 		expect(readScripts(list)).toEqual(list);
 	});
 
@@ -50,8 +52,8 @@ describe('readScripts', () => {
 	/// would take `.length` off undefined and throw — swapping the empty menu
 	/// we are here to explain for a TypeError toast, the same bug one layer up
 	it('reads a bare array as a list with nothing to explain', () => {
-		expect(readScripts(two)).toEqual({ scripts: two, reason: null });
-		expect(readScripts([])).toEqual({ scripts: [], reason: null });
+		expect(readScripts(two)).toEqual({ scripts: two, reason: null, install: null });
+		expect(readScripts([])).toEqual({ scripts: [], reason: null, install: null });
 	});
 });
 
@@ -59,7 +61,7 @@ describe('scriptsLogLine', () => {
 	/// ⭐ the line the failing click did not write. one line covers every
 	/// entry in the dev section, because they all come out of this one array
 	it('names the count and every script, so a report can be read cold', () => {
-		const line = scriptsLogLine('devgo', { scripts: two, reason: null });
+		const line = scriptsLogLine('devgo', { scripts: two, reason: null, install: null });
 
 		expect(line).toBe('scripts devgo: 2 [dev build]');
 	});
@@ -69,7 +71,8 @@ describe('scriptsLogLine', () => {
 	it('a zero carries the reason beside it', () => {
 		const line = scriptsLogLine('med-store-management', {
 			scripts: [],
-			reason: ASLEEP
+			reason: ASLEEP,
+			install: null
 		});
 
 		expect(line.startsWith('scripts med-store-management: 0 []')).toBe(true);
@@ -82,7 +85,8 @@ describe('scriptsLogLine', () => {
 	it('keeps the reason on a non-empty list', () => {
 		const line = scriptsLogLine('api', {
 			scripts: [{ name: 'cargo run', command: 'cargo run' }],
-			reason: ASLEEP
+			reason: ASLEEP,
+			install: null
 		});
 
 		expect(line).toContain('1 [cargo run]');
@@ -95,14 +99,71 @@ describe('emptyScriptsMessage', () => {
 	/// is not a fact about the project, and the user acted on it as if it
 	/// were — the retry that "fixed" it only refreshed a 5-second memo
 	it('says why, when the backend knows why', () => {
-		expect(emptyScriptsMessage({ scripts: [], reason: ASLEEP })).toBe(ASLEEP);
+		expect(emptyScriptsMessage({ scripts: [], reason: ASLEEP, install: null })).toBe(ASLEEP);
 	});
 
 	/// and the old sentence survives for the case it was always true for:
 	/// nothing stopped us looking, so the project really has none
 	it('claims the project has none only when nothing stopped the read', () => {
-		expect(emptyScriptsMessage({ scripts: [], reason: null })).toBe(
+		expect(emptyScriptsMessage({ scripts: [], reason: null, install: null })).toBe(
 			'No dev scripts found for this project'
 		);
+	});
+});
+
+const INSTALL: DevScript = { name: 'Install', command: 'pnpm install' };
+
+describe('readScripts › install', () => {
+	/// an answer from before the field existed must not leave it undefined
+	it('reads a missing install as null', () => {
+		expect(
+			readScripts({ scripts: two, reason: null } as unknown as ScriptList)
+		).toEqual({ scripts: two, reason: null, install: null });
+	});
+
+	it('keeps the install the backend sent', () => {
+		const list: ScriptList = { scripts: two, reason: null, install: INSTALL };
+		expect(readScripts(list).install).toEqual(INSTALL);
+	});
+});
+
+describe('devMenuRows', () => {
+	/// ⭐ Install sits on top, split from the scripts by a separator
+	it('puts Install first, then a separator, then the scripts', () => {
+		expect(
+			devMenuRows({ scripts: two, reason: null, install: INSTALL })
+		).toEqual([INSTALL, 'separator', ...two]);
+	});
+
+	it('a package.json with no scripts is Install alone, no dangling separator', () => {
+		expect(
+			devMenuRows({ scripts: [], reason: null, install: INSTALL })
+		).toEqual([INSTALL]);
+	});
+
+	/// no package.json (rust-only, or a sleeping distro): no Install row
+	it('no install means the scripts alone, unchanged', () => {
+		const cargo = [{ name: 'cargo run', command: 'cargo run' }];
+		expect(devMenuRows({ scripts: cargo, reason: null, install: null })).toEqual(
+			cargo
+		);
+	});
+});
+
+describe('devMenuIsEmpty', () => {
+	it('is empty only with no install and no scripts', () => {
+		expect(devMenuIsEmpty({ scripts: [], reason: null, install: null })).toBe(true);
+		expect(devMenuIsEmpty({ scripts: [], reason: null, install: INSTALL })).toBe(
+			false
+		);
+		expect(devMenuIsEmpty({ scripts: two, reason: null, install: null })).toBe(false);
+	});
+});
+
+describe('scriptsLogLine › install', () => {
+	it('names the install command beside the scripts', () => {
+		expect(
+			scriptsLogLine('devgo', { scripts: two, reason: null, install: INSTALL })
+		).toBe('scripts devgo: 2 [dev build] + pnpm install');
 	});
 });

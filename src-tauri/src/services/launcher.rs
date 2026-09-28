@@ -2447,6 +2447,65 @@ mod tests {
         assert_eq!(cmd_line(&exe, &args), format!("/c wt {args}"));
     }
 
+    // the dev menu's Install entry is a dev script like any other: the same
+    // wt line, the same interactive login bash, so `pnpm install` in a WSL
+    // project finds the distro's nvm node and not the windows shim
+    #[cfg(windows)]
+    #[test]
+    fn a_wsl_install_runs_on_the_dev_script_line() {
+        for pm in ["pnpm", "bun", "yarn", "npm"] {
+            let install = crate::services::scripts::install_command(pm);
+            let (exe, args) = run_line(
+                &wt(),
+                &wsl_project("zettabyte", "projects"),
+                &with_distro("Ubuntu"),
+                &install,
+            )
+            .unwrap();
+            assert_eq!(exe, "wt");
+            assert_eq!(
+                args,
+                format!(
+                    r#"wsl -d Ubuntu --cd "/home/user/projects/zettabyte" -e bash -lic "{pm} install\; exec ${{SHELL:-bash}} -l""#
+                )
+            );
+        }
+    }
+
+    // and on linux/mac through the same run script, in the user's shell
+    #[cfg(not(windows))]
+    #[test]
+    fn a_linux_install_runs_in_the_users_shell_like_a_dev_script() {
+        let project = local_project("linux-install", "work");
+        let gnome = LaunchTarget {
+            id: "gnome-terminal".into(),
+            name: "GNOME Terminal".into(),
+            kind: TargetKind::Terminal,
+            executable: "gnome-terminal".into(),
+            args_template: String::new(),
+            wsl_executable: None,
+            wsl_args_template: None,
+            run_args_template: Some(
+                crate::models::target::LINUX_RUN_ARGS_PRE_SCRIPT[0].2.into(),
+            ),
+            reveal_args_template: None,
+            wsl_run_args_template: None,
+        };
+        let install = crate::services::scripts::install_command("pnpm");
+        let (_, _, script) =
+            run_line_parts(&gnome, &project, &no_distro(), &install).unwrap();
+        let script = script.expect("a run script");
+        let body = std::fs::read_to_string(&script).unwrap();
+        assert!(
+            body.contains(&format!(
+                "\"${{SHELL:-bash}}\" -ic {}\n",
+                sh_quote(&format!("{}pnpm install", mac_run_header()))
+            )),
+            "{body}"
+        );
+        let _ = std::fs::remove_file(&script);
+    }
+
     // a linux terminal's dev script goes through the run script, not onto
     // the line: /bin/sh split `bash -lc pnpm run dev` into words and bash
     // ran a bare `pnpm`. the script runs it in the user's own interactive

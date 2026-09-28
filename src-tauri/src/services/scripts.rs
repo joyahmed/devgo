@@ -29,6 +29,19 @@ pub struct DevScript {
 pub struct ScriptList {
     pub scripts: Vec<DevScript>,
     pub reason: Option<String>,
+    /// `{runner} install`, present exactly when a package.json was read —
+    /// the same condition that yields the project's own scripts, so the
+    /// entry never shows for a rust/go-only project or a sleeping distro.
+    /// It runs through `run`, the dev-script path, so it lands in the same
+    /// terminal with the same login shell (and nvm) as `pnpm run dev`.
+    pub install: Option<DevScript>,
+}
+
+/// The install line for a runner. npm is `npm install`, not `npm ci`: ci
+/// deletes node_modules and refuses a lockfile that drifted from
+/// package.json, and this entry is the everyday "get me the deps" click.
+pub fn install_command(runner: &str) -> String {
+    format!("{runner} install")
 }
 
 // tolerant on purpose: a package.json we half understand still yields its
@@ -132,10 +145,18 @@ pub fn for_project(
         None => read_windows(&project.full_path),
     };
 
+    let install = json.as_ref().map(|_| DevScript {
+        name: "Install".into(),
+        command: install_command(runner),
+    });
     let mut scripts =
         json.map(|j| parse_scripts(&j, runner)).unwrap_or_default();
     scripts.extend(conventional(tags));
-    ScriptList { scripts, reason }
+    ScriptList {
+        scripts,
+        reason,
+        install,
+    }
 }
 
 pub fn run(
@@ -197,6 +218,7 @@ mod tests {
         let got = for_project(&wsl_project("Ubuntu"), &[], Some("pnpm"), &[]);
 
         assert!(got.scripts.is_empty(), "a stopped distro reads nothing");
+        assert!(got.install.is_none(), "no package.json read, no install");
         let reason = got
             .reason
             .expect("a distro that was never asked must state why");
@@ -233,6 +255,7 @@ mod tests {
         let got = for_project(&project, &[], None, &[]);
 
         assert!(got.scripts.is_empty());
+        assert!(got.install.is_none(), "no package.json, no install entry");
         assert_eq!(
             got.reason, None,
             "nothing stopped us looking; the empty list IS the answer"
@@ -254,6 +277,52 @@ mod tests {
 
         assert!(got.scripts.iter().any(|s| s.command == "cargo run"));
         assert!(got.reason.is_some(), "the package.json was still not read");
+    }
+
+    #[test]
+    fn install_is_the_runners_own_install_never_ci() {
+        for (pm, want) in [
+            ("pnpm", "pnpm install"),
+            ("bun", "bun install"),
+            ("yarn", "yarn install"),
+            ("npm", "npm install"),
+        ] {
+            assert_eq!(install_command(pm), want);
+        }
+        assert!(!install_command("npm").contains("ci"));
+    }
+
+    /// A package.json on disk yields the install entry under the detected
+    /// runner; no runner (no lockfile yet) is npm, same as the scripts.
+    #[test]
+    fn a_package_json_offers_install_under_the_detected_runner() {
+        let dir = std::env::temp_dir().join("devgo-scripts-install");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("package.json"),
+            r#"{"name":"x","scripts":{"dev":"vite"}}"#,
+        )
+        .unwrap();
+        let project = Project::new(
+            "x".to_string(),
+            dir.to_string_lossy().into_owned(),
+            dir.to_string_lossy().into_owned(),
+            "Windows".to_string(),
+        );
+
+        for (pm, want) in [
+            (Some("pnpm"), "pnpm install"),
+            (Some("bun"), "bun install"),
+            (Some("yarn"), "yarn install"),
+            (None, "npm install"),
+        ] {
+            let got = for_project(&project, &[], pm, &[]);
+            let install = got.install.expect("package.json read");
+            assert_eq!(install.name, "Install");
+            assert_eq!(install.command, want);
+        }
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

@@ -21,8 +21,29 @@
 /// a test mock still can. A reader that assumed the new shape would take
 /// `.length` off undefined and throw — replacing the empty menu we are here
 /// to explain with a TypeError toast, which is the same bug one layer up.
+/// An answer from before `install` existed reads as "no install entry",
+/// never as undefined, for the same reason.
 export const readScripts = (answer: DevScript[] | ScriptList): ScriptList =>
-	Array.isArray(answer) ? { scripts: answer, reason: null } : answer;
+	Array.isArray(answer)
+		? { scripts: answer, reason: null, install: null }
+		: { ...answer, install: answer.install ?? null };
+
+/// The dev menu, top to bottom: Install first — it is what a fresh clone
+/// needs before any script can run — then a separator, then the scripts.
+/// Every row is a command for `run_script`, so Install rides the exact
+/// launcher path the dev scripts do.
+export const devMenuRows = (list: ScriptList): (DevScript | 'separator')[] =>
+	list.install
+		? [
+				list.install,
+				...(list.scripts.length > 0 ? (['separator'] as const) : []),
+				...list.scripts
+			]
+		: list.scripts;
+
+/// Nothing to offer at all: no install and no scripts.
+export const devMenuIsEmpty = (list: ScriptList) =>
+	list.install === null && list.scripts.length === 0;
 
 /// ⭐ One line for the whole dev section.
 ///
@@ -35,6 +56,7 @@ export const readScripts = (answer: DevScript[] | ScriptList): ScriptList =>
 export const scriptsLogLine = (project: string, list: ScriptList) =>
 	`scripts ${project}: ${list.scripts.length}` +
 	` [${list.scripts.map(s => s.name).join(' ')}]` +
+	(list.install ? ` + ${list.install.command}` : '') +
 	(list.reason ? ` · ${list.reason}` : '');
 
 /// Why the section is empty, in the user's words.
