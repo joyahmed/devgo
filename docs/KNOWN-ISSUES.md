@@ -1,7 +1,7 @@
 # Known issues
 
 What DevGo gets wrong today, what you will see when it happens, and what to do instead. The current
-release is v1.2.4.
+release is v1.2.5.
 
 Shipping a list like this is cheaper than the alternative for both of us: if you hit something here,
 it is known and you do not need to write it up. Everything else is worth an
@@ -185,12 +185,14 @@ on the emulator's own command line with no shell around it, so nvm, fnm or `brew
 those four now run a dev script the way Terminal.app does — through your own shell, which reads your
 rc file first, and then leave you at your login shell in the project when the script stops.
 
-⚠️ **The loose end: I have not run those four on a real Mac or a real Linux desktop.** The change is
-covered by tests and it is the same run script Terminal.app already uses, but a green test
-is not a window I have watched. If one of them opens and the script does not start, that is the
-report I want — the log section below says what to attach. Until one is confirmed, Terminal.app or
-iTerm2 are the safe targets for dev-script launches: Settings › Editors & Terminals, or the footer's
-Terminal group, which names the one each key will use.
+**Ghostty is now confirmed, on a real Mac**: `bun run smoke` drove an installed v1.2.5 build through
+Ghostty and watched it — nvm loaded, and the tab stayed at `/bin/zsh -l` when the script stopped,
+same as Terminal.app. WezTerm, Kitty and Alacritty are still unwatched on real hardware, and so is
+every Linux desktop terminal (GNOME Terminal and the rest) — the Linux box this has been driven on
+so far is a headless server. If one of the still-unverified four opens and the script does not
+start, that is the report I want — the log section below says what to attach. Until a given emulator
+is confirmed, Terminal.app or iTerm2 remain the safe targets on a Mac: Settings › Editors &
+Terminals, or the footer's Terminal group, which names the one each key will use.
 
 ## A dev script inside WSL could not find node (v1.2.3 and earlier)
 
@@ -207,6 +209,15 @@ new line on first launch, but only rows that still match what it shipped byte fo
 a copy of `targets.json` beside the original before it touches anything. A row you changed yourself
 is left exactly as you wrote it, which also means it keeps the old behaviour. If a WSL dev script
 still says `node: not found` on v1.2.4, check that row first in Settings › Editors & Terminals.
+
+## Install and a dev script for the same project could collide (v1.2.4 and earlier, macOS and Linux)
+
+On macOS and Linux, the run script DevGo writes for a launch was named after the project alone, not
+the command. Running **Install** and *Run dev script…* for the same project close together made both
+write to that one file: whichever ran second overwrote it, and if the first had already deleted its
+copy after running, the second command's tab failed with `No such file or directory` instead of
+running. **Fixed in v1.2.5**: the filename now also hashes the command, so Install and a dev script
+each get their own file and no longer step on each other.
 
 ## macOS builds are Apple Silicon only
 
@@ -233,6 +244,7 @@ all of it, here is what I have and have not.
 | Windows | Trove, File Explorer | right-clicked a project, chose *Reveal in Trove*: the process started with the project's parent folder in its window title. The explicit *Reveal in File Explorer* row opens Explorer. |
 | Windows | VS Code, Windows Terminal, Claude Code | I use these every day, so they are the paths I exercise constantly — a different kind of evidence than the row above, and a much stronger one than anything below |
 | macOS | Terminal.app with Claude Code | *Open in agent* opened a Terminal window that ran `claude` in the project |
+| macOS | Ghostty, dev script | `bun run smoke` drove *Run dev script…* through Ghostty on an installed v1.2.5 build: nvm loaded, and the tab stayed at `/bin/zsh -l` when the script stopped |
 | Linux | VS Code, xterm | `Ctrl+Enter` opened the project; `Shift+Enter` gave me a shell already sitting in the project directory |
 
 Two things that table does not say on its own.
@@ -251,7 +263,7 @@ of me:
 | kind | I have not launched these |
 |---|---|
 | Editors | VS Code Insiders, Cursor, Windsurf, Zed, Sublime Text, IntelliJ IDEA, WebStorm, PyCharm, RustRover, GoLand, Fleet — and Neovim, Helix, Vim, Emacs and Micro, which are only offered inside a WSL distribution |
-| Terminals | iTerm2, Ghostty, WezTerm, Kitty, Alacritty, Konsole, Xfce Terminal, Tilix, foot, Terminator (and GNOME Terminal, above) |
+| Terminals | iTerm2, WezTerm, Kitty, Alacritty, Konsole, Xfce Terminal, Tilix, foot, Terminator (and GNOME Terminal, above) |
 | Agents | Codex, OpenCode, Gemini CLI |
 | File managers | Finder, the desktop default (`xdg-open`), Files (Nautilus), Dolphin, Nemo, Thunar, Caja, PCManFM |
 
@@ -265,8 +277,8 @@ The failure to watch for is a quiet one: **a window opens and the command does n
 or terminal appears, in the right directory or the wrong one, and the agent or dev script you asked
 for never starts, with no error — because DevGo has handed off by then, and what happens inside that
 window belongs to the program that owns it. On a Mac, read the macOS entry above first: Ghostty,
-WezTerm, Kitty and Alacritty had exactly this failure through v1.2.3, and v1.2.4's fix for it is
-tested but not yet watched on real hardware.
+WezTerm, Kitty and Alacritty had exactly this failure through v1.2.3. The fix is confirmed on
+Ghostty on real hardware; WezTerm, Kitty and Alacritty are still tested but not yet watched.
 
 The log will go a long way here. Every launch you ask for writes two lines: what DevGo was about to
 run, and whether the spawn was accepted or refused. Between them they say which of the two failures
@@ -282,15 +294,16 @@ the first.
 Until then, Settings › Editors & Terminals will point the agent and dev-script keys at anything in
 the first table.
 
-## `bun run smoke` has not been run on macOS or Linux yet
+## `bun run smoke` has now run on all three platforms
 
 For anyone building DevGo themselves. `bun run install:local` rebuilds, reinstalls and relaunches
 DevGo on all three platforms, and `bun run smoke` then checks, without driving a window, that the
-running build is the one you just made and that its dev menu lines find your node. At the time
-v1.2.4 was tagged, smoke had been run only on Windows, and not yet on a Mac or a
-Linux desktop, so its macOS and Linux paths are written and reviewed but not yet exercised. If it
-reports something that is plainly wrong on one of those, that is a bug in the check, and worth an
-issue.
+running build is the one you just made and that its dev menu lines find your node. As of v1.2.5,
+smoke has passed on an installed build at the same commit on all three: macOS 5 of 5, Linux
+(a headless Ubuntu server, not a desktop) 5 of 5, and Windows with WSL 8 of 8. That confirms the
+dev menu's node-finding and shell behaviour on each platform's own smoke checks; it does not stand
+in for watching a GUI terminal emulator open a window by hand — the entry above says which of those
+are and are not confirmed that way.
 
 ## The log, and why attaching it helps
 
