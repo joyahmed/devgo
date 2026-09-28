@@ -30,6 +30,29 @@ function Step([string] $msg) {
 	else { Write-Host $msg }
 }
 
+# NSIS preserves the *source* file's write time when it copies it into the
+# install directory, so the installed exe's mtime is always the moment
+# cargo wrote it during the build, never the moment the installer ran - a
+# build that took even a few seconds makes a genuinely successful install
+# look stale if compared against installer-launch time. freshness instead
+# means: at or after the moment this run's build started (--skip-build: no
+# build ran this run, so compare against the exe already on disk in
+# target\release instead, 2s of tolerance for filesystem mtime rounding).
+function Test-InstallFresh {
+	param(
+		[datetime] $InstalledTime,
+		[bool] $SkipBuild,
+		$BuildStart,
+		$BuiltBinaryTime
+	)
+	if ($SkipBuild) {
+		if (-not $BuiltBinaryTime) { throw "Test-InstallFresh: --skip-build needs the built binary's write time to compare against" }
+		return $InstalledTime -ge $BuiltBinaryTime.AddSeconds(-2)
+	}
+	if (-not $BuildStart) { throw 'Test-InstallFresh: needs $BuildStart when a build ran' }
+	return $InstalledTime -ge $BuildStart
+}
+
 # a repo-wide "which OS" test would need $IsWindows (PS 7+, absent on
 # Windows PowerShell 5.1) with a fallback that works on both
 $onWindows = if (Get-Variable -Name IsWindows -ErrorAction SilentlyContinue) { $IsWindows } else { $env:OS -eq 'Windows_NT' }
@@ -41,6 +64,7 @@ $RepoRoot = Resolve-Path (Join-Path $PSScriptRoot '..')
 $BundleDir = Join-Path $RepoRoot 'src-tauri\target\release\bundle\nsis'
 $InstallDir = Join-Path $env:LOCALAPPDATA 'DevGo'
 $InstalledExe = Join-Path $InstallDir 'DevGo.exe'
+$BuiltBinaryPath = Join-Path $RepoRoot 'src-tauri\target\release\DevGo.exe'
 
 # --- 1. build -----------------------------------------------------------
 if ($SkipBuild) {
@@ -50,6 +74,7 @@ if ($SkipBuild) {
 	# and the build's `tsc` then fails on the missing import before cargo runs
 	Step '1/4 bun install --frozen-lockfile'
 	Step '1/4 bun run tauri build'
+	$BuildStart = Get-Date
 	if (-not $DryRun) {
 		Push-Location $RepoRoot
 		try {
@@ -96,7 +121,7 @@ if (-not $installer) {
 
 # --- 2. stop the running DevGo, then install silently -------------------
 Step '3/4 stop any running DevGo.exe, wait for it to exit, run the installer /S'
-Step "3/4 verify $InstalledExe was actually rewritten (mtime at or after the install)"
+Step "3/4 verify $InstalledExe was actually rewritten (mtime at or after the build)"
 if (-not $DryRun) {
 	$procs = Get-Process -Name DevGo -ErrorAction SilentlyContinue
 	if ($procs) {
@@ -112,7 +137,6 @@ if (-not $DryRun) {
 	}
 
 	if (-not $installer) { throw 'no installer to run (should have failed above already)' }
-	$InstallStart = Get-Date
 	$p = Start-Process -FilePath $installer.FullName -ArgumentList '/S' -Wait -PassThru
 	if ($p.ExitCode -ne 0) { throw "installer exited $($p.ExitCode): $($installer.FullName)" }
 
@@ -122,12 +146,22 @@ if (-not $DryRun) {
 	# the built exe and the freshly-installed one at a fixed ~8.84MB offset
 	# on an install that had genuinely changed - almost certainly NSIS
 	# stamping installer metadata into its copy - so hash equality is not a
-	# safe signal here. freshness is: the installed exe's write time must be
-	# at or after the moment the installer was launched.
+	# safe signal here. freshness is Test-InstallFresh above, not a raw
+	# comparison against the moment the installer ran: see its comment for
+	# why (NSIS carries the source exe's mtime through the copy).
 	$installedItem = Get-Item $InstalledExe -ErrorAction SilentlyContinue
 	if (-not $installedItem) { throw "installer reported success but $InstalledExe is missing" }
-	if ($installedItem.LastWriteTime -lt $InstallStart) {
-		throw "installer reported success but $InstalledExe's mtime ($($installedItem.LastWriteTime)) predates this install (started $InstallStart) - it may not have actually been replaced"
+	if ($SkipBuild) {
+		$builtItem = Get-Item $BuiltBinaryPath -ErrorAction SilentlyContinue
+		if (-not $builtItem) { throw "--skip-build has nothing to compare $InstalledExe's mtime against: $BuiltBinaryPath is missing" }
+		$fresh = Test-InstallFresh -InstalledTime $installedItem.LastWriteTime -SkipBuild $true -BuiltBinaryTime $builtItem.LastWriteTime
+		$against = "the built exe already on disk ($BuiltBinaryPath, mtime $($builtItem.LastWriteTime))"
+	} else {
+		$fresh = Test-InstallFresh -InstalledTime $installedItem.LastWriteTime -SkipBuild $false -BuildStart $BuildStart
+		$against = "this run's build start ($BuildStart)"
+	}
+	if (-not $fresh) {
+		throw "installer reported success but $InstalledExe's mtime ($($installedItem.LastWriteTime)) predates $against - it may not have actually been replaced"
 	}
 }
 
