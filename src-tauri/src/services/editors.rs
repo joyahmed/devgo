@@ -1,6 +1,6 @@
 //! Finding the editors and terminals that are actually installed.
 //!
-//! One `where.exe` for every Windows candidate and one `bash -lc` per
+//! One `where.exe` for every Windows candidate and one `bash -lic` per
 //! running distro, never a process per editor. A stopped distro is not
 //! asked: an editor list is not worth booting a VM for. On a Mac there is
 //! no crossing at all: the login-shell PATH is one string, resolved once,
@@ -246,7 +246,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_args: Some("-e wsl -d {distro} bash \"{script}\""),
         run_args: Some("--working-directory \"{path}\" -e cmd /k {command}"),
         wsl_run_args: Some(
-            "-e wsl -d {distro} --cd \"{linux_path}\" -e bash -lc \"{command}; exec bash\"",
+            "-e wsl -d {distro} --cd \"{linux_path}\" -e bash -lic \"{command}; exec bash\"",
         ),
         reveal_args: None,
         app: None,
@@ -261,7 +261,7 @@ const CANDIDATES: &[Candidate] = &[
         wsl_args: Some("start -- wsl -d {distro} bash \"{script}\""),
         run_args: Some("start --cwd \"{path}\" -- cmd /k {command}"),
         wsl_run_args: Some(
-            "start -- wsl -d {distro} --cd \"{linux_path}\" -e bash -lc \"{command}; exec bash\"",
+            "start -- wsl -d {distro} --cd \"{linux_path}\" -e bash -lic \"{command}; exec bash\"",
         ),
         reveal_args: None,
         app: None,
@@ -800,7 +800,7 @@ const CANDIDATES: &[Candidate] = &[
 ];
 
 /// Coding-agent CLIs, on the Windows side and inside each running distro,
-/// found the way the editors are: where.exe here, command -v under bash -lc
+/// found the way the editors are: where.exe here, command -v under bash -lic
 /// there (so an nvm install is on PATH). On Windows an npm-installed CLI
 /// resolves to claude.cmd; where lists it and the terminal's run template
 /// runs it. On a Mac the same four names resolve on the login-shell PATH,
@@ -1118,7 +1118,7 @@ pub fn detect(running: &[String]) -> Vec<DetectedTarget> {
     out
 }
 
-/// Which of a table's commands exist in the distro, in one bash -lc.
+/// Which of a table's commands exist in the distro, in one bash -lic.
 fn present_in_distro(
     distro: &str,
     table: &'static [(&'static str, &'static str)],

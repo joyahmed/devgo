@@ -4,9 +4,9 @@ use std::path::{Path, PathBuf};
 use crate::error::AppError;
 use crate::models::target::{
     defaults, LaunchTarget, TargetKind, LINUX_ARGS_PRE_TMUX, MAC_TERMINAL_ARGS,
-    MAC_TERMINAL_RUN_ARGS, VSCODE_WSL_ARGS, VSCODE_WSL_ARGS_PRE, WT_ARGS,
-    WT_ARGS_PRE_PSMUX, WT_RUN_ARGS, WT_RUN_ARGS_PRE, WT_WSL_RUN_ARGS,
-    WT_WSL_RUN_ARGS_PRE,
+    MAC_TERMINAL_RUN_ARGS, VSCODE_WSL_ARGS, VSCODE_WSL_ARGS_PRE,
+    WSL_RUN_ARGS_PRE_INTERACTIVE, WT_ARGS, WT_ARGS_PRE_PSMUX, WT_RUN_ARGS,
+    WT_RUN_ARGS_PRE, WT_WSL_RUN_ARGS, WT_WSL_RUN_ARGS_PRE,
 };
 
 /// Editors and terminals, persisted together.
@@ -51,6 +51,7 @@ impl TargetStore {
         store.adopt_psmux_template()?;
         store.adopt_run_template()?;
         store.adopt_wt_semicolon_escape()?;
+        store.adopt_interactive_wsl_run()?;
         store.adopt_remote_uri_quotes()?;
         store.adopt_mac_ghostty_bundle()?;
         store.adopt_linux_session_script()?;
@@ -157,6 +158,38 @@ impl TargetStore {
         }
         self.targets[pos].wsl_run_args_template =
             Some(WT_WSL_RUN_ARGS.to_string());
+        self.save()
+    }
+
+    /// The WSL run line ran `bash -lc`, which reads ~/.profile but stops at
+    /// the top of ~/.bashrc, where nvm lives: a pnpm dev script resolved to
+    /// the Windows shim on /mnt/c and died on `exec: node: not found`. Not
+    /// keyed to an id: wt, Alacritty and WezTerm each shipped a form, and
+    /// the exact old bytes are what mark a row nobody edited.
+    fn adopt_interactive_wsl_run(&mut self) -> Result<(), AppError> {
+        let stale: Vec<(usize, &'static str)> = self
+            .targets
+            .iter()
+            .enumerate()
+            .filter_map(|(i, t)| {
+                let old = t.wsl_run_args_template.as_deref()?;
+                WSL_RUN_ARGS_PRE_INTERACTIVE
+                    .iter()
+                    .find(|(pre, _)| *pre == old)
+                    .map(|(_, new)| (i, *new))
+            })
+            .collect();
+        if stale.is_empty() {
+            return Ok(());
+        }
+        if self.file_path.exists() {
+            let backup =
+                format!("{}.pre-interactive-run", self.file_path.display());
+            fs::copy(&self.file_path, backup)?;
+        }
+        for (pos, new) in stale {
+            self.targets[pos].wsl_run_args_template = Some(new.to_string());
+        }
         self.save()
     }
 
@@ -717,6 +750,84 @@ mod tests {
 ]"#,
             wt_args.replace('"', "\\\"")
         )
+    }
+
+    /// An install whose wt row carries the shipped `bash -lc` run line - the
+    /// file on every machine today - moves to `-lic`, with a backup. An
+    /// Alacritty row added from detection moves too; a hand-written WSL run
+    /// line that merely mentions -lc is the user's and stays.
+    #[test]
+    fn a_login_only_wsl_run_line_becomes_interactive_with_a_backup() {
+        let dir = std::env::temp_dir().join("devgo-targets-interactive-run");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let mut rows: Vec<LaunchTarget> = defaults();
+        let wt = rows.iter_mut().find(|t| t.id == "wt");
+        if let Some(wt) = wt {
+            wt.wsl_run_args_template =
+                Some(WSL_RUN_ARGS_PRE_INTERACTIVE[0].0.into());
+        }
+        let mut alacritty = editor("Alacritty");
+        alacritty.id = "alacritty".into();
+        alacritty.kind = TargetKind::Terminal;
+        alacritty.wsl_run_args_template =
+            Some(WSL_RUN_ARGS_PRE_INTERACTIVE[1].0.into());
+        let custom = "wsl -d {distro} -e bash -lc \"{command}\"";
+        let mut mine = editor("Mine");
+        mine.id = "mine".into();
+        mine.kind = TargetKind::Terminal;
+        mine.wsl_run_args_template = Some(custom.into());
+        rows.push(alacritty);
+        rows.push(mine);
+        let original = serde_json::to_string_pretty(&rows).unwrap();
+        fs::write(dir.join("targets.json"), &original).unwrap();
+
+        let s = TargetStore::new(dir.clone()).unwrap();
+        if s.get("wt").is_some() {
+            assert_eq!(
+                s.get("wt").unwrap().wsl_run_args_template.as_deref(),
+                Some(WT_WSL_RUN_ARGS)
+            );
+        }
+        assert_eq!(
+            s.get("alacritty").unwrap().wsl_run_args_template.as_deref(),
+            Some(WSL_RUN_ARGS_PRE_INTERACTIVE[1].1)
+        );
+        assert_eq!(
+            s.get("mine").unwrap().wsl_run_args_template.as_deref(),
+            Some(custom),
+            "a template the user wrote is theirs"
+        );
+        assert_eq!(
+            fs::read_to_string(dir.join("targets.json.pre-interactive-run"))
+                .unwrap(),
+            original,
+            "the pre-migration file is kept verbatim"
+        );
+
+        // persisted, and a second load has nothing left to adopt
+        let _ = fs::remove_file(dir.join("targets.json.pre-interactive-run"));
+        let again = TargetStore::new(dir.clone()).unwrap();
+        assert_eq!(
+            again
+                .get("alacritty")
+                .unwrap()
+                .wsl_run_args_template
+                .as_deref(),
+            Some(WSL_RUN_ARGS_PRE_INTERACTIVE[1].1)
+        );
+        assert!(!dir.join("targets.json.pre-interactive-run").exists());
+    }
+
+    /// Each rewrite is the old line with -lc made -lic and nothing else
+    /// moved, so a user's terminal row keeps every other byte it had.
+    #[test]
+    fn each_migrated_run_line_is_the_old_one_made_interactive() {
+        for (pre, new) in WSL_RUN_ARGS_PRE_INTERACTIVE {
+            assert!(pre.contains("-e bash -lc \""), "{pre}");
+            assert_eq!(pre.replace("bash -lc", "bash -lic"), *new);
+        }
+        assert!(WT_WSL_RUN_ARGS.contains("bash -lic"));
     }
 
     #[test]

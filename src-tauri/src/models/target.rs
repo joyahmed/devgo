@@ -201,10 +201,36 @@ pub const WT_RUN_ARGS_PRE: &str = "-d \"{path}\" cmd /k {command}";
 /// running the command and one failing on `" exec bash"`. wt turns the
 /// escaped form back into `;` before the line reaches wsl, so bash sees the
 /// two commands as before. Other terminals do no such splitting.
+///
+/// -lic, not -lc: Ubuntu's ~/.bashrc returns at its first lines unless the
+/// shell is interactive, and nvm, fnm and pnpm's installer all write
+/// themselves into ~/.bashrc. Under -lc none of it loads, so `pnpm` fell
+/// through to the Windows shim on the /mnt/c interop PATH, and that shim's
+/// `exec node` found nothing: "/mnt/c/Users/<you>/AppData/Roaming/npm/pnpm:
+/// 15: exec: node: not found", in a distro whose prompt says node v24.
 pub const WT_WSL_RUN_ARGS: &str =
-    "wsl -d {distro} --cd \"{linux_path}\" -e bash -lc \"{command}\\; exec bash\"";
+    "wsl -d {distro} --cd \"{linux_path}\" -e bash -lic \"{command}\\; exec bash\"";
 pub const WT_WSL_RUN_ARGS_PRE: &str =
     "wsl -d {distro} --cd \"{linux_path}\" -e bash -lc \"{command}; exec bash\"";
+
+/// Every WSL run line that shipped under `bash -lc`, next to the `-lic`
+/// form that replaces it: wt's own, and the two detection offers the same
+/// line to. A row still carrying the old bytes is a row nobody edited, so
+/// the store rewrites it once; any other template is the user's.
+pub const WSL_RUN_ARGS_PRE_INTERACTIVE: &[(&str, &str)] = &[
+    (
+        "wsl -d {distro} --cd \"{linux_path}\" -e bash -lc \"{command}\\; exec bash\"",
+        WT_WSL_RUN_ARGS,
+    ),
+    (
+        "-e wsl -d {distro} --cd \"{linux_path}\" -e bash -lc \"{command}; exec bash\"",
+        "-e wsl -d {distro} --cd \"{linux_path}\" -e bash -lic \"{command}; exec bash\"",
+    ),
+    (
+        "start -- wsl -d {distro} --cd \"{linux_path}\" -e bash -lc \"{command}; exec bash\"",
+        "start -- wsl -d {distro} --cd \"{linux_path}\" -e bash -lic \"{command}; exec bash\"",
+    ),
+];
 
 /// Terminal.app's arguments for a local project on a Mac. `open -a Terminal
 /// <file>` is the only way to hand Terminal.app a command from outside: it

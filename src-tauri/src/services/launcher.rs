@@ -1117,7 +1117,7 @@ pub fn server_line(
                 return Err(AppError::WslNotRunning(distro));
             }
             // ~ is wsl's own spelling of the distro user's home, and the
-            // line runs under bash -lc, so it is the distro's ssh and the
+            // line runs under bash -lic, so it is the distro's ssh and the
             // distro's ~/.ssh that answer
             target
                 .resolve_run(
@@ -1195,7 +1195,7 @@ fn run_script_args(
     Ok((args.replace("{script}", &path), Some(path)))
 }
 
-// the command sits inside a double-quoted bash -lc argument
+// the command sits inside a double-quoted bash -lic argument
 fn escape(command: &str) -> String {
     command.replace('\\', "\\\\").replace('"', "\\\"")
 }
@@ -2397,7 +2397,7 @@ mod tests {
     }
 
     // the wsl host is the terminal's wsl run form with the distro's own
-    // ssh: ~ for the distro's home, bash -lc for its PATH and ~/.ssh
+    // ssh: ~ for the distro's home, bash -lic for its PATH and ~/.ssh
     #[cfg(windows)]
     #[test]
     fn a_server_through_wsl_runs_the_distros_own_ssh() {
@@ -2414,9 +2414,30 @@ mod tests {
         assert_eq!(
             args,
             format!(
-                r#"wsl -d Ubuntu --cd "~" -e bash -lc "{SSH}\; exec bash""#
+                r#"wsl -d Ubuntu --cd "~" -e bash -lic "{SSH}\; exec bash""#
             )
         );
+    }
+
+    // a wsl project's dev script runs in an interactive login bash. under
+    // -lc ubuntu's ~/.bashrc returns before nvm loads, `pnpm` resolved to
+    // the windows shim on /mnt/c, and the tab said "exec: node: not found"
+    #[cfg(windows)]
+    #[test]
+    fn a_wsl_dev_script_runs_where_the_distros_nvm_is_loaded() {
+        let (exe, args) = run_line(
+            &wt(),
+            &wsl_project("zettabyte", "projects"),
+            &with_distro("Ubuntu"),
+            "pnpm run dev",
+        )
+        .unwrap();
+        assert_eq!(exe, "wt");
+        assert_eq!(
+            args,
+            r#"wsl -d Ubuntu --cd "/home/user/projects/zettabyte" -e bash -lic "pnpm run dev\; exec bash""#
+        );
+        assert!(!args.contains("bash -lc "), "{args}");
     }
 
     // never a boot: a stopped default distro is a refusal that names it,

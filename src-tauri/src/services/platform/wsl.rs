@@ -180,10 +180,17 @@ pub(crate) fn refresh_running() -> Vec<String> {
 /// status of its last iteration: a missing last candidate makes the whole
 /// probe "fail" after printing perfectly good output. A spawn failure is an
 /// empty vec too, which is the honest answer for optional discovery.
+///
+/// -lic, not -lc: Ubuntu's ~/.bashrc returns early in a shell that is not
+/// interactive, and that is where nvm puts itself, so an agent installed
+/// with npm under nvm (opencode, gemini) was "not installed". Only stdout
+/// is read, and only lines equal to a name asked about count, so what an
+/// interactive rc prints on the way (a motd, a job-control warning on
+/// stderr) cannot be mistaken for an answer.
 #[cfg(windows)]
 pub fn probe_lines(distro: &str, script: &str) -> Vec<String> {
     let Ok(out) = wsl_command()
-        .args(["-d", distro, "-e", "bash", "-lc", script])
+        .args(["-d", distro, "-e", "bash", "-lic", script])
         .output()
     else {
         return Vec::new();
