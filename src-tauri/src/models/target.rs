@@ -310,6 +310,41 @@ pub const LINUX_RUN_ARGS_PRE_SCRIPT: &[(&str, &str, &str)] = &[
     ("xterm", "-e bash -lc {command}", "-e bash \"{script}\""),
 ];
 
+/// The four emulators a mac and a linux box share, their run lines as they
+/// shipped, next to the {script} form that replaces them. The old lines
+/// handed {command} to the emulator with no shell at all: nvm, fnm and
+/// brew's shellenv in ~/.zshrc never loaded, the emulator split
+/// `pnpm run dev` into words itself, and the window closed when the
+/// command ended. The script is the one Terminal.app and the linux rows
+/// already run - preamble, "$SHELL" -ic, then exec "$SHELL" -l - and the
+/// new bytes are each row's session form, as theirs are. Ghostty's run
+/// form moved in d8895ae, but only a fresh detection ever read it: a row
+/// added from PATH before v1.2.2 still carries `-e {command}`. Keyed on the
+/// id and the bytes, as the linux table is: Ghostty and Alacritty differ
+/// by one `=`, and the id says which line to write.
+pub const EMULATOR_RUN_ARGS_PRE_SCRIPT: &[(&str, &str, &str)] = &[
+    (
+        "ghostty",
+        "--working-directory=\"{path}\" -e {command}",
+        "--working-directory=\"{path}\" -e bash \"{script}\"",
+    ),
+    (
+        "wezterm",
+        "start --cwd \"{path}\" -- {command}",
+        "start --cwd \"{path}\" -- bash \"{script}\"",
+    ),
+    (
+        "kitty",
+        "--directory \"{path}\" {command}",
+        "--directory \"{path}\" bash \"{script}\"",
+    ),
+    (
+        "alacritty",
+        "--working-directory \"{path}\" -e {command}",
+        "--working-directory \"{path}\" -e bash \"{script}\"",
+    ),
+];
+
 /// Terminal.app's arguments for a local project on a Mac. `open -a Terminal
 /// <file>` is the only way to hand Terminal.app a command from outside: it
 /// opens a window and runs the file, so the file is the command and

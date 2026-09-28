@@ -2494,6 +2494,55 @@ mod tests {
         let _ = std::fs::remove_file(&script);
     }
 
+    // the four emulators a mac shares with linux ran `-e {command}` with
+    // no shell: nothing in ~/.zshrc loaded, the emulator split the words
+    // and the window closed at the end. each now runs the same script
+    #[cfg(not(windows))]
+    #[test]
+    fn a_shared_emulators_dev_script_runs_in_the_users_shell() {
+        let project = local_project("emulator-run", "work");
+        for (id, pre, new) in
+            crate::models::target::EMULATOR_RUN_ARGS_PRE_SCRIPT
+        {
+            let row = LaunchTarget {
+                id: (*id).into(),
+                name: (*id).into(),
+                kind: TargetKind::Terminal,
+                executable: (*id).into(),
+                args_template: String::new(),
+                wsl_executable: None,
+                wsl_args_template: None,
+                run_args_template: Some((*new).into()),
+                reveal_args_template: None,
+                wsl_run_args_template: None,
+            };
+            let (exe, args, script) =
+                run_line_parts(&row, &project, &no_distro(), "pnpm run dev")
+                    .unwrap();
+            let script = script.expect("a run script");
+            assert_eq!(exe, *id);
+            assert_eq!(
+                args,
+                new.replace("{path}", &project.full_path)
+                    .replace("{script}", &script),
+                "{id}"
+            );
+            assert!(!args.contains("pnpm"), "{id}: {args}");
+            let body = std::fs::read_to_string(&script).unwrap();
+            assert!(body.contains("\" -ic "), "{id}: {body}");
+            assert!(body.ends_with("exec \"${SHELL:-bash}\" -l\n"), "{body}");
+            let _ = std::fs::remove_file(&script);
+
+            // and the line it replaces wrote no script at all
+            let mut old = row.clone();
+            old.run_args_template = Some((*pre).into());
+            let (_, _, none) =
+                run_line_parts(&old, &project, &no_distro(), "pnpm run dev")
+                    .unwrap();
+            assert!(none.is_none(), "{id}");
+        }
+    }
+
     // never a boot: a stopped default distro is a refusal that names it,
     // and no distro at all is the older refusal
     #[test]

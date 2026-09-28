@@ -3,11 +3,12 @@ use std::path::{Path, PathBuf};
 
 use crate::error::AppError;
 use crate::models::target::{
-    defaults, LaunchTarget, TargetKind, LINUX_ARGS_PRE_TMUX,
-    LINUX_RUN_ARGS_PRE_SCRIPT, MAC_TERMINAL_ARGS, MAC_TERMINAL_RUN_ARGS,
-    VSCODE_WSL_ARGS, VSCODE_WSL_ARGS_PRE, WSL_RUN_ARGS_PRE_INTERACTIVE,
-    WSL_RUN_ARGS_PRE_LOGIN_SHELL, WT_ARGS, WT_ARGS_PRE_PSMUX, WT_RUN_ARGS,
-    WT_RUN_ARGS_PRE, WT_WSL_RUN_ARGS, WT_WSL_RUN_ARGS_PRE,
+    defaults, LaunchTarget, TargetKind, EMULATOR_RUN_ARGS_PRE_SCRIPT,
+    LINUX_ARGS_PRE_TMUX, LINUX_RUN_ARGS_PRE_SCRIPT, MAC_TERMINAL_ARGS,
+    MAC_TERMINAL_RUN_ARGS, VSCODE_WSL_ARGS, VSCODE_WSL_ARGS_PRE,
+    WSL_RUN_ARGS_PRE_INTERACTIVE, WSL_RUN_ARGS_PRE_LOGIN_SHELL, WT_ARGS,
+    WT_ARGS_PRE_PSMUX, WT_RUN_ARGS, WT_RUN_ARGS_PRE, WT_WSL_RUN_ARGS,
+    WT_WSL_RUN_ARGS_PRE,
 };
 
 /// Editors and terminals, persisted together.
@@ -59,6 +60,7 @@ impl TargetStore {
         store.adopt_linux_session_script()?;
         store.adopt_linux_terminal_row()?;
         store.adopt_linux_run_script()?;
+        store.adopt_emulator_run_script()?;
         store.adopt_file_manager_row(knows_file_managers)?;
         Ok(store)
     }
@@ -236,13 +238,49 @@ impl TargetStore {
     /// drive it from a windows box too. Keyed on the id and the old bytes,
     /// the same rule as the session script.
     fn replace_linux_run_lines(&mut self) -> Result<(), AppError> {
+        self.replace_run_lines(
+            LINUX_RUN_ARGS_PRE_SCRIPT,
+            "pre-linux-run-script",
+        )
+    }
+
+    /// Ghostty, WezTerm, Kitty and Alacritty ran a dev script as {command}
+    /// straight on the emulator's line, with no shell: on a mac nothing in
+    /// ~/.zshrc loaded, so nvm, fnm and brew's shellenv were missing, the
+    /// emulator split the command into words, and the window closed when
+    /// it ended. The same move the linux rows made above, to the same run
+    /// script, with its own backup so a machine that already took that
+    /// step keeps the file it found. Not on windows, for the same reason:
+    /// no run script is written there, and the windows rows for WezTerm
+    /// and Alacritty shipped other bytes.
+    fn adopt_emulator_run_script(&mut self) -> Result<(), AppError> {
+        if cfg!(windows) {
+            return Ok(());
+        }
+        self.replace_emulator_run_lines()
+    }
+
+    fn replace_emulator_run_lines(&mut self) -> Result<(), AppError> {
+        self.replace_run_lines(
+            EMULATOR_RUN_ARGS_PRE_SCRIPT,
+            "pre-emulator-run-script",
+        )
+    }
+
+    // the run-script adoptions are one shape: a row whose id and run line
+    // are a shipped old pair moves to its new line, one backup first
+    fn replace_run_lines(
+        &mut self,
+        table: &[(&str, &str, &'static str)],
+        suffix: &str,
+    ) -> Result<(), AppError> {
         let stale: Vec<(usize, &str)> = self
             .targets
             .iter()
             .enumerate()
             .filter_map(|(i, t)| {
                 let old = t.run_args_template.as_deref()?;
-                LINUX_RUN_ARGS_PRE_SCRIPT
+                table
                     .iter()
                     .find(|(id, pre, _)| *id == t.id && *pre == old)
                     .map(|(_, _, new)| (i, *new))
@@ -252,8 +290,7 @@ impl TargetStore {
             return Ok(());
         }
         if self.file_path.exists() {
-            let backup =
-                format!("{}.pre-linux-run-script", self.file_path.display());
+            let backup = format!("{}.{suffix}", self.file_path.display());
             fs::copy(&self.file_path, backup)?;
         }
         for (pos, new) in stale {
@@ -1063,6 +1100,106 @@ mod tests {
             Some("-e bash \"{script}\"")
         );
         assert!(!dir.join("targets.json.pre-linux-run-script").exists());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// Each emulator's run line lands on its own session form, and the old
+    /// line is the new one with the script spelled as a bare {command}.
+    #[test]
+    fn each_emulator_run_line_becomes_its_session_form() {
+        assert_eq!(EMULATOR_RUN_ARGS_PRE_SCRIPT.len(), 4);
+        for (id, pre, new) in EMULATOR_RUN_ARGS_PRE_SCRIPT {
+            let (_, _, seam) = LINUX_ARGS_PRE_TMUX
+                .iter()
+                .find(|(t, _, _)| t == id)
+                .unwrap_or_else(|| panic!("{id} has no session form"));
+            assert_eq!(new, seam, "{id}");
+            assert!(!new.contains("{command}"), "{id}: {new}");
+            assert_eq!(
+                new.replace("bash \"{script}\"", "{command}"),
+                *pre,
+                "{id}"
+            );
+            // one row, one table: a linux row is never keyed twice
+            assert!(
+                !LINUX_RUN_ARGS_PRE_SCRIPT.iter().any(|(l, _, _)| l == id),
+                "{id}"
+            );
+        }
+    }
+
+    /// The four shared emulators move to the run script with their own
+    /// backup; Ghostty's line under Alacritty's id (one `=` apart), a line
+    /// the user extended, and a row already on the script are left alone.
+    /// A mac row found through its bundle keeps its in-bundle executable:
+    /// only the run line is the migration's. Driven through the
+    /// platform-free half, so a windows run proves it too.
+    #[test]
+    fn an_emulator_run_line_moves_to_the_run_script_with_a_backup() {
+        let dir = std::env::temp_dir().join("devgo-targets-emulator-run");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let row = |id: &str, run: &str| {
+            let mut t = editor(id);
+            t.id = id.into();
+            t.kind = TargetKind::Terminal;
+            t.executable = id.into();
+            t.run_args_template = Some(run.into());
+            t
+        };
+        let mut rows: Vec<LaunchTarget> = EMULATOR_RUN_ARGS_PRE_SCRIPT
+            .iter()
+            .map(|(id, pre, _)| row(id, pre))
+            .collect();
+        let bundled = "/Applications/kitty.app/Contents/MacOS/kitty";
+        rows[2].executable = bundled.into();
+        let ghostty_pre = EMULATOR_RUN_ARGS_PRE_SCRIPT[0].1;
+        rows.push(row("my-alacritty", ghostty_pre));
+        let custom = "start --cwd \"{path}\" -- {command} --hold";
+        rows.push(row("my-wezterm", custom));
+        let original = serde_json::to_string_pretty(&rows).unwrap();
+        fs::write(dir.join("targets.json"), &original).unwrap();
+
+        // on linux and a mac new() has already done it; here it is the call
+        let mut s = TargetStore::new(dir.clone()).unwrap();
+        s.replace_emulator_run_lines().unwrap();
+
+        for (id, _, new) in EMULATOR_RUN_ARGS_PRE_SCRIPT {
+            assert_eq!(
+                s.get(id).unwrap().run_args_template.as_deref(),
+                Some(*new),
+                "{id}"
+            );
+        }
+        assert_eq!(s.get("kitty").unwrap().executable, bundled);
+        assert_eq!(
+            s.get("my-alacritty").unwrap().run_args_template.as_deref(),
+            Some(ghostty_pre)
+        );
+        assert_eq!(
+            s.get("my-wezterm").unwrap().run_args_template.as_deref(),
+            Some(custom)
+        );
+        assert_eq!(
+            fs::read_to_string(
+                dir.join("targets.json.pre-emulator-run-script")
+            )
+            .unwrap(),
+            original,
+            "the pre-migration file is kept verbatim"
+        );
+        assert!(!dir.join("targets.json.pre-linux-run-script").exists());
+
+        // persisted, and a second pass has nothing left to adopt
+        let _ =
+            fs::remove_file(dir.join("targets.json.pre-emulator-run-script"));
+        let mut again = TargetStore::new(dir.clone()).unwrap();
+        again.replace_emulator_run_lines().unwrap();
+        assert_eq!(
+            again.get("wezterm").unwrap().run_args_template.as_deref(),
+            Some("start --cwd \"{path}\" -- bash \"{script}\"")
+        );
+        assert!(!dir.join("targets.json.pre-emulator-run-script").exists());
         let _ = fs::remove_dir_all(&dir);
     }
 

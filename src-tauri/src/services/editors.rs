@@ -520,7 +520,13 @@ const CANDIDATES: &[Candidate] = &[
     // terminal.app gets, preamble and interactive shell included, so one
     // script builder serves every terminal and there is one place to be
     // wrong. the exec'd login shell at the end of that script also holds
-    // the tab open past the command, which ghostty's own rule would close
+    // the tab open past the command, which ghostty's own rule would close.
+    //
+    // wezterm, kitty and alacritty follow for the same reasons: their run
+    // forms put {command} on the line with no shell, so nothing in
+    // ~/.zshrc loaded (nvm, fnm, brew shellenv), the emulator split the
+    // command into words itself, and the window closed when it ended. see
+    // EMULATOR_RUN_ARGS_PRE_SCRIPT
     Candidate {
         id: "ghostty",
         name: "Ghostty",
@@ -541,7 +547,7 @@ const CANDIDATES: &[Candidate] = &[
         exe: "wezterm",
         args: "start --cwd \"{path}\" -- bash \"{script}\"",
         wsl_args: None,
-        run_args: Some("start --cwd \"{path}\" -- {command}"),
+        run_args: Some("start --cwd \"{path}\" -- bash \"{script}\""),
         wsl_run_args: None,
         reveal_args: None,
         app: Some("WezTerm"),
@@ -554,7 +560,7 @@ const CANDIDATES: &[Candidate] = &[
         exe: "kitty",
         args: "--directory \"{path}\" bash \"{script}\"",
         wsl_args: None,
-        run_args: Some("--directory \"{path}\" {command}"),
+        run_args: Some("--directory \"{path}\" bash \"{script}\""),
         wsl_run_args: None,
         reveal_args: None,
         app: Some("kitty"),
@@ -567,7 +573,7 @@ const CANDIDATES: &[Candidate] = &[
         exe: "alacritty",
         args: "--working-directory \"{path}\" -e bash \"{script}\"",
         wsl_args: None,
-        run_args: Some("--working-directory \"{path}\" -e {command}"),
+        run_args: Some("--working-directory \"{path}\" -e bash \"{script}\""),
         wsl_run_args: None,
         reveal_args: None,
         app: Some("Alacritty"),
@@ -1551,7 +1557,10 @@ mod tests {
         // migration compares bytes, so a bare seam here is a bad match
         templates
             .extend(LINUX_ARGS_PRE_TMUX.iter().map(|(_, p, _)| p.to_string()));
-        for (_, pre, new) in crate::models::target::LINUX_RUN_ARGS_PRE_SCRIPT {
+        for (_, pre, new) in crate::models::target::LINUX_RUN_ARGS_PRE_SCRIPT
+            .iter()
+            .chain(crate::models::target::EMULATOR_RUN_ARGS_PRE_SCRIPT)
+        {
             templates.extend([pre.to_string(), new.to_string()]);
         }
         for (pre, new) in crate::models::target::WSL_RUN_ARGS_PRE_LOGIN_SHELL {
@@ -1817,7 +1826,10 @@ mod tests {
             assert_eq!(&c.args, args, "{id}");
         }
         // and the run form is where an upgrade lands it
-        for (id, _, new) in crate::models::target::LINUX_RUN_ARGS_PRE_SCRIPT {
+        for (id, _, new) in crate::models::target::LINUX_RUN_ARGS_PRE_SCRIPT
+            .iter()
+            .chain(crate::models::target::EMULATOR_RUN_ARGS_PRE_SCRIPT)
+        {
             let c = CANDIDATES.iter().find(|c| c.id == *id).unwrap();
             assert_eq!(c.run_args, Some(*new), "{id}");
         }
@@ -1830,6 +1842,12 @@ mod tests {
                 "{} has a cli and no pinned session form",
                 c.id
             );
+            // a run line with {command} on it runs with no shell: no rc
+            // file, no nvm, split into words by the emulator, closed at
+            // the end. every one of them runs the script instead
+            let run = c.run_args.unwrap_or_else(|| panic!("{}", c.id));
+            assert!(!run.contains("{command}"), "{}: {run}", c.id);
+            assert_eq!(run, c.args, "{} runs a different line", c.id);
         }
     }
 
@@ -2106,21 +2124,21 @@ mod tests {
                 "WezTerm",
                 "WezTerm",
                 "start --cwd \"{path}\" -- bash \"{script}\"",
-                "start --cwd \"{path}\" -- {command}",
+                "start --cwd \"{path}\" -- bash \"{script}\"",
             ),
             shared_terminal(
                 "kitty",
                 "Kitty",
                 "kitty",
                 "--directory \"{path}\" bash \"{script}\"",
-                "--directory \"{path}\" {command}",
+                "--directory \"{path}\" bash \"{script}\"",
             ),
             shared_terminal(
                 "alacritty",
                 "Alacritty",
                 "Alacritty",
                 "--working-directory \"{path}\" -e bash \"{script}\"",
-                "--working-directory \"{path}\" -e {command}",
+                "--working-directory \"{path}\" -e bash \"{script}\"",
             ),
         ];
         for c in &rows {
@@ -2231,21 +2249,21 @@ mod tests {
                 "WezTerm",
                 "WezTerm",
                 "start --cwd \"{path}\" -- bash \"{script}\"",
-                "start --cwd \"{path}\" -- {command}",
+                "start --cwd \"{path}\" -- bash \"{script}\"",
             ),
             shared_terminal(
                 "kitty",
                 "Kitty",
                 "kitty",
                 "--directory \"{path}\" bash \"{script}\"",
-                "--directory \"{path}\" {command}",
+                "--directory \"{path}\" bash \"{script}\"",
             ),
             shared_terminal(
                 "alacritty",
                 "Alacritty",
                 "Alacritty",
                 "--working-directory \"{path}\" -e bash \"{script}\"",
-                "--working-directory \"{path}\" -e {command}",
+                "--working-directory \"{path}\" -e bash \"{script}\"",
             ),
         ] {
             let c = CANDIDATES
