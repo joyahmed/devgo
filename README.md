@@ -156,7 +156,7 @@ scripts/build-linux.sh --deps --install
 
 `bun run build` runs the contrast gate, `tsc` and Vite; `cargo test` in `src-tauri` runs the Rust tests. CI runs both on every push and pull request, and the tag build runs them on each platform before it bundles.
 
-On **Windows**, `bun run install:local` replaces the four manual steps of a local reinstall — build, stop the running DevGo, run the NSIS installer with `/S`, relaunch — with one (`--skip-build`, `--no-launch` and `--dry-run` are also available; see `scripts/install-local.ps1`).
+`bun run install:local` replaces the four manual steps of a local reinstall — build, stop the running DevGo, install, relaunch — with one, and prints the commit it was built at. On **Windows** it builds the NSIS installer and runs it with `/S` (`scripts/install-local.ps1`). On **macOS** it builds the `.app`, quits DevGo, replaces `/Applications/DevGo.app`, strips the quarantine flag and opens it. On **Linux** it builds the `.deb`, stops DevGo and runs `sudo apt install` on it — sudo asks for your password in the terminal — then starts `DevGo` detached. `--skip-build`, `--no-launch` and `--dry-run` work on all three; see `scripts/install-local.mjs`.
 
 ## 🧭 Platform notes
 

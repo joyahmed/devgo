@@ -10,7 +10,7 @@
     "test": "vitest run",
     "preview": "vite preview",
     "tauri": "tauri",
-    "install:local": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install-local.ps1"
+    "install:local": "bun scripts/install-local.mjs"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.3",
