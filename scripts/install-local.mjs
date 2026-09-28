@@ -6,9 +6,11 @@
 //
 //   macOS  tauri build --bundles app, quit DevGo, replace
 //          /Applications/<productName>.app, strip quarantine, open it
-//   linux  tauri build --bundles deb, stop DevGo, sudo apt install the
-//          .deb (sudo asks in this terminal, as it would anywhere), start
-//          the installed binary detached
+//   linux  tauri build --bundles deb, stop DevGo, sudo apt install --reinstall
+//          the .deb (sudo asks in this terminal, as it would anywhere; the
+//          --reinstall matters because apt otherwise no-ops when the deb's
+//          package+version already looks installed), verify the installed
+//          binary's sha256 against the one the .deb carries, start it detached
 //
 //   bun run install:local                      build, install, relaunch
 //   bun run install:local -- --skip-build      reinstall the bundle on disk
@@ -23,7 +25,9 @@
 // the process, mainBinaryName the program the .deb puts on PATH, version
 // the file a build is expected to write
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -140,6 +144,19 @@ function macPlan() {
 			// a local build carries no quarantine flag, but a copy that came
 			// through a download or airdrop does, and Gatekeeper then refuses it
 			spawnSync('xattr', ['-dr', 'com.apple.quarantine', dest], { stdio: 'ignore' });
+			// ditto is a straight copy, so this should always match - it exists
+			// to catch a truncated or partial copy rather than a stale install
+			// (unlike apt on linux, ditto has no "already the newest version"
+			// shortcut to fool), same idea as the linux/windows checks below
+			const builtSha = sha256File(join(src, 'Contents', 'MacOS', binaryName));
+			const installedSha = sha256File(join(dest, 'Contents', 'MacOS', binaryName));
+			if (builtSha !== installedSha) {
+				fail(
+					`ditto reported success but ${dest}/Contents/MacOS/${binaryName} (sha256 ${installedSha.slice(0, 12)}) ` +
+						`does not match the built app's binary (${builtSha.slice(0, 12)}); the install did not actually change`,
+				);
+			}
+			console.log(`verified: Contents/MacOS/${binaryName} sha256 ${installedSha.slice(0, 12)} matches the built app`);
 		},
 		launchLine: `open -a "${dest}"`,
 		launch: () => run('open', ['-a', dest]),
@@ -167,17 +184,70 @@ function linuxPlan() {
 			if (newest) console.log(`note: no .deb for tauri.conf.json's version (${version}); using the newest one found: ${newest}`);
 			return newest ?? null;
 		},
-		install: deb => [`pkill -x ${binaryName}, wait up to 15s`, `sudo apt install -y "${deb}"`],
+		install: deb => [
+			`check for a DevGo already running from somewhere apt won't touch (command -v ${binaryName}, /proc/<pid>/exe)`,
+			`pkill -x ${binaryName}, wait up to 15s`,
+			`sudo apt install -y --reinstall "${deb}"`,
+			`verify ${bin} sha256 now matches the .deb's packed usr/bin/${binaryName}`,
+		],
 		doInstall: deb => {
+			// apt only ever touches /usr/bin. if the box's DevGo is really an
+			// AppImage, a ~/.local/bin copy, or something in /opt, this whole
+			// script is aimed at a file nobody is running - so say so before
+			// doing anything.
+			const which = capture('sh', ['-c', `command -v ${binaryName}`]);
+			if (which) console.log(`command -v ${binaryName}: ${which}`);
+			const pids = capture('pgrep', ['-x', binaryName])
+				.split('\n')
+				.map(s => s.trim())
+				.filter(Boolean);
+			for (const pid of pids) {
+				const exe = capture('readlink', ['-f', `/proc/${pid}/exe`]);
+				if (exe && exe !== bin) {
+					console.log(`warning: ${productName} (pid ${pid}) is running from ${exe}, not ${bin} - this install will not touch it`);
+				} else if (exe) {
+					console.log(`${productName} (pid ${pid}) running from ${exe}`);
+				}
+			}
+
 			spawnSync('pkill', ['-x', binaryName], { stdio: 'ignore' });
 			if (!waitGone(15_000)) fail(`${productName} is still running 15s after being asked to stop; close it and retry`);
 			// sudo prompts right here, in this terminal; nothing is hidden.
-			// apt, not dpkg -i: it also pulls a dependency the box lacks
-			console.log(`running: sudo apt install -y "${deb}"`);
-			run('sudo', ['apt', 'install', '-y', deb]);
+			// --reinstall: apt otherwise sees the same package+version this deb
+			// is (e.g. dev-go 1.2.3 built again from a new commit) as already
+			// installed and does nothing but say "already the newest version" -
+			// and this script used to call that success. apt accepts a path to
+			// a local .deb as an install argument; --reinstall forces the copy
+			// even when dpkg's version check sees nothing changed.
+			console.log(`running: sudo apt install -y --reinstall "${deb}"`);
+			run('sudo', ['apt', 'install', '-y', '--reinstall', deb]);
 			const pkg = capture('dpkg-deb', ['-f', deb, 'Package']);
 			if (pkg) console.log(`package:   ${capture('dpkg-query', ['-W', '-f=${Package} ${Version}', pkg])}`);
 			if (!existsSync(bin)) fail(`apt reported success but ${bin} is missing`);
+
+			// belt and suspenders: apt/dpkg saying "installed" is not proof the
+			// bytes on disk changed. extract the binary the .deb itself carries
+			// and compare it to what's now at /usr/bin - this is what would
+			// have caught the original bug (apt no-op'd, ${bin} kept the old build).
+			const tmp = mkdtempSync(join(tmpdir(), 'devgo-verify-'));
+			try {
+				run('dpkg-deb', ['-x', deb, tmp]);
+				const packed = join(tmp, 'usr', 'bin', binaryName);
+				if (!existsSync(packed)) fail(`the .deb has no usr/bin/${binaryName} - can't verify the install`);
+				const packedSha = sha256File(packed);
+				const installedSha = sha256File(bin);
+				if (packedSha !== installedSha) {
+					fail(
+						`apt reported success but ${bin} (sha256 ${installedSha.slice(0, 12)}) does not match the .deb's ` +
+							`packed usr/bin/${binaryName} (${packedSha.slice(0, 12)}) - apt likely saw the same package+version ` +
+							`already installed and skipped it. Retry (this script now passes --reinstall), or by hand: ` +
+							`sudo dpkg -i "${deb}" && sudo apt-get install -f -y`,
+					);
+				}
+				console.log(`verified: ${bin} sha256 ${installedSha.slice(0, 12)} matches the .deb`);
+			} finally {
+				rmSync(tmp, { recursive: true, force: true });
+			}
 		},
 		launchLine: `${bin} (detached)`,
 		launch: () => {
@@ -202,6 +272,12 @@ function run(cmd, args, opts = {}) {
 function capture(cmd, args) {
 	const r = spawnSync(cmd, args, { encoding: 'utf8' });
 	return r.status === 0 ? r.stdout.trim() : '';
+}
+
+// equivalent to `shasum -a 256`/`sha256sum`, in-process so mac and linux
+// share one implementation and neither needs the external tool on PATH
+function sha256File(path) {
+	return createHash('sha256').update(readFileSync(path)).digest('hex');
 }
 
 // is any process named binaryName still up? pgrep -x matches the name

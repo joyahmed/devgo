@@ -96,6 +96,7 @@ if (-not $installer) {
 
 # --- 2. stop the running DevGo, then install silently -------------------
 Step '3/4 stop any running DevGo.exe, wait for it to exit, run the installer /S'
+Step "3/4 verify $InstalledExe was actually rewritten (mtime at or after the install)"
 if (-not $DryRun) {
 	$procs = Get-Process -Name DevGo -ErrorAction SilentlyContinue
 	if ($procs) {
@@ -111,8 +112,23 @@ if (-not $DryRun) {
 	}
 
 	if (-not $installer) { throw 'no installer to run (should have failed above already)' }
+	$InstallStart = Get-Date
 	$p = Start-Process -FilePath $installer.FullName -ArgumentList '/S' -Wait -PassThru
 	if ($p.ExitCode -ne 0) { throw "installer exited $($p.ExitCode): $($installer.FullName)" }
+
+	# NSIS is not apt: it has no "already the newest version" shortcut, so
+	# this should never trip. a sha256 compare would be the sharper check,
+	# but an earlier run of this script saw Get-FileHash disagree between
+	# the built exe and the freshly-installed one at a fixed ~8.84MB offset
+	# on an install that had genuinely changed - almost certainly NSIS
+	# stamping installer metadata into its copy - so hash equality is not a
+	# safe signal here. freshness is: the installed exe's write time must be
+	# at or after the moment the installer was launched.
+	$installedItem = Get-Item $InstalledExe -ErrorAction SilentlyContinue
+	if (-not $installedItem) { throw "installer reported success but $InstalledExe is missing" }
+	if ($installedItem.LastWriteTime -lt $InstallStart) {
+		throw "installer reported success but $InstalledExe's mtime ($($installedItem.LastWriteTime)) predates this install (started $InstallStart) - it may not have actually been replaced"
+	}
 }
 
 # --- 3. relaunch ----------------------------------------------------------
