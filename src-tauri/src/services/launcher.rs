@@ -1176,8 +1176,14 @@ fn run_script_args(
 
 // a mac run template may ask for {script} instead: terminal.app cannot
 // take a command at all, only a file to run, so the command goes into a
-// devgo-run-{session}.command. a template without the placeholder
-// (wezterm's start -- {command}) is spawned as resolved
+// devgo-run-{session}-{command hash}.command. a template without the
+// placeholder (wezterm's start -- {command}) is spawned as resolved.
+// the command's own hash is part of the name because a project's session
+// name alone is not unique per command - two different commands for the
+// same project (install vs dev, say) would otherwise collide on one file
+// and clobber each other, which is exactly what the smoke probe's `run`
+// verb does: it builds every menu entry's run line for one project in a
+// single call.
 #[cfg(not(windows))]
 fn run_script_args(
     args: &str,
@@ -1190,8 +1196,10 @@ fn run_script_args(
     let session = tmux_session_name(project);
     let script =
         build_mac_run_script(&project.name, &project.full_path, command);
-    let path =
-        write_command_file(&format!("devgo-run-{session}.command"), &script)?;
+    let path = write_command_file(
+        &format!("devgo-run-{session}-{}.command", path_suffix(command)),
+        &script,
+    )?;
     Ok((args.replace("{script}", &path), Some(path)))
 }
 
@@ -3383,8 +3391,11 @@ mod tests {
         launch_with_command(&terminal, &project, &no_distro(), &command)
             .unwrap();
 
-        let expected = std::env::temp_dir()
-            .join(format!("devgo-run-{}.command", tmux_session_name(&project)));
+        let expected = std::env::temp_dir().join(format!(
+            "devgo-run-{}-{}.command",
+            tmux_session_name(&project),
+            path_suffix(&command)
+        ));
         let script =
             std::fs::read_to_string(&expected).expect("the run script");
         assert!(
@@ -3420,8 +3431,11 @@ mod tests {
     #[test]
     fn a_run_template_without_the_placeholder_writes_no_run_script() {
         let project = local_project("no-run-script", "work");
-        let expected = std::env::temp_dir()
-            .join(format!("devgo-run-{}.command", tmux_session_name(&project)));
+        let expected = std::env::temp_dir().join(format!(
+            "devgo-run-{}-{}.command",
+            tmux_session_name(&project),
+            path_suffix("exit 0")
+        ));
         let _ = std::fs::remove_file(&expected);
 
         let terminal = LaunchTarget {
