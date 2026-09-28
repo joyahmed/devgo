@@ -51,7 +51,7 @@ Three kinds of target, three keys: the editor (`Ctrl+Enter`), the terminal (`Shi
 
 With the multiplexer on, a terminal launch opens a named session with the windows you listed: tmux inside the distro for a WSL project, psmux (`winget install marlocarlo.psmux`) for a Windows one, tmux on a Mac (`brew install tmux`). Close the terminal, close DevGo, come back: the session is still there and launching again reattaches. Off, a launch is one plain shell.
 
-`Run dev script…` (`Ctrl+Shift+D`) reads the project's `package.json` scripts and runs the one you pick in a terminal that stays open.
+`Run dev script…` (`Ctrl+Shift+D`) reads the project's `package.json` scripts and runs the one you pick in a terminal that stays open. The first line of that menu is **Install**, which runs the project's own package manager — pnpm, bun, yarn or npm, read from the lockfile — in the same kind of terminal. On WSL the line runs in the distro's interactive shell, so the node your `~/.bashrc` loads through nvm is the one it finds, and every dev tab ends in your own login shell rather than a bare bash.
 
 ## 🐙 GitHub
 
