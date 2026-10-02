@@ -563,6 +563,24 @@ const setThemeAndReload = async id => {
 	return reload();
 };
 
+// the owner's localStorage as it was before the first step, as a JSON string;
+// null until main() has taken it (and then null means "could not")
+let restoreStorage = null;
+
+// put every key back exactly as it was: walk-added keys removed, changed keys
+// reset. Then reload, so the driven window shows the owner's theme again too.
+const putStorageBack = async () => {
+	if (!restoreStorage) return { ok: false, err: 'no snapshot was taken' };
+	const r = await evaluate(`(() => { try {
+		const was = JSON.parse(${JSON.stringify(restoreStorage)});
+		localStorage.clear();
+		for (const [k, v] of Object.entries(was)) localStorage.setItem(k, v);
+		return 'ok'; } catch (e) { return String(e); } })()`);
+	if (r.value !== 'ok') return { ok: false, err: r.value ?? r.error };
+	restoreStorage = null;
+	return reload();
+};
+
 // ─── the plan ───────────────────────────────────────────────────────────────
 const themesFor = step => {
 	if (step.themes === 'all') return WANT_THEMES;
@@ -627,6 +645,18 @@ const main = async () => {
 	// folder held 66 pictures for a 62-step manifest. The manifest is rewritten
 	// whole every run, so the pictures must be too.
 	for (const f of readdirSync(outDir)) if (f.endsWith('.png')) rmSync(join(outDir, f));
+
+	// ⚠️ found on the first real run: the walk left the driven build on the
+	// LAST theme it walked (black), plus whatever Settings panel and palette
+	// recents its steps touched. The theme is stored nowhere but localStorage.
+	// That storage is per ORIGIN: `tauri dev` is http://localhost:1420 and the
+	// installed build is http://tauri.localhost, so the installed app's own
+	// state is NOT touched (checked in the shared leveldb on the first run) —
+	// but the owner's dev build is, and he runs that one too. Snapshot it all
+	// now and put it back on the way out.
+	const storage = await evaluate('JSON.stringify(Object.fromEntries(Object.entries(localStorage)))');
+	restoreStorage = storage.error ? null : (storage.value ?? null);
+	if (!restoreStorage) console.error("⚠️ could not snapshot localStorage — the owner's theme will not be restored");
 
 	const metrics = await evaluate(
 		'({ innerWidth, innerHeight, devicePixelRatio, ua: navigator.userAgent })'
@@ -732,6 +762,11 @@ const main = async () => {
 		if (log.value) console.log(`  ipc: ${log.value.calls} calls, blocked: ${log.value.blocked.join(', ') || 'none'}`);
 	}
 
+	// after the ipc log, because putting the storage back reloads the page and
+	// a reload throws window.__WALK__ away
+	const restored = await putStorageBack();
+	if (!restored.ok) console.error('⚠️ localStorage not restored: ' + restored.err);
+
 	const counted = { passed: 0, failed: 0, skipped: 0 };
 	for (const s of steps) counted[s.status]++;
 	const consoleErrors = steps.reduce((a, s) => a + s.console.length, 0);
@@ -789,4 +824,10 @@ const main = async () => {
 
 main()
 	.then(code => { try { ws?.close(); } catch {} process.exit(code); })
-	.catch(e => { console.error(e); try { ws?.close(); } catch {} process.exit(4); });
+	.catch(async e => {
+		console.error(e);
+		// a crashed walk must not leave the owner's app on the last theme it tried
+		if (restoreStorage && ws) await putStorageBack().catch(() => {});
+		try { ws?.close(); } catch {}
+		process.exit(4);
+	});
