@@ -500,7 +500,7 @@ export const STEPS = [
 		id: 'settings-backdrop',
 		name: 'Settings — closed by the backdrop',
 		themes: 'first',
-		why: '⛔ THE KNOWN DEFECT (prior walk, D1): the Settings sheet swallowed an outside click without closing, while Close ✓ and Escape ✓. This step is the one that catches that class — it clicks a computed point on the backdrop and asserts the dialog is GONE. Expect it red until the defect is fixed; a red here is the harness working.',
+		why: 'exit 3 of 3, and the guard on a once-reported defect (D1): the Settings sheet was seen swallowing an outside click while Close and Escape worked. 33a4f20 closed the title-bar-strip gap; the first real walk (6d2b16d) found this step GREEN, with a negative control: a click inside the panel left it open, a click on the backdrop closed it. A red here is a regression, not an expected failure.',
 		open: [
 			{ key: 'Ctrl+,' },
 			{ wait: { css: S.dialog } },
@@ -509,7 +509,7 @@ export const STEPS = [
 		],
 		assert: [{ gone: S.dialog }],
 		shot: false,
-		tags: ['settings', 'exit', 'known-defect']
+		tags: ['settings', 'exit', 'regression']
 	},
 
 	// ── the project row menu: all thirteen entries, none of them clicked ───
