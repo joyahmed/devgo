@@ -1,0 +1,2003 @@
+{
+  "schema": "devgo.walk/1",
+  "green": true,
+  "sha": "6d2b16d",
+  "shaSource": "get_git_sha via esm import of @tauri-apps/api",
+  "version": "1.2.5",
+  "summary": {
+    "total": 62,
+    "passed": 61,
+    "failed": 0,
+    "skipped": 1,
+    "consoleErrors": 0
+  },
+  "startedAt": "2026-10-02T20:30:51.135Z",
+  "finishedAt": "2026-10-02T20:31:27.849Z",
+  "themes": [
+    "neon",
+    "matrix",
+    "nord",
+    "dracula",
+    "black"
+  ],
+  "themeNote": "five dark palettes and no light one — src/themes.ts ships no light theme",
+  "host": {
+    "platform": "win32",
+    "hostname": "JoyR9",
+    "cdpPort": "9223",
+    "viewport": {
+      "innerWidth": 2560,
+      "innerHeight": 1392,
+      "devicePixelRatio": 1,
+      "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36 Edg/154.0.0.0"
+    }
+  },
+  "mode": {
+    "windowShots": false,
+    "ipcShim": {
+      "patched": false,
+      "why": "not armed"
+    },
+    "only": [],
+    "skip": []
+  },
+  "coverage": {
+    "settingsPanels": [
+      "workspaces",
+      "targets",
+      "tmux",
+      "wsl",
+      "github",
+      "shortcuts",
+      "scanning",
+      "appearance",
+      "config",
+      "servers",
+      "backups",
+      "help",
+      "about"
+    ],
+    "menuAlwaysAsserted": [
+      "Open in editor",
+      "Open both",
+      "Run dev script…"
+    ],
+    "menuConditional": {
+      "Open terminal": "no live session (mutually exclusive with Reattach terminal)",
+      "Reattach terminal": "a live session and the multiplexer on",
+      "Attach here": "a live session and the multiplexer on",
+      "Kill session": "a live session and the multiplexer on — DESTRUCTIVE",
+      "Reveal in Explorer": "a file manager on this desktop (label is per-desktop)",
+      "Copy Windows path": "always on Windows; reads \"Copy path\" elsewhere",
+      "Copy WSL path": "Windows only",
+      "Open remote": "the project has a git remote",
+      "Pin to top": "the row is not pinned",
+      "Unpin": "the row is pinned"
+    },
+    "neverClicked": {
+      "Kill session": "kills a real tmux/psmux session the owner is working in",
+      "Open in editor": "launches a real editor window",
+      "Open terminal": "launches a real terminal",
+      "Reattach terminal": "launches a real terminal",
+      "Open both": "launches both",
+      "Attach here": "opens a real pty in the attach pane",
+      "Open remote": "opens a browser",
+      "Reveal in Explorer": "opens a file manager window",
+      "Pin to top": "writes the owner’s prefs.json",
+      "Unpin": "writes the owner’s prefs.json",
+      "Run dev script…": "the picker is safe, the script it runs is not"
+    }
+  },
+  "notCovered": [
+    "HOVER STATES — scripts/cdp.mjs has no hover verb and neither does this walk. Input.dispatchMouseEvent mouseMoved is sent before every click, so a :hover style is on screen for the click but never captured on its own. src/themes.ts warns that muted text ran under 4:1 on a HOVERED row for months; this walk would not have caught that.",
+    "NATIVE WINDOW CHROME in all themes — only the `home-window` step uses shoot.ps1, and only in neon. The other four palettes are captured by Page.captureScreenshot, which sees the document and not the window: no rounded corners, no transparency knob, no title-bar buttons as the OS composites them.",
+    "THE ATTACH PANE and any live pty — opening one starts a real shell in the owner’s session. Never walked.",
+    "THE SERVERS LANE beyond its rows — every server action reaches a real box over SSH.",
+    "GITHUB CLONE, group edit and add-repo — they write to disk and to the GitHub account.",
+    "LOADING and ERROR states — they are timing- and network-dependent, and faking them needs an IPC shim per command. Reachable with --arm-ipc and a stub that rejects; no step does it yet.",
+    "A LIGHT THEME — there is not one. See the note on THEMES above.",
+    "macOS and LINUX — this harness needs WebView2 and shoot.ps1 needs Win32. The mac and linux builds are captured by hand (docs/screenshots/README.md).",
+    "CI — WebView2 needs a real interactive desktop session, windows-latest has no installed DevGo, and shoot.ps1 minimises every window on the box. This is a LOCAL gate and nothing else."
+  ],
+  "steps": [
+    {
+      "seq": 1,
+      "id": "home",
+      "name": "Home — the lanes",
+      "theme": "neon",
+      "why": "the screen every other step starts from, in all five palettes",
+      "at": "2026-10-02T20:30:51.135Z",
+      "status": "passed",
+      "shot": "docs/walk/6d2b16d/01-home-neon.png",
+      "shotKind": "webview",
+      "asserts": [
+        {
+          "ok": true,
+          "said": "text \"DevGo\""
+        },
+        {
+          "ok": true,
+          "said": "count div.rounded-panel.border-t-2.border-l-2 >= 1 (saw 4)"
+        },
+        {
+          "ok": true,
+          "said": "absent [role=\"dialog\"][aria-modal=\"true\"]"
+        },
+        {
+          "ok": true,
+          "said": "js document.querySelector(\"header\").offsetHeight === 48"
+        }
+      ],
+      "console": [],
+      "consoleIgnored": [],
+      "note": null
+    },
+    {
+      "seq": 2,
+      "id": "home-window",
+      "name": "Home — the real window over the wallpaper",
+      "theme": "neon",
+      "why": "the only step that proves the window chrome, the rounded corners and the transparency knob; cdp shot cannot see any of them",
+      "at": "2026-10-02T20:30:51.980Z",
+      "status": "skipped",
+      "shot": null,
+      "shotKind": "window (skipped — pass --window-shots)",
+      "asserts": [],
+      "console": [],
+      "consoleIgnored": [],
+      "note": "its window shot is the step; pass --window-shots to run it"
+    },
+    {
+      "seq": 3,
+      "id": "search-none",
+      "name": "Projects — no match (empty state)",
+      "theme": "neon",
+      "why": "the empty half of empty/one/many; its own sentence, not a blank lane",
+      "at": "2026-10-02T20:30:51.981Z",
+      "status": "passed",
+      "shot": "docs/walk/6d2b16d/03-search-none-neon.png",
+      "shotKind": "webview",
+      "asserts": [
+        {
+          "ok": true,
+          "said": "text \"No project matches.\""
+        },
+        {
+          "ok": true,
+          "said": "count div.group div.pl-10 div.basis-\\[34\\%\\] == 0 (saw 0)"
+        }
+      ],
+      "console": [],
+      "consoleIgnored": [],
+      "note": null
+    },
+    {
+      "seq": 4,
+      "id": "search-many",
+      "name": "Projects — the unfiltered list (many)",
+      "theme": "neon",
+      "why": "the many half; also the negative control for search-none — if this shows zero rows the empty assertion above proves nothing",
+      "at": "2026-10-02T20:30:52.608Z",
+      "status": "passed",
+      "shot": "docs/walk/6d2b16d/04-search-many-neon.png",
+      "shotKind": "webview",
+      "asserts": [
+        {
+          "ok": true,
+          "said": "count div.group div.pl-10 div.basis-\\[34\\%\\] >= 2 (saw 70)"
+        },
+        {
+          "ok": true,
+          "said": "no text \"No project matches.\""
+        }
+      ],
+      "console": [],
+      "consoleIgnored": [],
+      "note": null
+    },
+    {
+      "seq": 5,
+      "id": "palette",
+      "name": "Command palette",
+      "theme": "neon",
+      "why": "the one surface summoned from anywhere; z-60, over everything",
+      "at": "2026-10-02T20:30:52.917Z",
+      "status": "passed",
+      "shot": "docs/walk/6d2b16d/05-palette-neon.png",
+      "shotKind": "webview",
+      "asserts": [
+        {
+          "ok": true,
+          "said": "exists [role=\"dialog\"][aria-modal=\"true\"]"
+        },
+        {
+          "ok": true,
+          "said": "count [role=\"dialog\"] button >= 3 (saw 70)"
+        },
+        {
+          "ok": true,
+          "said": "absent [role=\"dialog\"] [aria-label=\"Close\"]"
+        }
+      ],
+      "console": [],
+      "consoleIgnored": [],
+      "note": null
+    },
+    {
+      "seq": 6,
+      "id": "palette-filtered",
+      "name": "Command palette — filtered to \"server\"",
+      "theme": "neon",
+      "why": "the palette with a query is a different render path from the palette empty",
+      "at": "2026-10-02T20:30:53.445Z",
+      "status": "passed",
+      "shot": "docs/walk/6d2b16d/06-palette-filtered-neon.png",
+      "shotKind": "webview",
+      "asserts": [
+        {
+          "ok": true,
+          "said": "exists [role=\"dialog\"][aria-modal=\"true\"]"
+        },
+        {
+          "ok": true,
+          "said": "text \"server\""
+        }
+      ],
+      "console": [],
+      "consoleIgnored": [],
+      "note": null
+    },
+    {
+      "seq": 7,
+      "id": "palette-escape",
+      "name": "Command palette — closed by Escape",
+      "theme": "neon",
+      "why": "exit 1 of 3",
+      "at": "2026-10-02T20:30:54.159Z",
+      "status": "passed",
+      "shot": null,
+      "shotKind": null,
+      "asserts": [
+        {
+          "ok": true,
+          "said": "absent [role=\"dialog\"][aria-modal=\"true\"]"
+        }
+      ],
+      "console": [],
+      "consoleIgnored": [],
+      "note": null
+    },
+    {
+      "seq": 8,
+      "id": "palette-backdrop",
+      "name": "Command palette — closed by the backdrop",
+      "theme": "neon",
+      "why": "exit 2 of 3. { outside } computes the point from the panel rect at run time, so it cannot drift with the layout",
+      "at": "2026-10-02T20:30:54.464Z",
+      "status": "passed",
+      "shot": null,
+      "shotKind": null,
+      "asserts": [
+        {
+          "ok": true,
+          "said": "absent [role=\"dialog\"][aria-modal=\"true\"]"
+        }
+      ],
+      "console": [],
+      "consoleIgnored": [],
+      "note": null
+    },
+    {
+      "seq": 9,
+      "id": "settings",
+      "name": "Settings — the nav column",
+      "theme": "neon",
+      "why": "thirteen panels, and the nav is the only way to reach any of them",
+      "at": "2026-10-02T20:30:54.835Z",
+      "status": "passed",
+      "shot": "docs/walk/6d2b16d/09-settings-neon.png",
+      "shotKind": "webview",
+      "asserts": [
+        {
+          "ok": true,
+          "said": "exists [role=\"dialog\"][aria-modal=\"true\"]"
+        },
+        {
+          "ok": true,
+          "said": "text \"Settings\""
+        },
+        {
+          "ok": true,
+          "said": "count [role=\"dialog\"] nav button == 13 (saw 13)"
+        },
+        {
+          "ok": true,
+          "said": "count [role=\"dialog\"] nav button[aria-current=\"page\"] == 1 (saw 1)"
+        }
+      ],
+      "console": [],
+      "consoleIgnored": [],
+      "note": null
+    },
+    {
+      "seq": 10,
+      "id": "settings-workspaces",
+      "name": "Settings › Workspaces",
+      "theme": "neon",
+      "why": "panel workspaces renders, and the nav marks it current",
+      "at": "2026-10-02T20:30:55.268Z",
+      "status": "passed",
+      "shot": "docs/walk/6d2b16d/10-settings-workspaces-neon.png",
+      "shotKind": "webview",
+      "asserts": [
+        {
+          "ok": true,
+          "said": "exists [role=\"dialog\"][aria-modal=\"true\"]"
+        },
+        {
+          "ok": true,
+          "said": "text \"Add Folder\""
+        },
+        {
+          "ok": true,
+          "said": "count [role=\"dialog\"] nav button[aria-current=\"page\"] == 1 (saw 1)"
+        },
+        {
+          "ok": true,
+          "said": "js document.querySelector('[role=\"dialog\"] nav button[aria-current=\"page\"]').textContent.trim() === \"Workspaces\""
+        }
+      ],
+      "console": [],
+      "consoleIgnored": [],
+      "note": null
+    },
+    {
+      "seq": 11,
+      "id": "settings-targets",
+      "name": "Settings › Launch targets",
+      "theme": "neon",
+      "why": "panel targets renders, and the nav marks it current",
+      "at": "2026-10-02T20:30:55.848Z",
+      "status": "passed",
+      "shot": "docs/walk/6d2b16d/11-settings-targets-neon.png",
+      "shotKind": "webview",
+      "asserts": [
+        {
+          "ok": true,
+          "said": "exists [role=\"dialog\"][aria-modal=\"true\"]"
+        },
+        {
+          "ok": true,
+          "said": "text \"Launch targets\""
+        },
+        {
+          "ok": true,
+          "said": "count [role=\"dialog\"] nav button[aria-current=\"page\"] == 1 (saw 1)"
+        },
+        {
+          "ok": true,
+          "said": "js document.querySelector('[role=\"dialog\"] nav button[aria-current=\"page\"]').textContent.trim() === \"Launch targets\""
+        }
+      ],
+      "console": [],
+      "consoleIgnored": [],
+      "note": null
+    },
+    {
+      "seq": 12,
+      "id": "settings-tmux",
+      "name": "Settings › tmux / psmux",
+      "theme": "neon",
+      "why": "panel tmux renders, and the nav marks it current",
+      "at": "2026-10-02T20:30:56.425Z",
+      "status": "passed",
+      "shot": "docs/walk/6d2b16d/12-settings-tmux-neon.png",
+      "shotKind": "webview",
+      "asserts": [
+        {
+          "ok": true,
+          "said": "exists [role=\"dialog\"][aria-modal=\"true\"]"
+        },
+        {
+          "ok": true,
+          "said": "text \"Use tmux / psmux\""
+        },
+        {
+          "ok": true,
+          "said": "count [role=\"dialog\"] nav button[aria-current=\"page\"] == 1 (saw 1)"
+        },
+        {
+          "ok": true,
+          "said": "js document.querySelector('[role=\"dialog\"] nav button[aria-current=\"page\"]').textContent.trim() === \"tmux / psmux\""
+        }
+      ],
+      "console": [],
+      "consoleIgnored": [],
+      "note": null
+    },
+    {
+      "seq": 13,
+      "id": "settings-wsl",
+      "name": "Settings › WSL doctor",
+      "theme": "neon",
+      "why": "panel wsl renders, and the nav marks it current",
+      "at": "2026-10-02T20:30:57.039Z",
+      "status": "passed",
+      "shot": "docs/walk/6d2b16d/13-settings-wsl-neon.png",
+      "shotKind": "webview",
+      "asserts": [
+        {
+          "ok": true,
+          "said": "exists [role=\"dialog\"][aria-modal=\"true\"]"
+        },
+        {
+          "ok": true,
+          "said": "text \"WSL\""
+        },
+        {
+          "ok": true,
+          "said": "count [role=\"dialog\"] nav button[aria-current=\"page\"] == 1 (saw 1)"
+        },
+        {
+          "ok": true,
+          "said": "js document.querySelector('[role=\"dialog\"] nav button[aria-current=\"page\"]').textContent.trim() === \"WSL doctor\""
+        }
+      ],
+      "console": [],
+      "consoleIgnored": [],
+      "note": null
+    },
+    {
+      "seq": 14,
+      "id": "settings-github",
+      "name": "Settings › GitHub",
+      "theme": "neon",
+      "why": "panel github renders, and the nav marks it current",
+      "at": "2026-10-02T20:30:57.648Z",
+      "status": "passed",
+      "shot": "docs/walk/6d2b16d/14-settings-github-neon.png",
+      "shotKind": "webview",
+      "asserts": [
+        {
+          "ok": true,
+          "said": "exists [role=\"dialog\"][aria-modal=\"true\"]"
+        },
+        {
+          "ok": true,
+          "said": "text \"GitHub\""
+        },
+        {
+          "ok": true,
+          "said": "count [role=\"dialog\"] nav button[aria-current=\"page\"] == 1 (saw 1)"
+        },
+        {
+          "ok": true,
+          "said": "js document.querySelector('[role=\"dialog\"] nav button[aria-current=\"page\"]').textContent.trim() === \"GitHub\""
+        }
+      ],
+      "console": [],
+      "consoleIgnored": [],
+      "note": null
+    },
+    {
+      "seq": 15,
+      "id": "settings-shortcuts",
+      "name": "Settings › Shortcuts",
+      "theme": "neon",
+      "why": "panel shortcuts renders, and the nav marks it current",
+      "at": "2026-10-02T20:30:58.245Z",
+      "status": "passed",
+      "shot": "docs/walk/6d2b16d/15-settings-shortcuts-neon.png",
+      "shotKind": "webview",
+      "asserts": [
+        {
+          "ok": true,
+          "said": "exists [role=\"dialog\"][aria-modal=\"true\"]"
+        },
+        {
+          "ok": true,
+          "said": "text \"Command palette\""
+        },
+        {
+          "ok": true,
+          "said": "count [role=\"dialog\"] nav button[aria-current=\"page\"] == 1 (saw 1)"
+        },
+        {
+          "ok": true,
+          "said": "js document.querySelector('[role=\"dialog\"] nav button[aria-current=\"page\"]').textContent.trim() === \"Shortcuts\""
+        }
+      ],
+      "console": [],
+      "consoleIgnored": [],
+      "note": null
+    },
+    {
+      "seq": 16,
+      "id": "settings-scanning",
+      "name": "Settings › Scanning",
+      "theme": "neon",
+      "why": "panel scanning renders, and the nav marks it current",
+      "at": "2026-10-02T20:30:58.851Z",
+      "status": "passed",
+      "shot": "docs/walk/6d2b16d/16-settings-scanning-neon.png",
+      "shotKind": "webview",
+      "asserts": [
+        {
+          "ok": true,
+          "said": "exists [role=\"dialog\"][aria-modal=\"true\"]"
+        },
+        {
+          "ok": true,
+          "said": "text \"Scanning\""
+        },
+        {
+          "ok": true,
+          "said": "count [role=\"dialog\"] nav button[aria-current=\"page\"] == 1 (saw 1)"
+        },
+        {
+          "ok": true,
+          "said": "js document.querySelector('[role=\"dialog\"] nav button[aria-current=\"page\"]').textContent.trim() === \"Scanning\""
+        }
+      ],
+      "console": [],
+      "consoleIgnored": [],
+      "note": null
+    },
+    {
+      "seq": 17,
+      "id": "settings-appearance",
+      "name": "Settings › Appearance",
+      "theme": "neon",
+      "why": "panel appearance renders, and the nav marks it current",
+      "at": "2026-10-02T20:30:59.434Z",
+      "status": "passed",
+      "shot": "docs/walk/6d2b16d/17-settings-appearance-neon.png",
+      "shotKind": "webview",
+      "asserts": [
+        {
+          "ok": true,
+          "said": "exists [role=\"dialog\"][aria-modal=\"true\"]"
+        },
+        {
+          "ok": true,
+          "said": "text \"Theme\""
+        },
+        {
+          "ok": true,
+          "said": "count [role=\"dialog\"] nav button[aria-current=\"page\"] == 1 (saw 1)"
+        },
+        {
+          "ok": true,
+          "said": "js document.querySelector('[role=\"dialog\"] nav button[aria-current=\"page\"]').textContent.trim() === \"Appearance\""
+        },
+        {
+          "ok": true,
+          "said": "count [role=\"dialog\"] button[aria-pressed=\"true\"] == 1 (saw 1)"
+        }
+      ],
+      "console": [],
+      "consoleIgnored": [],
+      "note": null
+    },
+    {
+      "seq": 18,
+      "id": "settings-config",
+      "name": "Settings › Config",
+      "theme": "neon",
+      "why": "panel config renders, and the nav marks it current",
+      "at": "2026-10-02T20:31:00.014Z",
+      "status": "passed",
+      "shot": "docs/walk/6d2b16d/18-settings-config-neon.png",
+      "shotKind": "webview",
+      "asserts": [
+        {
+          "ok": true,
+          "said": "exists [role=\"dialog\"][aria-modal=\"true\"]"
+        },
+        {
+          "ok": true,
+          "said": "text \"Export\""
+        },
+        {
+          "ok": true,
+          "said": "count [role=\"dialog\"] nav button[aria-current=\"page\"] == 1 (saw 1)"
+        },
+        {
+          "ok": true,
+          "said": "js document.querySelector('[role=\"dialog\"] nav button[aria-current=\"page\"]').textContent.trim() === \"Config\""
+        }
+      ],
+      "console": [],
+      "consoleIgnored": [],
+      "note": null
+    },
+    {
+      "seq": 19,
+      "id": "settings-servers",
+      "name": "Settings › Servers",
+      "theme": "neon",
+      "why": "panel servers renders, and the nav marks it current",
+      "at": "2026-10-02T20:31:00.613Z",
+      "status": "passed",
+      "shot": "docs/walk/6d2b16d/19-settings-servers-neon.png",
+      "shotKind": "webview",
+      "asserts": [
+        {
+          "ok": true,
+          "said": "exists [role=\"dialog\"][aria-modal=\"true\"]"
+        },
+        {
+          "ok": true,
+          "said": "text \"Machines\""
+        },
+        {
+          "ok": true,
+          "said": "count [role=\"dialog\"] nav button[aria-current=\"page\"] == 1 (saw 1)"
+        },
+        {
+          "ok": true,
+          "said": "js document.querySelector('[role=\"dialog\"] nav button[aria-current=\"page\"]').textContent.trim() === \"Servers\""
+        }
+      ],
+      "console": [],
+      "consoleIgnored": [],
+      "note": null
+    },
+    {
+      "seq": 20,
+      "id": "settings-backups",
+      "name": "Settings › Backups",
+      "theme": "neon",
+      "why": "panel backups renders, and the nav marks it current",
+      "at": "2026-10-02T20:31:01.206Z",
+      "status": "passed",
+      "shot": "docs/walk/6d2b16d/20-settings-backups-neon.png",
+      "shotKind": "webview",
+      "asserts": [
+        {
+          "ok": true,
+          "said": "exists [role=\"dialog\"][aria-modal=\"true\"]"
+        },
+        {
+          "ok": true,
+          "said": "text \"Nothing here asks a remote anything\""
+        },
+        {
+          "ok": true,
+          "said": "count [role=\"dialog\"] nav button[aria-current=\"page\"] == 1 (saw 1)"
+        },
+        {
+          "ok": true,
+          "said": "js document.querySelector('[role=\"dialog\"] nav button[aria-current=\"page\"]').textContent.trim() === \"Backups\""
+        }
+      ],
+      "console": [],
+      "consoleIgnored": [],
+      "note": null
+    },
+    {
+      "seq": 21,
+      "id": "settings-help",
+      "name": "Settings › Help",
+      "theme": "neon",
+      "why": "panel help renders, and the nav marks it current",
+      "at": "2026-10-02T20:31:01.809Z",
+      "status": "passed",
+      "shot": "docs/walk/6d2b16d/21-settings-help-neon.png",
+      "shotKind": "webview",
+      "asserts": [
+        {
+          "ok": true,
+          "said": "exists [role=\"dialog\"][aria-modal=\"true\"]"
+        },
+        {
+          "ok": true,
+          "said": "text \"What DevGo is\""
+        },
+        {
+          "ok": true,
+          "said": "count [role=\"dialog\"] nav button[aria-current=\"page\"] == 1 (saw 1)"
+        },
+        {
+          "ok": true,
+          "said": "js document.querySelector('[role=\"dialog\"] nav button[aria-current=\"page\"]').textContent.trim() === \"Help\""
+        }
+      ],
+      "console": [],
+      "consoleIgnored": [],
+      "note": null
+    },
+    {
+      "seq": 22,
+      "id": "settings-about",
+      "name": "Settings › About",
+      "theme": "neon",
+      "why": "panel about renders, and the nav marks it current",
+      "at": "2026-10-02T20:31:02.420Z",
+      "status": "passed",
+      "shot": "docs/walk/6d2b16d/22-settings-about-neon.png",
+      "shotKind": "webview",
+      "asserts": [
+        {
+          "ok": true,
+          "said": "exists [role=\"dialog\"][aria-modal=\"true\"]"
+        },
+        {
+          "ok": true,
+          "said": "text \"DevGo\""
+        },
+        {
+          "ok": true,
+          "said": "count [role=\"dialog\"] nav button[aria-current=\"page\"] == 1 (saw 1)"
+        },
+        {
+          "ok": true,
+          "said": "js document.querySelector('[role=\"dialog\"] nav button[aria-current=\"page\"]').textContent.trim() === \"About\""
+        },
+        {
+          "ok": true,
+          "said": "the sha 6d2b16d is on screen"
+        }
+      ],
+      "console": [],
+      "consoleIgnored": [],
+      "note": null
+    },
+    {
+      "seq": 23,
+      "id": "settings-escape",
+      "name": "Settings — closed by Escape",
+      "theme": "neon",
+      "why": "exit 1 of 3. Recorded as passing by the prior walk; kept so a regression is caught",
+      "at": "2026-10-02T20:31:03.016Z",
+      "status": "passed",
+      "shot": null,
+      "shotKind": null,
+      "asserts": [
+        {
+          "ok": true,
+          "said": "absent [role=\"dialog\"][aria-modal=\"true\"]"
+        }
+      ],
+      "console": [],
+      "consoleIgnored": [],
+      "note": null
+    },
+    {
+      "seq": 24,
+      "id": "settings-close-button",
+      "name": "Settings — closed by its own Close button",
+      "theme": "neon",
+      "why": "exit 2 of 3. ⚠️ Settings gets no Drawer `title`, so it has no ✕ — the footer button is the button, and asserting the ✕ here would be asserting the wrong control",
+      "at": "2026-10-02T20:31:03.314Z",
+      "status": "passed",
+      "shot": null,
+      "shotKind": null,
+      "asserts": [
+        {
+          "ok": true,
+          "said": "absent [role=\"dialog\"][aria-modal=\"true\"]"
+        }
+      ],
+      "console": [],
+      "consoleIgnored": [],
+      "note": null
+    },
+    {
+      "seq": 25,
+      "id": "settings-backdrop",
+      "name": "Settings — closed by the backdrop",
+      "theme": "neon",
+      "why": "exit 3 of 3, and the guard on a once-reported defect (D1): the Settings sheet was seen swallowing an outside click while Close and Escape worked. 33a4f20 closed the title-bar-strip gap; the first real walk (6d2b16d) found this step GREEN, with a negative control: a click inside the panel left it open, a click on the backdrop closed it. A red here is a regression, not an expected failure.",
+      "at": "2026-10-02T20:31:03.664Z",
+      "status": "passed",
+      "shot": null,
+      "shotKind": null,
+      "asserts": [
+        {
+          "ok": true,
+          "said": "absent [role=\"dialog\"][aria-modal=\"true\"]"
+        }
+      ],
+      "console": [],
+      "consoleIgnored": [],
+      "note": null
+    },
+    {
+      "seq": 26,
+      "id": "project-menu",
+      "name": "Project row menu — the inventory",
+      "theme": "neon",
+      "why": "⭐ the densest surface in the app: thirteen entries in four sections, ten of them conditional. Asserted, screenshot, and NOT clicked — see NEVER_CLICK.",
+      "at": "2026-10-02T20:31:04.016Z",
+      "status": "passed",
+      "shot": "docs/walk/6d2b16d/26-project-menu-neon.png",
+      "shotKind": "webview",
+      "asserts": [
+        {
+          "ok": true,
+          "said": "exists div.fixed.z-50.w-72"
+        },
+        {
+          "ok": true,
+          "said": "menu entries enabled: Open in editor, Open both, Run dev script…",
+          "extra": {
+            "missing": [],
+            "saw": [
+              "Open in editor",
+              "Open terminal",
+              "Open both",
+              "Open in Claude Code (disabled)",
+              "Open in Claude Code (Ubuntu-26.04)",
+              "Reveal in File Explorer",
+              "Reveal in Trove",
+              "Copy Windows path",
+              "Copy WSL path",
+              "Run dev script…",
+              "Open remote",
+              "Pin to top"
+            ]
+          }
+        },
+        {
+          "ok": true,
+          "said": "menu hints",
+          "extra": {
+            "bad": []
+          }
+        },
+        {
+          "ok": true,
+          "said": "count div.fixed.z-50.w-72 > div.border-b >= 2 (saw 3)"
+        }
+      ],
+      "console": [],
+      "consoleIgnored": [],
+      "note": null
+    },
+    {
+      "seq": 27,
+      "id": "project-menu-escape",
+      "name": "Project row menu — closed by Escape",
+      "theme": "neon",
+      "why": null,
+      "at": "2026-10-02T20:31:04.596Z",
+      "status": "passed",
+      "shot": null,
+      "shotKind": null,
+      "asserts": [
+        {
+          "ok": true,
+          "said": "absent div.fixed.z-50.w-72"
+        }
+      ],
+      "console": [],
+      "consoleIgnored": [],
+      "note": null
+    },
+    {
+      "seq": 28,
+      "id": "project-menu-outside",
+      "name": "Project row menu — closed by a click away",
+      "theme": "neon",
+      "why": "ContextMenu listens on mousedown, not click — a different exit from the Drawer backdrop, and worth its own step",
+      "at": "2026-10-02T20:31:04.946Z",
+      "status": "passed",
+      "shot": null,
+      "shotKind": null,
+      "asserts": [
+        {
+          "ok": true,
+          "said": "absent div.fixed.z-50.w-72"
+        }
+      ],
+      "console": [],
+      "consoleIgnored": [],
+      "note": null
+    },
+    {
+      "seq": 29,
+      "id": "workspace-menu",
+      "name": "Workspace header menu",
+      "theme": "neon",
+      "why": "the second context menu, on the lane heading rather than a row",
+      "at": "2026-10-02T20:31:05.302Z",
+      "status": "passed",
+      "shot": "docs/walk/6d2b16d/29-workspace-menu-neon.png",
+      "shotKind": "webview",
+      "asserts": [
+        {
+          "ok": true,
+          "said": "exists div.fixed.z-50.w-72"
+        },
+        {
+          "ok": true,
+          "said": "count div.fixed.z-50.w-72 button >= 2 (saw 7)"
+        }
+      ],
+      "console": [],
+      "consoleIgnored": [],
+      "note": null
+    },
+    {
+      "seq": 30,
+      "id": "confirm-remove-workspace",
+      "name": "Confirm — Remove workspace (cancelled)",
+      "theme": "neon",
+      "why": "⭐ the destructive confirm, reached and refused. The Delete key opens it; Cancel closes it; nothing is removed. This is the shape of the only class of modal that can lose the owner data, so it is walked deliberately and it never gets to Confirm.",
+      "at": "2026-10-02T20:31:05.760Z",
+      "status": "passed",
+      "shot": "docs/walk/6d2b16d/30-confirm-remove-workspace-neon.png",
+      "shotKind": "webview",
+      "asserts": [
+        {
+          "ok": true,
+          "said": "exists [role=\"dialog\"][aria-modal=\"true\"]"
+        },
+        {
+          "ok": true,
+          "said": "text \"Your files will not be deleted.\""
+        },
+        {
+          "ok": true,
+          "said": "js !!document.querySelector('[role=\"dialog\"][aria-modal=\"true\"]') && [...document.querySelectorAll('[role=\"dialog\"][aria-modal=\"true\"] button')].some(b => b.textContent.trim() === 'Cancel')"
+        },
+        {
+          "ok": true,
+          "said": "js [...document.querySelectorAll('[role=\"dialog\"][aria-modal=\"true\"] button')].some(b => b.textContent.trim() === 'Remove')"
+        }
+      ],
+      "console": [],
+      "consoleIgnored": [],
+      "note": null
+    },
+    {
+      "seq": 31,
+      "id": "confirm-escape",
+      "name": "Confirm — closed by Escape",
+      "theme": "neon",
+      "why": null,
+      "at": "2026-10-02T20:31:06.431Z",
+      "status": "passed",
+      "shot": null,
+      "shotKind": null,
+      "asserts": [
+        {
+          "ok": true,
+          "said": "absent [role=\"dialog\"][aria-modal=\"true\"]"
+        }
+      ],
+      "console": [],
+      "consoleIgnored": [],
+      "note": null
+    },
+    {
+      "seq": 32,
+      "id": "confirm-x",
+      "name": "Confirm — closed by its ✕",
+      "theme": "neon",
+      "why": "exit 3 of 3, and the only surface in the walk that HAS a ✕: ConfirmDialog passes a title, so Drawer renders the header",
+      "at": "2026-10-02T20:31:06.927Z",
+      "status": "passed",
+      "shot": null,
+      "shotKind": null,
+      "asserts": [
+        {
+          "ok": true,
+          "said": "absent [role=\"dialog\"][aria-modal=\"true\"]"
+        }
+      ],
+      "console": [],
+      "consoleIgnored": [],
+      "note": null
+    },
+    {
+      "seq": 33,
+      "id": "confirm-backdrop",
+      "name": "Confirm — closed by the backdrop",
+      "theme": "neon",
+      "why": "the same class as settings-backdrop, on a top sheet instead of a right drawer — the two sides compute a different backdrop point",
+      "at": "2026-10-02T20:31:07.438Z",
+      "status": "passed",
+      "shot": null,
+      "shotKind": null,
+      "asserts": [
+        {
+          "ok": true,
+          "said": "absent [role=\"dialog\"][aria-modal=\"true\"]"
+        }
+      ],
+      "console": [],
+      "consoleIgnored": [],
+      "note": null
+    },
+    {
+      "seq": 34,
+      "id": "scan-drawer",
+      "name": "Scan for folders (drawer)",
+      "theme": "neon",
+      "why": "a right drawer with a title, so it has the ✕ the palette and Settings do not",
+      "at": "2026-10-02T20:31:07.924Z",
+      "status": "passed",
+      "shot": "docs/walk/6d2b16d/34-scan-drawer-neon.png",
+      "shotKind": "webview",
+      "asserts": [
+        {
+          "ok": true,
+          "said": "exists [role=\"dialog\"][aria-label]"
+        },
+        {
+          "ok": true,
+          "said": "exists [role=\"dialog\"] [aria-label=\"Close\"]"
+        },
+        {
+          "ok": true,
+          "said": "js document.querySelector('[role=\"dialog\"][aria-label]').getAttribute('aria-label').length > 0"
+        }
+      ],
+      "console": [],
+      "consoleIgnored": [],
+      "note": null
+    },
+    {
+      "seq": 35,
+      "id": "home",
+      "name": "Home — the lanes",
+      "theme": "matrix",
+      "why": "the screen every other step starts from, in all five palettes",
+      "at": "2026-10-02T20:31:08.615Z",
+      "status": "passed",
+      "shot": "docs/walk/6d2b16d/35-home-matrix.png",
+      "shotKind": "webview",
+      "asserts": [
+        {
+          "ok": true,
+          "said": "text \"DevGo\""
+        },
+        {
+          "ok": true,
+          "said": "count div.rounded-panel.border-t-2.border-l-2 >= 1 (saw 4)"
+        },
+        {
+          "ok": true,
+          "said": "absent [role=\"dialog\"][aria-modal=\"true\"]"
+        },
+        {
+          "ok": true,
+          "said": "js document.querySelector(\"header\").offsetHeight === 48"
+        }
+      ],
+      "console": [],
+      "consoleIgnored": [],
+      "note": null
+    },
+    {
+      "seq": 36,
+      "id": "search-none",
+      "name": "Projects — no match (empty state)",
+      "theme": "matrix",
+      "why": "the empty half of empty/one/many; its own sentence, not a blank lane",
+      "at": "2026-10-02T20:31:11.233Z",
+      "status": "passed",
+      "shot": "docs/walk/6d2b16d/36-search-none-matrix.png",
+      "shotKind": "webview",
+      "asserts": [
+        {
+          "ok": true,
+          "said": "text \"No project matches.\""
+        },
+        {
+          "ok": true,
+          "said": "count div.group div.pl-10 div.basis-\\[34\\%\\] == 0 (saw 0)"
+        }
+      ],
+      "console": [],
+      "consoleIgnored": [],
+      "note": null
+    },
+    {
+      "seq": 37,
+      "id": "palette",
+      "name": "Command palette",
+      "theme": "matrix",
+      "why": "the one surface summoned from anywhere; z-60, over everything",
+      "at": "2026-10-02T20:31:11.801Z",
+      "status": "passed",
+      "shot": "docs/walk/6d2b16d/37-palette-matrix.png",
+      "shotKind": "webview",
+      "asserts": [
+        {
+          "ok": true,
+          "said": "exists [role=\"dialog\"][aria-modal=\"true\"]"
+        },
+        {
+          "ok": true,
+          "said": "count [role=\"dialog\"] button >= 3 (saw 69)"
+        },
+        {
+          "ok": true,
+          "said": "absent [role=\"dialog\"] [aria-label=\"Close\"]"
+        }
+      ],
+      "console": [],
+      "consoleIgnored": [],
+      "note": null
+    },
+    {
+      "seq": 38,
+      "id": "settings",
+      "name": "Settings — the nav column",
+      "theme": "matrix",
+      "why": "thirteen panels, and the nav is the only way to reach any of them",
+      "at": "2026-10-02T20:31:12.385Z",
+      "status": "passed",
+      "shot": "docs/walk/6d2b16d/38-settings-matrix.png",
+      "shotKind": "webview",
+      "asserts": [
+        {
+          "ok": true,
+          "said": "exists [role=\"dialog\"][aria-modal=\"true\"]"
+        },
+        {
+          "ok": true,
+          "said": "text \"Settings\""
+        },
+        {
+          "ok": true,
+          "said": "count [role=\"dialog\"] nav button == 13 (saw 13)"
+        },
+        {
+          "ok": true,
+          "said": "count [role=\"dialog\"] nav button[aria-current=\"page\"] == 1 (saw 1)"
+        }
+      ],
+      "console": [],
+      "consoleIgnored": [],
+      "note": null
+    },
+    {
+      "seq": 39,
+      "id": "settings-appearance",
+      "name": "Settings › Appearance",
+      "theme": "matrix",
+      "why": "panel appearance renders, and the nav marks it current",
+      "at": "2026-10-02T20:31:12.794Z",
+      "status": "passed",
+      "shot": "docs/walk/6d2b16d/39-settings-appearance-matrix.png",
+      "shotKind": "webview",
+      "asserts": [
+        {
+          "ok": true,
+          "said": "exists [role=\"dialog\"][aria-modal=\"true\"]"
+        },
+        {
+          "ok": true,
+          "said": "text \"Theme\""
+        },
+        {
+          "ok": true,
+          "said": "count [role=\"dialog\"] nav button[aria-current=\"page\"] == 1 (saw 1)"
+        },
+        {
+          "ok": true,
+          "said": "js document.querySelector('[role=\"dialog\"] nav button[aria-current=\"page\"]').textContent.trim() === \"Appearance\""
+        },
+        {
+          "ok": true,
+          "said": "count [role=\"dialog\"] button[aria-pressed=\"true\"] == 1 (saw 1)"
+        }
+      ],
+      "console": [],
+      "consoleIgnored": [],
+      "note": null
+    },
+    {
+      "seq": 40,
+      "id": "settings-about",
+      "name": "Settings › About",
+      "theme": "matrix",
+      "why": "panel about renders, and the nav marks it current",
+      "at": "2026-10-02T20:31:13.385Z",
+      "status": "passed",
+      "shot": "docs/walk/6d2b16d/40-settings-about-matrix.png",
+      "shotKind": "webview",
+      "asserts": [
+        {
+          "ok": true,
+          "said": "exists [role=\"dialog\"][aria-modal=\"true\"]"
+        },
+        {
+          "ok": true,
+          "said": "text \"DevGo\""
+        },
+        {
+          "ok": true,
+          "said": "count [role=\"dialog\"] nav button[aria-current=\"page\"] == 1 (saw 1)"
+        },
+        {
+          "ok": true,
+          "said": "js document.querySelector('[role=\"dialog\"] nav button[aria-current=\"page\"]').textContent.trim() === \"About\""
+        },
+        {
+          "ok": true,
+          "said": "the sha 6d2b16d is on screen"
+        }
+      ],
+      "console": [],
+      "consoleIgnored": [],
+      "note": null
+    },
+    {
+      "seq": 41,
+      "id": "project-menu",
+      "name": "Project row menu — the inventory",
+      "theme": "matrix",
+      "why": "⭐ the densest surface in the app: thirteen entries in four sections, ten of them conditional. Asserted, screenshot, and NOT clicked — see NEVER_CLICK.",
+      "at": "2026-10-02T20:31:13.929Z",
+      "status": "passed",
+      "shot": "docs/walk/6d2b16d/41-project-menu-matrix.png",
+      "shotKind": "webview",
+      "asserts": [
+        {
+          "ok": true,
+          "said": "exists div.fixed.z-50.w-72"
+        },
+        {
+          "ok": true,
+          "said": "menu entries enabled: Open in editor, Open both, Run dev script…",
+          "extra": {
+            "missing": [],
+            "saw": [
+              "Open in editor",
+              "Open terminal",
+              "Open both",
+              "Open in Claude Code (disabled)",
+              "Open in Claude Code (Ubuntu-26.04)",
+              "Reveal in File Explorer",
+              "Reveal in Trove",
+              "Copy Windows path",
+              "Copy WSL path",
+              "Run dev script…",
+              "Open remote",
+              "Pin to top"
+            ]
+          }
+        },
+        {
+          "ok": true,
+          "said": "menu hints",
+          "extra": {
+            "bad": []
+          }
+        },
+        {
+          "ok": true,
+          "said": "count div.fixed.z-50.w-72 > div.border-b >= 2 (saw 3)"
+        }
+      ],
+      "console": [],
+      "consoleIgnored": [],
+      "note": null
+    },
+    {
+      "seq": 42,
+      "id": "home",
+      "name": "Home — the lanes",
+      "theme": "nord",
+      "why": "the screen every other step starts from, in all five palettes",
+      "at": "2026-10-02T20:31:14.522Z",
+      "status": "passed",
+      "shot": "docs/walk/6d2b16d/42-home-nord.png",
+      "shotKind": "webview",
+      "asserts": [
+        {
+          "ok": true,
+          "said": "text \"DevGo\""
+        },
+        {
+          "ok": true,
+          "said": "count div.rounded-panel.border-t-2.border-l-2 >= 1 (saw 4)"
+        },
+        {
+          "ok": true,
+          "said": "absent [role=\"dialog\"][aria-modal=\"true\"]"
+        },
+        {
+          "ok": true,
+          "said": "js document.querySelector(\"header\").offsetHeight === 48"
+        }
+      ],
+      "console": [],
+      "consoleIgnored": [],
+      "note": null
+    },
+    {
+      "seq": 43,
+      "id": "search-none",
+      "name": "Projects — no match (empty state)",
+      "theme": "nord",
+      "why": "the empty half of empty/one/many; its own sentence, not a blank lane",
+      "at": "2026-10-02T20:31:15.326Z",
+      "status": "passed",
+      "shot": "docs/walk/6d2b16d/43-search-none-nord.png",
+      "shotKind": "webview",
+      "asserts": [
+        {
+          "ok": true,
+          "said": "text \"No project matches.\""
+        },
+        {
+          "ok": true,
+          "said": "count div.group div.pl-10 div.basis-\\[34\\%\\] == 0 (saw 0)"
+        }
+      ],
+      "console": [],
+      "consoleIgnored": [],
+      "note": null
+    },
+    {
+      "seq": 44,
+      "id": "palette",
+      "name": "Command palette",
+      "theme": "nord",
+      "why": "the one surface summoned from anywhere; z-60, over everything",
+      "at": "2026-10-02T20:31:15.948Z",
+      "status": "passed",
+      "shot": "docs/walk/6d2b16d/44-palette-nord.png",
+      "shotKind": "webview",
+      "asserts": [
+        {
+          "ok": true,
+          "said": "exists [role=\"dialog\"][aria-modal=\"true\"]"
+        },
+        {
+          "ok": true,
+          "said": "count [role=\"dialog\"] button >= 3 (saw 69)"
+        },
+        {
+          "ok": true,
+          "said": "absent [role=\"dialog\"] [aria-label=\"Close\"]"
+        }
+      ],
+      "console": [],
+      "consoleIgnored": [],
+      "note": null
+    },
+    {
+      "seq": 45,
+      "id": "settings",
+      "name": "Settings — the nav column",
+      "theme": "nord",
+      "why": "thirteen panels, and the nav is the only way to reach any of them",
+      "at": "2026-10-02T20:31:16.464Z",
+      "status": "passed",
+      "shot": "docs/walk/6d2b16d/45-settings-nord.png",
+      "shotKind": "webview",
+      "asserts": [
+        {
+          "ok": true,
+          "said": "exists [role=\"dialog\"][aria-modal=\"true\"]"
+        },
+        {
+          "ok": true,
+          "said": "text \"Settings\""
+        },
+        {
+          "ok": true,
+          "said": "count [role=\"dialog\"] nav button == 13 (saw 13)"
+        },
+        {
+          "ok": true,
+          "said": "count [role=\"dialog\"] nav button[aria-current=\"page\"] == 1 (saw 1)"
+        }
+      ],
+      "console": [],
+      "consoleIgnored": [],
+      "note": null
+    },
+    {
+      "seq": 46,
+      "id": "settings-appearance",
+      "name": "Settings › Appearance",
+      "theme": "nord",
+      "why": "panel appearance renders, and the nav marks it current",
+      "at": "2026-10-02T20:31:16.874Z",
+      "status": "passed",
+      "shot": "docs/walk/6d2b16d/46-settings-appearance-nord.png",
+      "shotKind": "webview",
+      "asserts": [
+        {
+          "ok": true,
+          "said": "exists [role=\"dialog\"][aria-modal=\"true\"]"
+        },
+        {
+          "ok": true,
+          "said": "text \"Theme\""
+        },
+        {
+          "ok": true,
+          "said": "count [role=\"dialog\"] nav button[aria-current=\"page\"] == 1 (saw 1)"
+        },
+        {
+          "ok": true,
+          "said": "js document.querySelector('[role=\"dialog\"] nav button[aria-current=\"page\"]').textContent.trim() === \"Appearance\""
+        },
+        {
+          "ok": true,
+          "said": "count [role=\"dialog\"] button[aria-pressed=\"true\"] == 1 (saw 1)"
+        }
+      ],
+      "console": [],
+      "consoleIgnored": [],
+      "note": null
+    },
+    {
+      "seq": 47,
+      "id": "settings-about",
+      "name": "Settings › About",
+      "theme": "nord",
+      "why": "panel about renders, and the nav marks it current",
+      "at": "2026-10-02T20:31:17.464Z",
+      "status": "passed",
+      "shot": "docs/walk/6d2b16d/47-settings-about-nord.png",
+      "shotKind": "webview",
+      "asserts": [
+        {
+          "ok": true,
+          "said": "exists [role=\"dialog\"][aria-modal=\"true\"]"
+        },
+        {
+          "ok": true,
+          "said": "text \"DevGo\""
+        },
+        {
+          "ok": true,
+          "said": "count [role=\"dialog\"] nav button[aria-current=\"page\"] == 1 (saw 1)"
+        },
+        {
+          "ok": true,
+          "said": "js document.querySelector('[role=\"dialog\"] nav button[aria-current=\"page\"]').textContent.trim() === \"About\""
+        },
+        {
+          "ok": true,
+          "said": "the sha 6d2b16d is on screen"
+        }
+      ],
+      "console": [],
+      "consoleIgnored": [],
+      "note": null
+    },
+    {
+      "seq": 48,
+      "id": "project-menu",
+      "name": "Project row menu — the inventory",
+      "theme": "nord",
+      "why": "⭐ the densest surface in the app: thirteen entries in four sections, ten of them conditional. Asserted, screenshot, and NOT clicked — see NEVER_CLICK.",
+      "at": "2026-10-02T20:31:18.039Z",
+      "status": "passed",
+      "shot": "docs/walk/6d2b16d/48-project-menu-nord.png",
+      "shotKind": "webview",
+      "asserts": [
+        {
+          "ok": true,
+          "said": "exists div.fixed.z-50.w-72"
+        },
+        {
+          "ok": true,
+          "said": "menu entries enabled: Open in editor, Open both, Run dev script…",
+          "extra": {
+            "missing": [],
+            "saw": [
+              "Open in editor",
+              "Open terminal",
+              "Open both",
+              "Open in Claude Code (disabled)",
+              "Open in Claude Code (Ubuntu-26.04)",
+              "Reveal in File Explorer",
+              "Reveal in Trove",
+              "Copy Windows path",
+              "Copy WSL path",
+              "Run dev script…",
+              "Open remote",
+              "Pin to top"
+            ]
+          }
+        },
+        {
+          "ok": true,
+          "said": "menu hints",
+          "extra": {
+            "bad": []
+          }
+        },
+        {
+          "ok": true,
+          "said": "count div.fixed.z-50.w-72 > div.border-b >= 2 (saw 3)"
+        }
+      ],
+      "console": [],
+      "consoleIgnored": [],
+      "note": null
+    },
+    {
+      "seq": 49,
+      "id": "home",
+      "name": "Home — the lanes",
+      "theme": "dracula",
+      "why": "the screen every other step starts from, in all five palettes",
+      "at": "2026-10-02T20:31:18.639Z",
+      "status": "passed",
+      "shot": "docs/walk/6d2b16d/49-home-dracula.png",
+      "shotKind": "webview",
+      "asserts": [
+        {
+          "ok": true,
+          "said": "text \"DevGo\""
+        },
+        {
+          "ok": true,
+          "said": "count div.rounded-panel.border-t-2.border-l-2 >= 1 (saw 4)"
+        },
+        {
+          "ok": true,
+          "said": "absent [role=\"dialog\"][aria-modal=\"true\"]"
+        },
+        {
+          "ok": true,
+          "said": "js document.querySelector(\"header\").offsetHeight === 48"
+        }
+      ],
+      "console": [],
+      "consoleIgnored": [],
+      "note": null
+    },
+    {
+      "seq": 50,
+      "id": "search-none",
+      "name": "Projects — no match (empty state)",
+      "theme": "dracula",
+      "why": "the empty half of empty/one/many; its own sentence, not a blank lane",
+      "at": "2026-10-02T20:31:19.475Z",
+      "status": "passed",
+      "shot": "docs/walk/6d2b16d/50-search-none-dracula.png",
+      "shotKind": "webview",
+      "asserts": [
+        {
+          "ok": true,
+          "said": "text \"No project matches.\""
+        },
+        {
+          "ok": true,
+          "said": "count div.group div.pl-10 div.basis-\\[34\\%\\] == 0 (saw 0)"
+        }
+      ],
+      "console": [],
+      "consoleIgnored": [],
+      "note": null
+    },
+    {
+      "seq": 51,
+      "id": "palette",
+      "name": "Command palette",
+      "theme": "dracula",
+      "why": "the one surface summoned from anywhere; z-60, over everything",
+      "at": "2026-10-02T20:31:20.093Z",
+      "status": "passed",
+      "shot": "docs/walk/6d2b16d/51-palette-dracula.png",
+      "shotKind": "webview",
+      "asserts": [
+        {
+          "ok": true,
+          "said": "exists [role=\"dialog\"][aria-modal=\"true\"]"
+        },
+        {
+          "ok": true,
+          "said": "count [role=\"dialog\"] button >= 3 (saw 69)"
+        },
+        {
+          "ok": true,
+          "said": "absent [role=\"dialog\"] [aria-label=\"Close\"]"
+        }
+      ],
+      "console": [],
+      "consoleIgnored": [],
+      "note": null
+    },
+    {
+      "seq": 52,
+      "id": "settings",
+      "name": "Settings — the nav column",
+      "theme": "dracula",
+      "why": "thirteen panels, and the nav is the only way to reach any of them",
+      "at": "2026-10-02T20:31:20.619Z",
+      "status": "passed",
+      "shot": "docs/walk/6d2b16d/52-settings-dracula.png",
+      "shotKind": "webview",
+      "asserts": [
+        {
+          "ok": true,
+          "said": "exists [role=\"dialog\"][aria-modal=\"true\"]"
+        },
+        {
+          "ok": true,
+          "said": "text \"Settings\""
+        },
+        {
+          "ok": true,
+          "said": "count [role=\"dialog\"] nav button == 13 (saw 13)"
+        },
+        {
+          "ok": true,
+          "said": "count [role=\"dialog\"] nav button[aria-current=\"page\"] == 1 (saw 1)"
+        }
+      ],
+      "console": [],
+      "consoleIgnored": [],
+      "note": null
+    },
+    {
+      "seq": 53,
+      "id": "settings-appearance",
+      "name": "Settings › Appearance",
+      "theme": "dracula",
+      "why": "panel appearance renders, and the nav marks it current",
+      "at": "2026-10-02T20:31:21.071Z",
+      "status": "passed",
+      "shot": "docs/walk/6d2b16d/53-settings-appearance-dracula.png",
+      "shotKind": "webview",
+      "asserts": [
+        {
+          "ok": true,
+          "said": "exists [role=\"dialog\"][aria-modal=\"true\"]"
+        },
+        {
+          "ok": true,
+          "said": "text \"Theme\""
+        },
+        {
+          "ok": true,
+          "said": "count [role=\"dialog\"] nav button[aria-current=\"page\"] == 1 (saw 1)"
+        },
+        {
+          "ok": true,
+          "said": "js document.querySelector('[role=\"dialog\"] nav button[aria-current=\"page\"]').textContent.trim() === \"Appearance\""
+        },
+        {
+          "ok": true,
+          "said": "count [role=\"dialog\"] button[aria-pressed=\"true\"] == 1 (saw 1)"
+        }
+      ],
+      "console": [],
+      "consoleIgnored": [],
+      "note": null
+    },
+    {
+      "seq": 54,
+      "id": "settings-about",
+      "name": "Settings › About",
+      "theme": "dracula",
+      "why": "panel about renders, and the nav marks it current",
+      "at": "2026-10-02T20:31:21.636Z",
+      "status": "passed",
+      "shot": "docs/walk/6d2b16d/54-settings-about-dracula.png",
+      "shotKind": "webview",
+      "asserts": [
+        {
+          "ok": true,
+          "said": "exists [role=\"dialog\"][aria-modal=\"true\"]"
+        },
+        {
+          "ok": true,
+          "said": "text \"DevGo\""
+        },
+        {
+          "ok": true,
+          "said": "count [role=\"dialog\"] nav button[aria-current=\"page\"] == 1 (saw 1)"
+        },
+        {
+          "ok": true,
+          "said": "js document.querySelector('[role=\"dialog\"] nav button[aria-current=\"page\"]').textContent.trim() === \"About\""
+        },
+        {
+          "ok": true,
+          "said": "the sha 6d2b16d is on screen"
+        }
+      ],
+      "console": [],
+      "consoleIgnored": [],
+      "note": null
+    },
+    {
+      "seq": 55,
+      "id": "project-menu",
+      "name": "Project row menu — the inventory",
+      "theme": "dracula",
+      "why": "⭐ the densest surface in the app: thirteen entries in four sections, ten of them conditional. Asserted, screenshot, and NOT clicked — see NEVER_CLICK.",
+      "at": "2026-10-02T20:31:22.249Z",
+      "status": "passed",
+      "shot": "docs/walk/6d2b16d/55-project-menu-dracula.png",
+      "shotKind": "webview",
+      "asserts": [
+        {
+          "ok": true,
+          "said": "exists div.fixed.z-50.w-72"
+        },
+        {
+          "ok": true,
+          "said": "menu entries enabled: Open in editor, Open both, Run dev script…",
+          "extra": {
+            "missing": [],
+            "saw": [
+              "Open in editor",
+              "Open terminal",
+              "Open both",
+              "Open in Claude Code (disabled)",
+              "Open in Claude Code (Ubuntu-26.04)",
+              "Reveal in File Explorer",
+              "Reveal in Trove",
+              "Copy Windows path",
+              "Copy WSL path",
+              "Run dev script…",
+              "Open remote",
+              "Pin to top"
+            ]
+          }
+        },
+        {
+          "ok": true,
+          "said": "menu hints",
+          "extra": {
+            "bad": []
+          }
+        },
+        {
+          "ok": true,
+          "said": "count div.fixed.z-50.w-72 > div.border-b >= 2 (saw 3)"
+        }
+      ],
+      "console": [],
+      "consoleIgnored": [],
+      "note": null
+    },
+    {
+      "seq": 56,
+      "id": "home",
+      "name": "Home — the lanes",
+      "theme": "black",
+      "why": "the screen every other step starts from, in all five palettes",
+      "at": "2026-10-02T20:31:22.865Z",
+      "status": "passed",
+      "shot": "docs/walk/6d2b16d/56-home-black.png",
+      "shotKind": "webview",
+      "asserts": [
+        {
+          "ok": true,
+          "said": "text \"DevGo\""
+        },
+        {
+          "ok": true,
+          "said": "count div.rounded-panel.border-t-2.border-l-2 >= 1 (saw 4)"
+        },
+        {
+          "ok": true,
+          "said": "absent [role=\"dialog\"][aria-modal=\"true\"]"
+        },
+        {
+          "ok": true,
+          "said": "js document.querySelector(\"header\").offsetHeight === 48"
+        }
+      ],
+      "console": [],
+      "consoleIgnored": [],
+      "note": null
+    },
+    {
+      "seq": 57,
+      "id": "search-none",
+      "name": "Projects — no match (empty state)",
+      "theme": "black",
+      "why": "the empty half of empty/one/many; its own sentence, not a blank lane",
+      "at": "2026-10-02T20:31:23.675Z",
+      "status": "passed",
+      "shot": "docs/walk/6d2b16d/57-search-none-black.png",
+      "shotKind": "webview",
+      "asserts": [
+        {
+          "ok": true,
+          "said": "text \"No project matches.\""
+        },
+        {
+          "ok": true,
+          "said": "count div.group div.pl-10 div.basis-\\[34\\%\\] == 0 (saw 0)"
+        }
+      ],
+      "console": [],
+      "consoleIgnored": [],
+      "note": null
+    },
+    {
+      "seq": 58,
+      "id": "palette",
+      "name": "Command palette",
+      "theme": "black",
+      "why": "the one surface summoned from anywhere; z-60, over everything",
+      "at": "2026-10-02T20:31:24.311Z",
+      "status": "passed",
+      "shot": "docs/walk/6d2b16d/58-palette-black.png",
+      "shotKind": "webview",
+      "asserts": [
+        {
+          "ok": true,
+          "said": "exists [role=\"dialog\"][aria-modal=\"true\"]"
+        },
+        {
+          "ok": true,
+          "said": "count [role=\"dialog\"] button >= 3 (saw 69)"
+        },
+        {
+          "ok": true,
+          "said": "absent [role=\"dialog\"] [aria-label=\"Close\"]"
+        }
+      ],
+      "console": [],
+      "consoleIgnored": [],
+      "note": null
+    },
+    {
+      "seq": 59,
+      "id": "settings",
+      "name": "Settings — the nav column",
+      "theme": "black",
+      "why": "thirteen panels, and the nav is the only way to reach any of them",
+      "at": "2026-10-02T20:31:24.896Z",
+      "status": "passed",
+      "shot": "docs/walk/6d2b16d/59-settings-black.png",
+      "shotKind": "webview",
+      "asserts": [
+        {
+          "ok": true,
+          "said": "exists [role=\"dialog\"][aria-modal=\"true\"]"
+        },
+        {
+          "ok": true,
+          "said": "text \"Settings\""
+        },
+        {
+          "ok": true,
+          "said": "count [role=\"dialog\"] nav button == 13 (saw 13)"
+        },
+        {
+          "ok": true,
+          "said": "count [role=\"dialog\"] nav button[aria-current=\"page\"] == 1 (saw 1)"
+        }
+      ],
+      "console": [],
+      "consoleIgnored": [],
+      "note": null
+    },
+    {
+      "seq": 60,
+      "id": "settings-appearance",
+      "name": "Settings › Appearance",
+      "theme": "black",
+      "why": "panel appearance renders, and the nav marks it current",
+      "at": "2026-10-02T20:31:25.350Z",
+      "status": "passed",
+      "shot": "docs/walk/6d2b16d/60-settings-appearance-black.png",
+      "shotKind": "webview",
+      "asserts": [
+        {
+          "ok": true,
+          "said": "exists [role=\"dialog\"][aria-modal=\"true\"]"
+        },
+        {
+          "ok": true,
+          "said": "text \"Theme\""
+        },
+        {
+          "ok": true,
+          "said": "count [role=\"dialog\"] nav button[aria-current=\"page\"] == 1 (saw 1)"
+        },
+        {
+          "ok": true,
+          "said": "js document.querySelector('[role=\"dialog\"] nav button[aria-current=\"page\"]').textContent.trim() === \"Appearance\""
+        },
+        {
+          "ok": true,
+          "said": "count [role=\"dialog\"] button[aria-pressed=\"true\"] == 1 (saw 1)"
+        }
+      ],
+      "console": [],
+      "consoleIgnored": [],
+      "note": null
+    },
+    {
+      "seq": 61,
+      "id": "settings-about",
+      "name": "Settings › About",
+      "theme": "black",
+      "why": "panel about renders, and the nav marks it current",
+      "at": "2026-10-02T20:31:25.974Z",
+      "status": "passed",
+      "shot": "docs/walk/6d2b16d/61-settings-about-black.png",
+      "shotKind": "webview",
+      "asserts": [
+        {
+          "ok": true,
+          "said": "exists [role=\"dialog\"][aria-modal=\"true\"]"
+        },
+        {
+          "ok": true,
+          "said": "text \"DevGo\""
+        },
+        {
+          "ok": true,
+          "said": "count [role=\"dialog\"] nav button[aria-current=\"page\"] == 1 (saw 1)"
+        },
+        {
+          "ok": true,
+          "said": "js document.querySelector('[role=\"dialog\"] nav button[aria-current=\"page\"]').textContent.trim() === \"About\""
+        },
+        {
+          "ok": true,
+          "said": "the sha 6d2b16d is on screen"
+        }
+      ],
+      "console": [],
+      "consoleIgnored": [],
+      "note": null
+    },
+    {
+      "seq": 62,
+      "id": "project-menu",
+      "name": "Project row menu — the inventory",
+      "theme": "black",
+      "why": "⭐ the densest surface in the app: thirteen entries in four sections, ten of them conditional. Asserted, screenshot, and NOT clicked — see NEVER_CLICK.",
+      "at": "2026-10-02T20:31:26.569Z",
+      "status": "passed",
+      "shot": "docs/walk/6d2b16d/62-project-menu-black.png",
+      "shotKind": "webview",
+      "asserts": [
+        {
+          "ok": true,
+          "said": "exists div.fixed.z-50.w-72"
+        },
+        {
+          "ok": true,
+          "said": "menu entries enabled: Open in editor, Open both, Run dev script…",
+          "extra": {
+            "missing": [],
+            "saw": [
+              "Open in editor",
+              "Open terminal",
+              "Open both",
+              "Open in Claude Code (disabled)",
+              "Open in Claude Code (Ubuntu-26.04)",
+              "Reveal in File Explorer",
+              "Reveal in Trove",
+              "Copy Windows path",
+              "Copy WSL path",
+              "Run dev script…",
+              "Open remote",
+              "Pin to top"
+            ]
+          }
+        },
+        {
+          "ok": true,
+          "said": "menu hints",
+          "extra": {
+            "bad": []
+          }
+        },
+        {
+          "ok": true,
+          "said": "count div.fixed.z-50.w-72 > div.border-b >= 2 (saw 3)"
+        }
+      ],
+      "console": [],
+      "consoleIgnored": [],
+      "note": null
+    }
+  ]
+}

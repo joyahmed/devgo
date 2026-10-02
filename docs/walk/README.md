@@ -12,7 +12,7 @@ The per-change lifecycle rule has three stages that leave no artefact behind, an
 
 `scripts/walk.mjs` knows the verbs (click, type, wait, key, theme, reload...) and never the screens. `scripts/walk.routes.mjs` is the route map — 34 steps, 62 step-runs over 5 themes — and is data, not code: adding a screen next month means adding one object to `STEPS` there and nothing else.
 
-⛔ **Neither file has ever been executed.** Both pass `node --check` and the route map has been statically imported and validated (export names, step count, uniqueness of ids, no step with an empty `assert` list — see the numbers at the bottom of this page), but nothing has driven the real app yet. The first real run will find things static reading cannot.
+⭐ **First real run: 2026-10-03, binary `6d2b16d` (v1.2.5), `tauri dev` on Windows 11 — GREEN, 61 passed, 0 failed, 1 skipped, 0 console errors.** The skip is `home-window`, which needs `--window-shots`. Details and what the run changed are under "First real run" at the bottom of this page.
 
 ## First run — do this in order
 
@@ -108,15 +108,30 @@ Lifted from `NOT_COVERED` in `walk.routes.mjs`:
 - macOS and Linux — this harness needs WebView2 and `shoot.ps1` needs Win32; those builds are captured by hand (`docs/screenshots/README.md`)
 - CI, for the reasons above
 
-## The one step expected RED
+## settings-backdrop is a regression guard, not an expected failure
 
-`settings-backdrop` closes the Settings sheet by clicking a computed point on its backdrop, and is expected to FAIL until the underlying defect is fixed: Settings swallows an outside click without closing, while Close and Escape both work. A red `settings-backdrop` is the harness working, not the harness broken — do not "fix" it by loosening the assertion.
+This step was written to be red: a click-through had seen the Settings sheet swallow an outside click while Close and Escape worked. 33a4f20 closed the title-bar-strip gap, and the first real run found the step GREEN. A negative control over CDP confirmed the check measures something: a click inside the panel left Settings open, a click on the backdrop closed it. A red here now means a regression.
 
-## Nothing has ever been run
+## Screenshots are not committed
 
-Both `walk.mjs` and `walk.routes.mjs` are unexecuted as of this writing. They pass `node --check` and the route map has been statically imported and its shape validated, but no CDP connection, no click, and no screenshot has ever actually happened. Treat the first real run as a discovery step in its own right, not a formality — static reading cannot find a selector that has drifted, a timing race, or a step that was never reachable the way its author assumed.
+This repo is public. The walk photographs the owner's real app, so its PNGs show private repo names, client projects, SSH aliases and WSL paths. `.gitignore` keeps `docs/walk/*/*.png` out of git; only `manifest.json` is committed. Its `shot` fields name files that exist on the machine that ran the walk, not in the repo.
 
-### Static validation, as of this checkout
+## First real run — 2026-10-03
+
+- binary: `6d2b16d` (v1.2.5), read from the app over IPC; `tauri dev` build, CDP on 9223
+- result: GREEN — 62 step-runs, 61 passed, 0 failed, 1 skipped (`home-window`, needs `--window-shots`), 0 console errors, 0 ignored console lines
+- theme check: the five `home` shots have five different hashes, so the theme switch really repaints
+- artefact: `docs/walk/6d2b16d/manifest.json` (51 PNGs, about 19 MB, kept local — see above)
+
+What the first run found, all in the walk itself, none in the app:
+
+- `settings-tmux` was red: on Windows the nav reads `tmux / psmux`, the route map said `tmux`. Fixed in the route map, with a stronger anchor.
+- a rerun of the same sha left the earlier run's PNGs beside the new manifest. The walk now clears its own folder's PNGs first.
+- the walk left the dev build on the last theme it walked (`black`). It now snapshots localStorage and puts it back at the end. The installed app was never affected: its storage origin is `http://tauri.localhost`, the dev build's is `http://localhost:1420`.
+- `home-window` printed `ok` with its window shot skipped. It now counts as skipped.
+- `settings-backdrop` passed although it was labelled "expected red" (see above).
+
+## Static validation of the route map
 
 - exports present: 11 of 11 expected (`CONSOLE_NOISE`, `IPC_READ_ONLY`, `IPC_STUBS`, `MENU_ALWAYS`, `MENU_CONDITIONAL`, `NEVER_CLICK`, `NOT_COVERED`, `SETTINGS_PANELS`, `STEPS`, `THEMES`, `THEME_STORAGE_KEY`), plus `MENU_HINTS` and `S`
 - steps: 34
