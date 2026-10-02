@@ -28,3 +28,7 @@ dist-ssr
 .claude/
 CLAUDE.md
 docs/ai-memory/
+
+# walk screenshots show the owner's private repos and hosts; this repo is public.
+# only docs/walk/<sha>/manifest.json is committed (docs/walk/README.md)
+docs/walk/*/*.png
