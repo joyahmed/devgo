@@ -91,7 +91,7 @@
 // It uses Node built-ins only and runs under both `node` and `bun`.
 
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { hostname, platform } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -622,6 +622,11 @@ const main = async () => {
 	const sha = id.sha;
 	const outDir = join(OUT_BASE, sha);
 	mkdirSync(outDir, { recursive: true });
+	// ⚠️ found on the first real run: a second walk of the same sha left the
+	// first walk's PNGs beside the new manifest, numbered differently, so the
+	// folder held 66 pictures for a 62-step manifest. The manifest is rewritten
+	// whole every run, so the pictures must be too.
+	for (const f of readdirSync(outDir)) if (f.endsWith('.png')) rmSync(join(outDir, f));
 
 	const metrics = await evaluate(
 		'({ innerWidth, innerHeight, devicePixelRatio, ua: navigator.userAgent })'
