@@ -707,6 +707,18 @@ const main = async () => {
 			continue;
 		}
 
+		// ⚠️ found on the first real run: home-window printed `ok` with its
+		// window shot skipped. Its assertions are a subset of `home`'s; the shot
+		// is the whole point of the step. Without --window-shots it proved
+		// nothing new, so it is SKIPPED, never counted as a pass.
+		if (step.shot === 'window' && !WINDOW_SHOTS) {
+			rec.status = 'skipped';
+			rec.shotKind = 'window (skipped — pass --window-shots)';
+			rec.note = 'its window shot is the step; pass --window-shots to run it';
+			process.stdout.write(`  skip ${theme.padEnd(8)} ${step.id} — needs --window-shots\n`);
+			continue;
+		}
+
 		let failed = null;
 		for (const a of step.open ?? []) {
 			const r = await act(a);
