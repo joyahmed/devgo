@@ -243,7 +243,12 @@ export const SETTINGS_PANELS = [
 	{ id: 'workspaces', label: 'Workspaces', anchor: 'Add Folder' },
 	{ id: 'targets', label: 'Launch targets', anchor: 'Launch targets' },
 	// the label is per-desktop: `isWindows ? 'tmux / psmux' : 'tmux'`
-	{ id: 'tmux', label: 'tmux', anchor: 'tmux' },
+	// (Settings.tsx:1123). This walk needs WebView2, so it only ever runs on
+	// Windows, and the Windows label is the one asserted — the first real run
+	// failed the nav-current check on exactly this (it read 'tmux / psmux').
+	// The anchor is the panel's own first <h4> (Settings.tsx:323), not the label
+	// repeated, for the reason given above the table.
+	{ id: 'tmux', label: 'tmux / psmux', anchor: 'Use tmux / psmux' },
 	{ id: 'wsl', label: 'WSL doctor', anchor: 'WSL' },
 	{ id: 'github', label: 'GitHub', anchor: 'GitHub' },
 	{ id: 'shortcuts', label: 'Shortcuts', anchor: 'Command palette' },
