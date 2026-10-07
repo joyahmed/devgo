@@ -251,6 +251,8 @@ fn distro_target(
 }
 ```
 
+*(Superseded in v1.2.6: this line ran wsl.exe bare, and every launch is spawned without a window, so a distro's Neovim started in a console nobody could see — the log said "started" and nothing opened. It also skipped the login shell, so it ran `/usr/bin/nvim` instead of a newer one in `~/.local/bin`. `editors::wsl_editor_form` now writes `wt` with `wsl -d {distro} --cd "{linux_path}" -e bash -lic "nvim ."`, or `cmd /c start "" wsl …` on a box without Windows Terminal — the same choice the Windows-side console editors already made. `TargetStore::adopt_wsl_editor_window` moves a saved row still carrying the exact old line on load and keeps `targets.json.pre-wsl-editor-window`; a line you edited is left alone.)*
+
 Id `nvim-ubuntu-26-04`: the **id** always carries the whole distro, because two targets cannot share one and saved rows, `default_editor` and `add_detected_target` all find a row by id. `slugify` lowercases and replaces everything non-alphanumeric with `-`.
 
 *(Superseded: see "One row per program" below. A found program is now one plainly named row; the distro-in-the-name rules apply only to a row still in the old shape.)* The **name** carries only as much of the distro as it takes to tell the installed ones apart, because the same editor in two distros opens two different filesystems and a list with "Neovim" twice would be a puzzle. `distro_label` picks it, against every installed distro (`wsl -l -q`, asked only when one is running), not just the running ones:
