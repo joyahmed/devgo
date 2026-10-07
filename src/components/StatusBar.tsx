@@ -1,3 +1,4 @@
+import { missingFromDistro } from '../paths';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { prettyKeys, shortcutFor } from '../shortcuts';
 import Button from './Button';
@@ -48,11 +49,17 @@ const HelpGlyph = () => (
 // the same fact TargetManager shows as a badge, before the click. an
 // agent is a command on one side or the other; an editor or a terminal
 // is blocked on wsl only when it has no wsl form
-const choiceOf = (t: LaunchTarget, isWsl: boolean): TargetChoice => ({
+const choiceOf = (
+	t: LaunchTarget,
+	isWsl: boolean,
+	distro: string | null = null
+): TargetChoice => ({
 	id: t.id,
 	name: t.name,
 	blocked:
-		t.kind === 'agent'
+		isWsl && missingFromDistro(t, distro)
+			? `${t.name} is not installed in ${distro}. Install it there and scan again in Settings`
+			: t.kind === 'agent'
 			? (isWsl ? !t.wsl_executable : !t.executable)
 				? `${t.name} is not installed on this project's side`
 				: undefined
@@ -197,6 +204,7 @@ const TargetGroup = ({
 const StatusBar = ({
 	hasSelection,
 	selectionIsWsl,
+	selectionDistro = null,
 	editors,
 	terminals,
 	agents,
@@ -219,7 +227,7 @@ const StatusBar = ({
 	onServerAttach
 }: StatusBarProps) => {
 	const choices = (list: LaunchTarget[]) =>
-		list.map(t => choiceOf(t, selectionIsWsl));
+		list.map(t => choiceOf(t, selectionIsWsl, selectionDistro));
 	const terminalKey = prettyKeys(shortcutFor('openTerminal'));
 	// a server row: one group, its local hosts, then the attach view, and
 	// the terminal key opens the default host. the remote half is the

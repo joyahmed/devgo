@@ -852,7 +852,7 @@ struct TuiEditor {
     program_files: Option<&'static str>,
 }
 
-// the ids are plain; a distro's are nvim-<slug>, so the two never clash
+// the ids are plain, and a distro's nvim is the same row (merge_in_distros)
 #[cfg(any(windows, test))]
 const TUI_EDITORS: &[TuiEditor] = &[
     TuiEditor {
@@ -901,6 +901,7 @@ fn tui_target(t: &TuiEditor, program: &str, wt: bool) -> LaunchTarget {
         wsl_args_template: None,
         run_args_template: None,
         reveal_args_template: None,
+        wsl_distros: Vec::new(),
         wsl_run_args_template: None,
     }
 }
@@ -927,35 +928,64 @@ fn to_target(c: &Candidate) -> LaunchTarget {
         wsl_args_template: c.wsl_args.map(str::to_string),
         run_args_template: c.run_args.map(str::to_string),
         reveal_args_template: c.reveal_args.map(str::to_string),
+        wsl_distros: Vec::new(),
         wsl_run_args_template: c.wsl_run_args.map(str::to_string),
     }
 }
 
-/// The same editor in two distros is two targets opening two filesystems,
-/// so the distro is in the id, slugified and always whole. The name carries
-/// `label`, the distro as the user needs to read it (see distro_label).
-fn distro_target(
+/// Fill a row's WSL form: the program as it runs inside a distro. One form
+/// for every distro, `{distro}` filled from the project at launch, and
+/// `distros` records which ones have it, so a project in any other is
+/// refused (see LaunchTarget::installed_in). An editor is started through
+/// wsl.exe, which gives it the terminal it runs in; an agent is a command
+/// the terminal's WSL run line runs, so its args stay empty.
+fn with_wsl_form(
+    t: &mut LaunchTarget,
+    exe: &str,
+    kind: TargetKind,
+    distros: Vec<String>,
+) {
+    if kind == TargetKind::Agent {
+        t.wsl_executable = Some(exe.to_string());
+        t.wsl_args_template = Some(String::new());
+    } else {
+        t.wsl_executable = Some("wsl".to_string());
+        t.wsl_args_template =
+            Some(format!("-d {{distro}} --cd \"{{linux_path}}\" -e {exe} ."));
+    }
+    t.wsl_distros = distros;
+}
+
+/// A program found only inside distros: one row under the program's own id
+/// and plain name, the WSL form filled and the Windows form empty, so a
+/// Windows project is refused rather than handed a linux binary.
+fn wsl_only_target(
     exe: &str,
     name: &str,
-    distro: &str,
-    label: &str,
+    kind: TargetKind,
+    distros: Vec<String>,
 ) -> LaunchTarget {
-    LaunchTarget {
-        id: format!("{exe}-{}", slugify(distro)),
-        name: distro_row_name(name, label),
-        kind: TargetKind::Editor,
-        // a linux binary cannot take a windows path, so there is no windows
-        // form; launch_target refuses windows projects for it
-        executable: "wsl".to_string(),
+    let mut t = LaunchTarget {
+        id: exe.to_string(),
+        name: name.to_string(),
+        kind,
+        // an agent has no windows command; an editor's windows half is the
+        // empty template, which launch_target reads as "cannot"
+        executable: if kind == TargetKind::Agent {
+            String::new()
+        } else {
+            "wsl".to_string()
+        },
         args_template: String::new(),
-        wsl_executable: Some("wsl".to_string()),
-        wsl_args_template: Some(format!(
-            "-d {{distro}} --cd \"{{linux_path}}\" -e {exe} ."
-        )),
+        wsl_executable: None,
+        wsl_args_template: None,
         run_args_template: None,
         reveal_args_template: None,
+        wsl_distros: Vec::new(),
         wsl_run_args_template: None,
-    }
+    };
+    with_wsl_form(&mut t, exe, kind, distros);
+    t
 }
 
 /// A target found installed but not yet registered, with where it came
@@ -964,10 +994,21 @@ fn distro_target(
 pub struct DetectedTarget {
     pub target: LaunchTarget,
     /// "path" for a program on PATH, "app" for a mac bundle found without
-    /// its cli, or the distro's label ("WSL", "Ubuntu"; see distro_label)
+    /// its cli; for a program found in distros, their labels ("WSL",
+    /// "Ubuntu · Debian"; see distro_label), after "Windows · " when the
+    /// Windows side has it too
     pub source: String,
-    /// the resolved exe path, the bundle path, or "Ubuntu-26.04 · nvim"
+    /// the resolved exe path, the bundle path, or "Ubuntu-26.04 · nvim";
+    /// both, joined by " | ", for a program found on both sides
     pub detail: String,
+    /// A row with this id is already saved, and this detection brings a
+    /// side it lacks: the WSL form for a Windows-only `nvim`, the Windows
+    /// form for a WSL-only one, or distros it has not recorded. Adding it
+    /// extends the saved row (see extend_saved) instead of making a second
+    /// one, so the UI can say "adds WSL" rather than offering a duplicate.
+    /// False for a program not saved at all. Rows that bring nothing new
+    /// are not offered (see offer).
+    pub extends_saved: bool,
 }
 
 // where a mac keeps its applications: the system folder, the user's own,
@@ -1037,6 +1078,7 @@ fn locate(
                 target: to_target(c),
                 source: "path".to_string(),
                 detail: path.clone(),
+                extends_saved: false,
             });
         }
     }
@@ -1051,6 +1093,7 @@ fn locate(
             target,
             source: "shortcut".to_string(),
             detail: path.clone(),
+            extends_saved: false,
         });
     }
 
@@ -1060,6 +1103,7 @@ fn locate(
         target: bundle_form(c, app, &bundle),
         source: "app".to_string(),
         detail: bundle.to_string_lossy().into_owned(),
+        extends_saved: false,
     })
 }
 
@@ -1189,6 +1233,7 @@ pub fn detect(running: &[String], installed: &[String]) -> Vec<DetectedTarget> {
                 target: tui_target(t, &program, wt),
                 source: source.to_string(),
                 detail: format!("{hit} · {how}"),
+                extends_saved: false,
             });
         }
     }
@@ -1211,10 +1256,12 @@ pub fn detect(running: &[String], installed: &[String]) -> Vec<DetectedTarget> {
                 wsl_args_template: None,
                 run_args_template: None,
                 reveal_args_template: None,
+                wsl_distros: Vec::new(),
                 wsl_run_args_template: None,
             },
             source: "path".to_string(),
             detail: format!("agent · {exe}"),
+            extends_saved: false,
         });
     }
 
@@ -1227,36 +1274,195 @@ pub fn detect(running: &[String], installed: &[String]) -> Vec<DetectedTarget> {
             known.push(d.clone());
         }
     }
+    let mut in_distros: Vec<InDistros> = Vec::new();
     for distro in running {
-        let label = distro_label(distro, &known);
-        for (exe, name) in present_in_distro(distro, AGENTS) {
-            out.push(DetectedTarget {
-                target: LaunchTarget {
-                    id: format!("{}-{}", exe, slugify(distro)),
-                    name: distro_row_name(name, &label),
-                    kind: TargetKind::Agent,
-                    // no windows command: this agent lives in the distro
-                    executable: String::new(),
-                    args_template: String::new(),
-                    wsl_executable: Some((*exe).to_string()),
-                    wsl_args_template: Some(String::new()),
-                    run_args_template: None,
-                    reveal_args_template: None,
-                    wsl_run_args_template: None,
-                },
-                source: label.clone(),
-                detail: format!("agent · {distro} · {exe}"),
-            });
-        }
-        for (exe, name) in present_in_distro(distro, IN_DISTRO) {
-            out.push(DetectedTarget {
-                target: distro_target(exe, name, distro, &label),
-                source: label.clone(),
-                detail: format!("{distro} · {exe}"),
-            });
+        let tables =
+            [(AGENTS, TargetKind::Agent), (IN_DISTRO, TargetKind::Editor)];
+        for (table, kind) in tables {
+            for (exe, name) in present_in_distro(distro, table) {
+                note_in_distro(&mut in_distros, exe, name, kind, distro);
+            }
         }
     }
+    merge_in_distros(&mut out, in_distros, &known);
     out
+}
+
+/// A program found inside one or more distros, before it becomes a row.
+type InDistros = (&'static str, &'static str, TargetKind, Vec<String>);
+
+fn note_in_distro(
+    seen: &mut Vec<InDistros>,
+    exe: &'static str,
+    name: &'static str,
+    kind: TargetKind,
+    distro: &str,
+) {
+    match seen.iter_mut().find(|(e, _, k, _)| *e == exe && *k == kind) {
+        Some((_, _, _, distros)) => {
+            if !distros.iter().any(|d| d.eq_ignore_ascii_case(distro)) {
+                distros.push(distro.to_string());
+            }
+        }
+        None => seen.push((exe, name, kind, vec![distro.to_string()])),
+    }
+}
+
+/// One row per program. A program the Windows side found under the same
+/// id and kind (nvim, hx, claude, codex) gains the WSL form on that row;
+/// one found only in distros gets a row of its own under its plain id. The
+/// id is the program's, never the distro's: the project's path picks the
+/// side at launch, and a WSL project its own distro.
+fn merge_in_distros(
+    out: &mut Vec<DetectedTarget>,
+    in_distros: Vec<InDistros>,
+    known: &[String],
+) {
+    for (exe, name, kind, distros) in in_distros {
+        let place = distros
+            .iter()
+            .map(|d| distro_label(d, known))
+            .collect::<Vec<_>>()
+            .join(" · ");
+        let prefix = if kind == TargetKind::Agent {
+            "agent · "
+        } else {
+            ""
+        };
+        let detail = distros
+            .iter()
+            .map(|d| format!("{prefix}{d} · {exe}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        match out
+            .iter_mut()
+            .find(|d| d.target.id == exe && d.target.kind == kind)
+        {
+            Some(found) => {
+                with_wsl_form(&mut found.target, exe, kind, distros);
+                found.source = format!("Windows · {place}");
+                found.detail = format!("{} | {detail}", found.detail);
+            }
+            None => out.push(DetectedTarget {
+                target: wsl_only_target(exe, name, kind, distros),
+                source: place,
+                detail,
+                extends_saved: false,
+            }),
+        }
+    }
+}
+
+// whether a row can open a windows project: an agent by its command, an
+// editor by its args (a wsl-only editor's executable is "wsl" with empty
+// args, which launch_target reads as "cannot")
+fn has_windows_form(t: &LaunchTarget) -> bool {
+    if t.kind == TargetKind::Agent {
+        !t.executable.is_empty()
+    } else {
+        !t.args_template.is_empty()
+    }
+}
+
+fn has_wsl_form(t: &LaunchTarget) -> bool {
+    t.wsl_executable.is_some() || t.wsl_args_template.is_some()
+}
+
+/// The saved row with what a detection of the same program adds to it, or
+/// None when it adds nothing. The saved row keeps its id, name and every
+/// form it has; only a missing side is filled in from `found`:
+///
+/// - no Windows form, and `found` has one: its executable and templates.
+/// - no WSL form, and `found` has one: its WSL form and distros.
+/// - both have a WSL form and the saved row records distros: the distros
+///   it lacks are added. A saved row that records none does not know, so
+///   it never refuses, and adding a list would make it start refusing.
+///
+/// A different kind is a different program and is never merged.
+pub(crate) fn extend_saved(
+    saved: &LaunchTarget,
+    found: &LaunchTarget,
+) -> Option<LaunchTarget> {
+    if saved.id != found.id || saved.kind != found.kind {
+        return None;
+    }
+    let mut t = saved.clone();
+    let mut changed = false;
+    if !has_windows_form(saved) && has_windows_form(found) {
+        t.executable = found.executable.clone();
+        t.args_template = found.args_template.clone();
+        if t.run_args_template.is_none() {
+            t.run_args_template = found.run_args_template.clone();
+        }
+        if t.reveal_args_template.is_none() {
+            t.reveal_args_template = found.reveal_args_template.clone();
+        }
+        changed = true;
+    }
+    if !has_wsl_form(saved) && has_wsl_form(found) {
+        t.wsl_executable = found.wsl_executable.clone();
+        t.wsl_args_template = found.wsl_args_template.clone();
+        t.wsl_run_args_template = found.wsl_run_args_template.clone();
+        t.wsl_distros = found.wsl_distros.clone();
+        changed = true;
+    } else if has_wsl_form(saved) && !saved.wsl_distros.is_empty() {
+        for d in &found.wsl_distros {
+            if !t.installed_in(d) {
+                t.wsl_distros.push(d.clone());
+                changed = true;
+            }
+        }
+    }
+    changed.then_some(t)
+}
+
+/// The scan list: each detected row not saved yet, plus each one whose
+/// saved row of the same id it would extend (marked extends_saved). A row
+/// that brings nothing new, or that a saved distro row already covers
+/// (see already_saved), is left out.
+pub(crate) fn offer(
+    saved: &[LaunchTarget],
+    found: Vec<DetectedTarget>,
+) -> Vec<DetectedTarget> {
+    found
+        .into_iter()
+        .filter_map(|mut d| {
+            match saved.iter().find(|t| t.id == d.target.id) {
+                Some(t) => {
+                    extend_saved(t, &d.target)?;
+                    d.extends_saved = true;
+                }
+                None if already_saved(saved, &d.target) => return None,
+                None => {}
+            }
+            Some(d)
+        })
+        .collect()
+}
+
+/// Whether a detected row is already registered, so the scan list does not
+/// offer it again. The same id is the plain case: a saved `nvim` is the
+/// detected `nvim` (offer still lists it when it adds a side, see
+/// extend_saved). The other is a WSL-only
+/// program saved before one row per program and kept under its distro id
+/// (`nvim-ubuntu-26-04`, see one_row_per_program): it hides a detected
+/// WSL-only row of the same program and kind whose distros it already
+/// lists. A detected row with a Windows form is still offered beside it,
+/// since that form is something the saved row cannot do.
+pub(crate) fn already_saved(
+    saved: &[LaunchTarget],
+    found: &LaunchTarget,
+) -> bool {
+    saved.iter().any(|t| {
+        if t.id == found.id {
+            return true;
+        }
+        t.kind == found.kind
+            && !has_windows_form(found)
+            && t.id.starts_with(&format!("{}-", found.id))
+            && !t.wsl_distros.is_empty()
+            && found.wsl_distros.iter().all(|d| t.installed_in(d))
+    })
 }
 
 /// Which of a table's commands exist in the distro, in one bash -lic.
@@ -1382,6 +1588,159 @@ pub(crate) fn renamed_wsl_row(
         }
     }
     None
+}
+
+/// A saved row as detection made it before one row per program: one
+/// program in one distro, its id `<exe>-<slug>`. Returns the table's exe
+/// and name and the distro the slug names. Only a row of that exact shape
+/// counts: the exe is one of the tables' with the table's kind, the slug
+/// is an installed distro's, the Windows form is empty, the WSL form is
+/// there, and no distro list has been recorded yet. A row someone added by
+/// hand, `vscode-insiders`, or a row already moved, is None.
+fn old_distro_row(
+    t: &LaunchTarget,
+    installed: &[String],
+) -> Option<(&'static str, &'static str, String)> {
+    if !t.wsl_distros.is_empty()
+        || t.wsl_executable.is_none()
+        || t.wsl_args_template.is_none()
+        || !t.args_template.is_empty()
+    {
+        return None;
+    }
+    let table = match t.kind {
+        TargetKind::Agent if t.executable.is_empty() => AGENTS,
+        TargetKind::Editor => IN_DISTRO,
+        _ => return None,
+    };
+    table.iter().find_map(|(exe, name)| {
+        let slug = t.id.strip_prefix(&format!("{exe}-"))?;
+        let distro = installed.iter().find(|d| slugify(d) == slug)?;
+        Some((*exe, *name, distro.clone()))
+    })
+}
+
+// the name detection gave a distro row: the plain name, or the name with
+// any distro label after it. anything else is a name the user chose
+fn auto_named(t: &LaunchTarget, name: &str) -> bool {
+    t.name == name
+        || t.name
+            .strip_prefix(&format!("{name} ("))
+            .is_some_and(|r| r.ends_with(')'))
+}
+
+// the windows row a program's distro rows merge into: the program's own
+// id, the same kind, a windows form and no wsl form of its own yet
+fn windows_twin(t: &LaunchTarget, exe: &str, kind: TargetKind) -> bool {
+    t.id == exe && t.kind == kind && has_windows_form(t) && !has_wsl_form(t)
+}
+
+/// An id that moved in one_row_per_program: (old, new).
+pub(crate) type Moved = (String, String);
+
+/// The saved list moved to one row per program, and the ids that moved
+/// (old, new) so the defaults pointing at them can follow. None when there
+/// is nothing to move. Rules, per program and kind:
+///
+/// - the old distro rows (see old_distro_row) the detection named, plain
+///   or "Neovim (WSL)" / "Neovim (Ubuntu-26.04)", merge into one row. That
+///   row is the Windows twin when there is one (the program's own id, a
+///   Windows form, no WSL form yet) and keeps its name, whatever it is;
+///   else the first of the distro rows, which keeps its id, so a default
+///   pointing at it stays valid, and takes the plain name. The merged row
+///   gets the distro rows' WSL form and records every distro they named;
+///   the others are removed and their ids move to it.
+/// - the distro rows must agree on the WSL form. One someone edited makes
+///   the forms differ, and then no row merges: each keeps its own form and
+///   only records its distro and loses the label in its name.
+/// - a distro row the user renamed is theirs: it stays its own row, keeps
+///   its name and form, and only records its distro.
+///
+/// The installed list names the distros; a slug none of them has is left
+/// as it is, so an empty list (every mac and linux box) moves nothing, and
+/// so does a second pass, since a moved row has its distros recorded.
+pub(crate) fn one_row_per_program(
+    targets: &[LaunchTarget],
+    installed: &[String],
+) -> Option<(Vec<LaunchTarget>, Vec<Moved>)> {
+    let old: Vec<(usize, &'static str, &'static str, String)> = targets
+        .iter()
+        .enumerate()
+        .filter_map(|(i, t)| {
+            old_distro_row(t, installed).map(|(e, n, d)| (i, e, n, d))
+        })
+        .collect();
+    if old.is_empty() {
+        return None;
+    }
+    let mut rows = targets.to_vec();
+    let mut gone: Vec<usize> = Vec::new();
+    let mut moved: Vec<(String, String)> = Vec::new();
+    let mut groups: Vec<(&'static str, TargetKind)> = Vec::new();
+    for (i, exe, _, _) in &old {
+        let key = (*exe, targets[*i].kind);
+        if !groups.contains(&key) {
+            groups.push(key);
+        }
+    }
+    for (exe, kind) in groups {
+        let group: Vec<&(usize, &str, &str, String)> = old
+            .iter()
+            .filter(|(i, e, _, _)| *e == exe && targets[*i].kind == kind)
+            .collect();
+        let (auto, renamed): (Vec<_>, Vec<_>) = group
+            .into_iter()
+            .partition(|(i, _, name, _)| auto_named(&targets[*i], name));
+        // a renamed row records its distro and is otherwise left alone
+        for (i, _, _, distro) in &renamed {
+            rows[*i].wsl_distros = vec![distro.clone()];
+        }
+        let Some((first, _, name, _)) = auto.first() else {
+            continue;
+        };
+        let form = |i: usize| {
+            let t = &targets[i];
+            (
+                t.wsl_executable.clone(),
+                t.wsl_args_template.clone(),
+                t.wsl_run_args_template.clone(),
+            )
+        };
+        if auto.iter().any(|(i, ..)| form(*i) != form(*first)) {
+            for (i, _, name, distro) in &auto {
+                rows[*i].name = (*name).to_string();
+                rows[*i].wsl_distros = vec![distro.clone()];
+            }
+            continue;
+        }
+        let distros: Vec<String> =
+            auto.iter().map(|(.., d)| d.clone()).collect();
+        let twin = targets.iter().position(|t| windows_twin(t, exe, kind));
+        let (into, (wsl_executable, wsl_args, wsl_run)) = match twin {
+            Some(w) => (w, form(*first)),
+            None => {
+                rows[*first].name = (*name).to_string();
+                (*first, form(*first))
+            }
+        };
+        rows[into].wsl_executable = wsl_executable;
+        rows[into].wsl_args_template = wsl_args;
+        rows[into].wsl_run_args_template = wsl_run;
+        rows[into].wsl_distros = distros;
+        for (i, ..) in &auto {
+            if *i != into {
+                gone.push(*i);
+                moved.push((targets[*i].id.clone(), targets[into].id.clone()));
+            }
+        }
+    }
+    let rows = rows
+        .into_iter()
+        .enumerate()
+        .filter(|(i, _)| !gone.contains(i))
+        .map(|(_, t)| t)
+        .collect();
+    Some((rows, moved))
 }
 
 pub(crate) fn slugify(s: &str) -> String {
@@ -1780,7 +2139,7 @@ mod tests {
             VSCODE_WSL_ARGS.into(),
             MAC_TERMINAL_ARGS.into(),
             MAC_TERMINAL_RUN_ARGS.into(),
-            distro_target("nvim", "Neovim", "Ubuntu", "WSL")
+            wsl_only_target("nvim", "Neovim", TargetKind::Editor, Vec::new())
                 .wsl_args_template
                 .unwrap(),
         ];
@@ -1865,26 +2224,6 @@ mod tests {
             console.args_template,
             format!("/c start \"\" /d \"{{path}}\" {quoted} .")
         );
-    }
-
-    /// A Windows `nvim` and a distro's `nvim-ubuntu-26-04` are two rows
-    /// opening two filesystems; one id for both would make adding either
-    /// hide the other.
-    #[cfg(windows)]
-    #[test]
-    fn windows_and_distro_editors_never_share_an_id() {
-        let mut ids: Vec<String> = TUI_EDITORS
-            .iter()
-            .map(|t| t.id.to_string())
-            .chain(CANDIDATES.iter().map(|c| c.id.to_string()))
-            .collect();
-        ids.extend(IN_DISTRO.iter().map(|(exe, name)| {
-            distro_target(exe, name, "Ubuntu-26.04", "WSL").id
-        }));
-        let before = ids.len();
-        ids.sort_unstable();
-        ids.dedup();
-        assert_eq!(ids.len(), before, "an id is shared: {ids:?}");
     }
 
     // the shipped rel path uses backslashes, which only windows splits on
@@ -1976,21 +2315,6 @@ mod tests {
         assert_eq!(args, "--wsl Ubuntu \"/home/user/p\"");
     }
 
-    #[test]
-    fn a_distro_editor_gets_a_distinct_id_per_distro() {
-        assert_eq!(slugify("Ubuntu-26.04"), "ubuntu-26-04");
-        let a = distro_target("nvim", "Neovim", "Ubuntu-26.04", "Ubuntu");
-        let b = distro_target("nvim", "Neovim", "Debian", "Debian");
-        assert_ne!(a.id, b.id);
-        assert_eq!(a.id, "nvim-ubuntu-26-04");
-        assert_eq!(a.name, "Neovim (Ubuntu)");
-        assert!(a.resolve("x", None).is_none(), "no windows form");
-        let (exe, args) =
-            a.resolve("x", Some(("Ubuntu-26.04", "/srv/app"))).unwrap();
-        assert_eq!(exe, "wsl");
-        assert_eq!(args, "-d Ubuntu-26.04 --cd \"/srv/app\" -e nvim .");
-    }
-
     fn distros(names: &[&str]) -> Vec<String> {
         names.iter().map(|n| n.to_string()).collect()
     }
@@ -2001,13 +2325,6 @@ mod tests {
         assert_eq!(distro_label("Ubuntu-26.04", &one), "WSL");
         // the list call failed: the distro still counts as one
         assert_eq!(distro_label("Ubuntu-26.04", &[]), "WSL");
-        let t = distro_target(
-            "nvim",
-            "Neovim",
-            "Ubuntu-26.04",
-            &distro_label("Ubuntu-26.04", &one),
-        );
-        assert_eq!(t.name, "Neovim (WSL)");
     }
 
     #[test]
@@ -2056,16 +2373,6 @@ mod tests {
         assert_eq!(distro_label("Ubuntu-26.04", &bare), "Ubuntu-26.04");
     }
 
-    /// Saved rows, prefs defaults and add_detected_target all go by id, so
-    /// the label may change the name and never the id.
-    #[test]
-    fn the_label_never_changes_the_id() {
-        for label in ["WSL", "Ubuntu", "Ubuntu-26.04"] {
-            let t = distro_target("nvim", "Neovim", "Ubuntu-26.04", label);
-            assert_eq!(t.id, "nvim-ubuntu-26-04");
-        }
-    }
-
     fn saved_row(id: &str, name: &str, kind: TargetKind) -> LaunchTarget {
         LaunchTarget {
             id: id.into(),
@@ -2077,6 +2384,7 @@ mod tests {
             wsl_args_template: Some(String::new()),
             run_args_template: None,
             reveal_args_template: None,
+            wsl_distros: Vec::new(),
             wsl_run_args_template: None,
         }
     }
@@ -2132,6 +2440,330 @@ mod tests {
         done.name = renamed_wsl_row(&nvim, &one).unwrap();
         assert_eq!(renamed_wsl_row(&done, &one), None);
         assert_eq!(renamed_wsl_row(&done, &two), None);
+    }
+
+    const NVIM_WSL_ARGS: &str = "-d {distro} --cd \"{linux_path}\" -e nvim .";
+
+    fn found(target: LaunchTarget, source: &str) -> DetectedTarget {
+        DetectedTarget {
+            target,
+            source: source.into(),
+            detail: String::new(),
+            extends_saved: false,
+        }
+    }
+
+    fn windows_claude() -> LaunchTarget {
+        LaunchTarget {
+            id: "claude".into(),
+            name: "Claude Code".into(),
+            kind: TargetKind::Agent,
+            executable: "claude".into(),
+            args_template: String::new(),
+            wsl_executable: None,
+            wsl_args_template: None,
+            run_args_template: None,
+            reveal_args_template: None,
+            wsl_distros: Vec::new(),
+            wsl_run_args_template: None,
+        }
+    }
+
+    // what detect gives a box with neovim and claude on windows and in two
+    // distros, without asking a real distro
+    fn detected_on_both_sides() -> Vec<DetectedTarget> {
+        let mut out = vec![
+            found(tui_target(&TUI_EDITORS[0], "nvim", true), "path"),
+            found(windows_claude(), "path"),
+        ];
+        let mut seen = Vec::new();
+        for d in ["Ubuntu-26.04", "Debian"] {
+            note_in_distro(&mut seen, "nvim", "Neovim", TargetKind::Editor, d);
+        }
+        // the same distro noted twice is recorded once
+        note_in_distro(
+            &mut seen,
+            "nvim",
+            "Neovim",
+            TargetKind::Editor,
+            "ubuntu-26.04",
+        );
+        note_in_distro(
+            &mut seen,
+            "claude",
+            "Claude Code",
+            TargetKind::Agent,
+            "Ubuntu-26.04",
+        );
+        merge_in_distros(&mut out, seen, &distros(&["Ubuntu-26.04", "Debian"]));
+        out
+    }
+
+    #[test]
+    fn detection_merges_a_program_found_on_windows_and_in_distros_into_one_row()
+    {
+        let out = detected_on_both_sides();
+        assert_eq!(out.len(), 2, "{out:?}");
+        let nvim = &out[0].target;
+        assert_eq!((nvim.id.as_str(), nvim.name.as_str()), ("nvim", "Neovim"));
+        assert_eq!(nvim.executable, "wt", "the windows form stays");
+        assert_eq!(nvim.wsl_executable.as_deref(), Some("wsl"));
+        assert_eq!(nvim.wsl_args_template.as_deref(), Some(NVIM_WSL_ARGS));
+        assert_eq!(nvim.wsl_distros, distros(&["Ubuntu-26.04", "Debian"]));
+        assert_eq!(out[0].source, "Windows · Ubuntu · Debian");
+        let claude = &out[1].target;
+        assert_eq!(claude.id, "claude");
+        assert_eq!(claude.executable, "claude");
+        assert_eq!(claude.wsl_executable.as_deref(), Some("claude"));
+        assert_eq!(claude.wsl_args_template.as_deref(), Some(""));
+        assert_eq!(claude.wsl_distros, distros(&["Ubuntu-26.04"]));
+        assert_eq!(out[1].source, "Windows · Ubuntu");
+    }
+
+    #[test]
+    fn a_program_found_only_in_distros_is_one_row_with_only_the_wsl_form() {
+        let mut out = Vec::new();
+        let mut seen = Vec::new();
+        for d in ["Ubuntu-26.04", "Debian"] {
+            note_in_distro(&mut seen, "hx", "Helix", TargetKind::Editor, d);
+            note_in_distro(&mut seen, "codex", "Codex", TargetKind::Agent, d);
+        }
+        merge_in_distros(&mut out, seen, &distros(&["Ubuntu-26.04", "Debian"]));
+        assert_eq!(out.len(), 2, "{out:?}");
+        let hx = &out[0].target;
+        assert_eq!((hx.id.as_str(), hx.name.as_str()), ("hx", "Helix"));
+        assert_eq!(out[0].source, "Ubuntu · Debian");
+        assert_eq!(hx.wsl_distros, distros(&["Ubuntu-26.04", "Debian"]));
+        assert!(hx.resolve(r"G:\dev", None).is_none(), "no windows form");
+        let (exe, args) =
+            hx.resolve("x", Some(("Debian", "/srv/app"))).unwrap();
+        assert_eq!(exe, "wsl");
+        assert_eq!(args, "-d Debian --cd \"/srv/app\" -e hx .");
+        let codex = &out[1].target;
+        assert_eq!(codex.id, "codex");
+        assert!(codex.executable.is_empty(), "no windows command");
+        assert_eq!(codex.wsl_executable.as_deref(), Some("codex"));
+    }
+
+    /// The merged row opens a Windows project with its Windows form and a
+    /// WSL project with its WSL form, in the distro the project names.
+    #[test]
+    fn the_project_side_picks_the_form_and_a_wsl_project_its_own_distro() {
+        let out = detected_on_both_sides();
+        let nvim = &out[0].target;
+        let (exe, args) = nvim.resolve(r"G:\dev\app", None).unwrap();
+        assert_eq!(exe, "wt");
+        assert_eq!(args, "-d \"G:\\dev\\app\" nvim .");
+        for distro in ["Ubuntu-26.04", "Debian"] {
+            let (exe, args) =
+                nvim.resolve("x", Some((distro, "/home/u/app"))).unwrap();
+            assert_eq!(exe, "wsl");
+            assert_eq!(
+                args,
+                format!("-d {distro} --cd \"/home/u/app\" -e nvim .")
+            );
+        }
+        assert!(nvim.installed_in("debian"), "matched without case");
+        assert!(!nvim.installed_in("kali-linux"));
+    }
+
+    #[test]
+    fn a_saved_row_that_already_has_every_side_hides_the_detected_one() {
+        let out = detected_on_both_sides();
+        let saved: Vec<LaunchTarget> =
+            out.iter().map(|d| d.target.clone()).collect();
+        assert!(already_saved(&saved, &out[0].target));
+        assert!(offer(&saved, out).is_empty());
+
+        // a wsl-only row kept under its old distro id covers a wsl-only
+        // detection in the distros it lists, and not a windows form
+        let mut old = wsl_only_target(
+            "nvim",
+            "Neovim",
+            TargetKind::Editor,
+            distros(&["Ubuntu-26.04"]),
+        );
+        old.id = "nvim-ubuntu-26-04".into();
+        let saved = vec![old];
+        let wsl_only = wsl_only_target(
+            "nvim",
+            "Neovim",
+            TargetKind::Editor,
+            distros(&["Ubuntu-26.04"]),
+        );
+        assert!(already_saved(&saved, &wsl_only));
+        let in_debian = wsl_only_target(
+            "nvim",
+            "Neovim",
+            TargetKind::Editor,
+            distros(&["Debian"]),
+        );
+        assert!(!already_saved(&saved, &in_debian));
+        let both = detected_on_both_sides();
+        let offered = offer(&saved, both);
+        assert_eq!(offered.len(), 2);
+        assert!(offered.iter().all(|d| !d.extends_saved));
+    }
+
+    /// A Windows-only nvim saved before neovim was found in a distro is not
+    /// hidden for good: the scan offers it as extending the saved row, and
+    /// adding it fills in the WSL form under the saved id and name.
+    #[test]
+    fn a_rescan_extends_a_windows_only_saved_nvim_with_the_wsl_form() {
+        let mut windows = tui_target(&TUI_EDITORS[0], "nvim", true);
+        windows.name = "My Neovim".into();
+        let saved = vec![windows.clone(), windows_claude()];
+        let offered = offer(&saved, detected_on_both_sides());
+        assert_eq!(offered.len(), 2, "{offered:?}");
+        assert!(offered.iter().all(|d| d.extends_saved));
+
+        let t = extend_saved(&windows, &offered[0].target).unwrap();
+        assert_eq!((t.id.as_str(), t.name.as_str()), ("nvim", "My Neovim"));
+        assert_eq!(t.args_template, windows.args_template);
+        assert_eq!(t.wsl_args_template.as_deref(), Some(NVIM_WSL_ARGS));
+        assert_eq!(t.wsl_distros, distros(&["Ubuntu-26.04", "Debian"]));
+        // once extended, the same scan has nothing left to add
+        assert!(extend_saved(&t, &offered[0].target).is_none());
+        assert!(offer(std::slice::from_ref(&t), detected_on_both_sides())
+            .iter()
+            .all(|d| d.target.id != "nvim"));
+
+        // a new distro is added to a row that records distros
+        let mut one = t.clone();
+        one.wsl_distros = distros(&["Ubuntu-26.04"]);
+        let more = extend_saved(&one, &offered[0].target).unwrap();
+        assert_eq!(more.wsl_distros, distros(&["Ubuntu-26.04", "Debian"]));
+        // a row that records none never refuses, and stays that way
+        let mut unknown = t.clone();
+        unknown.wsl_distros.clear();
+        assert!(extend_saved(&unknown, &offered[0].target).is_none());
+        // the windows side fills a wsl-only saved row the same way
+        let wsl = wsl_only_target(
+            "nvim",
+            "Neovim",
+            TargetKind::Editor,
+            distros(&["Ubuntu-26.04", "Debian"]),
+        );
+        let filled = extend_saved(&wsl, &offered[0].target).unwrap();
+        assert_eq!(filled.executable, "wt");
+        assert_eq!(filled.args_template, windows.args_template);
+        // another kind under the same id is another program
+        let mut agent = windows.clone();
+        agent.kind = TargetKind::Agent;
+        assert!(extend_saved(&agent, &offered[0].target).is_none());
+    }
+
+    // a row as detection saved it before one row per program
+    fn old_row(
+        id: &str,
+        name: &str,
+        kind: TargetKind,
+        exe: &str,
+    ) -> LaunchTarget {
+        let mut t = saved_row(id, name, kind);
+        if kind == TargetKind::Agent {
+            t.wsl_executable = Some(exe.into());
+        } else {
+            t.executable = "wsl".into();
+            t.wsl_args_template = Some(format!(
+                "-d {{distro}} --cd \"{{linux_path}}\" -e {exe} ."
+            ));
+        }
+        t
+    }
+
+    /// The real-world file: a Windows nvim and claude beside the rows the
+    /// old detection added for them in the one distro, and a Helix only in
+    /// the distros. Each program ends as one row; the defaults' ids follow.
+    #[test]
+    fn the_migration_merges_each_windows_row_with_its_distro_rows() {
+        let one = distros(&["Ubuntu-26.04"]);
+        let rows = vec![
+            tui_target(&TUI_EDITORS[0], "nvim", true),
+            old_row(
+                "nvim-ubuntu-26-04",
+                "Neovim (WSL)",
+                TargetKind::Editor,
+                "nvim",
+            ),
+            windows_claude(),
+            old_row(
+                "claude-ubuntu-26-04",
+                "Claude Code (WSL)",
+                TargetKind::Agent,
+                "claude",
+            ),
+        ];
+        let (after, moved) = one_row_per_program(&rows, &one).unwrap();
+        assert_eq!(after.len(), 2, "{after:?}");
+        assert_eq!(
+            moved,
+            vec![
+                ("nvim-ubuntu-26-04".to_string(), "nvim".to_string()),
+                ("claude-ubuntu-26-04".to_string(), "claude".to_string()),
+            ]
+        );
+        let nvim = &after[0];
+        assert_eq!((nvim.id.as_str(), nvim.name.as_str()), ("nvim", "Neovim"));
+        assert_eq!(nvim.executable, "wt");
+        assert_eq!(nvim.wsl_args_template.as_deref(), Some(NVIM_WSL_ARGS));
+        assert_eq!(nvim.wsl_distros, one);
+        let claude = &after[1];
+        assert_eq!(claude.id, "claude");
+        assert_eq!(claude.executable, "claude");
+        assert_eq!(claude.wsl_executable.as_deref(), Some("claude"));
+        assert_eq!(claude.wsl_distros, one);
+        // a second pass has nothing to move
+        assert!(one_row_per_program(&after, &one).is_none());
+        // and a box with no distro list moves nothing
+        assert!(one_row_per_program(&rows, &[]).is_none());
+    }
+
+    #[test]
+    fn distro_rows_with_no_windows_twin_merge_into_the_first_one() {
+        let two = distros(&["Ubuntu-26.04", "Debian"]);
+        let rows = vec![
+            old_row(
+                "hx-ubuntu-26-04",
+                "Helix (Ubuntu)",
+                TargetKind::Editor,
+                "hx",
+            ),
+            old_row("hx-debian", "Helix (Debian)", TargetKind::Editor, "hx"),
+        ];
+        let (after, moved) = one_row_per_program(&rows, &two).unwrap();
+        assert_eq!(after.len(), 1);
+        assert_eq!(
+            after[0].id, "hx-ubuntu-26-04",
+            "a default still points at it"
+        );
+        assert_eq!(after[0].name, "Helix");
+        assert_eq!(after[0].wsl_distros, two);
+        assert_eq!(
+            moved,
+            vec![("hx-debian".to_string(), "hx-ubuntu-26-04".to_string())]
+        );
+    }
+
+    #[test]
+    fn a_distro_row_the_user_renamed_keeps_its_name_and_its_own_row() {
+        let one = distros(&["Ubuntu-26.04"]);
+        let rows = vec![
+            tui_target(&TUI_EDITORS[0], "nvim", true),
+            old_row(
+                "nvim-ubuntu-26-04",
+                "My Linux Neovim",
+                TargetKind::Editor,
+                "nvim",
+            ),
+        ];
+        let (after, moved) = one_row_per_program(&rows, &one).unwrap();
+        assert!(moved.is_empty());
+        assert_eq!(after.len(), 2);
+        assert_eq!(after[1].name, "My Linux Neovim");
+        assert_eq!(after[1].wsl_distros, one, "it only records its distro");
+        assert!(after[0].wsl_executable.is_none(), "the twin is untouched");
+        assert!(one_row_per_program(&after, &one).is_none());
     }
 
     /// The shell is always present, so this is the real lookup: cmd.exe (or

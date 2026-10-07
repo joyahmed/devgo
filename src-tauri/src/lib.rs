@@ -441,6 +441,24 @@ pub fn run() {
             {
                 log_line!("[DevGo] wsl row names: {e}");
             }
+            // one row per program, from the same cached list. a failure
+            // leaves the old rows, which still launch, so it is logged and
+            // the app starts
+            if let Some((rows, moved)) = target_store
+                .plan_one_row_per_program(&runtime_info.distros)
+            {
+                // prefs first: if the rows save then fails, the default
+                // ("nvim") still exists and side_stand_in hands WSL
+                // projects to the not-yet-merged twin; the reverse order
+                // could leave the default on a removed id forever
+                if let Err(e) = pref_store.remap_default_targets(&moved) {
+                    log_line!("[DevGo] one row per program, defaults: {e}");
+                }
+                if let Err(e) = target_store.commit_one_row_per_program(rows)
+                {
+                    log_line!("[DevGo] one row per program: {e}");
+                }
+            }
 
             let github_store = services::GithubStore::new(app_data_dir.clone())
                 .expect("failed to initialize github store");

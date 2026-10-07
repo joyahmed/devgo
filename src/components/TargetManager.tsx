@@ -151,6 +151,16 @@ const field =
 	'w-full px-2 py-1.5 bg-bg-panel border border-border-strong rounded-control text-13 font-mono text-text-primary outline-none focus:border-accent';
 const badge = 'text-11 rounded-control px-1 border';
 
+// which side an extends_saved row would add. a merged scan row names both
+// sides in its source, so the new one is read off the saved row: the side it
+// has no form for. an agent has no args, only the executable of each side
+const hasWindows = (t: LaunchTarget) =>
+	t.kind === 'agent' ? !!t.executable : !!t.args_template;
+const extendsLabel = (d: DetectedTarget, saved: LaunchTarget[]) => {
+	const row = saved.find(t => t.id === d.target.id);
+	return row && !hasWindows(row) ? 'adds Windows' : 'adds WSL';
+};
+
 const TargetList = ({
 	kind,
 	items,
@@ -169,6 +179,8 @@ const TargetList = ({
 			// other takes a WSL project's UNC path as it stands
 			const agent = t.kind === 'agent';
 			const crosses = t.kind === 'editor' || t.kind === 'terminal';
+			const distros = t.wsl_distros ?? [];
+			const bothSides = !!t.wsl_args_template && !!t.args_template;
 			const badges = [
 				{
 					show: t.id === defaultId,
@@ -188,10 +200,33 @@ const TargetList = ({
 					title: 'Runs inside a distro — this target cannot open Windows projects'
 				},
 				{
-					show: isWindows && agent,
-					label: t.wsl_executable ? 'in distro' : 'windows',
+					// one row per program: a row found on both sides says so, with the
+					// distros that have it. a row with no distro list (VS Code, typed
+					// by hand) stays quiet, as before
+					show: isWindows && crosses && bothSides && distros.length > 0,
+					label: 'windows · wsl',
 					className: 'text-text-muted border-border-strong',
-					title: 'The side this agent is installed on'
+					title: `Opens Windows projects, and WSL projects in ${distros.join(', ')}`
+				},
+				{
+					show: isWindows && agent && !!t.wsl_executable && !!t.executable,
+					label: 'windows · wsl',
+					className: 'text-text-muted border-border-strong',
+					title: distros.length
+						? `Installed on Windows and in ${distros.join(', ')}`
+						: 'Installed on Windows and inside a distro'
+				},
+				{
+					show: isWindows && agent && !!t.wsl_executable && !t.executable,
+					label: 'wsl only',
+					className: 'text-text-muted border-border-strong',
+					title: 'Installed inside a distro only'
+				},
+				{
+					show: isWindows && agent && !t.wsl_executable,
+					label: 'windows only',
+					className: 'text-text-muted border-border-strong',
+					title: 'Installed on Windows only'
 				}
 			];
 			const actions = [
@@ -275,6 +310,8 @@ const TargetManager = ({
 	// refused with a sentence the user needs to read. The panel does not own
 	// a toast; the failure travels up.
 	const guard = (p: Promise<void>) => p.catch(e => onError(String(e)));
+
+	const allSaved = [...editors, ...terminals, ...agents, ...fileManagers];
 
 	const lists = [
 		{ kind: 'editor' as TargetKind, label: 'Editors', items: editors },
@@ -425,6 +462,13 @@ const TargetManager = ({
 										? d.detail
 										: `in ${d.source}`}
 									</span>
+									{/* the program is saved already; the scan found a side
+									    the saved row lacks, and Add merges it in */}
+									{d.extends_saved ? (
+										<span className='text-11 text-accent'>
+											{extendsLabel(d, allSaved)}
+										</span>
+									) : null}
 								</span>
 								<span className={`${badge} text-text-muted border-border-strong shrink-0`}>
 									{LABELS[d.target.kind]}
@@ -434,7 +478,7 @@ const TargetManager = ({
 									className='text-13 px-2 hover:text-accent'
 									onClick={() => addDetected(d.target.id)}
 								>
-									Add
+									{d.extends_saved ? 'Add side' : 'Add'}
 								</Button>
 							</li>
 						))}

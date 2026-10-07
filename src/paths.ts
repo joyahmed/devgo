@@ -9,6 +9,21 @@ export const normalizePath = (path: string) =>
 export const lastSegment = (path: string) =>
 	path.replace(/[\\/]+$/, '').split(/[\\/]/).pop() ?? path;
 
+// the distro a WSL project lives in: //wsl.localhost/<distro>/… or
+// //wsl$/<distro>/… (backslashes too). null for anything else
+export const wslDistroOf = (path: string): string | null =>
+	/^[\\/]{2}wsl(?:\.localhost|\$)[\\/]([^\\/]+)/i.exec(path)?.[1] ?? null;
+
+// a row that lists distros and not this one: the program is not installed
+// there. an empty list is "unknown" and never refuses, as on the backend
+export const missingFromDistro = (
+	t: { wsl_distros?: string[] },
+	distro: string | null
+) =>
+	!!distro &&
+	!!t.wsl_distros?.length &&
+	!t.wsl_distros.some(d => d.toLowerCase() === distro.toLowerCase());
+
 // the folder a path sits in, either separator
 export const parentOf = (path: string) =>
 	path.replace(/[\\/]+$/, '').replace(/[\\/][^\\/]*$/, '') || path;

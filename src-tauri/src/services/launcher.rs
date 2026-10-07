@@ -437,6 +437,10 @@ fn scrub_agent_env(cmd: &mut Command) {
 /// can open the project or nothing else can, and the default goes on to
 /// launch_target, which gives its refusal unchanged.
 ///
+/// A row that lists the distros it is in (one row per program) cannot open
+/// a WSL project in any other, so it counts as having no form there: a
+/// default neovim found only in Ubuntu hands a Debian project on too.
+///
 /// Only for the default. A target the user picked by name refuses: opening
 /// a different one than was asked for is answering a question nobody asked.
 pub fn side_stand_in(
@@ -445,14 +449,16 @@ pub fn side_stand_in(
     project: &Project,
 ) -> Option<LaunchTarget> {
     let wsl = is_wsl(project);
-    if default.opens_side(wsl) {
+    let distro = super::scanner::distro_of(&project.full_path);
+    let can_open = |t: &LaunchTarget| {
+        t.opens_side(wsl) && distro.as_deref().is_none_or(|d| t.installed_in(d))
+    };
+    if can_open(default) {
         return None;
     }
     let capable: Vec<&LaunchTarget> = saved
         .iter()
-        .filter(|t| {
-            t.kind == default.kind && t.id != default.id && t.opens_side(wsl)
-        })
+        .filter(|t| t.kind == default.kind && t.id != default.id && can_open(t))
         .collect();
     // the windows row is the distro row's id with the slug cut off, so the
     // prefix runs one way for a wsl project and the other for a windows one
@@ -463,8 +469,9 @@ pub fn side_stand_in(
             default.id.starts_with(&format!("{}-", t.id))
         }
     };
-    let home = super::scanner::distro_of(&project.full_path)
-        .map(|d| format!("{}-{}", default.id, super::editors::slugify(&d)));
+    let home = distro
+        .as_deref()
+        .map(|d| format!("{}-{}", default.id, super::editors::slugify(d)));
     let twins: Vec<&LaunchTarget> =
         capable.iter().copied().filter(|t| is_twin(t)).collect();
     twins
@@ -512,6 +519,12 @@ pub fn launch_target(
 ) -> Result<(), AppError> {
     let (resolved, wsl) = if is_wsl(project) {
         let distro = distro_from_project(project, info)?;
+        if !target.installed_in(&distro) {
+            return Err(AppError::TargetNotInDistro(
+                target.name.clone(),
+                distro,
+            ));
+        }
         let linux_path = super::platform::paths::windows_to_wsl_path(
             &project.full_path,
             &distro,
@@ -1147,6 +1160,12 @@ pub(crate) fn run_line_parts(
 ) -> Result<(String, String, Option<String>), AppError> {
     let resolved = if is_wsl(project) {
         let distro = distro_from_project(project, info)?;
+        if !target.installed_in(&distro) {
+            return Err(AppError::TargetNotInDistro(
+                target.name.clone(),
+                distro,
+            ));
+        }
         let linux_path = super::platform::paths::windows_to_wsl_path(
             &project.full_path,
             &distro,
@@ -1599,6 +1618,79 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// One row per program: a WSL project in a distro the row lists opens
+    /// there, with that distro filled in, and one in a distro the row does
+    /// not list is refused before anything is spawned, on the open and the
+    /// run line alike. A row that lists no distro does not know, so it
+    /// never refuses. The shell stands in for wsl so no distro is needed.
+    #[test]
+    fn a_wsl_project_opens_in_its_own_distro_and_one_the_row_lacks_is_refused()
+    {
+        let marker = std::env::temp_dir().join("devgo-own-distro-proof.txt");
+        let _ = std::fs::remove_file(&marker);
+        let mut nvim = LaunchTarget {
+            id: "nvim".into(),
+            name: "Neovim".into(),
+            kind: TargetKind::Editor,
+            executable: SHELL.into(),
+            args_template: shell_exit(""),
+            wsl_executable: Some(SHELL.into()),
+            wsl_args_template: Some(shell_echo_to("{distro}", &marker)),
+            run_args_template: Some(shell_exit("")),
+            reveal_args_template: None,
+            wsl_distros: vec!["Debian".into()],
+            wsl_run_args_template: Some(shell_exit("")),
+        };
+        let debian = Project::new(
+            "app".into(),
+            r"\\wsl.localhost\Debian\home\user\work\app".into(),
+            r"\\wsl.localhost\Debian\home\user\work".into(),
+            "WSL".into(),
+        );
+        launch_target(&nvim, &debian, &no_distro(), &tmux_with(&["code"]))
+            .unwrap();
+        let written = || std::fs::read_to_string(&marker).unwrap_or_default();
+        for _ in 0..40 {
+            if !written().trim().is_empty() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        assert!(written().contains("Debian"), "{:?}", written());
+
+        let ubuntu = wsl_project("app", "work");
+        let err =
+            launch_target(&nvim, &ubuntu, &no_distro(), &tmux_with(&["code"]))
+                .unwrap_err();
+        assert!(
+            matches!(err, AppError::TargetNotInDistro(ref t, ref d)
+                if t == "Neovim" && d == "Ubuntu"),
+            "{err:?}"
+        );
+        assert_eq!(
+            err.to_string(),
+            "Neovim is not installed in Ubuntu. Install it there and scan \
+             again in Settings"
+        );
+        let err =
+            run_line_parts(&nvim, &ubuntu, &no_distro(), "exit 0").unwrap_err();
+        assert!(matches!(err, AppError::TargetNotInDistro(..)), "{err:?}");
+
+        // the row that does not know lets the distro answer
+        nvim.wsl_distros.clear();
+        let _ = std::fs::remove_file(&marker);
+        launch_target(&nvim, &ubuntu, &no_distro(), &tmux_with(&["code"]))
+            .unwrap();
+        for _ in 0..40 {
+            if !written().trim().is_empty() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        assert!(written().contains("Ubuntu"), "{:?}", written());
+        let _ = std::fs::remove_file(&marker);
+    }
+
     fn wsl_project(name: &str, workspace: &str) -> Project {
         Project::new(
             name.into(),
@@ -1744,6 +1836,7 @@ mod tests {
             ),
             run_args_template: None,
             reveal_args_template: None,
+            wsl_distros: Vec::new(),
             wsl_run_args_template: None,
         };
         let windows_path = r"\\wsl.localhost\Ubuntu\home\user\api";
@@ -1770,6 +1863,7 @@ mod tests {
             wsl_args_template: Some(shell_echo_to("{script}", &marker)),
             run_args_template: None,
             reveal_args_template: None,
+            wsl_distros: Vec::new(),
             wsl_run_args_template: None,
         };
         let project = wsl_project("placeholder", "work");
@@ -1807,6 +1901,7 @@ mod tests {
             wsl_args_template: Some(shell_exit("")),
             run_args_template: None,
             reveal_args_template: None,
+            wsl_distros: Vec::new(),
             wsl_run_args_template: None,
         };
         launch_target(&plain, &project, &no_distro(), &tmux_with(&["code"]))
@@ -1858,6 +1953,7 @@ mod tests {
             wsl_args_template: None,
             run_args_template: None,
             reveal_args_template: None,
+            wsl_distros: Vec::new(),
             wsl_run_args_template: None,
         };
         launch_target(&probe, &project, &no_distro(), &tmux_with(&["code"]))
@@ -2029,6 +2125,7 @@ mod tests {
             wsl_args_template: Some(shell_exit(" {script}")),
             run_args_template: None,
             reveal_args_template: None,
+            wsl_distros: Vec::new(),
             wsl_run_args_template: None,
         };
         for project in [&here, &there] {
@@ -2583,6 +2680,7 @@ mod tests {
                 crate::models::target::LINUX_RUN_ARGS_PRE_SCRIPT[0].2.into(),
             ),
             reveal_args_template: None,
+            wsl_distros: Vec::new(),
             wsl_run_args_template: None,
         };
         let install = crate::services::scripts::install_command("pnpm");
@@ -2620,6 +2718,7 @@ mod tests {
                 crate::models::target::LINUX_RUN_ARGS_PRE_SCRIPT[0].2.into(),
             ),
             reveal_args_template: None,
+            wsl_distros: Vec::new(),
             wsl_run_args_template: None,
         };
         let (exe, args, script) =
@@ -2667,6 +2766,7 @@ mod tests {
                 wsl_args_template: None,
                 run_args_template: Some((*new).into()),
                 reveal_args_template: None,
+                wsl_distros: Vec::new(),
                 wsl_run_args_template: None,
             };
             let (exe, args, script) =
@@ -2710,6 +2810,7 @@ mod tests {
             wsl_args_template: None,
             run_args_template: Some("{command}".into()),
             reveal_args_template: None,
+            wsl_distros: Vec::new(),
             wsl_run_args_template: Some("-d {distro} {command}".into()),
         };
         let home = local_project("box", "home");
@@ -2765,6 +2866,7 @@ mod tests {
             wsl_args_template: None,
             run_args_template: None,
             reveal_args_template: None,
+            wsl_distros: Vec::new(),
             wsl_run_args_template: None,
         };
         let project = windows_project("placeholder", "work");
@@ -2829,6 +2931,7 @@ mod tests {
             wsl_args_template: None,
             run_args_template: None,
             reveal_args_template: None,
+            wsl_distros: Vec::new(),
             wsl_run_args_template: None,
         };
         let project = local_project("env-scrub", "work");
@@ -2888,6 +2991,7 @@ mod tests {
             wsl_args_template: None,
             run_args_template: None,
             reveal_args_template: None,
+            wsl_distros: Vec::new(),
             wsl_run_args_template: None,
         };
         launch_target(&plain, &project, &no_distro(), &tmux_with(&["code"]))
@@ -2934,6 +3038,7 @@ mod tests {
             wsl_args_template: None,
             run_args_template: None,
             reveal_args_template: None,
+            wsl_distros: Vec::new(),
             wsl_run_args_template: None,
         };
         let project = local_project("project", "some");
@@ -2990,6 +3095,7 @@ mod tests {
             run_args_template: None,
             wsl_run_args_template: None,
             reveal_args_template: None,
+            wsl_distros: Vec::new(),
         };
         let err = launch_target(&bare, &project, &no_distro(), &tmux_with(&[]))
             .unwrap_err();
@@ -3103,6 +3209,7 @@ mod tests {
             run_args_template: Some("--directory \"{path}\" {command}".into()),
             wsl_run_args_template: None,
             reveal_args_template: None,
+            wsl_distros: Vec::new(),
         };
         let hostile = "/home/joy/tick`id`";
         let (_, args) = bare.resolve(hostile, None).unwrap();
@@ -3137,6 +3244,7 @@ mod tests {
             wsl_args_template: None,
             run_args_template: None,
             reveal_args_template: None,
+            wsl_distros: Vec::new(),
             wsl_run_args_template: None,
         };
 
@@ -3391,6 +3499,7 @@ mod tests {
             wsl_args_template: None,
             run_args_template: None,
             reveal_args_template: None,
+            wsl_distros: Vec::new(),
             wsl_run_args_template: None,
         };
 
@@ -3464,6 +3573,7 @@ mod tests {
             // the terminal.app shape: the file is the whole command line
             run_args_template: Some("-c \"{script}\"".into()),
             reveal_args_template: None,
+            wsl_distros: Vec::new(),
             wsl_run_args_template: None,
         };
         let project = Project::new(
@@ -3534,6 +3644,7 @@ mod tests {
             wsl_args_template: None,
             run_args_template: Some("-c \"{command}\"".into()),
             reveal_args_template: None,
+            wsl_distros: Vec::new(),
             wsl_run_args_template: None,
         };
         launch_with_command(&terminal, &project, &no_distro(), "exit 0")
@@ -3554,6 +3665,7 @@ mod tests {
             wsl_args_template: None,
             run_args_template: None,
             reveal_args_template: None,
+            wsl_distros: Vec::new(),
             wsl_run_args_template: None,
         }
     }
@@ -3727,6 +3839,7 @@ mod tests {
             run_args_template: None,
             wsl_run_args_template: None,
             reveal_args_template: None,
+            wsl_distros: Vec::new(),
         }
     }
 
@@ -3758,6 +3871,31 @@ mod tests {
         let project = wsl_project("app", "code");
         let picked = side_stand_in(&default, &saved, &project).unwrap();
         assert_eq!(picked.id, "nvim-ubuntu");
+    }
+
+    /// One row per program: the default neovim is in Ubuntu only, so a
+    /// Debian project goes to the first saved editor that can open it,
+    /// and an Ubuntu project stays with the default.
+    #[test]
+    fn a_default_not_in_the_projects_distro_gives_way_to_one_that_can_open_it()
+    {
+        let mut default = editor_row("nvim", true, true);
+        default.wsl_distros = vec!["Ubuntu".into()];
+        let saved = vec![
+            default.clone(),
+            editor_row("zed", true, false),
+            editor_row("vscode", true, true),
+        ];
+        let debian = Project::new(
+            "app".into(),
+            r"\\wsl.localhost\Debian\home\user\app".into(),
+            r"\\wsl.localhost\Debian\home\user".into(),
+            "WSL".into(),
+        );
+        let picked = side_stand_in(&default, &saved, &debian).unwrap();
+        assert_eq!(picked.id, "vscode");
+        let ubuntu = wsl_project("app", "code");
+        assert!(side_stand_in(&default, &saved, &ubuntu).is_none());
     }
 
     #[test]

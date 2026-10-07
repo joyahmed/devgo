@@ -587,6 +587,12 @@ interface LaunchTarget {
 	/// Finder's -R. null means the manager has no such verb, which is every
 	/// one on Linux, and the folder itself opens instead.
 	reveal_args_template: string | null;
+	/// One row per program: the distros the WSL form was found in. Empty
+	/// means the row does not know (VS Code, a row typed by hand, a file
+	/// older than one row per program) and never refuses. Non-empty and the
+	/// project's distro not in it: the launch is refused. `?` because a
+	/// target built on the frontend to send back does not carry it.
+	wsl_distros?: string[];
 }
 
 /// A target DevGo found installed but has not registered. It is added back
@@ -594,9 +600,13 @@ interface LaunchTarget {
 /// no run templates, so a round trip would strip them from a terminal.
 interface DetectedTarget {
 	target: LaunchTarget;
-	/// "path" | "shortcut" | "folder" for a Windows program, or the distro's
-	/// label for a distro row: "WSL" with one installed, else "Ubuntu" etc.
+	/// "path" | "shortcut" | "folder" for a Windows program; for a program
+	/// found in distros, their label ("WSL" with one installed, else
+	/// "Ubuntu" etc.), after "Windows · " when the Windows side has it too
 	source: string;
+	/// The program is saved already, but this scan found a side the saved
+	/// row lacks. Add merges that side into the saved row.
+	extends_saved?: boolean;
 	/// a resolved exe path, or "Ubuntu-26.04 · nvim"
 	detail: string;
 }
@@ -743,6 +753,9 @@ interface Launching {
 interface StatusBarProps {
 	hasSelection: boolean;
 	selectionIsWsl: boolean;
+	/// the selected WSL project's distro; greys a target whose wsl_distros
+	/// lacks it
+	selectionDistro?: string | null;
 	editors: LaunchTarget[];
 	terminals: LaunchTarget[];
 	/// coding agents: the group is absent entirely when none is detected

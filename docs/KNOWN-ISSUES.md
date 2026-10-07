@@ -98,6 +98,20 @@ it. The footer chip for that default still shows greyed out on a WSL project, be
 the target itself. Use the shortcut. Agents and dev scripts do not get a stand-in yet: they still
 refuse when the default cannot run on the project's side.
 
+The footer and the command palette also grey a program on a WSL project when its row lists the
+distros it was found in and the project's distro is not one of them. Launched from the shortcut, Enter
+or the tray, a default in that state gives way to a saved row of the same kind that can open the
+project, and a toast names it; picked by name from the menu, it refuses with *"X is not installed in
+<distro>. Install it there and scan again in Settings"*.
+
+## A WSL-only program saved before one row per program keeps its old shape for now
+
+DevGo now keeps one row per program ("Neovim", not "Neovim" plus "Neovim (WSL)"), merging saved
+pairs at startup. A row for a distro that is not in the cached distro list at that start (the distro
+was stopped or removed, or WSL was not ready) is left as it was: still its own row, still named for
+the distro. It works as before. It merges the next time DevGo starts with that distro known. Rows
+you renamed keep your name. Mac and Linux are not affected.
+
 ## Uninstalling Neovim, Helix or Windows Terminal after you added them leaves a row that fails
 
 DevGo decides how to open a Windows terminal editor at the moment you add it: inside Windows Terminal

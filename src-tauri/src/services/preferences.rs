@@ -632,6 +632,42 @@ impl PreferencesStore {
         self.save()
     }
 
+    /// Point every default at the row its target moved into: `moved` is
+    /// (old id, new id), from TargetStore::adopt_one_row_per_program. A
+    /// default naming a row that no longer exists would fall back to the
+    /// first of its kind, a different program than the one chosen. The
+    /// file it found is kept aside as prefs.json.pre-one-row-per-program,
+    /// and only when a default actually moves.
+    pub fn remap_default_targets(
+        &mut self,
+        moved: &[(String, String)],
+    ) -> Result<(), String> {
+        let p = &mut self.prefs;
+        let mut changed = false;
+        for slot in [
+            &mut p.default_editor,
+            &mut p.default_terminal,
+            &mut p.default_agent,
+            &mut p.default_file_manager,
+        ] {
+            let Some(id) = slot.as_ref() else { continue };
+            if let Some((_, new)) = moved.iter().find(|(old, _)| old == id) {
+                *slot = Some(new.clone());
+                changed = true;
+            }
+        }
+        if !changed {
+            return Ok(());
+        }
+        if self.file_path.exists() {
+            let backup =
+                format!("{}.pre-one-row-per-program", self.file_path.display());
+            fs::copy(&self.file_path, backup)
+                .map_err(|e| format!("Failed to back up prefs: {e}"))?;
+        }
+        self.save()
+    }
+
     fn save(&self) -> Result<(), String> {
         let json = serde_json::to_string_pretty(&self.prefs)
             .map_err(|e| format!("Failed to serialize prefs: {e}"))?;
@@ -650,6 +686,48 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         PreferencesStore::new(dir).unwrap()
+    }
+
+    /// One row per program: a default naming a distro row that merged away
+    /// follows it to the merged row, once, with the file it found kept
+    /// aside byte for byte; a default that did not move is left alone and
+    /// a pass with nothing to move writes nothing.
+    #[test]
+    fn defaults_follow_the_rows_that_merged_into_one_row_per_program() {
+        let dir = std::env::temp_dir().join("devgo-prefs-test-one-row");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let mut s = PreferencesStore::new(dir.clone()).unwrap();
+        s.set_default_target(TargetKind::Editor, "nvim-ubuntu-26-04")
+            .unwrap();
+        s.set_default_target(TargetKind::Terminal, "wt").unwrap();
+        let file = dir.join("prefs.json");
+        let original = fs::read(&file).unwrap();
+        let moved = vec![
+            ("nvim-ubuntu-26-04".to_string(), "nvim".to_string()),
+            ("claude-ubuntu-26-04".to_string(), "claude".to_string()),
+        ];
+        s.remap_default_targets(&moved).unwrap();
+        assert_eq!(
+            s.default_target(TargetKind::Editor).as_deref(),
+            Some("nvim")
+        );
+        assert_eq!(
+            s.default_target(TargetKind::Terminal).as_deref(),
+            Some("wt")
+        );
+        let backup = dir.join("prefs.json.pre-one-row-per-program");
+        assert_eq!(fs::read(&backup).unwrap(), original);
+
+        fs::remove_file(&backup).unwrap();
+        let mut again = PreferencesStore::new(dir.clone()).unwrap();
+        assert_eq!(
+            again.default_target(TargetKind::Editor).as_deref(),
+            Some("nvim")
+        );
+        again.remap_default_targets(&moved).unwrap();
+        assert!(!backup.exists(), "nothing moved, nothing written");
+        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]

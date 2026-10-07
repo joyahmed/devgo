@@ -11,6 +11,20 @@ vi.mock('@tauri-apps/plugin-dialog', () => ({
 	open: (...a: unknown[]) => openDialog(...(a as []))
 }));
 
+// the side badges only draw on a windows box. platform.ts reads the user agent
+// once at import, so the flag is a getter this file flips per test
+const platform = vi.hoisted(() => ({ windows: false }));
+vi.mock('../platform', () => ({
+	isMac: false,
+	isLinux: false,
+	get isWindows() {
+		return platform.windows;
+	}
+}));
+afterEach(() => {
+	platform.windows = false;
+});
+
 afterEach(cleanup);
 afterEach(() => openDialog.mockReset());
 // ⚠️ braces, not a concise body: vitest treats a function RETURNED from a
@@ -705,5 +719,76 @@ describe('TargetManager — detection proposes, a specific Add writes', () => {
 		// and the door reopens: a failed probe is retryable
 		const again = screen.getByRole('button', { name: 'Scan' }) as HTMLButtonElement;
 		expect(again.disabled).toBe(false);
+	});
+});
+
+describe('TargetManager — one row per program', () => {
+	const MERGED = target(NEOVIM, 'Neovim', 'editor', {
+		wsl_executable: 'wsl',
+		wsl_args_template: '-d {distro} --cd "{linux_path}" -e nvim .',
+		wsl_distros: ['Ubuntu-26.04']
+	});
+
+	it('badges a row with both forms as windows · wsl', () => {
+		platform.windows = true;
+		manager({ editors: [MERGED, target(ZED, 'Zed', 'editor')] });
+
+		const badge = within(section('Editors')).getByText('windows · wsl');
+		expect(badge.getAttribute('title')).toContain('Ubuntu-26.04');
+		// Zed has a windows form only: its own badge, and not the merged one
+		expect(within(section('Editors')).getAllByText('windows · wsl')).toHaveLength(1);
+		expect(within(section('Editors')).getByText('windows only')).not.toBeNull();
+	});
+
+	it('badges a program found only in a distro as wsl only', () => {
+		platform.windows = true;
+		const only = target(NEOVIM, 'Neovim', 'editor', {
+			args_template: '',
+			wsl_executable: 'wsl',
+			wsl_args_template: '-d {distro} -e nvim .',
+			wsl_distros: ['Ubuntu-26.04']
+		});
+		manager({ editors: [only] });
+
+		expect(within(section('Editors')).getByText('wsl only')).not.toBeNull();
+		expect(within(section('Editors')).queryByText('windows · wsl')).toBeNull();
+	});
+
+	it('says which side an extends_saved scan row adds, and labels its button', async () => {
+		const user = userEvent.setup();
+		const row: DetectedTarget = {
+			target: MERGED,
+			source: 'Windows · WSL',
+			detail: 'C:\nvim.exe | Ubuntu-26.04 · nvim',
+			extends_saved: true
+		};
+		// the saved Neovim has a windows form and no WSL one: the scan adds WSL
+		const { onAddDetected } = manager({ onDetect: vi.fn().mockResolvedValue([row]) });
+
+		await user.click(screen.getByRole('button', { name: 'Scan' }));
+
+		expect(await screen.findByText('in Windows · WSL')).not.toBeNull();
+		expect(screen.getByText('adds WSL')).not.toBeNull();
+		await user.click(screen.getByRole('button', { name: 'Add side' }));
+		expect(onAddDetected).toHaveBeenCalledWith(NEOVIM);
+	});
+
+	it('reads adds Windows when the saved row is the WSL-only one', async () => {
+		const user = userEvent.setup();
+		const saved = target(NEOVIM, 'Neovim', 'editor', {
+			args_template: '',
+			wsl_args_template: '-d {distro} -e nvim .'
+		});
+		const row: DetectedTarget = {
+			target: MERGED,
+			source: 'Windows · WSL',
+			detail: 'x',
+			extends_saved: true
+		};
+		manager({ editors: [saved], onDetect: vi.fn().mockResolvedValue([row]) });
+
+		await user.click(screen.getByRole('button', { name: 'Scan' }));
+
+		expect(await screen.findByText('adds Windows')).not.toBeNull();
 	});
 });

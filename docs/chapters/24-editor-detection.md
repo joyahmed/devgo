@@ -253,7 +253,7 @@ fn distro_target(
 
 Id `nvim-ubuntu-26-04`: the **id** always carries the whole distro, because two targets cannot share one and saved rows, `default_editor` and `add_detected_target` all find a row by id. `slugify` lowercases and replaces everything non-alphanumeric with `-`.
 
-The **name** carries only as much of the distro as it takes to tell the installed ones apart, because the same editor in two distros opens two different filesystems and a list with "Neovim" twice would be a puzzle. `distro_label` picks it, against every installed distro (`wsl -l -q`, asked only when one is running), not just the running ones:
+*(Superseded: see "One row per program" below. A found program is now one plainly named row; the distro-in-the-name rules apply only to a row still in the old shape.)* The **name** carries only as much of the distro as it takes to tell the installed ones apart, because the same editor in two distros opens two different filesystems and a list with "Neovim" twice would be a puzzle. `distro_label` picks it, against every installed distro (`wsl -l -q`, asked only when one is running), not just the running ones:
 
 - **one distro installed:** `Neovim (WSL)` — there is nothing to tell apart.
 - **two or more:** the distro without its trailing version — `Neovim (Ubuntu)` for Ubuntu-26.04, `Neovim (Debian)` for Debian. A version is a last segment after `-` or `_` made only of digits and dots, stripped repeatedly (OracleLinux_9_1 is OracleLinux; SUSE-Linux-Enterprise-15-SP6 keeps its name).
@@ -267,6 +267,31 @@ The scan list's "in …" reads the same label (`DetectedTarget.source`); the row
 A saved name is fixed when the row is renamed or added. Installing a second distro later leaves `(WSL)` on the saved rows while new scans show `(Ubuntu)`; the ids decide what launches, so nothing opens the wrong place.
 
 The label's tests, in `editors.rs`: `one_installed_distro_reads_wsl`, `two_distinct_distros_read_their_short_names`, `two_distros_that_shorten_alike_keep_their_full_names`, `docker_desktop_distros_are_not_counted`, `the_label_never_changes_the_id` and `only_a_saved_row_with_the_old_auto_name_is_renamed`. In `target_store.rs`: `saved_wsl_rows_with_the_old_auto_name_get_the_short_name_once` and `an_empty_distro_list_renames_no_wsl_row`.
+
+### One row per program (supersedes the per-distro rows above)
+
+Everything above describes the first shape: a program on Windows and the same program in a distro were two rows, `nvim` and `nvim-ubuntu-26-04`, and the second one wore a `(WSL)` or `(Ubuntu)` tail. That asked you to choose a *place* when you meant to choose a *program*, and it doubled every list. The ids, the distro slug and the name tail still exist for one case only (below). The shape now is **one row per program**.
+
+**Detection merges.** A program found on Windows and/or in distros becomes one row:
+
+- **id** — the Windows id (`nvim`, `claude`, `codex`, `hx`), or the bare exe for a program found only in a distro (`lazygit`, say).
+- **name** — the plain product name, *Neovim*. No `(WSL)`, no `(Ubuntu)`; `distro_label` is now used only for the scan list's source.
+- **Windows form** (`executable` + `args_template`) and/or **WSL form** (`wsl_executable` + `wsl_args_template`). The WSL form is written once with `{distro}` in it, filled from the project at launch, so one form serves every distro.
+- **`wsl_distros: Vec<String>`** — which distros have it. This is what makes the one WSL form safe to share. Empty means *unknown* and never refuses: a program that crosses by itself (VS Code), a row typed by hand, a file older than this change.
+
+**Launch picks the form from the project.** A Windows project uses the Windows form, a WSL project the WSL form in the project's own distro. When the project's distro is not in a non-empty `wsl_distros`, the launch is refused before anything starts, with *"Neovim is not installed in Ubuntu-26.04. Install it there and scan again in Settings"*. `LaunchTarget::installed_in` does the match, without case, as wsl.exe does. A program found only in a distro has an empty Windows form, so a Windows project is refused as before (§24.3). The footer chip and the command palette grey the same pairing before the click (`missingFromDistro` in `src/paths.ts`, the distro read from the project's `\wsl.localhost\<distro>\` or `\wsl$\<distro>\` path), and the row's badge says which sides it has: *windows · wsl* when it lists distros as well as a Windows form, *windows only*, or *wsl only*.
+
+**Scan rows say what they add.** `DetectedTarget.source` is now `"Windows · WSL"`, `"path"`/`"shortcut"`/`"folder"` (a Windows-only row keeps its old source), or the distro label (`"WSL"`, `"Ubuntu"`). A new `extends_saved: bool` means *this program is already saved, but the scan found a side the saved row lacks*. The row still appears, reads *adds WSL* or *adds Windows* (worked out from which form the saved row is missing), and its button says **Add side**. `add_detected_target` then merges that side into the saved row, rather than refusing a duplicate id.
+
+**Startup merges the old pairs.** `TargetStore` runs a one-time migration against the cached runtime's distro list (startup never shells out to wsl.exe):
+
+- a saved twin pair (`nvim` + `nvim-ubuntu-26-04`, `claude` + `claude-ubuntu-26-04`) becomes the Windows row with the WSL form and `wsl_distros` folded in;
+- the prefs defaults (editor, terminal, agent, file manager) are remapped from the removed id to the survivor's, and this happens before the merged rows are saved, so a failed save leaves a default that still names an existing row;
+- `targets.json` is copied to `*.pre-one-row-per-program` first, and `prefs.json` too, but only when a default moves;
+- auto-named rows merge; a row the user renamed keeps its name;
+- an empty distro list (every mac and linux box) changes nothing, and a second start finds no pair left, so it does nothing.
+
+**Two edges I am leaving**, both in `docs/KNOWN-ISSUES.md`: a distro row whose distro is missing from the cached list keeps the old shape until a start that knows that distro, and the default-target stand-in (`side_stand_in`, §13.5) reads `wsl_distros`: a default not installed in the project's distro gives way like one with no form on that side; only a target named explicitly refuses.
 
 Four more tests, on the tables and ids. `every_candidate_id_is_unique`. `wsl_form_decides_whether_a_target_can_open_wsl` (Cursor resolves for a WSL project; Sublime does not, and still opens Windows ones). `a_distro_editor_gets_a_distinct_id_per_distro` — Ubuntu and Debian get different ids, the Windows form is `None` (§24.3's refusal, exercised), and the WSL form resolves to `-d Ubuntu-26.04 --cd "/srv/app" -e nvim .`. And the one that matters most:
 
@@ -364,7 +389,7 @@ fn program_files_hit(
 
 On PATH wins (source `"path"`, launched by bare name). Otherwise the Program Files probe runs (source `"folder"`, launched by full path, double-quoted because `C:\Program Files\…` has a space, in either template). The probe exists for **Neovim only**, because only Neovim's installer has a fixed, well-known folder that may be missing from PATH. I know of no fixed folder Helix installs to, so there is nothing to probe, and guessing is the thing this chapter exists to avoid: `program_files` is `None`, and a Helix that is not on PATH is not offered. The `detail` line says which terminal the row will use: `C:\…\nvim.exe · Windows Terminal`, or `· console`. (The panel shows `detail` for a `"folder"` source as it does for `"path"`; the condition in `TargetManager.tsx` learned a third word.)
 
-**Ids.** The Windows editor is `nvim`; the one inside a distro is `nvim-ubuntu-26-04` (§24.3's `distro_target` always appends the slug). They cannot collide, so a machine with both gets two rows, *Neovim* wearing *windows only* and *Neovim (WSL)* (on a box with one distro) wearing *wsl only*, and `detect_targets` hides each only once *its own* id is registered. The *windows only* badge needed no change: it already reads the missing WSL template off the model.
+**Ids.** The Windows editor is `nvim`; the one inside a distro is `nvim-ubuntu-26-04` (§24.3's `distro_target` always appends the slug). *(Superseded: see "One row per program" in §24.3. A machine with both now gets one *Neovim* row, id `nvim`, carrying both forms.)* They cannot collide, so a machine with both gets two rows, *Neovim* wearing *windows only* and *Neovim (WSL)* (on a box with one distro) wearing *wsl only*, and `detect_targets` hides each only once *its own* id is registered. The *windows only* badge needed no change: it already reads the missing WSL template off the model.
 
 **Why only these two.** Vim: the `vim` on a Windows PATH is almost always the one Git for Windows bundles, an MSYS build that expects MSYS's terminal and misbehaves in a plain console, so finding it would be a false positive. Emacs: on Windows it is a GUI application, so it already works as an ordinary `Candidate` and does not need a terminal wrapped around it. Micro: I have not tried it on Windows, and I do not list what I have not tried.
 
