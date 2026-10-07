@@ -1384,7 +1384,7 @@ pub(crate) fn renamed_wsl_row(
     None
 }
 
-fn slugify(s: &str) -> String {
+pub(crate) fn slugify(s: &str) -> String {
     let cleaned: String = s
         .chars()
         .map(|c| {

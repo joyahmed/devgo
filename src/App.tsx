@@ -163,6 +163,11 @@ const AppInner = () => {
 	// reaches it
 	const github = useGithub(projects, git);
 	const { toast } = useToast();
+	// a launch with no target named can come back saying the default could
+	// not open that project's side and which saved target opened it instead
+	const sayStandIn = (note: unknown) => {
+		if (typeof note === 'string') toast(note, 'info');
+	};
 	// the machines you ssh into: its own file, no network
 	const servers = useServers(e => toast(showError(e)));
 	// set up this box: the files the app carries, onto a server, then ↻
@@ -328,15 +333,15 @@ const AppInner = () => {
 	const handleLaunch = (p: Project) => {
 		setSelected(p);
 		flash('both', p.full_path);
-		openBoth(p).catch(e => toast(showError(e)));
+		openBoth(p).then(sayStandIn, e => toast(showError(e)));
 	};
 	const launchEditor = (p: Project) => {
 		flash('editor', p.full_path);
-		openEditor(p).catch(e => toast(showError(e)));
+		openEditor(p).then(sayStandIn, e => toast(showError(e)));
 	};
 	const launchTerminal = (p: Project) => {
 		flash('terminal', p.full_path);
-		openTerminal(p).catch(e => toast(showError(e)));
+		openTerminal(p).then(sayStandIn, e => toast(showError(e)));
 	};
 
 	const handleSearchEnter = () => {
@@ -809,15 +814,15 @@ const AppInner = () => {
 
 	const handleOpenEditor = (targetId?: string) => {
 		flash('editor');
-		openEditor(undefined, targetId).catch(e => toast(showError(e)));
+		openEditor(undefined, targetId).then(sayStandIn, e => toast(showError(e)));
 	};
 	const handleOpenTerminal = (targetId?: string) => {
 		flash('terminal');
-		openTerminal(undefined, targetId).catch(e => toast(showError(e)));
+		openTerminal(undefined, targetId).then(sayStandIn, e => toast(showError(e)));
 	};
 	const handleOpenBoth = () => {
 		flash('both');
-		openBoth().catch(e => toast(showError(e)));
+		openBoth().then(sayStandIn, e => toast(showError(e)));
 	};
 	const handleOpenAgent = (targetId?: string) => {
 		flash('agent');

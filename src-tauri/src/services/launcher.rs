@@ -424,6 +424,81 @@ fn scrub_agent_env(cmd: &mut Command) {
     }
 }
 
+/// What opens a project when nobody named a target and the default has no
+/// form for the project's side.
+///
+/// A default is one choice for every project, and a project lives on one
+/// side or the other: a distro neovim set as the default refused every
+/// windows project, with a windows neovim saved right beside it. So the
+/// default's twin first, the same program on the other side (a distro row's
+/// id is `<exe>-<slug>`, `nvim` beside `nvim-ubuntu-26-04`), the project's
+/// own distro first when there are several; else the first saved target of
+/// the kind that can open it, in the store's order. `None` when the default
+/// can open the project or nothing else can, and the default goes on to
+/// launch_target, which gives its refusal unchanged.
+///
+/// Only for the default. A target the user picked by name refuses: opening
+/// a different one than was asked for is answering a question nobody asked.
+pub fn side_stand_in(
+    default: &LaunchTarget,
+    saved: &[LaunchTarget],
+    project: &Project,
+) -> Option<LaunchTarget> {
+    let wsl = is_wsl(project);
+    if default.opens_side(wsl) {
+        return None;
+    }
+    let capable: Vec<&LaunchTarget> = saved
+        .iter()
+        .filter(|t| {
+            t.kind == default.kind && t.id != default.id && t.opens_side(wsl)
+        })
+        .collect();
+    // the windows row is the distro row's id with the slug cut off, so the
+    // prefix runs one way for a wsl project and the other for a windows one
+    let is_twin = |t: &LaunchTarget| {
+        if wsl {
+            t.id.starts_with(&format!("{}-", default.id))
+        } else {
+            default.id.starts_with(&format!("{}-", t.id))
+        }
+    };
+    let home = super::scanner::distro_of(&project.full_path)
+        .map(|d| format!("{}-{}", default.id, super::editors::slugify(&d)));
+    let twins: Vec<&LaunchTarget> =
+        capable.iter().copied().filter(|t| is_twin(t)).collect();
+    twins
+        .iter()
+        .find(|t| home.as_deref() == Some(t.id.as_str()))
+        .or(twins.first())
+        .or(capable.first())
+        .map(|t| (*t).clone())
+}
+
+/// The target a launch into this project uses, and the sentence for the
+/// toast when it is not the one resolved. `named` is whether the user
+/// picked it by id: a named target is never swapped, it opens or refuses.
+pub fn target_for_project(
+    target: LaunchTarget,
+    named: bool,
+    saved: &[LaunchTarget],
+    project: &Project,
+) -> (LaunchTarget, Option<String>) {
+    if named {
+        return (target, None);
+    }
+    match side_stand_in(&target, saved, project) {
+        Some(stand_in) => {
+            let note = format!(
+                "{} cannot open {}, so it opened in {} instead",
+                target.name, project.name, stand_in.name
+            );
+            (stand_in, Some(note))
+        }
+        None => (target, None),
+    }
+}
+
 /// Launch a project into any registered target.
 ///
 /// Replaces the hardcoded `code` and `wt` calls. Nothing here knows what an
@@ -3631,5 +3706,138 @@ mod tests {
     #[test]
     fn a_command_with_no_arguments_has_no_trailing_space() {
         assert_eq!(command_for_log("explorer.exe", ""), "explorer.exe");
+    }
+
+    // an editor row with a windows line, a wsl form, or both: the two
+    // fields side_stand_in reads, the rest empty
+    fn editor_row(id: &str, windows: bool, wsl: bool) -> LaunchTarget {
+        LaunchTarget {
+            id: id.into(),
+            name: id.into(),
+            kind: TargetKind::Editor,
+            executable: if windows { id.into() } else { "wsl".into() },
+            args_template: if windows {
+                "{path}".into()
+            } else {
+                String::new()
+            },
+            wsl_executable: wsl.then(|| "wsl".into()),
+            wsl_args_template: wsl
+                .then(|| "-d {distro} --cd \"{linux_path}\" -e nvim .".into()),
+            run_args_template: None,
+            wsl_run_args_template: None,
+            reveal_args_template: None,
+        }
+    }
+
+    /// a real setup: the default is a distro neovim, a windows neovim is
+    /// saved too, and a windows project opened with the default refused.
+    #[test]
+    fn a_distro_default_gives_way_to_its_windows_twin_for_a_windows_project() {
+        let default = editor_row("nvim-ubuntu-26-04", false, true);
+        let saved = vec![
+            editor_row("vscode", true, true),
+            editor_row("zed", true, false),
+            default.clone(),
+            editor_row("nvim", true, false),
+        ];
+        let project = local_project("devgo-app-private", "some");
+        let picked = side_stand_in(&default, &saved, &project).unwrap();
+        // the twin, not vscode, which is first and could open it too
+        assert_eq!(picked.id, "nvim");
+    }
+
+    #[test]
+    fn a_windows_default_gives_way_to_the_twin_in_the_projects_own_distro() {
+        let default = editor_row("nvim", true, false);
+        let saved = vec![
+            default.clone(),
+            editor_row("nvim-debian", false, true),
+            editor_row("nvim-ubuntu", false, true),
+        ];
+        let project = wsl_project("app", "code");
+        let picked = side_stand_in(&default, &saved, &project).unwrap();
+        assert_eq!(picked.id, "nvim-ubuntu");
+    }
+
+    #[test]
+    fn with_no_twin_the_first_saved_target_that_can_open_it_stands_in() {
+        let default = editor_row("hx-ubuntu", false, true);
+        let saved = vec![
+            default.clone(),
+            editor_row("nvim-ubuntu", false, true),
+            editor_row("zed", true, false),
+            editor_row("vscode", true, true),
+        ];
+        let project = local_project("app", "some");
+        let picked = side_stand_in(&default, &saved, &project).unwrap();
+        assert_eq!(picked.id, "zed");
+    }
+
+    /// Picked by name from the Editor menu, the distro neovim is what was
+    /// asked for: it is not swapped, and launch_target refuses it.
+    #[test]
+    fn a_target_picked_by_name_is_never_swapped_and_still_refuses() {
+        let picked = editor_row("nvim-ubuntu-26-04", false, true);
+        let saved = vec![picked.clone(), editor_row("nvim", true, false)];
+        let project = local_project("devgo-app-private", "some");
+        let (target, note) =
+            target_for_project(picked.clone(), true, &saved, &project);
+        assert_eq!(target.id, "nvim-ubuntu-26-04");
+        assert!(note.is_none());
+        let err =
+            launch_target(&target, &project, &no_distro(), &tmux_with(&[]))
+                .unwrap_err();
+        if cfg!(windows) {
+            assert!(matches!(err, AppError::TargetWslOnly(..)), "{err:?}");
+        } else {
+            assert!(matches!(err, AppError::TargetHasNoLine(..)), "{err:?}");
+        }
+
+        // the same row as the default is swapped, and the toast says so
+        let (target, note) =
+            target_for_project(picked, false, &saved, &project);
+        assert_eq!(target.id, "nvim");
+        assert_eq!(
+            note.as_deref(),
+            Some(
+                "nvim-ubuntu-26-04 cannot open devgo-app-private, so it \
+                 opened in nvim instead"
+            )
+        );
+    }
+
+    #[test]
+    fn a_default_that_can_open_the_project_is_kept() {
+        let default = editor_row("zed", true, false);
+        let saved = vec![default.clone(), editor_row("nvim", true, false)];
+        let project = local_project("app", "some");
+        assert!(side_stand_in(&default, &saved, &project).is_none());
+    }
+
+    /// Nothing else can open it, so the default goes on to launch_target
+    /// and the refusal reads exactly as it did before the stand-in.
+    #[test]
+    fn with_nothing_capable_the_default_still_gives_its_own_refusal() {
+        let default = editor_row("zed", true, false);
+        let saved = vec![
+            default.clone(),
+            editor_row("cursor", true, false),
+            // a terminal with a wsl form is not an editor
+            LaunchTarget {
+                kind: TargetKind::Terminal,
+                ..editor_row("wt", true, true)
+            },
+        ];
+        let project = wsl_project("app", "code");
+        assert!(side_stand_in(&default, &saved, &project).is_none());
+        let err =
+            launch_target(&default, &project, &no_distro(), &tmux_with(&[]))
+                .unwrap_err();
+        assert!(
+            matches!(err, AppError::TargetCannotOpenWsl(ref t, ref p)
+                if t == "zed" && p == "app"),
+            "{err:?}"
+        );
     }
 }
