@@ -1263,7 +1263,7 @@ fn present_in_distro(
         .collect()
 }
 
-fn slugify(s: &str) -> String {
+pub(crate) fn slugify(s: &str) -> String {
     let cleaned: String = s
         .chars()
         .map(|c| {
