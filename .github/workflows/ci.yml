@@ -26,6 +26,18 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # the book is its branches: a chapter is NN.name, work on one is fix/<what>,
+  # docs alone is docs/<what> (docs/chapters/00-prerequisites.md). a generic
+  # working branch names no chapter, so it fails here, first and cheaply.
+  branch-name:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: refuse a branch that names no chapter or fix
+        if: github.ref_name == 'joy'
+        run: |
+          echo "::error::branch 'joy' names nothing in the book. use NN.name for a chapter, fix/<what> to extend one, docs/<what> for docs alone."
+          exit 1
+
   gate:
     runs-on: windows-latest
     steps:
