@@ -90,6 +90,19 @@ directory — but the empty field accepts the row in the first place, so it is e
 
 Fill the arguments template in, usually `"{path}"`.
 
+## Uninstalling Neovim, Helix or Windows Terminal after you added them leaves a row that fails
+
+DevGo decides how to open a Windows terminal editor at the moment you add it: inside Windows Terminal
+if `wt` was on PATH during the scan, in its own console window if it was not. It does not look again
+later. So two uninstalls leave a stale row:
+
+- **Neovim or Helix removed.** The row still launches, and the error shows up outside DevGo: inside
+  the new Windows Terminal tab, or from `start` for a console-form row.
+- **Windows Terminal removed.** The row refuses with *"wt is not installed, or not on PATH"*.
+
+Remove the row in Settings › Editors & Terminals and scan again. The new row is built for what is
+installed now, which for the second case is the console-window form.
+
 ## On macOS the window came back the wrong size — Stage Manager (fixed, with a loose end)
 
 macOS only, and only with Stage Manager turned on. In v1.2.1: resize DevGo's window, quit, open it
@@ -262,7 +275,7 @@ of me:
 
 | kind | I have not launched these |
 |---|---|
-| Editors | VS Code Insiders, Cursor, Windsurf, Zed, Sublime Text, IntelliJ IDEA, WebStorm, PyCharm, RustRover, GoLand, Fleet — and Neovim, Helix, Vim, Emacs and Micro, which are only offered inside a WSL distribution |
+| Editors | VS Code Insiders, Cursor, Windsurf, Zed, Sublime Text, IntelliJ IDEA, WebStorm, PyCharm, RustRover, GoLand, Fleet — and Neovim and Helix (Windows), Vim, Emacs and Micro inside a WSL distribution |
 | Terminals | iTerm2, WezTerm, Kitty, Alacritty, Konsole, Xfce Terminal, Tilix, foot, Terminator (and GNOME Terminal, above) |
 | Agents | Codex, OpenCode, Gemini CLI |
 | File managers | Finder, the desktop default (`xdg-open`), Files (Nautilus), Dolphin, Nemo, Thunar, Caja, PCManFM |

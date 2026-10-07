@@ -594,7 +594,7 @@ interface LaunchTarget {
 /// no run templates, so a round trip would strip them from a terminal.
 interface DetectedTarget {
 	target: LaunchTarget;
-	/// "path" for a Windows program, or the distro name
+	/// "path" | "shortcut" | "folder" for a Windows program, or the distro name
 	source: string;
 	/// a resolved exe path, or "Ubuntu-26.04 · nvim"
 	detail: string;
