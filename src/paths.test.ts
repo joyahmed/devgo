@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { lastSegment, namesOf, normalizePath, parentOf } from './paths';
+import {
+	lastSegment,
+	missingFromDistro,
+	namesOf,
+	normalizePath,
+	parentOf,
+	wslDistroOf
+} from './paths';
 
 // pure string work, no DOM and no platform branch — the functions never ask
 // which OS they are on, which is exactly why they accept either separator.
@@ -184,5 +191,28 @@ describe('namesOf — a list of roots as one glanceable phrase', () => {
 
 	it('ignores a trailing separator on any root', () => {
 		expect(namesOf(['/home/dev/devgo/', 'C:\\code\\zetta\\'])).toBe('devgo and zetta');
+	});
+});
+
+describe('wslDistroOf and missingFromDistro', () => {
+	it('reads the distro from either UNC form, and null elsewhere', () => {
+		// a backslash built by code: the literal is the thing under test
+		const bs = String.fromCharCode(92);
+		const unc = (host: string, ...rest: string[]) =>
+			[bs + bs + host, ...rest].join(bs);
+		expect(wslDistroOf(unc('wsl.localhost', 'Ubuntu-26.04', 'home', 'a'))).toBe(
+			'Ubuntu-26.04'
+		);
+		expect(wslDistroOf(unc('wsl$', 'Debian', 'home'))).toBe('Debian');
+		expect(wslDistroOf('//wsl.localhost/Ubuntu/home')).toBe('Ubuntu');
+		expect(wslDistroOf(['C:', 'work', 'app'].join(bs))).toBeNull();
+	});
+
+	it('refuses only a non-empty list that lacks the distro, without case', () => {
+		expect(missingFromDistro({ wsl_distros: ['Ubuntu'] }, 'Debian')).toBe(true);
+		expect(missingFromDistro({ wsl_distros: ['Ubuntu'] }, 'ubuntu')).toBe(false);
+		expect(missingFromDistro({ wsl_distros: [] }, 'Debian')).toBe(false);
+		expect(missingFromDistro({}, 'Debian')).toBe(false);
+		expect(missingFromDistro({ wsl_distros: ['Ubuntu'] }, null)).toBe(false);
 	});
 });

@@ -130,6 +130,17 @@ The two `Option` fields sit next to each other and read as a matched pair. They 
 
 **A `None` that means "fall back" and a `None` that means "refuse" cannot be told apart by the type.** They are told apart by the code that reads them and by the doc comment on each field, which is why those two comments are the longest in the struct. If this pattern grew a third `Option` with a third meaning it would be time for real types; at two, with the meanings written at the field and enforced at the read, it stays honest.
 
+### One row, two forms: `wsl_distros`
+
+A program installed on Windows *and* inside WSL is one row, not two. The Windows form is `executable` + `args_template`; the WSL form is `wsl_executable` + `wsl_args_template`, written once with `{distro}` in it. Which form runs is decided by the project, not by the row: a Windows project gets the Windows form, a WSL project the WSL form in the project's own distro.
+
+A shared WSL form needs one more fact, which distros actually have the program, and that is `wsl_distros: Vec<String>` on the model:
+
+- **empty** means the row does not know (VS Code, which crosses by itself; a row typed in by hand; a `targets.json` older than this field). It never refuses, and the distro answers if the program is missing. `#[serde(default)]` keeps old files loading.
+- **non-empty** and the project's distro not in it: `launch_target` refuses before spawning, *"Neovim is not installed in Ubuntu-26.04. Install it there and scan again in Settings"*. It is the same stance as §13.5's refusal: say the pairing is wrong rather than open the wrong thing. `installed_in` matches without case, as wsl.exe does.
+
+The distro list is written by detection and by the startup migration that merges old `nvim` + `nvim-ubuntu-26-04` pairs (§24.3, *One row per program*). Settings badges a row with both forms *windows · wsl*, otherwise *windows only* or *wsl only*, and a scan row for a program that is saved but missing a side reads *adds WSL* or *adds Windows* with an **Add side** button, which merges that side into the saved row (`DetectedTarget.extends_saved`).
+
 ---
 
 ## 13.3 — Two seeded targets, and the argument for not seeding more
@@ -710,7 +721,7 @@ Step 2 is the one that matters. Set Cursor as your default, remove Cursor from t
 
 The dangling default is not cleaned up. It stays in `prefs.json`, quietly overridden, and starts working again the instant a target with that id reappears. Repairing on read is cheaper and less destructive than pruning on write.
 
-**A default that cannot open the project's side gives way, too.** A default is one choice for every project, and a project lives on Windows or in a distro: a distro Neovim set as the default refused every Windows project with a Windows Neovim saved beside it. So `open_editor`, `open_terminal` and `open_both` go through `resolve_for_project`, which asks `launcher::side_stand_in` when no id was named: the default's twin first (the same program on the other side, `nvim` beside `nvim-ubuntu-26-04`, the project's own distro first when there are several), else the first saved target of that kind that can open it. The launch says which in an info toast. Nothing capable leaves the default in place and the refusal reads exactly as before. A target picked by name is never swapped — step 1's rule — so choosing the distro Neovim from the menu for a Windows project still refuses.
+**A default that cannot open the project's side gives way, too.** A default is one choice for every project, and a project lives on Windows or in a distro: a distro Neovim set as the default refused every Windows project with a Windows Neovim saved beside it. So `open_editor`, `open_terminal` and `open_both` go through `resolve_for_project`, which asks `launcher::side_stand_in` when no id was named: the default's twin first (the same program on the other side, `nvim` beside `nvim-ubuntu-26-04`, the project's own distro first when there are several), else the first saved target of that kind that can open it. The launch says which in an info toast. Nothing capable leaves the default in place and the refusal reads exactly as before. The stand-in reads `wsl_distros` too: a default not installed in the project's distro gives way like one with no form on that side. A target picked by name is never swapped — step 1's rule — so choosing the distro Neovim from the menu for a Windows project still refuses.
 
 ---
 

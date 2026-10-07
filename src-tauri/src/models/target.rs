@@ -40,6 +40,14 @@ pub struct LaunchTarget {
     /// is every Linux file manager, and the caller opens the parent folder.
     #[serde(default)]
     pub reveal_args_template: Option<String>,
+    /// The distros this program was found in, when the row's WSL form is
+    /// one program living inside them (Neovim, Claude Code). A WSL project
+    /// in a distro not on the list is refused rather than handed a command
+    /// that is not there. Empty means the row does not know: a program
+    /// that crosses by itself (VS Code), a row typed in by hand, or a file
+    /// written before one row per program. Empty never refuses.
+    #[serde(default)]
+    pub wsl_distros: Vec<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -109,6 +117,18 @@ impl LaunchTarget {
         } else {
             !self.args_template.is_empty()
         }
+    }
+
+    /// Whether this row's program is in `distro`, as far as the row knows.
+    /// An empty list does not know and says yes; the launch goes ahead and
+    /// the distro answers. Distro names are matched without case, as
+    /// wsl.exe matches them.
+    pub fn installed_in(&self, distro: &str) -> bool {
+        self.wsl_distros.is_empty()
+            || self
+                .wsl_distros
+                .iter()
+                .any(|d| d.eq_ignore_ascii_case(distro))
     }
 
     pub fn resolve_run(
@@ -458,6 +478,7 @@ pub fn defaults() -> Vec<LaunchTarget> {
             // an editor is not a place to run a dev command
             run_args_template: None,
             reveal_args_template: None,
+            wsl_distros: Vec::new(),
             wsl_run_args_template: None,
         },
         LaunchTarget {
@@ -470,6 +491,7 @@ pub fn defaults() -> Vec<LaunchTarget> {
             wsl_args_template: Some("wsl -d {distro} bash \"{script}\"".into()),
             run_args_template: Some(WT_RUN_ARGS.into()),
             reveal_args_template: None,
+            wsl_distros: Vec::new(),
             wsl_run_args_template: Some(WT_WSL_RUN_ARGS.into()),
         },
         LaunchTarget {
@@ -487,6 +509,7 @@ pub fn defaults() -> Vec<LaunchTarget> {
             // UNC path of a WSL project does not survive it, and those are
             // half of what DevGo reveals
             reveal_args_template: Some("\"{path}\"".into()),
+            wsl_distros: Vec::new(),
             wsl_run_args_template: None,
         },
     ]
@@ -518,6 +541,7 @@ pub fn defaults() -> Vec<LaunchTarget> {
             // an editor is not a place to run a dev command
             run_args_template: None,
             reveal_args_template: None,
+            wsl_distros: Vec::new(),
             wsl_run_args_template: None,
         },
         LaunchTarget {
@@ -530,6 +554,7 @@ pub fn defaults() -> Vec<LaunchTarget> {
             wsl_args_template: None,
             run_args_template: Some(MAC_TERMINAL_RUN_ARGS.into()),
             reveal_args_template: None,
+            wsl_distros: Vec::new(),
             wsl_run_args_template: None,
         },
         LaunchTarget {
@@ -547,6 +572,7 @@ pub fn defaults() -> Vec<LaunchTarget> {
             // -R: the parent window with the folder highlighted, the one
             // reveal verb a file manager on any platform here really has
             reveal_args_template: Some("-R \"{path}\"".into()),
+            wsl_distros: Vec::new(),
             wsl_run_args_template: None,
         },
     ]
@@ -568,6 +594,7 @@ pub fn defaults() -> Vec<LaunchTarget> {
         wsl_args_template: None,
         run_args_template: None,
         reveal_args_template: None,
+        wsl_distros: Vec::new(),
         wsl_run_args_template: None,
     }];
     if let Some(t) = crate::services::editors::first_terminal() {
@@ -585,6 +612,27 @@ mod tests {
 
     fn vscode() -> LaunchTarget {
         defaults().into_iter().next().unwrap()
+    }
+
+    /// A targets.json written before one row per program has no distro
+    /// list. It loads, and a row that does not know never refuses.
+    #[test]
+    fn a_row_saved_without_a_distro_list_loads_and_never_refuses() {
+        let mut json = serde_json::to_value(vscode()).unwrap();
+        let removed = json.as_object_mut().unwrap().remove("wsl_distros");
+        assert!(removed.is_some(), "the field is spelled wsl_distros");
+        let t: LaunchTarget = serde_json::from_value(json).unwrap();
+        assert!(t.wsl_distros.is_empty());
+        assert!(t.installed_in("Debian"));
+    }
+
+    #[test]
+    fn a_row_with_a_distro_list_is_installed_only_in_those_distros() {
+        let mut t = vscode();
+        t.wsl_distros = vec!["Ubuntu-26.04".into()];
+        assert!(t.installed_in("Ubuntu-26.04"));
+        assert!(t.installed_in("ubuntu-26.04"), "wsl.exe ignores case");
+        assert!(!t.installed_in("Debian"));
     }
 
     /// The key the default-target map is built with, and the string the
@@ -673,6 +721,7 @@ mod tests {
             wsl_args_template: None,
             run_args_template: None,
             reveal_args_template: Some("--select \"{path}\"".into()),
+            wsl_distros: Vec::new(),
             wsl_run_args_template: None,
         };
         let (exe, args) = trove.resolve_reveal(r"G:\01_tauri\my app").unwrap();
@@ -781,6 +830,7 @@ mod tests {
             ),
             run_args_template: None,
             reveal_args_template: None,
+            wsl_distros: Vec::new(),
             wsl_run_args_template: None,
         };
         let (exe, args) = helix
@@ -830,6 +880,7 @@ mod tests {
             wsl_args_template: None,
             run_args_template: None,
             reveal_args_template: None,
+            wsl_distros: Vec::new(),
             wsl_run_args_template: None,
         };
         assert!(notepad.resolve("x", Some(("Ubuntu", "/home"))).is_none());
@@ -852,6 +903,7 @@ mod tests {
             ),
             run_args_template: None,
             reveal_args_template: None,
+            wsl_distros: Vec::new(),
             wsl_run_args_template: None,
         };
         assert!(nvim.resolve(r"G:\dev", None).is_none());

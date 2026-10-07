@@ -753,20 +753,16 @@ pub fn detect_targets(
 ) -> Result<Vec<DetectedTarget>, AppError> {
     // only distros already running are asked; detection never boots a vm
     let running = wsl::running_distros();
-    let existing: Vec<String> = state
-        .target_store
-        .lock()
-        .map_err(lock_err)?
-        .list()
-        .into_iter()
-        .map(|t| t.id)
-        .collect();
+    let existing = state.target_store.lock().map_err(lock_err)?.list();
 
     let installed = installed_for(&running);
-    Ok(editors::detect(&running, &installed)
-        .into_iter()
-        .filter(|d| !existing.contains(&d.target.id))
-        .collect())
+    // one row per program: a saved nvim hides the detected nvim unless the
+    // detection adds a side it lacks (then it is offered as extends_saved),
+    // and a wsl-only row kept under its distro id hides it too
+    Ok(editors::offer(
+        &existing,
+        editors::detect(&running, &installed),
+    ))
 }
 
 // the installed distros, which only decide how a wsl row is named (one
@@ -783,7 +779,9 @@ fn installed_for(running: &[String]) -> Vec<String> {
 /// Register one detected target by id. Not by posting the target back: the
 /// TS LaunchTarget has no run templates, so a detected terminal would come
 /// back with them stripped and fail its first run_script. Re-deriving costs
-/// one where.exe spawn and cannot lose a field.
+/// one where.exe spawn and cannot lose a field. A row saved under the same
+/// id is extended with the side it lacks rather than refused as a
+/// duplicate (TargetStore::add_detected).
 #[tauri::command]
 pub fn add_detected_target(
     id: String,
@@ -800,7 +798,7 @@ pub fn add_detected_target(
         .target_store
         .lock()
         .map_err(lock_err)?
-        .add(found.target)
+        .add_detected(found.target)
 }
 
 #[tauri::command]
@@ -969,8 +967,12 @@ pub fn open_agent(
 ) -> Result<(), AppError> {
     require_project_dir(&project)?;
     let agent = resolve_target(&state, TargetKind::Agent, target_id)?;
-    let on_wsl =
-        crate::services::scanner::distro_of(&project.full_path).is_some();
+    let distro = crate::services::scanner::distro_of(&project.full_path);
+    // one row per program: the row knows which distros have the agent
+    if let Some(d) = distro.as_ref().filter(|d| !agent.installed_in(d)) {
+        return Err(AppError::TargetNotInDistro(agent.name.clone(), d.clone()));
+    }
+    let on_wsl = distro.is_some();
     let command = if on_wsl {
         agent.wsl_executable.clone()
     } else {
@@ -3062,6 +3064,7 @@ mod tests {
             wsl_args_template: None,
             run_args_template: None,
             reveal_args_template: None,
+            wsl_distros: Vec::new(),
             wsl_run_args_template: None,
         };
         let (exe, args) = reveal_line(&fm, "/srv/work/app", true).unwrap();

@@ -55,7 +55,7 @@ import { useTraffic } from './hooks/useTraffic';
 import { useWorkspaces } from './hooks/useWorkspaces';
 import { useRuntime } from './hooks/useRuntime';
 import { useWsl } from './hooks/useWsl';
-import { lastSegment, namesOf, parentOf } from './paths';
+import { lastSegment, missingFromDistro, namesOf, parentOf, wslDistroOf } from './paths';
 import { isMac, isWindows } from './platform';
 import { closingBecause, logLine } from './uiLog';
 import {
@@ -831,6 +831,7 @@ const AppInner = () => {
 	// a target with no WSL form cannot open a WSL project; the row disables
 	// it instead of letting the launch fail after the click
 	const selectionIsWsl = selected?.file_system === 'WSL';
+	const selectionDistro = selectionIsWsl ? wslDistroOf(selected.full_path) : null;
 	// the default agent's key, the other agent's key, or none: the palette
 	// and the row menu say the same thing the footer does
 	const agentHint = (id: string) =>
@@ -1323,7 +1324,10 @@ const AppInner = () => {
 				title: `Open in ${t.name}`,
 				subtitle: p?.name ?? 'Select a project first',
 				keywords: ['editor', 'open', t.name.toLowerCase()],
-				disabled: !p || (selectionIsWsl && !t.wsl_args_template),
+				disabled:
+					!p ||
+					(selectionIsWsl &&
+						(!t.wsl_args_template || missingFromDistro(t, selectionDistro))),
 				run: () => handleOpenEditor(t.id)
 			})),
 			...targets.agents.map(t => ({
@@ -1332,7 +1336,11 @@ const AppInner = () => {
 				hint: agentHint(t.id),
 				subtitle: p ? `${p.name}, in your terminal` : 'Select a project first',
 				keywords: ['agent', 'ai', 'claude', 'codex', t.name.toLowerCase()],
-				disabled: !p || (selectionIsWsl ? !t.wsl_executable : !t.executable),
+				disabled:
+					!p ||
+					(selectionIsWsl
+						? !t.wsl_executable || missingFromDistro(t, selectionDistro)
+						: !t.executable),
 				run: () => handleOpenAgent(t.id)
 			})),
 			...targets.terminals.map(t => ({
@@ -1340,7 +1348,10 @@ const AppInner = () => {
 				title: `Open terminal: ${t.name}`,
 				subtitle: p?.name ?? 'Select a project first',
 				keywords: ['terminal', 'shell', t.name.toLowerCase()],
-				disabled: !p || (selectionIsWsl && !t.wsl_args_template),
+				disabled:
+					!p ||
+					(selectionIsWsl &&
+						(!t.wsl_args_template || missingFromDistro(t, selectionDistro))),
 				run: () => handleOpenTerminal(t.id)
 			})),
 			{
@@ -2825,6 +2836,7 @@ const AppInner = () => {
 				{...{
 					hasSelection: selected !== null,
 					selectionIsWsl,
+					selectionDistro,
 					editors: targets.editors,
 					terminals: targets.terminals,
 					agents: targets.agents,

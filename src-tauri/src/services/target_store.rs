@@ -21,6 +21,10 @@ pub struct TargetStore {
     file_path: PathBuf,
 }
 
+/// The rows a one-row-per-program merge would leave, and the (old, new) ids
+/// that would move.
+type OneRowPlan = (Vec<LaunchTarget>, Vec<(String, String)>);
+
 impl TargetStore {
     pub fn new(app_data_dir: PathBuf) -> Result<Self, AppError> {
         fs::create_dir_all(&app_data_dir)?;
@@ -528,6 +532,60 @@ impl TargetStore {
         self.save()
     }
 
+    /// One row per program: a Windows row and the rows detection used to
+    /// add for the same program in each distro (`nvim` beside
+    /// `nvim-ubuntu-26-04`) become the one `nvim` row, with both forms and
+    /// the distros recorded. The rules are editors::one_row_per_program's.
+    /// Returns the ids that moved, (old, new), for the caller to carry the
+    /// defaults across; empty when nothing moved.
+    ///
+    /// Not in new(), for the reason adopt_wsl_row_names is not: the distro
+    /// names come from the cached runtime, and startup does not shell out.
+    /// An empty list moves nothing. The file it found is kept aside as
+    /// targets.json.pre-one-row-per-program; a second pass finds nothing
+    /// to move and writes nothing.
+    #[cfg(test)]
+    pub fn adopt_one_row_per_program(
+        &mut self,
+        installed: &[String],
+    ) -> Result<Vec<(String, String)>, AppError> {
+        let Some((rows, moved)) = self.plan_one_row_per_program(installed)
+        else {
+            return Ok(Vec::new());
+        };
+        self.commit_one_row_per_program(rows)?;
+        Ok(moved)
+    }
+
+    /// The merge adopt_one_row_per_program would make, without making it:
+    /// the rows it would leave and the ids that would move. None when
+    /// nothing would. Lets startup carry the defaults across first.
+    pub fn plan_one_row_per_program(
+        &self,
+        installed: &[String],
+    ) -> Option<OneRowPlan> {
+        crate::services::editors::one_row_per_program(&self.targets, installed)
+    }
+
+    /// Back the file up and save the rows plan_one_row_per_program made.
+    /// A failed save puts the old rows back, so memory still matches disk.
+    pub fn commit_one_row_per_program(
+        &mut self,
+        rows: Vec<LaunchTarget>,
+    ) -> Result<(), AppError> {
+        if self.file_path.exists() {
+            let backup =
+                format!("{}.pre-one-row-per-program", self.file_path.display());
+            fs::copy(&self.file_path, backup)?;
+        }
+        let old = std::mem::replace(&mut self.targets, rows);
+        if let Err(e) = self.save() {
+            self.targets = old;
+            return Err(e);
+        }
+        Ok(())
+    }
+
     pub fn list(&self) -> Vec<LaunchTarget> {
         self.targets.clone()
     }
@@ -558,6 +616,32 @@ impl TargetStore {
         self.targets.push(target.clone());
         self.save()?;
         Ok(target)
+    }
+
+    /// Register a detected row. When a row with its id is saved already,
+    /// the detection extends it instead: the side the saved row lacks (its
+    /// WSL form, its Windows form, distros it has not recorded) is merged
+    /// in, and the saved id and name stay (see editors::extend_saved). A
+    /// detection that brings nothing new is still TargetExists.
+    pub fn add_detected(
+        &mut self,
+        found: LaunchTarget,
+    ) -> Result<LaunchTarget, AppError> {
+        let Some(pos) = self.targets.iter().position(|t| t.id == found.id)
+        else {
+            return self.add(found);
+        };
+        let Some(extended) =
+            crate::services::editors::extend_saved(&self.targets[pos], &found)
+        else {
+            return Err(AppError::TargetExists(found.id));
+        };
+        let old = std::mem::replace(&mut self.targets[pos], extended.clone());
+        if let Err(e) = self.save() {
+            self.targets[pos] = old;
+            return Err(e);
+        }
+        Ok(extended)
     }
 
     /// Removing the last target of a kind is refused rather than silently
@@ -726,6 +810,7 @@ mod tests {
             wsl_args_template: None,
             run_args_template: None,
             reveal_args_template: None,
+            wsl_distros: Vec::new(),
             wsl_run_args_template: None,
         }
     }
@@ -908,6 +993,144 @@ mod tests {
         t.wsl_executable = Some("wsl".into());
         t.wsl_args_template = Some(String::new());
         t
+    }
+
+    /// The real-world file: a Windows nvim and claude beside the "(WSL)"
+    /// rows the old detection added for them. One load later each is one
+    /// row with both forms, the ids that moved are returned for the
+    /// defaults, the file found is kept aside byte for byte, and a second
+    /// pass writes nothing.
+    #[test]
+    fn saved_twin_rows_merge_into_one_row_per_program_once() {
+        let dir = std::env::temp_dir().join("devgo-targets-one-row");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let mut rows: Vec<LaunchTarget> = defaults();
+        let mut nvim = editor("Neovim");
+        nvim.id = "nvim".into();
+        nvim.executable = "wt".into();
+        nvim.args_template = "-d \"{path}\" nvim .".into();
+        rows.push(nvim);
+        let mut old_nvim =
+            wsl_row("nvim-ubuntu-26-04", "Neovim (WSL)", TargetKind::Editor);
+        old_nvim.executable = "wsl".into();
+        old_nvim.wsl_args_template =
+            Some("-d {distro} --cd \"{linux_path}\" -e nvim .".into());
+        rows.push(old_nvim);
+        let mut claude = editor("Claude Code");
+        claude.id = "claude".into();
+        claude.kind = TargetKind::Agent;
+        claude.executable = "claude".into();
+        claude.args_template = String::new();
+        rows.push(claude);
+        let mut old_claude = wsl_row(
+            "claude-ubuntu-26-04",
+            "Claude Code (WSL)",
+            TargetKind::Agent,
+        );
+        old_claude.wsl_executable = Some("claude".into());
+        rows.push(old_claude);
+        fs::write(
+            dir.join("targets.json"),
+            serde_json::to_string_pretty(&rows).unwrap(),
+        )
+        .unwrap();
+        let installed = vec!["Ubuntu-26.04".to_string()];
+
+        let mut s = TargetStore::new(dir.clone()).unwrap();
+        let found = fs::read(dir.join("targets.json")).unwrap();
+        let moved = s.adopt_one_row_per_program(&installed).unwrap();
+        assert_eq!(
+            moved,
+            vec![
+                ("nvim-ubuntu-26-04".to_string(), "nvim".to_string()),
+                ("claude-ubuntu-26-04".to_string(), "claude".to_string()),
+            ]
+        );
+        assert!(s.get("nvim-ubuntu-26-04").is_none());
+        assert!(s.get("claude-ubuntu-26-04").is_none());
+        let nvim = s.get("nvim").unwrap();
+        assert_eq!(nvim.name, "Neovim");
+        assert_eq!(nvim.executable, "wt");
+        assert_eq!(nvim.wsl_executable.as_deref(), Some("wsl"));
+        assert_eq!(nvim.wsl_distros, installed);
+        let claude = s.get("claude").unwrap();
+        assert_eq!(claude.executable, "claude");
+        assert_eq!(claude.wsl_executable.as_deref(), Some("claude"));
+        assert_eq!(claude.wsl_distros, installed);
+        let backup = dir.join("targets.json.pre-one-row-per-program");
+        assert_eq!(fs::read(&backup).unwrap(), found);
+
+        // persisted, and the second pass moves and writes nothing
+        fs::remove_file(&backup).unwrap();
+        let mut again = TargetStore::new(dir.clone()).unwrap();
+        assert_eq!(again.get("nvim").unwrap().wsl_distros, installed);
+        assert!(again
+            .adopt_one_row_per_program(&installed)
+            .unwrap()
+            .is_empty());
+        assert!(!backup.exists());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// A rescan that finds neovim in a distro extends the saved Windows-only
+    /// nvim instead of failing as a duplicate; one with nothing new still
+    /// fails.
+    #[test]
+    fn adding_a_detection_of_a_saved_program_extends_the_saved_row() {
+        let mut s = store("add-detected-extends");
+        let mut nvim = editor("My Neovim");
+        nvim.id = "nvim".into();
+        s.add(nvim.clone()).unwrap();
+        let mut found = nvim.clone();
+        found.name = "Neovim".into();
+        found.wsl_executable = Some("wsl".into());
+        found.wsl_args_template =
+            Some("-d {distro} --cd \"{linux_path}\" -e nvim .".into());
+        found.wsl_distros = vec!["Ubuntu-26.04".into()];
+        let t = s.add_detected(found.clone()).unwrap();
+        assert_eq!(t.name, "My Neovim", "the saved name stays");
+        assert_eq!(s.get("nvim").unwrap().wsl_distros, found.wsl_distros);
+        assert_eq!(s.list().iter().filter(|t| t.id == "nvim").count(), 1);
+        let err = s.add_detected(found).unwrap_err();
+        assert!(matches!(err, AppError::TargetExists(ref id) if id == "nvim"));
+    }
+
+    /// A save that fails leaves the rows in memory as they were, so memory
+    /// and disk do not part ways. A directory where the file should be makes
+    /// every write fail.
+    #[test]
+    fn a_failed_save_leaves_the_rows_as_they_were() {
+        let dir = std::env::temp_dir().join("devgo-targets-blocked-save");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(dir.join("blocked")).unwrap();
+        let mut s = store("failed-save");
+        let mut nvim = editor("Neovim");
+        nvim.id = "nvim".into();
+        s.add(nvim.clone()).unwrap();
+        let mut ubuntu =
+            wsl_row("nvim-ubuntu-26-04", "Neovim (WSL)", TargetKind::Editor);
+        ubuntu.executable = "wsl".into();
+        s.targets.push(ubuntu);
+        let before = s.list();
+        let installed = vec!["Ubuntu-26.04".to_string()];
+        let (rows, _) = s.plan_one_row_per_program(&installed).unwrap();
+        let good_path = s.file_path.clone();
+        s.file_path = dir.join("blocked");
+
+        assert!(s.commit_one_row_per_program(rows).is_err());
+        assert_eq!(s.list().len(), before.len());
+        assert!(s.get("nvim-ubuntu-26-04").is_some());
+        assert!(s.get("nvim").unwrap().wsl_distros.is_empty());
+
+        let mut found = nvim.clone();
+        found.wsl_executable = Some("wsl".into());
+        found.wsl_args_template = Some("-d {distro} -e nvim .".into());
+        found.wsl_distros = vec!["Ubuntu-26.04".into()];
+        assert!(s.add_detected(found).is_err());
+        assert!(s.get("nvim").unwrap().wsl_executable.is_none());
+        s.file_path = good_path;
+        let _ = fs::remove_dir_all(&dir);
     }
 
     /// A WSL row saved under its old long name moves to the short one, once,
@@ -1585,6 +1808,7 @@ mod tests {
             wsl_args_template: None,
             run_args_template: None,
             reveal_args_template: None,
+            wsl_distros: Vec::new(),
             wsl_run_args_template: None,
         }
     }
@@ -1754,6 +1978,7 @@ mod tests {
             ),
             wsl_run_args_template: None,
             reveal_args_template: None,
+            wsl_distros: Vec::new(),
         }
     }
 

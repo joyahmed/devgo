@@ -118,6 +118,13 @@ pub enum AppError {
     #[error("{0} runs inside WSL, so it cannot open the Windows project {1}")]
     TargetWslOnly(String, String),
 
+    /// One row per program: the row knows which distros have it, and the
+    /// project lives in one that does not. Opening anyway would start wsl
+    /// with a command the distro answers "not found" to, in a window that
+    /// closes before it can be read.
+    #[error("{0} is not installed in {1}. Install it there and scan again in Settings")]
+    TargetNotInDistro(String, String),
+
     /// An empty args template and no WSL form either: the row has no way
     /// of opening anything. TargetWslOnly used to answer for this too,
     /// and told a linux user their kitty runs inside WSL.
