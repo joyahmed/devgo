@@ -90,6 +90,14 @@ directory — but the empty field accepts the row in the first place, so it is e
 
 Fill the arguments template in, usually `"{path}"`.
 
+## The footer greys out a default editor that a stand-in would cover
+
+When your default editor or terminal cannot open a project's side, launching with the shortcut,
+Enter or the tray opens it in the default's twin or the first saved one that can, and a toast names
+it. The footer chip for that default still shows greyed out on a WSL project, because it describes
+the target itself. Use the shortcut. Agents and dev scripts do not get a stand-in yet: they still
+refuse when the default cannot run on the project's side.
+
 ## Uninstalling Neovim, Helix or Windows Terminal after you added them leaves a row that fails
 
 DevGo decides how to open a Windows terminal editor at the moment you add it: inside Windows Terminal

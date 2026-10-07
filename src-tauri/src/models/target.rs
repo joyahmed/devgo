@@ -99,6 +99,18 @@ impl LaunchTarget {
         self.resolve_inner(windows_path, wsl, None)
     }
 
+    /// Whether this target has an open form for the project's side: a WSL
+    /// form for a WSL project, a non-empty line otherwise. The question
+    /// `resolve` answers by returning `None`, asked without a path, so a
+    /// caller can choose between targets before launching any of them.
+    pub fn opens_side(&self, wsl: bool) -> bool {
+        if wsl {
+            self.wsl_args_template.is_some()
+        } else {
+            !self.args_template.is_empty()
+        }
+    }
+
     pub fn resolve_run(
         &self,
         windows_path: &str,

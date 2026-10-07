@@ -658,19 +658,38 @@ fn resolve_target(
         .ok_or_else(|| AppError::TargetNotFound(kind.wire().to_string()))
 }
 
+/// resolve_target for a launch into a project. With no id, a default that
+/// cannot open the project's side gives way to its stand-in (see
+/// launcher::side_stand_in), and the sentence saying so comes back for the
+/// toast. A named id is never swapped: it opens or it refuses.
+fn resolve_for_project(
+    state: &AppState,
+    kind: TargetKind,
+    explicit: Option<String>,
+    project: &Project,
+) -> Result<(LaunchTarget, Option<String>), AppError> {
+    let named = explicit.is_some();
+    let target = resolve_target(state, kind, explicit)?;
+    let saved = state.target_store.lock().map_err(lock_err)?.list();
+    Ok(launcher::target_for_project(target, named, &saved, project))
+}
+
+/// The `Ok` carries a sentence when the default gave way to a stand-in.
 #[tauri::command]
 pub fn open_editor(
     project: Project,
     target_id: Option<String>,
     state: State<AppState>,
-) -> Result<(), AppError> {
+) -> Result<Option<String>, AppError> {
     require_project_dir(&project)?;
     let info = state.runtime_info.lock().map_err(lock_err)?.clone();
     // the guard dies on this line: resolve_target locks pref_store itself
     let tmux = state.pref_store.lock().map_err(lock_err)?.tmux_config();
-    let target = resolve_target(&state, TargetKind::Editor, target_id)?;
+    let (target, note) =
+        resolve_for_project(&state, TargetKind::Editor, target_id, &project)?;
     launcher::launch_target(&target, &project, &info, &tmux)?;
-    record_launch(&state, &project)
+    record_launch(&state, &project)?;
+    Ok(note)
 }
 
 #[tauri::command]
@@ -678,14 +697,16 @@ pub fn open_terminal(
     project: Project,
     target_id: Option<String>,
     state: State<AppState>,
-) -> Result<(), AppError> {
+) -> Result<Option<String>, AppError> {
     require_project_dir(&project)?;
     let info = state.runtime_info.lock().map_err(lock_err)?.clone();
     // read at launch, not cached: the next launch reconciles a changed list
     let tmux = state.pref_store.lock().map_err(lock_err)?.tmux_config();
-    let target = resolve_target(&state, TargetKind::Terminal, target_id)?;
+    let (target, note) =
+        resolve_for_project(&state, TargetKind::Terminal, target_id, &project)?;
     launcher::launch_target(&target, &project, &info, &tmux)?;
-    record_launch(&state, &project)
+    record_launch(&state, &project)?;
+    Ok(note)
 }
 
 // one launch path for the window, the palette and the tray
@@ -694,14 +715,19 @@ pub fn launch_project_default(
     project: &Project,
     editor_id: Option<String>,
     terminal_id: Option<String>,
-) -> Result<(), AppError> {
+) -> Result<Option<String>, AppError> {
     require_project_dir(project)?;
     let info = state.runtime_info.lock().map_err(lock_err)?.clone();
     let tmux = state.pref_store.lock().map_err(lock_err)?.tmux_config();
-    let editor = resolve_target(state, TargetKind::Editor, editor_id)?;
-    let terminal = resolve_target(state, TargetKind::Terminal, terminal_id)?;
+    let (editor, editor_note) =
+        resolve_for_project(state, TargetKind::Editor, editor_id, project)?;
+    let (terminal, terminal_note) =
+        resolve_for_project(state, TargetKind::Terminal, terminal_id, project)?;
     launcher::launch_both(&editor, &terminal, project, &info, &tmux)?;
-    record_launch(state, project)
+    record_launch(state, project)?;
+    let notes: Vec<String> =
+        [editor_note, terminal_note].into_iter().flatten().collect();
+    Ok((!notes.is_empty()).then(|| notes.join(". ")))
 }
 
 /// Unlike open_editor and open_terminal this took no ids at all, so "open
@@ -712,7 +738,7 @@ pub fn open_both(
     editor_id: Option<String>,
     terminal_id: Option<String>,
     state: State<AppState>,
-) -> Result<(), AppError> {
+) -> Result<Option<String>, AppError> {
     launch_project_default(&state, &project, editor_id, terminal_id)
 }
 

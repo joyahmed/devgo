@@ -710,6 +710,8 @@ Step 2 is the one that matters. Set Cursor as your default, remove Cursor from t
 
 The dangling default is not cleaned up. It stays in `prefs.json`, quietly overridden, and starts working again the instant a target with that id reappears. Repairing on read is cheaper and less destructive than pruning on write.
 
+**A default that cannot open the project's side gives way, too.** A default is one choice for every project, and a project lives on Windows or in a distro: a distro Neovim set as the default refused every Windows project with a Windows Neovim saved beside it. So `open_editor`, `open_terminal` and `open_both` go through `resolve_for_project`, which asks `launcher::side_stand_in` when no id was named: the default's twin first (the same program on the other side, `nvim` beside `nvim-ubuntu-26-04`, the project's own distro first when there are several), else the first saved target of that kind that can open it. The launch says which in an info toast. Nothing capable leaves the default in place and the refusal reads exactly as before. A target picked by name is never swapped — step 1's rule — so choosing the distro Neovim from the menu for a Windows project still refuses.
+
 ---
 
 ## 13.8 — Five commands, two rewritten ones, and one that resolves for the UI
