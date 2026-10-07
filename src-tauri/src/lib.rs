@@ -430,8 +430,17 @@ pub fn run() {
                 services::ProjectCacheStore::new(app_data_dir.clone())
                     .expect("failed to initialize project cache store");
 
-            let target_store = services::TargetStore::new(app_data_dir.clone())
-                .expect("failed to initialize target store");
+            let mut target_store =
+                services::TargetStore::new(app_data_dir.clone())
+                    .expect("failed to initialize target store");
+            // the cached distro list, not a fresh one: startup does not
+            // shell out to wsl.exe. a name left long is cosmetic, so a
+            // failed rename is logged and the app still starts
+            if let Err(e) =
+                target_store.adopt_wsl_row_names(&runtime_info.distros)
+            {
+                log_line!("[DevGo] wsl row names: {e}");
+            }
 
             let github_store = services::GithubStore::new(app_data_dir.clone())
                 .expect("failed to initialize github store");
