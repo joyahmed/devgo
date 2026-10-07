@@ -419,7 +419,9 @@ const TargetManager = ({
 									{/* where it came from: an entry with no provenance is
 									    the guessing the old seed policy refused */}
 									<span className='font-mono text-11 text-text-muted truncate'>
-										{d.source === 'path' || d.source === 'shortcut'
+										{d.source === 'path' ||
+										d.source === 'shortcut' ||
+										d.source === 'folder'
 										? d.detail
 										: `in ${d.source}`}
 									</span>

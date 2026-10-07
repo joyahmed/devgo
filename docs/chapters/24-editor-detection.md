@@ -208,7 +208,7 @@ const REMOTE_URI: &str =
     },
 ```
 
-Alacritty is `--working-directory "{path}"` / `-e wsl -d {distro} bash "{script}"`; WezTerm is `start --cwd "{path}"` / `start -- wsl -d {distro} bash "{script}"`, with run forms of the same shape. Inside a distro, five command-line editors and no GUI terminal emulators — running one inside WSL needs an X server, and a target that opens nothing is worse than no target:
+Alacritty is `--working-directory "{path}"` / `-e wsl -d {distro} bash "{script}"`; WezTerm is `start --cwd "{path}"` / `start -- wsl -d {distro} bash "{script}"`, with run forms of the same shape. Inside a distro, five command-line editors and no GUI terminal emulators — running one inside WSL needs an X server, and a target that opens nothing is worse than no target. (Neovim and Helix also exist on the Windows side; that is its own table, below, because they are not `Candidate` rows.)
 
 ```rust
 const IN_DISTRO: &[(&str, &str)] = &[
@@ -272,6 +272,95 @@ Four tests. `every_candidate_id_is_unique`. `wsl_form_decides_whether_a_target_c
 Pinning the templates, not only the ids, is what keeps the `wt` candidate's `{script}` form honest: if the seed and the candidate ever disagree, the test says which field.
 
 > `✅TARGET: candidate tables`
+
+### Terminal editors on the Windows side
+
+I first wrote this chapter believing a terminal editor could only live inside a distro. That is true of Vim, Emacs and Micro (below), but Neovim and Helix both ship Windows builds, and a Windows project deserves them. They cannot be `Candidate` rows, for one reason: **`exe` means two things there.** `detect` uses it to ask `where.exe` whether the program exists, and `to_target` copies it into `executable`, the program DevGo launches. For VS Code those are the same program. For `nvim` they are not: launching `nvim` on its own through `cmd /c` gives a process whose console is hidden, so nothing it draws can be seen (every launch is spawned with `CREATE_NO_WINDOW`). The thing to launch is a *terminal that runs* nvim, and the thing to look up is nvim. So a second, smaller table:
+
+```rust
+/// A command-line editor on the Windows side. Not a `Candidate`: there the
+/// exe is both what is looked up and what is launched, and a console program
+/// launched bare from a windowless cmd draws nowhere. This one is launched
+/// through wt or start, so what is looked up is only the program they run.
+#[cfg(any(windows, test))]
+// off windows only the tests build it, and they never read exe or program_files
+#[cfg_attr(not(windows), allow(dead_code))]
+struct TuiEditor {
+    id: &'static str,
+    name: &'static str,
+    exe: &'static str,
+    open_arg: &'static str,
+    /// where the msi puts it when it is not on PATH, under %ProgramFiles%
+    program_files: Option<&'static str>,
+}
+
+// the ids are plain; a distro's are nvim-<slug>, so the two never clash
+#[cfg(any(windows, test))]
+const TUI_EDITORS: &[TuiEditor] = &[
+    TuiEditor {
+        id: "nvim",
+        name: "Neovim",
+        exe: "nvim",
+        open_arg: ".",
+        program_files: Some(r"Neovim\bin\nvim.exe"),
+    },
+    TuiEditor {
+        id: "hx",
+        name: "Helix",
+        exe: "hx",
+        open_arg: ".",
+        program_files: None,
+    },
+];
+```
+
+The builder is pure, and compiled for tests on every platform (`#[cfg(any(windows, test))]`), so its output can be asserted on a machine with no Windows Terminal at all. It makes one of two shapes, chosen by a `bool` that `detect` already knows:
+
+```text
+wt present:   executable "wt"    args  -d "{path}" nvim .
+wt absent:    executable "cmd"   args  /c start "" /d "{path}" nvim .
+```
+
+With Windows Terminal, the editor is just the command `wt` runs in a new tab, started in the project (`-d`, the same flag the seeded `wt` row uses). Without it, `cmd` has to give the editor a console of its own, and that is what `start` is for. DevGo's launcher already runs everything as `cmd /c <exe> <args>` with `CREATE_NO_WINDOW`, so a plain `cmd /c nvim .` would run nvim inside that hidden console, where nothing can see it. `start` asks Windows for a *new* console window, and `/d` sets its working directory. The empty `""` after `start` is its title argument: `start` takes the first quoted string as a title, so without it a quoted `{path}` would be eaten as the title and the folder would be ignored. The launcher then spawns `cmd /c cmd /c start "" /d "G:\p" nvim .`, which is clumsy and correct; there is a test for that exact line.
+
+**The choice is made when you add the row, not when you launch.** `add_detected_target` reruns `detect` on Add. `detect` already holds the one `where.exe` result, so `wt` costs nothing to check, and the target that comes out is built for what is installed right now.
+
+The editors are added to the *same* `where.exe` call as the candidates (`names` grows by two; there is still one spawn). Then, for each row:
+
+```rust
+/// `rel` under the Program Files folder, if a file is there. `root` is the
+/// env var's value, passed in so a test hands it a folder of its own.
+#[cfg(windows)]
+fn program_files_hit(
+    rel: &str,
+    root: Option<std::ffi::OsString>,
+) -> Option<PathBuf> {
+    let hit = PathBuf::from(root?).join(rel);
+    hit.is_file().then_some(hit)
+}
+```
+
+On PATH wins (source `"path"`, launched by bare name). Otherwise the Program Files probe runs (source `"folder"`, launched by full path, double-quoted because `C:\Program Files\…` has a space, in either template). The probe exists for **Neovim only**, because only Neovim's installer has a fixed, well-known folder that may be missing from PATH. I know of no fixed folder Helix installs to, so there is nothing to probe, and guessing is the thing this chapter exists to avoid: `program_files` is `None`, and a Helix that is not on PATH is not offered. The `detail` line says which terminal the row will use: `C:\…\nvim.exe · Windows Terminal`, or `· console`. (The panel shows `detail` for a `"folder"` source as it does for `"path"`; the condition in `TargetManager.tsx` learned a third word.)
+
+**Ids.** The Windows editor is `nvim`; the one inside a distro is `nvim-ubuntu-26-04` (§24.3's `distro_target` always appends the slug). They cannot collide, so a machine with both gets two rows, *Neovim* wearing *windows only* and *Neovim (Ubuntu-26.04)* wearing *wsl only*, and `detect_targets` hides each only once *its own* id is registered. The *windows only* badge needed no change: it already reads the missing WSL template off the model.
+
+**Why only these two.** Vim: the `vim` on a Windows PATH is almost always the one Git for Windows bundles, an MSYS build that expects MSYS's terminal and misbehaves in a plain console, so finding it would be a false positive. Emacs: on Windows it is a GUI application, so it already works as an ordinary `Candidate` and does not need a terminal wrapped around it. Micro: I have not tried it on Windows, and I do not list what I have not tried.
+
+One risk I am leaving: Windows Terminal reads `;` in an argument as "new tab", so a project path containing a semicolon splits. The seeded `wt` row has the same flaw.
+
+Tests, all in `editors.rs` except where noted:
+
+- `a_windows_terminal_editor_opens_in_wt_at_the_project`: resolves against `G:\01_tauri\my app` to `("wt", "-d \"G:\\01_tauri\\my app\" nvim .")`, and refuses a WSL project.
+- `without_wt_a_terminal_editor_gets_its_own_console`: `("cmd", "/c start \"\" /d \"G:\\…\" nvim .")`.
+- `a_program_files_neovim_is_quoted`: the full `C:\Program Files\Neovim\bin\nvim.exe` is double-quoted in both forms.
+- `windows_and_distro_editors_never_share_an_id` (`#[cfg(windows)]`): `TUI_EDITORS`, `CANDIDATES` and every `IN_DISTRO` editor through `distro_target(..., "Ubuntu-26.04")` are pairwise distinct.
+- `program_files_hit_finds_the_msi_folder_only` (`#[cfg(windows)]`, because the shipped path uses backslashes, which only Windows splits on): against a temp directory.
+- `every_shipped_template_quotes_the_path_and_script_seams`, extended with both forms.
+- in `launcher.rs`: `a_start_line_goes_through_cmd_unchanged` (`#[cfg(windows)]`): `cmd_line("cmd", …)` yields `/c cmd /c start "" /d "G:\p" nvim .`.
+- in `models/target.rs`: `wsl_only_targets_refuse_windows_projects` renames its example id from `nvim` to `nvim-ubuntu`, because `nvim` is now a real Windows id.
+- in `TargetManager.test.tsx`: a scan row from a `"folder"` source shows its detail, not *in folder*.
+
+Whether the two forms actually open a tab or a console on a real machine is checked in the gate run, not by these tests; they pin the strings.
 
 ### Detection
 
@@ -549,18 +638,18 @@ Restore the four files when done; the distro is stopped again.
 src-tauri/
   src/services/platform/wsl.rs   probe_lines (exit status ignored on purpose)
   src/services/discover.rs       uses it; the ch. 17 fix
-  src/services/editors.rs        where_lookup, is_on_path, WINDOWS + IN_DISTRO, detect; 5 tests
+  src/services/editors.rs        where_lookup, is_on_path, WINDOWS + IN_DISTRO, TUI_EDITORS + tui_target + program_files_hit, detect; 10 tests
   src/models/target.rs           an empty Windows template is a refusal; 1 test
-  src/services/launcher.rs       PATH check before cmd /c; TargetWslOnly by side; 1 test
+  src/services/launcher.rs       PATH check before cmd /c; TargetWslOnly by side; 2 tests
   src/error.rs                   TargetNotInstalled, TargetWslOnly
   src/commands.rs                detect_targets, add_detected_target (by id)
 src/
   types.d.ts                     DetectedTarget; two props
   hooks/useTargets.ts            detect, addDetected
-  components/TargetManager.tsx   Detected on this machine; wsl only badge
+  components/TargetManager.tsx   Detected on this machine; wsl only badge; 'folder' shows its detail; 1 test
   components/Settings.tsx        two lines of wiring
 ```
 
-DevGo now finds VS Code and its forks, the JetBrains launchers, Zed, Sublime, three terminals, and the command-line editors inside every running distro — offers them with provenance, adds only what you pick, and refuses to pretend a launch worked when the program is not there.
+DevGo now finds VS Code and its forks, the JetBrains launchers, Zed, Sublime, three terminals, Neovim and Helix on the Windows side, and the command-line editors inside every running distro — offers them with provenance, adds only what you pick, and refuses to pretend a launch worked when the program is not there.
 
 > **The thread running through this chapter.** Every gate was green while `discover` was silently discarding half its answer, while a missing editor "launched" successfully, and while the model let a Linux binary be handed a Windows path. **The code that looks like it works is not the code you have run.** One helper for the loop, one `where.exe` before the spawn, one `filter` on an empty template — and a panel that proposes instead of deciding.

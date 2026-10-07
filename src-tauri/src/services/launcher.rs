@@ -1477,6 +1477,17 @@ mod tests {
         );
     }
 
+    /// A console editor's `cmd /c start` line is launched through one more
+    /// cmd, and its quotes reach start whole.
+    #[cfg(windows)]
+    #[test]
+    fn a_start_line_goes_through_cmd_unchanged() {
+        assert_eq!(
+            cmd_line("cmd", r#"/c start "" /d "G:\p" nvim ."#),
+            r#"/c cmd /c start "" /d "G:\p" nvim ."#
+        );
+    }
+
     /// The same line through the real cmd, not a string comparison: cmd's
     /// quote rule is the whole reason for the outer pair, and only cmd can
     /// say whether it was read the way this expects. Without it cmd answers

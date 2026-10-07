@@ -829,7 +829,7 @@ mod tests {
     #[test]
     fn wsl_only_targets_refuse_windows_projects() {
         let nvim = LaunchTarget {
-            id: "nvim".into(),
+            id: "nvim-ubuntu".into(),
             name: "Neovim".into(),
             kind: TargetKind::Editor,
             executable: "wsl".into(),

@@ -824,9 +824,10 @@ pub const AGENTS: &[(&str, &str)] = &[
     ("gemini", "Gemini CLI"),
 ];
 
-/// Command-line editors worth looking for inside a distro. No GUI terminal
-/// emulators: running one inside WSL needs an X server, and a target that
-/// opens nothing is worse than no target.
+/// Command-line editors worth looking for inside a distro, where wsl.exe
+/// gives them the terminal they run in. No GUI terminal emulators: running
+/// one inside WSL needs an X server, and a target that opens nothing is
+/// worse than no target.
 const IN_DISTRO: &[(&str, &str)] = &[
     ("nvim", "Neovim"),
     ("hx", "Helix"),
@@ -834,6 +835,86 @@ const IN_DISTRO: &[(&str, &str)] = &[
     ("emacs", "Emacs"),
     ("micro", "Micro"),
 ];
+
+/// A command-line editor on the Windows side. Not a `Candidate`: there the
+/// exe is both what is looked up and what is launched, and a console program
+/// launched bare from a windowless cmd draws nowhere. This one is launched
+/// through wt or start, so what is looked up is only the program they run.
+#[cfg(any(windows, test))]
+// off windows only the tests build it, and they never read exe or program_files
+#[cfg_attr(not(windows), allow(dead_code))]
+struct TuiEditor {
+    id: &'static str,
+    name: &'static str,
+    exe: &'static str,
+    open_arg: &'static str,
+    /// where the msi puts it when it is not on PATH, under %ProgramFiles%
+    program_files: Option<&'static str>,
+}
+
+// the ids are plain; a distro's are nvim-<slug>, so the two never clash
+#[cfg(any(windows, test))]
+const TUI_EDITORS: &[TuiEditor] = &[
+    TuiEditor {
+        id: "nvim",
+        name: "Neovim",
+        exe: "nvim",
+        open_arg: ".",
+        program_files: Some(r"Neovim\bin\nvim.exe"),
+    },
+    TuiEditor {
+        id: "hx",
+        name: "Helix",
+        exe: "hx",
+        open_arg: ".",
+        program_files: None,
+    },
+];
+
+/// The target for a console editor: a tab in Windows Terminal when it is
+/// installed, else a console of its own through `start`, since the launch
+/// itself has no window. `program` is the bare exe or its full path, and is
+/// quoted when it has a space. Decided at detection, so the row it makes is
+/// one fixed line.
+#[cfg(any(windows, test))]
+fn tui_target(t: &TuiEditor, program: &str, wt: bool) -> LaunchTarget {
+    let program = if program.contains(' ') {
+        format!("\"{program}\"")
+    } else {
+        program.to_string()
+    };
+    let (executable, args_template) = if wt {
+        ("wt", format!("-d \"{{path}}\" {program} {}", t.open_arg))
+    } else {
+        (
+            "cmd",
+            format!("/c start \"\" /d \"{{path}}\" {program} {}", t.open_arg),
+        )
+    };
+    LaunchTarget {
+        id: t.id.to_string(),
+        name: t.name.to_string(),
+        kind: TargetKind::Editor,
+        executable: executable.to_string(),
+        args_template,
+        wsl_executable: None,
+        wsl_args_template: None,
+        run_args_template: None,
+        reveal_args_template: None,
+        wsl_run_args_template: None,
+    }
+}
+
+/// `rel` under the Program Files folder, if a file is there. `root` is the
+/// env var's value, passed in so a test hands it a folder of its own.
+#[cfg(windows)]
+fn program_files_hit(
+    rel: &str,
+    root: Option<std::ffi::OsString>,
+) -> Option<PathBuf> {
+    let hit = PathBuf::from(root?).join(rel);
+    hit.is_file().then_some(hit)
+}
 
 fn to_target(c: &Candidate) -> LaunchTarget {
     LaunchTarget {
@@ -1059,9 +1140,15 @@ pub fn candidate_bundle(id: &str) -> Option<PathBuf> {
 /// twice; only those distros are asked. On a Mac it is empty and the
 /// distro loops are never entered.
 pub fn detect(running: &[String]) -> Vec<DetectedTarget> {
+    // the console editors ride in the same where call, so it stays one spawn
+    #[cfg(windows)]
+    let tui_exes = TUI_EDITORS.iter().map(|t| t.exe);
+    #[cfg(not(windows))]
+    let tui_exes = std::iter::empty::<&str>();
     let names: Vec<&str> = CANDIDATES
         .iter()
         .map(|c| c.exe)
+        .chain(tui_exes)
         .filter(|e| !e.is_empty())
         .collect();
     let found = path_lookup(&names);
@@ -1073,6 +1160,31 @@ pub fn detect(running: &[String]) -> Vec<DetectedTarget> {
         .filter(|c| usable_in_session(c, wayland))
         .filter_map(|c| locate(c, &found, &lnks))
         .collect();
+
+    // console editors: on PATH, else (Neovim's msi) under Program Files.
+    // wt is asked of the same lookup, its row's exe is "wt"
+    #[cfg(windows)]
+    {
+        let wt = found.contains_key("wt");
+        let how = if wt { "Windows Terminal" } else { "console" };
+        for t in TUI_EDITORS {
+            let (program, source, hit) = if let Some(p) = found.get(t.exe) {
+                (t.exe.to_string(), "path", p.clone())
+            } else if let Some(p) = t.program_files.and_then(|rel| {
+                program_files_hit(rel, std::env::var_os("ProgramFiles"))
+            }) {
+                let p = p.to_string_lossy().into_owned();
+                (p.clone(), "folder", p)
+            } else {
+                continue;
+            };
+            out.push(DetectedTarget {
+                target: tui_target(t, &program, wt),
+                source: source.to_string(),
+                detail: format!("{hit} · {how}"),
+            });
+        }
+    }
 
     // agents on the local side: one lookup for the four names
     let agent_exes: Vec<&str> = AGENTS.iter().map(|(exe, _)| *exe).collect();
@@ -1551,6 +1663,10 @@ mod tests {
                 .wsl_args_template
                 .unwrap(),
         ];
+        for wt in [true, false] {
+            templates
+                .push(tui_target(&TUI_EDITORS[0], "nvim", wt).args_template);
+        }
         templates
             .extend(LINUX_TERMINAL_ARGS.iter().map(|(_, a)| a.to_string()));
         // the forms an upgrade reads as well as the ones it writes: a
@@ -1589,6 +1705,85 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// A console editor is not a window program: in Windows Terminal it gets
+    /// a tab started in the project, and a WSL project has no Windows form.
+    #[test]
+    fn a_windows_terminal_editor_opens_in_wt_at_the_project() {
+        let nvim = tui_target(&TUI_EDITORS[0], "nvim", true);
+        assert_eq!(
+            nvim.resolve(r"G:\01_tauri\my app", None),
+            Some(("wt".into(), r#"-d "G:\01_tauri\my app" nvim ."#.into()))
+        );
+        assert!(nvim.resolve("x", Some(("Ubuntu", "/home"))).is_none());
+    }
+
+    /// The launch has no window, so without wt the editor is handed to
+    /// `start`, which gives it a console of its own.
+    #[test]
+    fn without_wt_a_terminal_editor_gets_its_own_console() {
+        let nvim = tui_target(&TUI_EDITORS[0], "nvim", false);
+        assert_eq!(
+            nvim.resolve(r"G:\01_tauri\my app", None),
+            Some((
+                "cmd".into(),
+                r#"/c start "" /d "G:\01_tauri\my app" nvim ."#.into()
+            ))
+        );
+    }
+
+    #[test]
+    fn a_program_files_neovim_is_quoted() {
+        let exe = r"C:\Program Files\Neovim\bin\nvim.exe";
+        let quoted = format!("\"{exe}\"");
+        let wt = tui_target(&TUI_EDITORS[0], exe, true);
+        assert_eq!(wt.args_template, format!("-d \"{{path}}\" {quoted} ."));
+        let console = tui_target(&TUI_EDITORS[0], exe, false);
+        assert_eq!(
+            console.args_template,
+            format!("/c start \"\" /d \"{{path}}\" {quoted} .")
+        );
+    }
+
+    /// A Windows `nvim` and a distro's `nvim-ubuntu-26-04` are two rows
+    /// opening two filesystems; one id for both would make adding either
+    /// hide the other.
+    #[cfg(windows)]
+    #[test]
+    fn windows_and_distro_editors_never_share_an_id() {
+        let mut ids: Vec<String> = TUI_EDITORS
+            .iter()
+            .map(|t| t.id.to_string())
+            .chain(CANDIDATES.iter().map(|c| c.id.to_string()))
+            .collect();
+        ids.extend(
+            IN_DISTRO
+                .iter()
+                .map(|(exe, name)| distro_target(exe, name, "Ubuntu-26.04").id),
+        );
+        let before = ids.len();
+        ids.sort_unstable();
+        ids.dedup();
+        assert_eq!(ids.len(), before, "an id is shared: {ids:?}");
+    }
+
+    // the shipped rel path uses backslashes, which only windows splits on
+    #[cfg(windows)]
+    #[test]
+    fn program_files_hit_finds_the_msi_folder_only() {
+        let root = std::env::temp_dir().join("devgo-editors-pf-test");
+        let _ = std::fs::remove_dir_all(&root);
+        let rel = r"Neovim\bin\nvim.exe";
+        // folder there, file not
+        std::fs::create_dir_all(root.join("Neovim").join("bin")).unwrap();
+        assert!(program_files_hit(rel, Some(root.clone().into())).is_none());
+        std::fs::write(root.join("Neovim").join("bin").join("nvim.exe"), "")
+            .unwrap();
+        let hit = program_files_hit(rel, Some(root.clone().into()));
+        assert_eq!(hit, Some(root.join(rel)));
+        assert!(program_files_hit(rel, None).is_none());
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     /// Every WSL run line detection offers is one an upgrade also lands on,

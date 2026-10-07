@@ -615,6 +615,28 @@ describe('TargetManager — detection proposes, a specific Add writes', () => {
 		expect(screen.getAllByRole('listitem')).toHaveLength(2);
 	});
 
+	// a program found in its install folder carries a full path like a PATH hit
+	// does: "in folder" would name the source and hide where the program is
+	it('shows the path of a row found in an install folder, not "in folder"', async () => {
+		const user = userEvent.setup();
+		const IN_FOLDER = detected(
+			'editor:nvim',
+			'Neovim',
+			'editor',
+			'folder',
+			'C:\\Program Files\\Neovim\\bin\\nvim.exe · console'
+		);
+		const onDetect = vi.fn().mockResolvedValue([IN_FOLDER]);
+		manager({ onDetect });
+
+		await user.click(screen.getByRole('button', { name: 'Scan' }));
+
+		expect(
+			await screen.findByText('C:\\Program Files\\Neovim\\bin\\nvim.exe · console')
+		).not.toBeNull();
+		expect(screen.queryByText('in folder')).toBeNull();
+	});
+
 	// the badge on a found row is a label a person reads, and the wire name is
 	// snake_case: the form's own tab for that kind says 'file manager', so a
 	// row reading 'file_manager' is the same kind named two ways in one panel
