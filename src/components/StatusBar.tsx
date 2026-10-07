@@ -64,8 +64,8 @@ const choiceOf = (t: LaunchTarget, isWsl: boolean): TargetChoice => ({
 // the footer is the only surface where a target's name pays rent in
 // pixels, so it says the name shorter than the rest of the app does.
 // both rules choose a shorter name rather than clipping one: a trailing
-// parenthetical — "Claude Code (Ubuntu-26.04)", the form editors.rs
-// gives every in-distro target — becomes a muted suffix at the chip
+// parenthetical — "Claude Code (WSL)", or "(Ubuntu)" beside a second
+// distro, the form editors.rs gives every in-distro target — becomes a muted suffix at the chip
 // size, so which row runs in the distro is still on the screen, and the
 // two seeded agent clis whose product name is unambiguous at one word
 // lose the second word. a name devgo did not seed is left exactly as

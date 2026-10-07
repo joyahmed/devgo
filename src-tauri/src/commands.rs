@@ -762,10 +762,22 @@ pub fn detect_targets(
         .map(|t| t.id)
         .collect();
 
-    Ok(editors::detect(&running)
+    let installed = installed_for(&running);
+    Ok(editors::detect(&running, &installed)
         .into_iter()
         .filter(|d| !existing.contains(&d.target.id))
         .collect())
+}
+
+// the installed distros, which only decide how a wsl row is named (one
+// installed reads "WSL", more read short names). nothing running means no
+// wsl rows to name, so no second wsl.exe spawn
+fn installed_for(running: &[String]) -> Vec<String> {
+    if running.is_empty() {
+        Vec::new()
+    } else {
+        wsl::list_distros()
+    }
 }
 
 /// Register one detected target by id. Not by posting the target back: the
@@ -778,7 +790,8 @@ pub fn add_detected_target(
     state: State<AppState>,
 ) -> Result<LaunchTarget, AppError> {
     let running = wsl::running_distros();
-    let found = editors::detect(&running)
+    let installed = installed_for(&running);
+    let found = editors::detect(&running, &installed)
         .into_iter()
         .find(|d| d.target.id == id)
         .ok_or(AppError::TargetNotFound(id))?;

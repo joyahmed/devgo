@@ -932,11 +932,17 @@ fn to_target(c: &Candidate) -> LaunchTarget {
 }
 
 /// The same editor in two distros is two targets opening two filesystems,
-/// so the distro is in the name and, slugified, in the id.
-fn distro_target(exe: &str, name: &str, distro: &str) -> LaunchTarget {
+/// so the distro is in the id, slugified and always whole. The name carries
+/// `label`, the distro as the user needs to read it (see distro_label).
+fn distro_target(
+    exe: &str,
+    name: &str,
+    distro: &str,
+    label: &str,
+) -> LaunchTarget {
     LaunchTarget {
         id: format!("{exe}-{}", slugify(distro)),
-        name: format!("{name} ({distro})"),
+        name: distro_row_name(name, label),
         kind: TargetKind::Editor,
         // a linux binary cannot take a windows path, so there is no windows
         // form; launch_target refuses windows projects for it
@@ -958,7 +964,7 @@ fn distro_target(exe: &str, name: &str, distro: &str) -> LaunchTarget {
 pub struct DetectedTarget {
     pub target: LaunchTarget,
     /// "path" for a program on PATH, "app" for a mac bundle found without
-    /// its cli, or the distro name
+    /// its cli, or the distro's label ("WSL", "Ubuntu"; see distro_label)
     pub source: String,
     /// the resolved exe path, the bundle path, or "Ubuntu-26.04 · nvim"
     pub detail: String,
@@ -1137,9 +1143,10 @@ pub fn candidate_bundle(id: &str) -> Option<PathBuf> {
 
 /// Everything installed, as targets ready to be added. `running` is passed
 /// in so a caller that already paid for `wsl -l --running` does not pay
-/// twice; only those distros are asked. On a Mac it is empty and the
-/// distro loops are never entered.
-pub fn detect(running: &[String]) -> Vec<DetectedTarget> {
+/// twice; only those distros are asked. `installed` only names them (see
+/// distro_label). On a Mac both are empty and the distro loops are never
+/// entered.
+pub fn detect(running: &[String], installed: &[String]) -> Vec<DetectedTarget> {
     // the console editors ride in the same where call, so it stays one spawn
     #[cfg(windows)]
     let tui_exes = TUI_EDITORS.iter().map(|t| t.exe);
@@ -1211,12 +1218,22 @@ pub fn detect(running: &[String]) -> Vec<DetectedTarget> {
         });
     }
 
+    // the label is read against every installed distro, not just the
+    // running ones: two installed and one running is still two to tell
+    // apart. a running distro is installed even if the list call failed
+    let mut known: Vec<String> = installed.to_vec();
+    for d in running {
+        if !known.iter().any(|k| k.eq_ignore_ascii_case(d)) {
+            known.push(d.clone());
+        }
+    }
     for distro in running {
+        let label = distro_label(distro, &known);
         for (exe, name) in present_in_distro(distro, AGENTS) {
             out.push(DetectedTarget {
                 target: LaunchTarget {
                     id: format!("{}-{}", exe, slugify(distro)),
-                    name: format!("{name} ({distro})"),
+                    name: distro_row_name(name, &label),
                     kind: TargetKind::Agent,
                     // no windows command: this agent lives in the distro
                     executable: String::new(),
@@ -1227,14 +1244,14 @@ pub fn detect(running: &[String]) -> Vec<DetectedTarget> {
                     reveal_args_template: None,
                     wsl_run_args_template: None,
                 },
-                source: distro.clone(),
+                source: label.clone(),
                 detail: format!("agent · {distro} · {exe}"),
             });
         }
         for (exe, name) in present_in_distro(distro, IN_DISTRO) {
             out.push(DetectedTarget {
-                target: distro_target(exe, name, distro),
-                source: distro.clone(),
+                target: distro_target(exe, name, distro, &label),
+                source: label.clone(),
                 detail: format!("{distro} · {exe}"),
             });
         }
@@ -1261,6 +1278,110 @@ fn present_in_distro(
         .filter(|(exe, _)| present.iter().any(|p| p == exe))
         .copied()
         .collect()
+}
+
+/// What a distro is called in a row's name and in the scan list's "in ...".
+/// The id always carries the whole distro; the name only has to tell the
+/// installed distros apart, so it says as little as does that:
+///
+/// - one distro installed: "WSL", there is nothing to tell apart
+/// - two or more: the name without its trailing version, "Ubuntu-26.04"
+///   is "Ubuntu" and "Debian" stays "Debian"
+/// - two that shorten to the same word (Ubuntu-24.04 and Ubuntu-26.04)
+///   keep their full names, since the short one would name both
+///
+/// `installed` is every distro on the box; `distro` counts as one of them
+/// whether or not the list has it. Docker Desktop's own distros do not
+/// count (see counts_as_user_distro).
+pub(crate) fn distro_label(distro: &str, installed: &[String]) -> String {
+    let others: Vec<&String> = installed
+        .iter()
+        .filter(|d| !d.eq_ignore_ascii_case(distro) && counts_as_user_distro(d))
+        .collect();
+    if others.is_empty() {
+        return "WSL".to_string();
+    }
+    let short = short_distro(distro);
+    let clash = others
+        .iter()
+        .any(|d| short_distro(d).eq_ignore_ascii_case(short));
+    if clash {
+        distro.to_string()
+    } else {
+        short.to_string()
+    }
+}
+
+// docker desktop installs its own wsl distros (docker-desktop and
+// docker-desktop-data) that nobody opens an editor in. if they counted, a
+// box with one ubuntu plus docker would read as two distros and the row
+// would say "Neovim (Ubuntu)" instead of "Neovim (WSL)". a row's own
+// distro is never asked about here: distro_label always counts it
+fn counts_as_user_distro(distro: &str) -> bool {
+    !distro.to_ascii_lowercase().starts_with("docker-desktop")
+}
+
+// the distro name with its trailing version dropped: a last segment, after
+// a - or _, made only of digits and dots. repeated, so OracleLinux_9_1 is
+// OracleLinux, while SUSE-Linux-Enterprise-15-SP6 keeps its name because
+// SP6 is not a number. a name that is all version stays whole
+fn short_distro(distro: &str) -> &str {
+    let mut s = distro;
+    while let Some(cut) = s.rfind(['-', '_']) {
+        let tail = &s[cut + 1..];
+        let version = !tail.is_empty()
+            && tail.chars().all(|c| c.is_ascii_digit() || c == '.')
+            && tail.chars().any(|c| c.is_ascii_digit());
+        if !version || cut == 0 {
+            break;
+        }
+        s = &s[..cut];
+    }
+    s
+}
+
+fn distro_row_name(name: &str, label: &str) -> String {
+    format!("{name} ({label})")
+}
+
+/// The new name for a saved WSL row still carrying the name detection gave
+/// it before distro_label: "Neovim (Ubuntu-26.04)" on nvim-ubuntu-26-04.
+/// That exact form is what marks a row nobody renamed: the name is one of
+/// the tables' names, the distro in brackets slugifies to the id's tail,
+/// and the kind matches the table. Anything else is the user's and gets
+/// None, and so does a distro the installed list does not have, since its
+/// label cannot be read without knowing what it sits beside. None too when
+/// the new name is the old one (Debian beside Ubuntu-26.04 stays Debian).
+pub(crate) fn renamed_wsl_row(
+    t: &LaunchTarget,
+    installed: &[String],
+) -> Option<String> {
+    t.wsl_executable.as_ref()?;
+    let tables = [(AGENTS, TargetKind::Agent), (IN_DISTRO, TargetKind::Editor)];
+    for (table, kind) in tables {
+        if t.kind != kind {
+            continue;
+        }
+        for (exe, name) in table {
+            let Some(slug) = t.id.strip_prefix(&format!("{exe}-")) else {
+                continue;
+            };
+            let Some(distro) = t
+                .name
+                .strip_prefix(&format!("{name} ("))
+                .and_then(|r| r.strip_suffix(')'))
+            else {
+                continue;
+            };
+            if slugify(distro) != slug || !installed.iter().any(|d| d == distro)
+            {
+                continue;
+            }
+            let new = distro_row_name(name, &distro_label(distro, installed));
+            return (new != t.name).then_some(new);
+        }
+    }
+    None
 }
 
 pub(crate) fn slugify(s: &str) -> String {
@@ -1659,7 +1780,7 @@ mod tests {
             VSCODE_WSL_ARGS.into(),
             MAC_TERMINAL_ARGS.into(),
             MAC_TERMINAL_RUN_ARGS.into(),
-            distro_target("nvim", "Neovim", "Ubuntu")
+            distro_target("nvim", "Neovim", "Ubuntu", "WSL")
                 .wsl_args_template
                 .unwrap(),
         ];
@@ -1757,11 +1878,9 @@ mod tests {
             .map(|t| t.id.to_string())
             .chain(CANDIDATES.iter().map(|c| c.id.to_string()))
             .collect();
-        ids.extend(
-            IN_DISTRO
-                .iter()
-                .map(|(exe, name)| distro_target(exe, name, "Ubuntu-26.04").id),
-        );
+        ids.extend(IN_DISTRO.iter().map(|(exe, name)| {
+            distro_target(exe, name, "Ubuntu-26.04", "WSL").id
+        }));
         let before = ids.len();
         ids.sort_unstable();
         ids.dedup();
@@ -1860,15 +1979,159 @@ mod tests {
     #[test]
     fn a_distro_editor_gets_a_distinct_id_per_distro() {
         assert_eq!(slugify("Ubuntu-26.04"), "ubuntu-26-04");
-        let a = distro_target("nvim", "Neovim", "Ubuntu-26.04");
-        let b = distro_target("nvim", "Neovim", "Debian");
+        let a = distro_target("nvim", "Neovim", "Ubuntu-26.04", "Ubuntu");
+        let b = distro_target("nvim", "Neovim", "Debian", "Debian");
         assert_ne!(a.id, b.id);
-        assert_eq!(a.name, "Neovim (Ubuntu-26.04)");
+        assert_eq!(a.id, "nvim-ubuntu-26-04");
+        assert_eq!(a.name, "Neovim (Ubuntu)");
         assert!(a.resolve("x", None).is_none(), "no windows form");
         let (exe, args) =
             a.resolve("x", Some(("Ubuntu-26.04", "/srv/app"))).unwrap();
         assert_eq!(exe, "wsl");
         assert_eq!(args, "-d Ubuntu-26.04 --cd \"/srv/app\" -e nvim .");
+    }
+
+    fn distros(names: &[&str]) -> Vec<String> {
+        names.iter().map(|n| n.to_string()).collect()
+    }
+
+    #[test]
+    fn one_installed_distro_reads_wsl() {
+        let one = distros(&["Ubuntu-26.04"]);
+        assert_eq!(distro_label("Ubuntu-26.04", &one), "WSL");
+        // the list call failed: the distro still counts as one
+        assert_eq!(distro_label("Ubuntu-26.04", &[]), "WSL");
+        let t = distro_target(
+            "nvim",
+            "Neovim",
+            "Ubuntu-26.04",
+            &distro_label("Ubuntu-26.04", &one),
+        );
+        assert_eq!(t.name, "Neovim (WSL)");
+    }
+
+    #[test]
+    fn docker_desktop_distros_are_not_counted() {
+        let box_ =
+            distros(&["Ubuntu-26.04", "docker-desktop", "docker-desktop-data"]);
+        assert_eq!(distro_label("Ubuntu-26.04", &box_), "WSL");
+        let upper = distros(&["Ubuntu-26.04", "Docker-Desktop"]);
+        assert_eq!(distro_label("Ubuntu-26.04", &upper), "WSL");
+        // two real distros beside docker still tell each other apart
+        let two = distros(&[
+            "Ubuntu-26.04",
+            "Debian",
+            "docker-desktop",
+            "docker-desktop-data",
+        ]);
+        assert_eq!(distro_label("Ubuntu-26.04", &two), "Ubuntu");
+        assert_eq!(distro_label("Debian", &two), "Debian");
+    }
+
+    #[test]
+    fn two_distinct_distros_read_their_short_names() {
+        let two = distros(&["Ubuntu-26.04", "Debian"]);
+        assert_eq!(distro_label("Ubuntu-26.04", &two), "Ubuntu");
+        assert_eq!(distro_label("Debian", &two), "Debian");
+        assert_eq!(short_distro("OracleLinux_9_1"), "OracleLinux");
+        assert_eq!(short_distro("openSUSE-Leap-15.6"), "openSUSE-Leap");
+        assert_eq!(
+            short_distro("SUSE-Linux-Enterprise-15-SP6"),
+            "SUSE-Linux-Enterprise-15-SP6"
+        );
+        assert_eq!(short_distro("kali-linux"), "kali-linux");
+        assert_eq!(short_distro("-26.04"), "-26.04");
+    }
+
+    #[test]
+    fn two_distros_that_shorten_alike_keep_their_full_names() {
+        let both = distros(&["Ubuntu-24.04", "Ubuntu-26.04", "Debian"]);
+        assert_eq!(distro_label("Ubuntu-24.04", &both), "Ubuntu-24.04");
+        assert_eq!(distro_label("Ubuntu-26.04", &both), "Ubuntu-26.04");
+        // only the pair that collides keeps the long form
+        assert_eq!(distro_label("Debian", &both), "Debian");
+        // a bare Ubuntu beside Ubuntu-26.04 collides the same way
+        let bare = distros(&["Ubuntu", "Ubuntu-26.04"]);
+        assert_eq!(distro_label("Ubuntu", &bare), "Ubuntu");
+        assert_eq!(distro_label("Ubuntu-26.04", &bare), "Ubuntu-26.04");
+    }
+
+    /// Saved rows, prefs defaults and add_detected_target all go by id, so
+    /// the label may change the name and never the id.
+    #[test]
+    fn the_label_never_changes_the_id() {
+        for label in ["WSL", "Ubuntu", "Ubuntu-26.04"] {
+            let t = distro_target("nvim", "Neovim", "Ubuntu-26.04", label);
+            assert_eq!(t.id, "nvim-ubuntu-26-04");
+        }
+    }
+
+    fn saved_row(id: &str, name: &str, kind: TargetKind) -> LaunchTarget {
+        LaunchTarget {
+            id: id.into(),
+            name: name.into(),
+            kind,
+            executable: String::new(),
+            args_template: String::new(),
+            wsl_executable: Some("wsl".into()),
+            wsl_args_template: Some(String::new()),
+            run_args_template: None,
+            reveal_args_template: None,
+            wsl_run_args_template: None,
+        }
+    }
+
+    #[test]
+    fn only_a_saved_row_with_the_old_auto_name_is_renamed() {
+        let one = distros(&["Ubuntu-26.04"]);
+        let two = distros(&["Ubuntu-26.04", "Debian"]);
+        let nvim = saved_row(
+            "nvim-ubuntu-26-04",
+            "Neovim (Ubuntu-26.04)",
+            TargetKind::Editor,
+        );
+        let codex = saved_row(
+            "codex-ubuntu-26-04",
+            "Codex (Ubuntu-26.04)",
+            TargetKind::Agent,
+        );
+        assert_eq!(
+            renamed_wsl_row(&nvim, &one).as_deref(),
+            Some("Neovim (WSL)")
+        );
+        assert_eq!(
+            renamed_wsl_row(&codex, &two).as_deref(),
+            Some("Codex (Ubuntu)")
+        );
+
+        // the user's own name, a name that would not change, a distro the
+        // list does not have, and the wrong kind are all left alone
+        let mine =
+            saved_row("nvim-ubuntu-26-04", "My Neovim", TargetKind::Editor);
+        assert_eq!(renamed_wsl_row(&mine, &one), None);
+        let debian =
+            saved_row("nvim-debian", "Neovim (Debian)", TargetKind::Editor);
+        assert_eq!(renamed_wsl_row(&debian, &two), None);
+        assert_eq!(renamed_wsl_row(&nvim, &distros(&["Debian"])), None);
+        let odd = saved_row(
+            "nvim-ubuntu-26-04",
+            "Neovim (Ubuntu-26.04)",
+            TargetKind::Agent,
+        );
+        assert_eq!(renamed_wsl_row(&odd, &one), None);
+        // a distro whose slug is not the id's tail is someone's edit
+        let moved = saved_row(
+            "nvim-debian",
+            "Neovim (Ubuntu-26.04)",
+            TargetKind::Editor,
+        );
+        assert_eq!(renamed_wsl_row(&moved, &two), None);
+
+        // and the renamed row is not renamed again
+        let mut done = nvim.clone();
+        done.name = renamed_wsl_row(&nvim, &one).unwrap();
+        assert_eq!(renamed_wsl_row(&done, &one), None);
+        assert_eq!(renamed_wsl_row(&done, &two), None);
     }
 
     /// The shell is always present, so this is the real lookup: cmd.exe (or

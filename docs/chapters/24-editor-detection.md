@@ -224,11 +224,17 @@ const IN_DISTRO: &[(&str, &str)] = &[
 
 ```rust
 /// The same editor in two distros is two targets opening two filesystems,
-/// so the distro is in the name and, slugified, in the id.
-fn distro_target(exe: &str, name: &str, distro: &str) -> LaunchTarget {
+/// so the distro is in the id, slugified and always whole. The name carries
+/// `label`, the distro as the user needs to read it (see distro_label).
+fn distro_target(
+    exe: &str,
+    name: &str,
+    distro: &str,
+    label: &str,
+) -> LaunchTarget {
     LaunchTarget {
         id: format!("{exe}-{}", slugify(distro)),
-        name: format!("{name} ({distro})"),
+        name: distro_row_name(name, label),
         kind: TargetKind::Editor,
         // a linux binary cannot take a windows path, so there is no windows
         // form; launch_target refuses windows projects for it
@@ -239,14 +245,30 @@ fn distro_target(exe: &str, name: &str, distro: &str) -> LaunchTarget {
             "-d {{distro}} --cd \"{{linux_path}}\" -e {exe} ."
         )),
         run_args_template: None,
+        reveal_args_template: None,
         wsl_run_args_template: None,
     }
 }
 ```
 
-`Neovim (Ubuntu-26.04)`, id `nvim-ubuntu-26-04`. The distro is in the **name** because the same editor in two distros opens two different filesystems and a list with "Neovim" twice would be a puzzle; in the **id** because two targets cannot share one. `slugify` lowercases and replaces everything non-alphanumeric with `-`.
+Id `nvim-ubuntu-26-04`: the **id** always carries the whole distro, because two targets cannot share one and saved rows, `default_editor` and `add_detected_target` all find a row by id. `slugify` lowercases and replaces everything non-alphanumeric with `-`.
 
-Four tests. `every_candidate_id_is_unique`. `wsl_form_decides_whether_a_target_can_open_wsl` (Cursor resolves for a WSL project; Sublime does not, and still opens Windows ones). `a_distro_editor_gets_a_distinct_id_per_distro` — Ubuntu and Debian get different ids, the Windows form is `None` (§24.3's refusal, exercised), and the WSL form resolves to `-d Ubuntu-26.04 --cd "/srv/app" -e nvim .`. And the one that matters most:
+The **name** carries only as much of the distro as it takes to tell the installed ones apart, because the same editor in two distros opens two different filesystems and a list with "Neovim" twice would be a puzzle. `distro_label` picks it, against every installed distro (`wsl -l -q`, asked only when one is running), not just the running ones:
+
+- **one distro installed:** `Neovim (WSL)` — there is nothing to tell apart.
+- **two or more:** the distro without its trailing version — `Neovim (Ubuntu)` for Ubuntu-26.04, `Neovim (Debian)` for Debian. A version is a last segment after `-` or `_` made only of digits and dots, stripped repeatedly (OracleLinux_9_1 is OracleLinux; SUSE-Linux-Enterprise-15-SP6 keeps its name).
+- **Docker Desktop's own distros** (`docker-desktop`, `docker-desktop-data`, anything starting `docker-desktop`, any case) are not counted, so one Ubuntu beside Docker Desktop still reads `Neovim (WSL)`. `counts_as_user_distro` is the filter; the row's own distro always counts.
+- **two that shorten alike** (Ubuntu-24.04 and Ubuntu-26.04, or Ubuntu beside Ubuntu-26.04): those two keep their full names; the short one would name both.
+
+The scan list's "in …" reads the same label (`DetectedTarget.source`); the row's tooltip (`detail`) keeps the whole distro, `Ubuntu-26.04 · nvim`. Agent rows inside a distro (`codex-ubuntu-26-04`, *Codex (WSL)*) follow the same rule.
+
+`targets.json` keeps the name a row was added with, so rows saved under the old long form are renamed once at startup by `TargetStore::adopt_wsl_row_names`, against the cached runtime's distro list (startup never shells out to wsl.exe). Only a name that is still exactly the old auto form — a table name, the distro in brackets, that distro slugifying to the id's tail, the kind matching — is touched; a row the user renamed stays. The file is copied to `targets.json.pre-wsl-row-names` first, a name that would not change is not written, and a renamed row no longer matches, so a second start does nothing. An empty list (every mac and linux box) renames nothing.
+
+A saved name is fixed when the row is renamed or added. Installing a second distro later leaves `(WSL)` on the saved rows while new scans show `(Ubuntu)`; the ids decide what launches, so nothing opens the wrong place.
+
+The label's tests, in `editors.rs`: `one_installed_distro_reads_wsl`, `two_distinct_distros_read_their_short_names`, `two_distros_that_shorten_alike_keep_their_full_names`, `docker_desktop_distros_are_not_counted`, `the_label_never_changes_the_id` and `only_a_saved_row_with_the_old_auto_name_is_renamed`. In `target_store.rs`: `saved_wsl_rows_with_the_old_auto_name_get_the_short_name_once` and `an_empty_distro_list_renames_no_wsl_row`.
+
+Four more tests, on the tables and ids. `every_candidate_id_is_unique`. `wsl_form_decides_whether_a_target_can_open_wsl` (Cursor resolves for a WSL project; Sublime does not, and still opens Windows ones). `a_distro_editor_gets_a_distinct_id_per_distro` — Ubuntu and Debian get different ids, the Windows form is `None` (§24.3's refusal, exercised), and the WSL form resolves to `-d Ubuntu-26.04 --cd "/srv/app" -e nvim .`. And the one that matters most:
 
 ```rust
     /// A detected VS Code or Windows Terminal is the seeded one: same id, so
@@ -342,7 +364,7 @@ fn program_files_hit(
 
 On PATH wins (source `"path"`, launched by bare name). Otherwise the Program Files probe runs (source `"folder"`, launched by full path, double-quoted because `C:\Program Files\…` has a space, in either template). The probe exists for **Neovim only**, because only Neovim's installer has a fixed, well-known folder that may be missing from PATH. I know of no fixed folder Helix installs to, so there is nothing to probe, and guessing is the thing this chapter exists to avoid: `program_files` is `None`, and a Helix that is not on PATH is not offered. The `detail` line says which terminal the row will use: `C:\…\nvim.exe · Windows Terminal`, or `· console`. (The panel shows `detail` for a `"folder"` source as it does for `"path"`; the condition in `TargetManager.tsx` learned a third word.)
 
-**Ids.** The Windows editor is `nvim`; the one inside a distro is `nvim-ubuntu-26-04` (§24.3's `distro_target` always appends the slug). They cannot collide, so a machine with both gets two rows, *Neovim* wearing *windows only* and *Neovim (Ubuntu-26.04)* wearing *wsl only*, and `detect_targets` hides each only once *its own* id is registered. The *windows only* badge needed no change: it already reads the missing WSL template off the model.
+**Ids.** The Windows editor is `nvim`; the one inside a distro is `nvim-ubuntu-26-04` (§24.3's `distro_target` always appends the slug). They cannot collide, so a machine with both gets two rows, *Neovim* wearing *windows only* and *Neovim (WSL)* (on a box with one distro) wearing *wsl only*, and `detect_targets` hides each only once *its own* id is registered. The *windows only* badge needed no change: it already reads the missing WSL template off the model.
 
 **Why only these two.** Vim: the `vim` on a Windows PATH is almost always the one Git for Windows bundles, an MSYS build that expects MSYS's terminal and misbehaves in a plain console, so finding it would be a false positive. Emacs: on Windows it is a GUI application, so it already works as an ordinary `Candidate` and does not need a terminal wrapped around it. Micro: I have not tried it on Windows, and I do not list what I have not tried.
 
@@ -353,7 +375,7 @@ Tests, all in `editors.rs` except where noted:
 - `a_windows_terminal_editor_opens_in_wt_at_the_project`: resolves against `G:\01_tauri\my app` to `("wt", "-d \"G:\\01_tauri\\my app\" nvim .")`, and refuses a WSL project.
 - `without_wt_a_terminal_editor_gets_its_own_console`: `("cmd", "/c start \"\" /d \"G:\\…\" nvim .")`.
 - `a_program_files_neovim_is_quoted`: the full `C:\Program Files\Neovim\bin\nvim.exe` is double-quoted in both forms.
-- `windows_and_distro_editors_never_share_an_id` (`#[cfg(windows)]`): `TUI_EDITORS`, `CANDIDATES` and every `IN_DISTRO` editor through `distro_target(..., "Ubuntu-26.04")` are pairwise distinct.
+- `windows_and_distro_editors_never_share_an_id` (`#[cfg(windows)]`): `TUI_EDITORS`, `CANDIDATES` and every `IN_DISTRO` editor through `distro_target(..., "Ubuntu-26.04", "WSL")` are pairwise distinct.
 - `program_files_hit_finds_the_msi_folder_only` (`#[cfg(windows)]`, because the shipped path uses backslashes, which only Windows splits on): against a temp directory.
 - `every_shipped_template_quotes_the_path_and_script_seams`, extended with both forms.
 - in `launcher.rs`: `a_start_line_goes_through_cmd_unchanged` (`#[cfg(windows)]`): `cmd_line("cmd", …)` yields `/c cmd /c start "" /d "G:\p" nvim .`.
@@ -556,7 +578,7 @@ interface DetectedTarget {
 
 **Scanning is a thing you ask for.** It shells out to `where.exe` and `wsl.exe`; running it at startup would put two process spawns on the launch path of an app whose entire discipline is not doing that.
 
-**Every row says where it came from** — a resolved path for a Windows program, `in Ubuntu-26.04` for a distro one. An entry appearing with no provenance is precisely the "guessing" the original policy refused.
+**Every row says where it came from** — a resolved path for a Windows program, `in WSL` (or `in Ubuntu` beside a second distro, see §24.3's `distro_label`) for a distro one. An entry appearing with no provenance is precisely the "guessing" the original policy refused.
 
 **Nothing is written until a specific Add is clicked.**
 

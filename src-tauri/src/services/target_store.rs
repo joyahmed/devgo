@@ -487,6 +487,47 @@ impl TargetStore {
         self.save()
     }
 
+    /// A WSL row used to be named with its whole distro, "Neovim
+    /// (Ubuntu-26.04)", and targets.json keeps the name it was added with,
+    /// so the short names would reach only rows added from now on. This
+    /// renames a saved row whose name is still that exact old form (see
+    /// editors::renamed_wsl_row); a row the user renamed is theirs and is
+    /// left alone. The id never moves, so defaults and re-detection by id
+    /// keep pointing at the same row.
+    ///
+    /// Not in new(): the name depends on how many distros are installed,
+    /// and startup must not shell out to wsl.exe, so the caller passes the
+    /// list it already holds (the cached runtime's). An empty list, which
+    /// is every mac and linux box, renames nothing. Idempotent: a renamed
+    /// row no longer has the old form, and a name that would not change
+    /// (Debian beside Ubuntu-26.04) is not written, so no backup either.
+    pub fn adopt_wsl_row_names(
+        &mut self,
+        installed: &[String],
+    ) -> Result<(), AppError> {
+        let renames: Vec<(usize, String)> = self
+            .targets
+            .iter()
+            .enumerate()
+            .filter_map(|(i, t)| {
+                crate::services::editors::renamed_wsl_row(t, installed)
+                    .map(|n| (i, n))
+            })
+            .collect();
+        if renames.is_empty() {
+            return Ok(());
+        }
+        if self.file_path.exists() {
+            let backup =
+                format!("{}.pre-wsl-row-names", self.file_path.display());
+            fs::copy(&self.file_path, backup)?;
+        }
+        for (pos, name) in renames {
+            self.targets[pos].name = name;
+        }
+        self.save()
+    }
+
     pub fn list(&self) -> Vec<LaunchTarget> {
         self.targets.clone()
     }
@@ -856,6 +897,110 @@ mod tests {
 ]"#,
             wt_args.replace('"', "\\\"")
         )
+    }
+
+    fn wsl_row(id: &str, name: &str, kind: TargetKind) -> LaunchTarget {
+        let mut t = editor(name);
+        t.id = id.into();
+        t.kind = kind;
+        t.executable = String::new();
+        t.args_template = String::new();
+        t.wsl_executable = Some("wsl".into());
+        t.wsl_args_template = Some(String::new());
+        t
+    }
+
+    /// A WSL row saved under its old long name moves to the short one, once,
+    /// with the file it found kept aside; a row the user renamed stays, and
+    /// the id under every row stays, so defaults still point at it.
+    #[test]
+    fn saved_wsl_rows_with_the_old_auto_name_get_the_short_name_once() {
+        let dir = std::env::temp_dir().join("devgo-targets-wsl-row-names");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let mut rows: Vec<LaunchTarget> = defaults();
+        rows.push(wsl_row(
+            "nvim-ubuntu-26-04",
+            "Neovim (Ubuntu-26.04)",
+            TargetKind::Editor,
+        ));
+        rows.push(wsl_row(
+            "codex-ubuntu-26-04",
+            "Codex (Ubuntu-26.04)",
+            TargetKind::Agent,
+        ));
+        rows.push(wsl_row(
+            "hx-ubuntu-26-04",
+            "Helix on my box",
+            TargetKind::Editor,
+        ));
+        let original = serde_json::to_string_pretty(&rows).unwrap();
+        fs::write(dir.join("targets.json"), &original).unwrap();
+        let installed = vec!["Ubuntu-26.04".to_string()];
+
+        let mut s = TargetStore::new(dir.clone()).unwrap();
+        // new() alone renames nothing: it has no distro list to read
+        assert_eq!(
+            s.get("nvim-ubuntu-26-04").unwrap().name,
+            "Neovim (Ubuntu-26.04)"
+        );
+        s.adopt_wsl_row_names(&installed).unwrap();
+        assert_eq!(s.get("nvim-ubuntu-26-04").unwrap().name, "Neovim (WSL)");
+        assert_eq!(s.get("codex-ubuntu-26-04").unwrap().name, "Codex (WSL)");
+        assert_eq!(
+            s.get("hx-ubuntu-26-04").unwrap().name,
+            "Helix on my box",
+            "a name the user chose is theirs"
+        );
+        let backup = dir.join("targets.json.pre-wsl-row-names");
+        assert_eq!(fs::read_to_string(&backup).unwrap(), original);
+
+        // persisted, and a second pass has nothing left to rename: no write,
+        // so no fresh backup either
+        fs::remove_file(&backup).unwrap();
+        let mut again = TargetStore::new(dir.clone()).unwrap();
+        assert_eq!(
+            again.get("nvim-ubuntu-26-04").unwrap().name,
+            "Neovim (WSL)"
+        );
+        again.adopt_wsl_row_names(&installed).unwrap();
+        again
+            .adopt_wsl_row_names(&["Ubuntu-26.04".into(), "Debian".into()])
+            .unwrap();
+        assert_eq!(
+            again.get("nvim-ubuntu-26-04").unwrap().name,
+            "Neovim (WSL)"
+        );
+        assert!(!backup.exists());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// A mac or linux box, or a windows box whose cached list is empty, has
+    /// no distro count to name a row by, so it renames nothing.
+    #[test]
+    fn an_empty_distro_list_renames_no_wsl_row() {
+        let dir = std::env::temp_dir().join("devgo-targets-wsl-row-empty");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let mut rows: Vec<LaunchTarget> = defaults();
+        rows.push(wsl_row(
+            "nvim-ubuntu-26-04",
+            "Neovim (Ubuntu-26.04)",
+            TargetKind::Editor,
+        ));
+        fs::write(
+            dir.join("targets.json"),
+            serde_json::to_string_pretty(&rows).unwrap(),
+        )
+        .unwrap();
+        let mut s = TargetStore::new(dir.clone()).unwrap();
+        s.adopt_wsl_row_names(&[]).unwrap();
+        assert_eq!(
+            s.get("nvim-ubuntu-26-04").unwrap().name,
+            "Neovim (Ubuntu-26.04)"
+        );
+        assert!(!dir.join("targets.json.pre-wsl-row-names").exists());
+        let _ = fs::remove_dir_all(&dir);
     }
 
     /// An install whose wt row carries the shipped `bash -lc` run line - the

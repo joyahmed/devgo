@@ -559,9 +559,9 @@ describe('TargetManager — detection proposes, a specific Add writes', () => {
 	);
 	const IN_DISTRO = detected(
 		FOUND_NVIM,
-		'Neovim',
+		'Neovim (WSL)',
 		'editor',
-		'Ubuntu-26.04',
+		'WSL',
 		'Ubuntu-26.04 · nvim'
 	);
 	const MANAGER_ON_PATH = detected(
@@ -610,7 +610,7 @@ describe('TargetManager — detection proposes, a specific Add writes', () => {
 		await user.click(screen.getByRole('button', { name: 'Scan' }));
 
 		expect(await screen.findByText('/usr/bin/kitty')).not.toBeNull();
-		expect(screen.getByText('in Ubuntu-26.04')).not.toBeNull();
+		expect(screen.getByText('in WSL')).not.toBeNull();
 		expect(screen.queryByText(NEVER_SCANNED)).toBeNull();
 		expect(screen.getAllByRole('listitem')).toHaveLength(2);
 	});
@@ -667,7 +667,7 @@ describe('TargetManager — detection proposes, a specific Add writes', () => {
 		expect(onAddDetected).toHaveBeenCalledTimes(1);
 		expect(onAddDetected).toHaveBeenCalledWith(FOUND_KITTY);
 		await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(1));
-		expect(screen.getByText('in Ubuntu-26.04')).not.toBeNull();
+		expect(screen.getByText('in WSL')).not.toBeNull();
 		expect(onError).not.toHaveBeenCalled();
 	});
 
