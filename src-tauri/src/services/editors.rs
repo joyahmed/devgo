@@ -936,24 +936,49 @@ fn to_target(c: &Candidate) -> LaunchTarget {
 /// Fill a row's WSL form: the program as it runs inside a distro. One form
 /// for every distro, `{distro}` filled from the project at launch, and
 /// `distros` records which ones have it, so a project in any other is
-/// refused (see LaunchTarget::installed_in). An editor is started through
-/// wsl.exe, which gives it the terminal it runs in; an agent is a command
-/// the terminal's WSL run line runs, so its args stay empty.
+/// refused (see LaunchTarget::installed_in). An editor gets a window of its
+/// own (wsl_editor_form); an agent is a command the terminal's WSL run line
+/// runs, so its args stay empty.
 fn with_wsl_form(
     t: &mut LaunchTarget,
     exe: &str,
     kind: TargetKind,
     distros: Vec<String>,
+    wt: bool,
 ) {
     if kind == TargetKind::Agent {
         t.wsl_executable = Some(exe.to_string());
         t.wsl_args_template = Some(String::new());
     } else {
-        t.wsl_executable = Some("wsl".to_string());
-        t.wsl_args_template =
-            Some(format!("-d {{distro}} --cd \"{{linux_path}}\" -e {exe} ."));
+        let (launcher, args) = wsl_editor_form(exe, wt);
+        t.wsl_executable = Some(launcher);
+        t.wsl_args_template = Some(args);
     }
     t.wsl_distros = distros;
+}
+
+/// The WSL form detection wrote before wsl_editor_form, for `exe`: wsl.exe
+/// run bare. TargetStore rewrites a saved row still carrying it.
+pub(crate) fn wsl_editor_args_pre_window(exe: &str) -> String {
+    format!("-d {{distro}} --cd \"{{linux_path}}\" -e {exe} .")
+}
+
+/// A distro's console editor as a launch: a tab in Windows Terminal when it
+/// is installed, else a console of its own through `start`, the same choice
+/// tui_target makes for the Windows side. Every launch is spawned without a
+/// window, so wsl.exe run bare started neovim in a console nobody could
+/// see: the log said "started" and nothing opened. `bash -lic` so the
+/// program is the login PATH's: a neovim in ~/.local/bin, not the older
+/// one apt left in /usr/bin.
+pub(crate) fn wsl_editor_form(exe: &str, wt: bool) -> (String, String) {
+    let line = format!(
+        "wsl -d {{distro}} --cd \"{{linux_path}}\" -e bash -lic \"{exe} .\""
+    );
+    if wt {
+        ("wt".to_string(), line)
+    } else {
+        ("cmd".to_string(), format!("/c start \"\" {line}"))
+    }
 }
 
 /// A program found only inside distros: one row under the program's own id
@@ -964,6 +989,7 @@ fn wsl_only_target(
     name: &str,
     kind: TargetKind,
     distros: Vec<String>,
+    wt: bool,
 ) -> LaunchTarget {
     let mut t = LaunchTarget {
         id: exe.to_string(),
@@ -984,7 +1010,7 @@ fn wsl_only_target(
         wsl_distros: Vec::new(),
         wsl_run_args_template: None,
     };
-    with_wsl_form(&mut t, exe, kind, distros);
+    with_wsl_form(&mut t, exe, kind, distros, wt);
     t
 }
 
@@ -1204,6 +1230,8 @@ pub fn detect(running: &[String], installed: &[String]) -> Vec<DetectedTarget> {
         .collect();
     let found = path_lookup(&names);
     let lnks = shortcut_lookup(&found);
+    // a distro's console editor opens in wt too when there is one
+    let has_wt = found.contains_key("wt");
 
     let wayland = wayland_session();
     let mut out: Vec<DetectedTarget> = CANDIDATES
@@ -1284,7 +1312,7 @@ pub fn detect(running: &[String], installed: &[String]) -> Vec<DetectedTarget> {
             }
         }
     }
-    merge_in_distros(&mut out, in_distros, &known);
+    merge_in_distros(&mut out, in_distros, &known, has_wt);
     out
 }
 
@@ -1317,6 +1345,7 @@ fn merge_in_distros(
     out: &mut Vec<DetectedTarget>,
     in_distros: Vec<InDistros>,
     known: &[String],
+    wt: bool,
 ) {
     for (exe, name, kind, distros) in in_distros {
         let place = distros
@@ -1339,12 +1368,12 @@ fn merge_in_distros(
             .find(|d| d.target.id == exe && d.target.kind == kind)
         {
             Some(found) => {
-                with_wsl_form(&mut found.target, exe, kind, distros);
+                with_wsl_form(&mut found.target, exe, kind, distros, wt);
                 found.source = format!("Windows · {place}");
                 found.detail = format!("{} | {detail}", found.detail);
             }
             None => out.push(DetectedTarget {
-                target: wsl_only_target(exe, name, kind, distros),
+                target: wsl_only_target(exe, name, kind, distros, wt),
                 source: place,
                 detail,
                 extends_saved: false,
@@ -2139,13 +2168,12 @@ mod tests {
             VSCODE_WSL_ARGS.into(),
             MAC_TERMINAL_ARGS.into(),
             MAC_TERMINAL_RUN_ARGS.into(),
-            wsl_only_target("nvim", "Neovim", TargetKind::Editor, Vec::new())
-                .wsl_args_template
-                .unwrap(),
+            wsl_editor_args_pre_window("nvim"),
         ];
         for wt in [true, false] {
             templates
                 .push(tui_target(&TUI_EDITORS[0], "nvim", wt).args_template);
+            templates.push(wsl_editor_form("nvim", wt).1);
         }
         templates
             .extend(LINUX_TERMINAL_ARGS.iter().map(|(_, a)| a.to_string()));
@@ -2442,7 +2470,12 @@ mod tests {
         assert_eq!(renamed_wsl_row(&done, &two), None);
     }
 
-    const NVIM_WSL_ARGS: &str = "-d {distro} --cd \"{linux_path}\" -e nvim .";
+    const NVIM_WSL_ARGS: &str =
+        "wsl -d {distro} --cd \"{linux_path}\" -e bash -lic \"nvim .\"";
+    // what a row saved before the window fix carries, and what the one
+    // row per program merge copies across unchanged
+    const NVIM_WSL_ARGS_PRE: &str =
+        "-d {distro} --cd \"{linux_path}\" -e nvim .";
 
     fn found(target: LaunchTarget, source: &str) -> DetectedTarget {
         DetectedTarget {
@@ -2495,7 +2528,12 @@ mod tests {
             TargetKind::Agent,
             "Ubuntu-26.04",
         );
-        merge_in_distros(&mut out, seen, &distros(&["Ubuntu-26.04", "Debian"]));
+        merge_in_distros(
+            &mut out,
+            seen,
+            &distros(&["Ubuntu-26.04", "Debian"]),
+            true,
+        );
         out
     }
 
@@ -2507,7 +2545,7 @@ mod tests {
         let nvim = &out[0].target;
         assert_eq!((nvim.id.as_str(), nvim.name.as_str()), ("nvim", "Neovim"));
         assert_eq!(nvim.executable, "wt", "the windows form stays");
-        assert_eq!(nvim.wsl_executable.as_deref(), Some("wsl"));
+        assert_eq!(nvim.wsl_executable.as_deref(), Some("wt"));
         assert_eq!(nvim.wsl_args_template.as_deref(), Some(NVIM_WSL_ARGS));
         assert_eq!(nvim.wsl_distros, distros(&["Ubuntu-26.04", "Debian"]));
         assert_eq!(out[0].source, "Windows · Ubuntu · Debian");
@@ -2528,7 +2566,13 @@ mod tests {
             note_in_distro(&mut seen, "hx", "Helix", TargetKind::Editor, d);
             note_in_distro(&mut seen, "codex", "Codex", TargetKind::Agent, d);
         }
-        merge_in_distros(&mut out, seen, &distros(&["Ubuntu-26.04", "Debian"]));
+        // no wt on this box: the editor gets a console of its own
+        merge_in_distros(
+            &mut out,
+            seen,
+            &distros(&["Ubuntu-26.04", "Debian"]),
+            false,
+        );
         assert_eq!(out.len(), 2, "{out:?}");
         let hx = &out[0].target;
         assert_eq!((hx.id.as_str(), hx.name.as_str()), ("hx", "Helix"));
@@ -2537,8 +2581,11 @@ mod tests {
         assert!(hx.resolve(r"G:\dev", None).is_none(), "no windows form");
         let (exe, args) =
             hx.resolve("x", Some(("Debian", "/srv/app"))).unwrap();
-        assert_eq!(exe, "wsl");
-        assert_eq!(args, "-d Debian --cd \"/srv/app\" -e hx .");
+        assert_eq!(exe, "cmd");
+        assert_eq!(
+            args,
+            "/c start \"\" wsl -d Debian --cd \"/srv/app\" -e bash -lic \"hx .\""
+        );
         let codex = &out[1].target;
         assert_eq!(codex.id, "codex");
         assert!(codex.executable.is_empty(), "no windows command");
@@ -2557,10 +2604,12 @@ mod tests {
         for distro in ["Ubuntu-26.04", "Debian"] {
             let (exe, args) =
                 nvim.resolve("x", Some((distro, "/home/u/app"))).unwrap();
-            assert_eq!(exe, "wsl");
+            assert_eq!(exe, "wt", "a window to draw in");
             assert_eq!(
                 args,
-                format!("-d {distro} --cd \"/home/u/app\" -e nvim .")
+                format!(
+                    "wsl -d {distro} --cd \"/home/u/app\" -e bash -lic \"nvim .\""
+                )
             );
         }
         assert!(nvim.installed_in("debian"), "matched without case");
@@ -2582,6 +2631,7 @@ mod tests {
             "Neovim",
             TargetKind::Editor,
             distros(&["Ubuntu-26.04"]),
+            true,
         );
         old.id = "nvim-ubuntu-26-04".into();
         let saved = vec![old];
@@ -2590,6 +2640,7 @@ mod tests {
             "Neovim",
             TargetKind::Editor,
             distros(&["Ubuntu-26.04"]),
+            true,
         );
         assert!(already_saved(&saved, &wsl_only));
         let in_debian = wsl_only_target(
@@ -2597,6 +2648,7 @@ mod tests {
             "Neovim",
             TargetKind::Editor,
             distros(&["Debian"]),
+            true,
         );
         assert!(!already_saved(&saved, &in_debian));
         let both = detected_on_both_sides();
@@ -2643,6 +2695,7 @@ mod tests {
             "Neovim",
             TargetKind::Editor,
             distros(&["Ubuntu-26.04", "Debian"]),
+            true,
         );
         let filled = extend_saved(&wsl, &offered[0].target).unwrap();
         assert_eq!(filled.executable, "wt");
@@ -2706,7 +2759,7 @@ mod tests {
         let nvim = &after[0];
         assert_eq!((nvim.id.as_str(), nvim.name.as_str()), ("nvim", "Neovim"));
         assert_eq!(nvim.executable, "wt");
-        assert_eq!(nvim.wsl_args_template.as_deref(), Some(NVIM_WSL_ARGS));
+        assert_eq!(nvim.wsl_args_template.as_deref(), Some(NVIM_WSL_ARGS_PRE));
         assert_eq!(nvim.wsl_distros, one);
         let claude = &after[1];
         assert_eq!(claude.id, "claude");

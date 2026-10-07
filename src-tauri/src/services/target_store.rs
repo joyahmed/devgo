@@ -66,6 +66,7 @@ impl TargetStore {
         store.adopt_linux_run_script()?;
         store.adopt_emulator_run_script()?;
         store.adopt_file_manager_row(knows_file_managers)?;
+        store.adopt_wsl_editor_window()?;
         Ok(store)
     }
 
@@ -128,6 +129,56 @@ impl TargetStore {
             fs::copy(&self.file_path, backup)?;
         }
         self.targets[pos].args_template = WT_ARGS.to_string();
+        self.save()
+    }
+
+    /// A distro's console editor ran as wsl.exe bare, and every launch is
+    /// spawned without a window, so neovim started in a console nobody
+    /// could see: the log said "started" and nothing opened. A row still
+    /// carrying the exact form detection wrote moves to the one it writes
+    /// now (editors::wsl_editor_form): a tab in wt when the registry has a
+    /// wt row, else a console through start. A form the user edited is
+    /// theirs and is left alone. Runs before one row per program, so a
+    /// distro row that merge folds in brings the new form with it.
+    fn adopt_wsl_editor_window(&mut self) -> Result<(), AppError> {
+        use crate::services::editors::{
+            wsl_editor_args_pre_window, wsl_editor_form,
+        };
+        let wt = self.targets.iter().any(|t| t.executable == "wt");
+        let stale: Vec<(usize, (String, String))> = self
+            .targets
+            .iter()
+            .enumerate()
+            .filter(|(_, t)| {
+                t.kind == TargetKind::Editor
+                    && t.wsl_executable.as_deref().unwrap_or(&t.executable)
+                        == "wsl"
+            })
+            .filter_map(|(i, t)| {
+                let old = t.wsl_args_template.as_deref()?;
+                let exe = old
+                    .strip_prefix("-d {distro} --cd \"{linux_path}\" -e ")?
+                    .strip_suffix(" .")?;
+                // one bare word, as detection wrote it: `hx --vsplit` is
+                // a line someone tuned
+                let bare = !exe.is_empty()
+                    && !exe.contains(|c: char| c.is_whitespace() || c == '"');
+                (bare && old == wsl_editor_args_pre_window(exe))
+                    .then(|| (i, wsl_editor_form(exe, wt)))
+            })
+            .collect();
+        if stale.is_empty() {
+            return Ok(());
+        }
+        if self.file_path.exists() {
+            let backup =
+                format!("{}.pre-wsl-editor-window", self.file_path.display());
+            fs::copy(&self.file_path, backup)?;
+        }
+        for (pos, (launcher, args)) in stale {
+            self.targets[pos].wsl_executable = Some(launcher);
+            self.targets[pos].wsl_args_template = Some(args);
+        }
         self.save()
     }
 
@@ -995,6 +1046,90 @@ mod tests {
         t
     }
 
+    /// The row from the box where neovim never opened: wt on Windows, wsl
+    /// bare for a distro. One load gives the distro side a wt tab under a
+    /// login shell and keeps the file it found; a second load writes
+    /// nothing; a form the user edited, and a box without wt, are handled.
+    #[test]
+    fn a_wsl_editor_saved_without_a_window_gets_one_once() {
+        let dir = std::env::temp_dir().join("devgo-targets-wsl-editor-window");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let mut rows: Vec<LaunchTarget> = defaults();
+        let mut nvim = editor("Neovim");
+        nvim.id = "nvim".into();
+        nvim.executable = "wt".into();
+        nvim.args_template = "-d \"{path}\" nvim .".into();
+        nvim.wsl_executable = Some("wsl".into());
+        nvim.wsl_args_template =
+            Some("-d {distro} --cd \"{linux_path}\" -e nvim .".into());
+        nvim.wsl_distros = vec!["Ubuntu-26.04".into()];
+        rows.push(nvim);
+        let mut tuned = editor("My Helix");
+        tuned.id = "hx".into();
+        tuned.wsl_executable = Some("wsl".into());
+        tuned.wsl_args_template =
+            Some("-d {distro} --cd \"{linux_path}\" -e hx --vsplit .".into());
+        rows.push(tuned.clone());
+        let json = serde_json::to_string_pretty(&rows).unwrap();
+        fs::write(dir.join("targets.json"), &json).unwrap();
+
+        let s = TargetStore::new(dir.clone()).unwrap();
+        let nvim = s.get("nvim").unwrap();
+        let (exe, args) = nvim
+            .resolve("x", Some(("Ubuntu-26.04", "/home/joy/app")))
+            .unwrap();
+        assert_eq!(exe, "wt");
+        assert_eq!(
+            args,
+            "wsl -d Ubuntu-26.04 --cd \"/home/joy/app\" -e bash -lic \"nvim .\""
+        );
+        assert_eq!(
+            nvim.args_template, "-d \"{path}\" nvim .",
+            "windows side kept"
+        );
+        assert_eq!(
+            s.get("hx").unwrap().wsl_args_template,
+            tuned.wsl_args_template
+        );
+        let backup = dir.join("targets.json.pre-wsl-editor-window");
+        assert_eq!(fs::read_to_string(&backup).unwrap(), json);
+
+        // the second load finds nothing to move and writes no backup
+        fs::remove_file(&backup).unwrap();
+        TargetStore::new(dir.clone()).unwrap();
+        assert!(!backup.exists());
+
+        // no wt in the registry: a console of its own through start
+        let no_wt: Vec<LaunchTarget> =
+            rows.into_iter().filter(|t| t.executable != "wt").collect();
+        let mut wsl_only = editor("Neovim");
+        wsl_only.id = "nvim".into();
+        wsl_only.executable = "wsl".into();
+        wsl_only.args_template = String::new();
+        wsl_only.wsl_args_template =
+            Some("-d {distro} --cd \"{linux_path}\" -e nvim .".into());
+        let mut no_wt = no_wt;
+        no_wt.push(wsl_only);
+        fs::write(
+            dir.join("targets.json"),
+            serde_json::to_string_pretty(&no_wt).unwrap(),
+        )
+        .unwrap();
+        let s = TargetStore::new(dir.clone()).unwrap();
+        let (exe, args) = s
+            .get("nvim")
+            .unwrap()
+            .resolve("x", Some(("Debian", "/srv/app")))
+            .unwrap();
+        assert_eq!(exe, "cmd");
+        assert_eq!(
+            args,
+            "/c start \"\" wsl -d Debian --cd \"/srv/app\" -e bash -lic \"nvim .\""
+        );
+        let _ = fs::remove_dir_all(&dir);
+    }
+
     /// The real-world file: a Windows nvim and claude beside the "(WSL)"
     /// rows the old detection added for them. One load later each is one
     /// row with both forms, the ids that moved are returned for the
@@ -1052,7 +1187,9 @@ mod tests {
         let nvim = s.get("nvim").unwrap();
         assert_eq!(nvim.name, "Neovim");
         assert_eq!(nvim.executable, "wt");
-        assert_eq!(nvim.wsl_executable.as_deref(), Some("wsl"));
+        // the distro row was moved to a visible window on load, and the
+        // merge carried that form across
+        assert_eq!(nvim.wsl_executable.as_deref(), Some("wt"));
         assert_eq!(nvim.wsl_distros, installed);
         let claude = s.get("claude").unwrap();
         assert_eq!(claude.executable, "claude");
