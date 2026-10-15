@@ -231,7 +231,7 @@ const RowMeta = ({
 		{onTogglePin && (
 			<Button
 				variant='ghost'
-				className={`text-15 leading-none p-0.5 hover:scale-110 hover:bg-transparent transition-opacity ${
+				className={`text-15 leading-none p-0.5 shrink-0 hover:scale-110 hover:bg-transparent transition-opacity ${
 					rank?.pinned
 						? 'text-accent'
 						: 'text-text-muted/40 opacity-0 group-hover:opacity-100 focus-visible:opacity-100'
@@ -301,8 +301,13 @@ const ProjectRow = ({
 			    being clickable makes it a bit inconvenient"): on a wide row a
 			    click meant for the empty middle, or a double-click near a chip,
 			    selected or launched a project. the row keeps hover and right-click */}
+			{/* a pinned row also carries its workspace, and a lane can be
+			    narrow (four lanes in a small window; meli measured the row
+			    overflowing under ~340px and the star clipped away): there the
+			    name's 12rem floor drops to 55% of the row and it truncates, and
+			    the workspace, capped at 30%, gives way first */}
 			<div
-				className={`${nameCell} cursor-pointer`}
+				className={`${nameCell} cursor-pointer ${pinned ? '!min-w-[min(12rem,55%)] !shrink' : ''}`}
 				onClick={() => onSelect(project)}
 				onDoubleClick={() => onDoubleClick(project)}
 			>
@@ -313,7 +318,7 @@ const ProjectRow = ({
 			    column. the lane already names the file system */}
 			{pinned && (
 				<span
-					className='text-text-muted text-13 truncate shrink-0'
+					className='text-text-muted text-13 truncate min-w-0 max-w-[30%] shrink-[4]'
 					title={project.workspace}
 				>
 					{lastSegment(project.workspace)}
