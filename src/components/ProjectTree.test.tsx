@@ -291,7 +291,18 @@ describe('ProjectTree — the pinned drawer', () => {
 	};
 	afterEach(() => localStorage.clear());
 
-	it('is folded by default, and the pin stays in its lane', () => {
+	// open by default: folded, a pin inside a collapsed workspace is out of
+	// sight, and v1.2.6 always showed pins
+	it('is open by default, the pin lifted to the top of its lane', () => {
+		render(<ProjectTree {...props} />);
+		const toggle = screen.getByRole('button', { name: /Pinned/ });
+		expect(toggle.getAttribute('aria-expanded')).toBe('true');
+		expect(screen.getAllByText('alpha-proj')).toHaveLength(1);
+		expect(screen.getByText('alpha-proj').parentElement!.className).toContain('border-l-accent/60');
+	});
+
+	it('folded, the pin stays in its lane', () => {
+		localStorage.setItem('devgo.pinnedOpen', '0');
 		render(<ProjectTree {...props} />);
 		const toggle = screen.getByRole('button', { name: /Pinned/ });
 		expect(toggle.getAttribute('aria-expanded')).toBe('false');
@@ -301,6 +312,7 @@ describe('ProjectTree — the pinned drawer', () => {
 	});
 
 	it('opens on click, lifts the pin to the top, and remembers it', async () => {
+		localStorage.setItem('devgo.pinnedOpen', '0');
 		const user = userEvent.setup();
 		render(<ProjectTree {...props} />);
 		await user.click(screen.getByRole('button', { name: /Pinned/ }));
@@ -313,6 +325,17 @@ describe('ProjectTree — the pinned drawer', () => {
 		await user.click(toggle);
 		expect(localStorage.getItem('devgo.pinnedOpen')).toBe('0');
 		expect(screen.getByText('alpha-proj').parentElement!.className).toContain('border-l-border');
+	});
+
+	it('folds and opens from the keyboard', async () => {
+		const user = userEvent.setup();
+		render(<ProjectTree {...props} />);
+		const toggle = screen.getByRole('button', { name: /Pinned/ });
+		toggle.focus();
+		await user.keyboard('{Enter}');
+		expect(toggle.getAttribute('aria-expanded')).toBe('false');
+		await user.keyboard(' ');
+		expect(toggle.getAttribute('aria-expanded')).toBe('true');
 	});
 
 	it('draws nothing when nothing is pinned', () => {
