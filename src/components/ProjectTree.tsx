@@ -304,10 +304,10 @@ const ProjectRow = ({
 			{/* a pinned row also carries its workspace, and a lane can be
 			    narrow (four lanes in a small window; meli measured the row
 			    overflowing under ~340px and the star clipped away): there the
-			    name's 12rem floor drops to 55% of the row and it truncates, and
-			    the workspace, capped at 30%, gives way first */}
+			    name may shrink to its floor (nameCell) and truncates, and the
+			    workspace, capped at 30%, gives way first */}
 			<div
-				className={`${nameCell} cursor-pointer ${pinned ? '!min-w-[min(12rem,55%)] !shrink' : ''}`}
+				className={`${nameCell} cursor-pointer ${pinned ? '!shrink' : ''}`}
 				onClick={() => onSelect(project)}
 				onDoubleClick={() => onDoubleClick(project)}
 			>
