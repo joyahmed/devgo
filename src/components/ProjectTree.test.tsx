@@ -1,7 +1,7 @@
 import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ProjectTree from './ProjectTree';
 
 // the tree reaches core through uiLog on the rows under it. one stub, the
@@ -191,6 +191,10 @@ describe('ProjectTree — the selected row draws its own edge, not just a fill',
 	const alpha = project('alpha-proj');
 	const beta = project('beta-proj');
 
+	// the pinned cases are about a pin lifted to the top: the drawer open
+	beforeEach(() => localStorage.setItem('devgo.pinnedOpen', '1'));
+	afterEach(() => localStorage.clear());
+
 	// the outer row div (bg-bg-selected, the new cue) is the name's
 	// grandparent: name -> rowIndented (pinned's border-l) -> the row.
 	// no jest-dom in this suite (test-setup.ts registers only RTL's
@@ -262,5 +266,57 @@ describe('ProjectTree — the selected row draws its own edge, not just a fill',
 		const rowClasses = classesOf(rowOf('alpha-proj'));
 		expect(rowClasses).toContain('border-r-2');
 		expect(rowClasses).toContain('border-r-border-strong');
+	});
+});
+
+// the pinned drawer: a row per pin on top of the lanes cost five rows of
+// screen for five pins. folded by default, to one line that counts them
+describe('ProjectTree — the pinned drawer', () => {
+	const project = (name: string): Project => ({
+		name,
+		full_path: `/w/${name}`,
+		workspace: 'W',
+		file_system: 'Windows'
+	});
+	const alpha = project('alpha-proj');
+	const beta = project('beta-proj');
+	const props = {
+		projects: [alpha, beta],
+		selected: null,
+		onSelect: () => {},
+		onDoubleClick: () => {},
+		onLaunch: () => {},
+		query: '',
+		pinnedProjects: [alpha]
+	};
+	afterEach(() => localStorage.clear());
+
+	it('is folded by default, and the pin stays in its lane', () => {
+		render(<ProjectTree {...props} />);
+		const toggle = screen.getByRole('button', { name: /Pinned \(1\)/ });
+		expect(toggle.getAttribute('aria-expanded')).toBe('false');
+		// once, in its lane — not lifted, not lost
+		expect(screen.getAllByText('alpha-proj')).toHaveLength(1);
+		expect(screen.getByText('alpha-proj').parentElement!.className).toContain('border-l-border');
+	});
+
+	it('opens on click, lifts the pin to the top, and remembers it', async () => {
+		const user = userEvent.setup();
+		render(<ProjectTree {...props} />);
+		await user.click(screen.getByRole('button', { name: /Pinned \(1\)/ }));
+		const toggle = screen.getByRole('button', { name: /Pinned \(1\)/ });
+		expect(toggle.getAttribute('aria-expanded')).toBe('true');
+		expect(screen.getAllByText('alpha-proj')).toHaveLength(1);
+		expect(screen.getByText('alpha-proj').parentElement!.className).toContain('border-l-accent/60');
+		expect(localStorage.getItem('devgo.pinnedOpen')).toBe('1');
+
+		await user.click(toggle);
+		expect(localStorage.getItem('devgo.pinnedOpen')).toBe('0');
+		expect(screen.getByText('alpha-proj').parentElement!.className).toContain('border-l-border');
+	});
+
+	it('draws nothing when nothing is pinned', () => {
+		render(<ProjectTree {...{ ...props, pinnedProjects: [] }} />);
+		expect(screen.queryByRole('button', { name: /Pinned/ })).toBeNull();
 	});
 });
