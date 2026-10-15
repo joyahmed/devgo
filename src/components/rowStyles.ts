@@ -32,9 +32,11 @@ export const selectedCue = 'border-r-2 border-r-border-strong';
 
 // 34% of a lane, not of the window: a lane is about half as wide, and a
 // name that still gets a third of it leaves the meta within an eye
-// movement instead of a screen away
+// movement instead of a screen away. the 12rem floor drops to 55% of
+// the row in a lane narrower than ~350px, or the row spills its star
+// past the card (meli measured 7px out at a 256px lane)
 export const nameCell =
-	'font-medium font-mono truncate basis-[34%] min-w-[12rem] shrink-0';
+	'font-medium font-mono truncate basis-[34%] min-w-[min(12rem,55%)] shrink-0';
 
 // the search boxes' sizing, written once for all five call sites. one
 // SearchBox drawn five times was five different sizes, because the size
