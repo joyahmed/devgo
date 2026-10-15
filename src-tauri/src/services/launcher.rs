@@ -3551,8 +3551,12 @@ mod tests {
     // for real: a {script} run template goes through launch_with_command
     // on a project whose directory has a space and an apostrophe, the
     // .command runs under sh, and the command inside it runs in that
-    // directory. exit 0 at the end of the line ends the script before its
-    // final exec would hand the test a login shell to sit in
+    // directory. the script always ends in exec "$SHELL" -l (exit 0 in
+    // the command only ends the -ic child), so the template gives that
+    // login shell /dev/null for all three fds: it reads eof and quits.
+    // inherited, it sat orphaned on a caller's open stdin and held the
+    // runner's output pipe, and a gate that captured cargo test never
+    // returned (env -i, stdin a socket; sh sets $SHELL from passwd)
     #[cfg(not(windows))]
     #[test]
     fn a_run_script_enters_a_directory_with_a_space_and_an_apostrophe() {
@@ -3571,7 +3575,9 @@ mod tests {
             wsl_executable: None,
             wsl_args_template: None,
             // the terminal.app shape: the file is the whole command line
-            run_args_template: Some("-c \"{script}\"".into()),
+            run_args_template: Some(
+                "-c \"{script}\" </dev/null >/dev/null 2>&1".into(),
+            ),
             reveal_args_template: None,
             wsl_distros: Vec::new(),
             wsl_run_args_template: None,
