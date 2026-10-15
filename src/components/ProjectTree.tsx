@@ -21,6 +21,10 @@ import {
 
 // the collapse set is the user's, saved; search is a view on top of it
 const COLLAPSED_KEY = 'devgo.collapsed';
+// the pinned drawer, open or folded; folded unless the user opened it.
+// a row per pin on top of the lanes cost five rows of screen for five pins
+// (joy: "they cover a lot of space on top")
+const PINNED_OPEN_KEY = 'devgo.pinnedOpen';
 // pixels of travel before a press on a header becomes a drag
 const DRAG_THRESHOLD = 4;
 
@@ -30,6 +34,14 @@ const loadCollapsed = (): Set<string> => {
 		return new Set(Array.isArray(raw) ? (raw as string[]) : []);
 	} catch {
 		return new Set();
+	}
+};
+
+const loadPinnedOpen = () => {
+	try {
+		return localStorage.getItem(PINNED_OPEN_KEY) === '1';
+	} catch {
+		return false;
 	}
 };
 
@@ -450,6 +462,14 @@ const ProjectTree = ({
 	ref
 }: ProjectTreeProps) => {
 	const [collapsed, setCollapsed] = useState<Set<string>>(loadCollapsed);
+	const [pinnedOpen, setPinnedOpen] = useState(loadPinnedOpen);
+	const togglePinned = () =>
+		setPinnedOpen(open => {
+			try {
+				localStorage.setItem(PINNED_OPEN_KEY, open ? '0' : '1');
+			} catch {}
+			return !open;
+		});
 	// a workspace header under the cursor: kept beside selected (still a
 	// project, for launching) so a collapsed workspace is reachable by
 	// arrow without inventing a fake selection
@@ -601,7 +621,10 @@ const ProjectTree = ({
 
 	// Pinned rows come first for keyboard navigation, and are then skipped in
 	// the tree below so arrowing down never lands on the same project twice.
-	const pinned = pinnedProjects ?? [];
+	// with the drawer folded the pins stay in their lanes, so folding it
+	// never hides a project
+	const allPinned = pinnedProjects ?? [];
+	const pinned = pinnedOpen ? allPinned : [];
 	const pinnedPaths = new Set(pinned.map(p => p.full_path));
 
 	// the navigable sequence in the order the rows render: the pinned
@@ -1111,18 +1134,26 @@ const ProjectTree = ({
 						{lanes[lane].map(workspace)}
 					</WorkspaceLane>
 				)),
-				pinned.length > 0 && (
+				allPinned.length > 0 && (
 					<div className='mb-1 shrink-0'>
-						<div className='px-4 py-1 text-13 font-semibold text-text-muted'>
-							Pinned
-						</div>
+						<button
+							type='button'
+							className='mx-2 px-2 py-1 rounded-control text-13 font-semibold text-text-muted hover:text-text-primary hover:bg-bg-hover/50 inline-flex items-center gap-1.5'
+							aria-expanded={pinnedOpen}
+							title={pinnedOpen ? 'Fold the pinned projects away' : 'Show the pinned projects on top'}
+							onClick={togglePinned}
+						>
+							<span className='text-accent'>★</span>
+							Pinned ({allPinned.length})
+							<span className='text-11'>{pinnedOpen ? '▼' : '▶'}</span>
+						</button>
 						{pinned.map(project => (
 							<ProjectRow
 								key={`pinned-${project.full_path}`}
 								{...{ ...rowProps(project), pinned: true }}
 							/>
 						))}
-						<div className='mx-4 my-1 border-b border-border' />
+						{pinnedOpen && <div className='mx-4 my-1 border-b border-border' />}
 					</div>
 				)
 			)}
