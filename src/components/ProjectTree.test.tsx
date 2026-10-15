@@ -293,7 +293,7 @@ describe('ProjectTree — the pinned drawer', () => {
 
 	it('is folded by default, and the pin stays in its lane', () => {
 		render(<ProjectTree {...props} />);
-		const toggle = screen.getByRole('button', { name: /Pinned \(1\)/ });
+		const toggle = screen.getByRole('button', { name: /Pinned/ });
 		expect(toggle.getAttribute('aria-expanded')).toBe('false');
 		// once, in its lane — not lifted, not lost
 		expect(screen.getAllByText('alpha-proj')).toHaveLength(1);
@@ -303,8 +303,8 @@ describe('ProjectTree — the pinned drawer', () => {
 	it('opens on click, lifts the pin to the top, and remembers it', async () => {
 		const user = userEvent.setup();
 		render(<ProjectTree {...props} />);
-		await user.click(screen.getByRole('button', { name: /Pinned \(1\)/ }));
-		const toggle = screen.getByRole('button', { name: /Pinned \(1\)/ });
+		await user.click(screen.getByRole('button', { name: /Pinned/ }));
+		const toggle = screen.getByRole('button', { name: /Pinned/ });
 		expect(toggle.getAttribute('aria-expanded')).toBe('true');
 		expect(screen.getAllByText('alpha-proj')).toHaveLength(1);
 		expect(screen.getByText('alpha-proj').parentElement!.className).toContain('border-l-accent/60');
@@ -319,4 +319,23 @@ describe('ProjectTree — the pinned drawer', () => {
 		render(<ProjectTree {...{ ...props, pinnedProjects: [] }} />);
 		expect(screen.queryByRole('button', { name: /Pinned/ })).toBeNull();
 	});
+
+	// joy: the full-width strip went "out of column width". a pin sits at
+	// the top of its own lane: wsl pins in wsl, local pins in local
+	it('puts each pin at the top of its own lane', () => {
+		localStorage.setItem('devgo.pinnedOpen', '1');
+		const w = { ...project('wsl-proj'), full_path: '/l/wsl-proj', workspace: 'L', file_system: 'WSL' };
+		render(<ProjectTree {...{ ...props, projects: [alpha, beta, w], pinnedProjects: [alpha, w] }} />);
+		const laneOfText = (t: string) => {
+			let el: HTMLElement | null = screen.getByText(t);
+			while (el && !el.className.includes('rounded')) el = el.parentElement;
+			return el!;
+		};
+		const headings = screen.getAllByRole('button', { name: /Pinned/ });
+		expect(headings).toHaveLength(2);
+		expect(laneOfText('wsl-proj')).not.toBe(laneOfText('alpha-proj'));
+		expect(laneOfText('wsl-proj').textContent).toContain('WSL');
+		expect(laneOfText('alpha-proj').textContent).toContain('Windows');
+	});
 });
+

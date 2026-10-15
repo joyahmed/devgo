@@ -248,8 +248,8 @@ const RowMeta = ({
 	</div>
 );
 
-/// One project row — the same element whether it sits in the Pinned strip or
-/// under its workspace header; a pinned row names its workspace, a row
+/// One project row — the same element whether it sits in its lane's Pinned
+/// group or under its workspace header; a pinned row names its workspace, a row
 /// under a heading inherits it. no workspace and no file-system cell on
 /// a row under its heading: the heading states both, once
 const ProjectRow = ({
@@ -307,18 +307,16 @@ const ProjectRow = ({
 			>
 				{project.name}
 			</div>
-			{/* a pinned row floats above the lanes, so unlike a row under its
-			    heading it has to name its own home: a suffix, not a column */}
+			{/* a pinned row sits above its lane's workspaces, so unlike a row
+			    under its heading it names its own workspace: a suffix, not a
+			    column. the lane already names the file system */}
 			{pinned && (
-				<>
-					<span
-						className='text-text-muted text-13 truncate shrink-0'
-						title={project.workspace}
-					>
-						{lastSegment(project.workspace)}
-					</span>
-					<FsCell {...{ fs: project.file_system, className: 'text-13 shrink-0' }} />
-				</>
+				<span
+					className='text-text-muted text-13 truncate shrink-0'
+					title={project.workspace}
+				>
+					{lastSegment(project.workspace)}
+				</span>
 			)}
 			<RowMeta
 				{...{ project, showHints, rank, git, tech, live, onTogglePin, onOpenBranches }}
@@ -524,7 +522,6 @@ const ProjectTree = ({
 	}
 	const laneOfWs = (ws: string) =>
 		laneOf(grouped.get(ws)?.[0]?.file_system ?? 'Windows');
-	const laneOrder = [...lanes.WSL, ...lanes.local];
 
 	// move ws to sit before or after target and hand back the whole order:
 	// the store can check a permutation, it cannot check a move. both live
@@ -619,26 +616,36 @@ const ProjectTree = ({
 		moveWorkspace(ws, target[0], dir === 1);
 	};
 
-	// Pinned rows come first for keyboard navigation, and are then skipped in
-	// the tree below so arrowing down never lands on the same project twice.
+	// Pinned rows come first in their lane, and are then skipped in the
+	// workspaces below so arrowing down never lands on the same project twice.
 	// with the drawer folded the pins stay in their lanes, so folding it
 	// never hides a project
 	const allPinned = pinnedProjects ?? [];
 	const pinned = pinnedOpen ? allPinned : [];
 	const pinnedPaths = new Set(pinned.map(p => p.full_path));
+	// a pin sits at the top of its own lane, wsl pins in wsl and local in
+	// local (joy: a full-width strip "going out of column width")
+	const pinnedOf = (lane: 'WSL' | 'local') =>
+		allPinned.filter(p => laneOf(p.file_system) === lane);
 
-	// the navigable sequence in the order the rows render: the pinned
-	// projects, then each header with its projects when open. headers are
-	// rows so the keyboard can land on a collapsed workspace and open it;
-	// without that a collapsed workspace is a dead end only the mouse
-	// reaches. then the github rows when that lane is open, and the
-	// servers last, each expanded server's folders right under it
-	const rows: NavRow[] = pinned.map(project => ({ kind: 'project', project }));
-	for (const [ws, wsProjects] of laneOrder) {
-		rows.push({ kind: 'ws', ws });
-		if (!isCollapsed(ws)) {
-			for (const project of wsProjects) {
-				if (!pinnedPaths.has(project.full_path)) rows.push({ kind: 'project', project });
+	// the navigable sequence in the order the rows render: lane by lane,
+	// the lane's pins when the group is open, then each header with its
+	// projects when open. headers are rows so the keyboard can land on a
+	// collapsed workspace and open it; without that a collapsed workspace
+	// is a dead end only the mouse reaches. then the github rows when that
+	// lane is open, and the servers last, each expanded server's folders
+	// right under it
+	const rows: NavRow[] = [];
+	for (const lane of ['WSL', 'local'] as const) {
+		if (pinnedOpen) {
+			for (const project of pinnedOf(lane)) rows.push({ kind: 'project', project });
+		}
+		for (const [ws, wsProjects] of lanes[lane]) {
+			rows.push({ kind: 'ws', ws });
+			if (!isCollapsed(ws)) {
+				for (const project of wsProjects) {
+					if (!pinnedPaths.has(project.full_path)) rows.push({ kind: 'project', project });
+				}
 			}
 		}
 	}
@@ -1113,6 +1120,51 @@ const ProjectTree = ({
 		);
 	};
 
+	// the lane's pins under one heading, drawn like a github group: the
+	// arrow folds them back into their workspaces (one setting for every
+	// lane, remembered), the count stays. no pins, no heading
+	const pinnedGroup = (lane: 'WSL' | 'local') => {
+		const lanePins = pinnedOf(lane);
+		if (lanePins.length === 0) return null;
+		return (
+			<div className='mb-1'>
+				<div
+					className={`${row} py-2 cursor-pointer hover:bg-bg-hover/50`}
+					role='button'
+					aria-expanded={pinnedOpen}
+					title={pinnedOpen ? 'Fold the pins back into their workspaces' : 'Show the pins at the top'}
+					onClick={togglePinned}
+				>
+					<div className={rowFlat}>
+						<div className='flex items-center gap-2 min-w-0'>
+							<span
+								className={`text-13 shrink-0 ${pinnedOpen ? 'text-accent' : 'text-text-muted'}`}
+							>
+								{pinnedOpen ? '▼' : '▶'}
+							</span>
+							<span className='truncate text-13 font-semibold text-text-primary'>Pinned</span>
+						</div>
+						<span className='flex-1' />
+						<div className='text-11 text-text-muted font-mono shrink-0 w-8 text-right'>
+							{lanePins.length}
+						</div>
+					</div>
+				</div>
+				{pinnedOpen &&
+					lanePins.map(project => (
+						<ProjectRow
+							key={`pinned-${project.full_path}`}
+							{...{ ...rowProps(project), pinned: true }}
+						/>
+					))}
+				<div
+					aria-hidden='true'
+					className='h-px ml-4 mt-1 w-[38%] bg-linear-to-r from-accent/70 to-transparent'
+				/>
+			</div>
+		);
+	};
+
 	// the lane's label is what the machine calls its own disk; the wsl
 	// lane is always wsl
 	const laneLabel = (lane: 'WSL' | 'local') =>
@@ -1131,31 +1183,10 @@ const ProjectTree = ({
 							entries: lanes[lane]
 						}}
 					>
+						{pinnedGroup(lane)}
 						{lanes[lane].map(workspace)}
 					</WorkspaceLane>
-				)),
-				allPinned.length > 0 && (
-					<div className='mb-1 shrink-0'>
-						<button
-							type='button'
-							className='mx-2 px-2 py-1 rounded-control text-13 font-semibold text-text-muted hover:text-text-primary hover:bg-bg-hover/50 inline-flex items-center gap-1.5'
-							aria-expanded={pinnedOpen}
-							title={pinnedOpen ? 'Fold the pinned projects away' : 'Show the pinned projects on top'}
-							onClick={togglePinned}
-						>
-							<span className='text-accent'>★</span>
-							Pinned ({allPinned.length})
-							<span className='text-11'>{pinnedOpen ? '▼' : '▶'}</span>
-						</button>
-						{pinned.map(project => (
-							<ProjectRow
-								key={`pinned-${project.full_path}`}
-								{...{ ...rowProps(project), pinned: true }}
-							/>
-						))}
-						{pinnedOpen && <div className='mx-4 my-1 border-b border-border' />}
-					</div>
-				)
+				))
 			)}
 		</div>
 	);
