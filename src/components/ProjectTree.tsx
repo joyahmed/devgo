@@ -21,9 +21,10 @@ import {
 
 // the collapse set is the user's, saved; search is a view on top of it
 const COLLAPSED_KEY = 'devgo.collapsed';
-// the pinned drawer, open or folded; folded unless the user opened it.
-// a row per pin on top of the lanes cost five rows of screen for five pins
-// (joy: "they cover a lot of space on top")
+// the pinned group at the top of each lane, open or folded; open unless
+// the user folded it. open is what v1.2.6 always showed, and a folded pin
+// inside a collapsed workspace is out of sight, so folded is the user's
+// choice, never the default
 const PINNED_OPEN_KEY = 'devgo.pinnedOpen';
 // pixels of travel before a press on a header becomes a drag
 const DRAG_THRESHOLD = 4;
@@ -39,9 +40,9 @@ const loadCollapsed = (): Set<string> => {
 
 const loadPinnedOpen = () => {
 	try {
-		return localStorage.getItem(PINNED_OPEN_KEY) === '1';
+		return localStorage.getItem(PINNED_OPEN_KEY) !== '0';
 	} catch {
-		return false;
+		return true;
 	}
 };
 
@@ -618,8 +619,9 @@ const ProjectTree = ({
 
 	// Pinned rows come first in their lane, and are then skipped in the
 	// workspaces below so arrowing down never lands on the same project twice.
-	// with the drawer folded the pins stay in their lanes, so folding it
-	// never hides a project
+	// with the group folded the pins go back under their workspaces, so a
+	// pin in a collapsed workspace is out of sight until one of the two
+	// opens: why folded is never the default (loadPinnedOpen)
 	const allPinned = pinnedProjects ?? [];
 	const pinned = pinnedOpen ? allPinned : [];
 	const pinnedPaths = new Set(pinned.map(p => p.full_path));
@@ -1131,9 +1133,15 @@ const ProjectTree = ({
 				<div
 					className={`${row} py-2 cursor-pointer hover:bg-bg-hover/50`}
 					role='button'
+					tabIndex={0}
 					aria-expanded={pinnedOpen}
 					title={pinnedOpen ? 'Fold the pins back into their workspaces' : 'Show the pins at the top'}
 					onClick={togglePinned}
+					onKeyDown={e => {
+						if (e.key !== 'Enter' && e.key !== ' ') return;
+						e.preventDefault();
+						togglePinned();
+					}}
 				>
 					<div className={rowFlat}>
 						<div className='flex items-center gap-2 min-w-0'>
