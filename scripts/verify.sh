@@ -352,7 +352,16 @@ if ($ours -gt 0) { "ours" } elseif ($other -gt 0) { "other" } else { "clear" }
     # usage message; some other ps could answer with something else again. if the
     # first line does not open with a pid we did not get a process listing, and the
     # only safe reading of "I could not look" is "clear" → the checks RUN.
-    if ! printf '%s\n' "$procs" | head -n 1 \
+    #
+    # ⚠️ cut the first line off in the shell, do NOT pipe the whole listing into
+    # `head -n 1`: head exits after one line while printf is still writing the other
+    # few hundred. normally printf just dies of SIGPIPE, silently; but git starts the
+    # pre-push hook with SIGPIPE ignored, so printf gets EPIPE instead and prints
+    # "printf: write error: Broken pipe" on every real push. the verdict was never
+    # wrong (the pipe's status is the last command's), only noisy.
+    first=${procs%%
+*}
+    if ! printf '%s\n' "$first" \
          | grep -Eq '^[[:space:]]*[0-9][0-9]*[[:space:]]'; then
       procs=''
     fi
