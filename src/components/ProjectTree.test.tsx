@@ -360,5 +360,18 @@ describe('ProjectTree — the pinned drawer', () => {
 		expect(laneOfText('wsl-proj').textContent).toContain('WSL');
 		expect(laneOfText('alpha-proj').textContent).toContain('Windows');
 	});
+
+	// the header counts the rows under it: a pin lifted to the Pinned group
+	// is counted there, not twice
+	it('counts a workspace without the pins lifted out of it', async () => {
+		const user = userEvent.setup();
+		render(<ProjectTree {...props} />);
+		const header = document.querySelector('[data-ws-header="W"]')!;
+		// open: alpha is in the Pinned group, beta alone under W
+		expect(header.textContent).toMatch(/1$/);
+		await user.click(screen.getByRole('button', { name: /Pinned/ }));
+		// folded: both under W again
+		expect(document.querySelector('[data-ws-header="W"]')!.textContent).toMatch(/2$/);
+	});
 });
 

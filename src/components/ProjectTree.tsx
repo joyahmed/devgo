@@ -1078,7 +1078,10 @@ const ProjectTree = ({
 				<WorkspaceHeader
 					{...{
 						ws,
-						count: wsProjects.length,
+						// the rows under the header, not the workspace's size: a pin
+						// lifted to the lane's Pinned group is counted there (alina
+						// and the review both saw "2" over one row)
+						count: wsProjects.filter(p => !pinnedPaths.has(p.full_path)).length,
 						fs,
 						state: wsState,
 						open: isOpen,
