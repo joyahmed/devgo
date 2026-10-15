@@ -1288,6 +1288,8 @@ Frecency is automatic and therefore approximate. A pin is you overriding it: *th
 
 A pinned project renders in a **Pinned** strip above the tree — and a pinned row is the same four columns as a row under a workspace header. Chapter 03 wrote that row inline in the tree; this chapter would have written it a second time. Instead it becomes `ProjectRow`, one component used from both places, and the only differences between the two uses are props: `pinnedStrip` for the accent left border, `stale` for the dimming. `RowMeta` is its fourth cell — the frecency hint and the pin star. Here is `src/components/ProjectTree.tsx` in full:
 
+*(Superseded in v1.2.7: a full-width strip above four lanes ran each pinned row far past the column it belongs to. Each project lane now carries its own **Pinned** group at its top, drawn like a GitHub group — arrow, name, count, an accent rule under it — so WSL pins sit in the WSL lane and local pins in the local one (on macOS and Linux, the one lane). One fold setting, `devgo.pinnedOpen`, covers every lane; folded, pins go back under their workspaces with their star, so folding never hides a project. A lane with no pins draws no heading, and the keyboard walks lane by lane: its pins, then its workspaces. See `pinnedGroup` in `ProjectTree.tsx`.)*
+
 ```tsx
 import { useEffect, useImperativeHandle, useState } from 'react';
 import Button from './Button';
