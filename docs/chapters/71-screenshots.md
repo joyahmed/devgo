@@ -79,7 +79,9 @@ Root `README.md`'s second paragraph now opens *Cross-platform.* and adds, betwee
 - **Windows**, 2560×1392, maximised, knob 20 %: `01-four-lanes.png` (WSL · Windows · GitHub with groups and the ungrouped tail · Servers with one row expanded to its folders and app rows), `02-app-actions.png` (right-click on an app: the declared actions in sections), `03-nginx-form.png` (*New site…*, the line it will type), `04-palette.png` (the palette filtered to `server`), and `10`–`20` — one per Settings page, Workspaces through About.
 - **Mac**, 1686×990, knob 18 %, `screencapture`: `01-three-lanes.png` (Mac · GitHub · Servers, one row expanded) and `01b-three-lanes-collapsed.png`.
 
-The table in that README is the caption for each. `20-settings-about.png` was taken again after 71.6 changed the panel's sentence — the last commit on the branch, a binary-only diff.
+> **Removed since:** these frames (and `social-preview.png`) were deleted from `main` because they showed private paths and names; they remain in git history, and `docs/screenshots/README.md` now only explains how to retake them safely.
+
+The table in that README was the caption for each. `20-settings-about.png` was taken again after 71.6 changed the panel's sentence — the last commit on the branch, a binary-only diff.
 
 > `✅DOCS: screenshots, windows and mac` · `✅DOCS: about frame on the new wording`
 
@@ -121,8 +123,8 @@ src/App.tsx                              add the workspace first; the Cloned / f
 src/components/AboutPanel.tsx            cross-platform, linux not run yet
 README.md                                the same sentence
 docs/screenshots/README.md               what each frame shows; the sizes and the knob
-docs/screenshots/windows/*.png           15 frames: the lanes, an app's actions, a form, the palette, every Settings page
-docs/screenshots/mac/*.png               2 frames: three lanes, expanded and collapsed
+docs/screenshots/windows/*.png           (removed later) 15 frames: the lanes, an app's actions, a form, the palette, every Settings page
+docs/screenshots/mac/*.png               (removed later) 2 frames: three lanes, expanded and collapsed
 ```
 
 - **A clone can land anywhere** — a workspace, or a folder you pick, which becomes a workspace so the clone has a lane to appear in.

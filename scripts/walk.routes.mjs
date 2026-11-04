@@ -704,6 +704,6 @@ export const NOT_COVERED = [
 	'GITHUB CLONE, group edit and add-repo — they write to disk and to the GitHub account.',
 	'LOADING and ERROR states — they are timing- and network-dependent, and faking them needs an IPC shim per command. Reachable with --arm-ipc and a stub that rejects; no step does it yet.',
 	'A LIGHT THEME — there is not one. See the note on THEMES above.',
-	'macOS and LINUX — this harness needs WebView2 and shoot.ps1 needs Win32. The mac and linux builds are captured by hand (docs/screenshots/README.md).',
+	'macOS and LINUX — this harness needs WebView2 and shoot.ps1 needs Win32. The mac and linux builds are captured by hand (see docs/screenshots/README.md for the retake steps).',
 	'CI — WebView2 needs a real interactive desktop session, windows-latest has no installed DevGo, and shoot.ps1 minimises every window on the box. This is a LOCAL gate and nothing else.'
 ];
