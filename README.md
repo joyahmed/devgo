@@ -1,237 +1,155 @@
-<p align="center">
-  <img src="src-tauri/icons/128x128@2x.png" width="112" alt="DevGo">
-</p>
+<div align="center">
 
-<h1 align="center">DevGo</h1>
+<img src="src-tauri/icons/128x128@2x.png" alt="DevGo icon" width="112">
 
-<p align="center">
-  Every project on your machine, your GitHub, your servers — one keystroke to where you work.
-</p>
+# DevGo
 
-<p align="center">
-  <a href="https://github.com/joyahmed/devgo/actions/workflows/ci.yml"><img src="https://github.com/joyahmed/devgo/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://github.com/joyahmed/devgo/releases"><img src="https://img.shields.io/github/v/release/joyahmed/devgo?include_prereleases&label=release" alt="Release"></a>
-  <img src="https://img.shields.io/badge/platforms-Windows%20%C2%B7%20WSL%20%C2%B7%20macOS%20%C2%B7%20Linux-0ea5e9" alt="Windows · WSL · macOS · Linux">
-  <img src="https://img.shields.io/badge/Tauri-2-24c8db?logo=tauri&logoColor=white" alt="Tauri 2">
-  <img src="https://img.shields.io/badge/Rust-stable-dea584?logo=rust&logoColor=black" alt="Rust">
-  <img src="https://img.shields.io/badge/React-19-61dafb?logo=react&logoColor=black" alt="React 19">
-</p>
+**A project launcher for developers, the same on Windows, Mac and Linux.**<br>
+Every project you have, one keystroke to where you work on it.
 
-A launcher for a developer's projects. Point it at the folders that hold them, on every filesystem the machine can see, and it lists every project, finds one in a few keystrokes, and opens it in the editor, terminal or agent you already use. It is not an editor, a terminal or a git client. It opens the door and gets out of the way.
+[![Latest release](https://img.shields.io/github/v/release/joyahmed/devgo?style=flat-square&label=release&color=0ea5e9)](https://github.com/joyahmed/devgo/releases/latest) [![Platforms](https://img.shields.io/badge/Windows%20%C2%B7%20WSL%20%C2%B7%20macOS%20%C2%B7%20Linux-1e293b?style=flat-square)](#install) [![License: MIT](https://img.shields.io/badge/license-MIT-1e293b?style=flat-square)](LICENSE)
 
-Cross-platform. On Windows that means the local drives and the WSL distros. On a Mac it means the local disk. On Linux it means the local disk too, and it has been run there - Ubuntu 24.04, 2026-09-23: it builds from the same crate, its tests pass, the `.deb` installs and the lanes work. Beside those, the GitHub account you are logged into and the servers in your ssh config get a lane of their own.
+### [⬇ Download DevGo](https://github.com/joyahmed/devgo/releases/latest)
 
-![DevGo on Windows: the four lanes](docs/screenshots/windows/01-four-lanes.png)
+Free · No tracking · Rust + Tauri 2 + React 19
 
-<p align="center">
-<img src="docs/screenshots/mac/01-three-lanes.png" alt="DevGo on a Mac: three lanes" width="49%">
-<img src="docs/screenshots/windows/02-app-actions.png" alt="An app's actions on a server" width="49%">
-</p>
+</div>
 
-More in [docs/screenshots](docs/screenshots/README.md) — the palette, a server form, every Settings page.
+<br>
 
-Tauri 2, Rust on the back, React 19 and Tailwind on the front, bun for the scripts.
+## Why I built this
 
-## 🛣️ The four lanes
+For a long time my "launcher" was a right-click. A few PowerShell scripts put *Open Ubuntu here* and *Open VS Code WSL here* on every folder, and a handful of shell shortcuts knew what to do inside a project. But a right-click needs you to find the folder first. The real question was always *which project, and where does it live*: on the local disk, in a WSL distro, on GitHub, on a server.
 
-The window is one row of lanes. From 1900 px they sit side by side; from 1400 they fold into two rows; narrower, they stack.
+So in May 2026 I wrote the first DevGo in C# and WinForms ([devgo-winforms](https://github.com/joyahmed/devgo-winforms)): one window, every project, one keystroke. It only ran on Windows, and I also work on a Mac and on Ubuntu. Two weeks later I started this rewrite in Tauri and Rust, partly to learn Rust properly.
 
-- **Windows** (or **Mac**, **Linux**): workspaces on the local disk. A workspace is a folder that holds projects. Add one with `Ctrl+N`, by scanning the usual roots, or by dropping a folder on the window. Depth 1 lists every immediate child; deeper, a folder is a project only when it carries a marker (`package.json`, `Cargo.toml`, `.git`, …), so a monorepo's apps become rows without every subfolder becoming one. Every row shows what the scanner found: the framework, the package manager, the git branch, `recent`.
-- **WSL**: the same, for workspaces inside a distro (`\\wsl.localhost\<distro>\...`). DevGo never boots a stopped distro to read them; the rows show the last list, marked `cached · WSL stopped`, until you refresh or open one. The title bar chip says what is running and can stop a distro.
-- **GitHub**: every repository you own, through `gh`. Search it, group it, clone it into a workspace, open any branch's page.
-- **Servers**: the machines you ssh into. Enter opens a terminal on one in a tmux session that survives; expand it and it lists its folders and, when the box describes itself, its apps and their actions.
+I also run the servers my apps live on, and that knowledge sat in a folder of shell scripts. Now the servers are a lane in DevGo too. It is not an editor, a terminal or a git client. It opens the door and gets out of the way. I use it every day.
 
-The search box over each lane filters that lane. `Ctrl+K` puts you in the first one, `Ctrl+G` in GitHub's. Pin a project with `Ctrl+S` and it stays at the top; sort by frecency, activity or name.
+## Highlights
 
-## 🚀 Launch targets
+- 🛣️ **Four lanes**: your local projects, your WSL distros, your GitHub repos and your servers, side by side.
+- ⌨️ **One keystroke**: open a project in your editor, your terminal or your coding agent. <kbd>Ctrl</kbd>+<kbd>K</kbd> to search.
+- 🔁 **Sessions that survive**: with tmux (or psmux on Windows) on, close the terminal, come back, and you are where you left off.
+- 🐙 **GitHub**: every repo you own, through the `gh` you already use. Clone into a workspace, group repos, open a branch.
+- 🖥️ **Servers**: every host in your ssh config. Enter opens a tmux session on the box. A box can list its own apps and actions.
+- 🐧 **WSL that stays asleep**: DevGo never boots a stopped distro just to show you its projects.
+- 🎨 **Five themes**, a transparency knob, text size from 85 to 150 percent.
+- 🔒 **Private**: no telemetry, no updater, no tokens or passwords of its own.
 
-A target is a program plus how to hand it a directory. DevGo detects the usual ones on this machine (VS Code, Cursor, Windsurf, Zed, Sublime, the JetBrains IDEs, Windows Terminal, Alacritty, WezTerm; on a Mac Terminal, iTerm2, Ghostty, Kitty as well) and, on Windows, inside each running distro. Add your own in Settings › Editors & Terminals with a template: `{path}`, `{distro}`, `{linux_path}`. A WSL project opens where it lives: VS Code through Remote-WSL, a terminal inside the distro in the project directory.
+<details>
+<summary><b>Everything it does</b> (click to open)</summary>
 
-Three kinds of target, three keys: the editor (`Ctrl+Enter`), the terminal (`Shift+Enter`), the agent (`Ctrl+Alt+Enter`, Claude Code, Codex or Gemini CLI, whichever is installed). `Alt+Enter` opens editor and terminal together. The footer shows which one each key will use.
+### Projects
 
-With the multiplexer on, a terminal launch opens a named session with the windows you listed: tmux inside the distro for a WSL project, psmux (`winget install marlocarlo.psmux`) for a Windows one, tmux on a Mac (`brew install tmux`). Close the terminal, close DevGo, come back: the session is still there and launching again reattaches. Off, a launch is one plain shell.
+- Point DevGo at the folders that hold your projects (a "workspace"). Add one with <kbd>Ctrl</kbd>+<kbd>N</kbd>, by scanning the usual places, or by dropping a folder on the window.
+- A folder is a project when it carries a marker like `package.json`, `Cargo.toml`, `go.mod` or `.git`, so a monorepo's apps each get a row.
+- Each row shows what it found: the framework, the package manager, the git branch.
+- Pin a project with <kbd>Ctrl</kbd>+<kbd>S</kbd> and it stays at the top. Sort by frecency, activity or name.
+- Start DevGo with a folder (`devgo <folder>`) and it opens that project.
 
-`Run dev script…` (`Ctrl+Shift+D`) reads the project's `package.json` scripts and runs the one you pick in a terminal that stays open. The first line of that menu is **Install**, which runs the project's own package manager — pnpm, bun, yarn or npm, read from the lockfile — in the same kind of terminal. On WSL the line runs in the distro's interactive shell, so the node your `~/.bashrc` loads through nvm is the one it finds, and every dev tab ends in your own login shell rather than a bare bash.
+### Launching
 
-## 🐙 GitHub
+- Three kinds of target, three keys: editor (<kbd>Ctrl</kbd>+<kbd>Enter</kbd>), terminal (<kbd>Shift</kbd>+<kbd>Enter</kbd>), agent (<kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>Enter</kbd>). <kbd>Alt</kbd>+<kbd>Enter</kbd> opens editor and terminal together.
+- It finds the usual editors and terminals on your machine: VS Code, Cursor, Windsurf, Zed, Sublime, the JetBrains IDEs, Windows Terminal, Alacritty, WezTerm, and on a Mac Terminal, iTerm2, Ghostty and Kitty too.
+- It finds coding agents too: Codex, OpenCode, Gemini CLI and others.
+- Add your own target with a template: `{path}`, `{distro}`, `{linux_path}`.
+- A WSL project opens where it lives: VS Code through Remote-WSL, a terminal inside the distro.
+- *Run dev script…* (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>D</kbd>) lists the project's `package.json` scripts and runs the one you pick. The first line is **Install**, with the package manager the lockfile names.
+- *Attach here* (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>A</kbd>) shows a live tmux or psmux session in a pane under the lanes.
 
-The GitHub lane lists every repository you own through the GitHub CLI. It needs `gh` installed and logged in (`gh auth login`); DevGo stores no token of its own, and `gh auth logout` signs out everywhere. The list is fetched when you ask, never on launch or on focus.
+### GitHub
 
-- **Catalogue**: the lane header says how many repos and when the list was last updated. A repo that is already cloned into one of your workspaces carries a `local` badge, and the badge follows the disk: clone one, delete one, the lane knows on the next pass.
-- **Clone**: `Clone into…` on a row picks a workspace and clones there; the new project appears in its lane as soon as the scan sees it.
-- **Groups**: put repos into named groups (`Add to group…`) so the ones you touch weekly sit above the rest. The ungrouped rest stays under one line at the bottom.
-- **Branches**: the branch chip on a row opens the repo's branches; pick one and it opens on GitHub.
-- **Traffic**: `Traffic (14 days)` on a row shows the views, clones and referrers GitHub shows a repository's owner, read through `gh api` when you ask and kept for the session; the row then carries the two totals.
-- **Live search**, off until you turn it on, is the one place a keystroke reaches the network.
+- Lists every repo you own through the GitHub CLI. You need `gh` installed and logged in.
+- The list loads when you ask, never on launch.
+- A repo already cloned into a workspace gets a `local` badge.
+- Clone into a workspace, put repos into named groups, open any branch on GitHub.
+- *Traffic (14 days)* shows a repo's views, clones and referrers.
 
-## 🖥️ Servers
+### Servers
 
-The Servers lane lists the machines you ssh into. Import `~/.ssh/config` (every `Host` becomes a row; the file is never written) or add one by hand. DevGo launches by alias so your config's key and options apply, and stores no password: an alias, a host, a key path. A `LocalForward` in the config marks the row `tunnel` and gives it *Copy tunnel command* (`ssh -N <alias>`).
+- Import `~/.ssh/config`: every `Host` becomes a row. DevGo never writes that file.
+- Enter opens a terminal on the server in a tmux session.
+- Expand a server and it lists its folders.
+- Put the scripts from [`server/`](server/README.md) on a box and DevGo also shows its apps, their domains and ports, and the actions the box declares. Right-click to run one. *Set up this box…* copies the scripts over for you.
+- Some actions are forms, like *New site…*, and show the exact line they will type. *Preview* runs it with `--dry-run` first.
+- `sudo` asks in the terminal. DevGo never holds it.
 
-Enter opens a terminal on the server in a tmux session that survives, the same promise a WSL project gets. Select a server row and the footer's Terminal group becomes its **local hosts**: every terminal target (a plain tab running `ssh`), **psmux** (a session on this PC whose window runs the `ssh`, so the next launch reattaches) and **WSL** (the `ssh` run from inside your default distro, with the distro's own keys; greyed with the reason when the distro is not running, because DevGo never boots one for a terminal). The remote half is the **tmux on the box** chip beside them: on, the line attaches a tmux session on the server; off, it is the server's plain login shell. The row menu and the palette list the same hosts; `Shift+Enter` on a server row is the default terminal. Expand a server (or ↻) and one `ssh` lists its folders: `~`, `~/projects`, `/var/www` and `/srv` by default, plus any folder you pin as top level.
+### Everything else
 
-When the box carries a script at `~/scripts/devgo-inventory.sh`, the same call brings back its **apps**: each `/var/www` folder shows its domain, a dot for its pm2 processes, and its ports. The server declares its own **actions** in `devgo-actions.json` beside that script; right-click the server or an app to run them. An action is typed into a tmux window on the server and the terminal attaches to it. `sudo` asks there; DevGo never holds it, never runs a script itself, and never reads what came back.
+- Command palette (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd>) runs anything DevGo can do.
+- A global hotkey (<kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>Space</kbd> by default, you can change it) brings the window up from anywhere.
+- Every shortcut is listed in Settings › Shortcuts. On a Mac, <kbd>Ctrl</kbd> reads <kbd>Cmd</kbd>.
+- Themes: DevGo Neon, Matrix, Nord, Dracula, Pure Black.
+- Export your workspaces, targets and settings as one JSON file and import them on another machine.
+- Closing the window hides it to the tray. Only one DevGo runs at a time.
 
-Some actions are **forms**: *New site…* asks for the name, the domain, the port, the type (`PROXY · STATIC`), www and HTTPS, and shows the exact line it composes as you type. *Preview* runs it with `--dry-run` so the script prints what it would do and changes nothing; the other button runs it for real.
+</details>
 
-Teaching a box to describe itself is three files, and [`server/README.md`](server/README.md) is the contract: `server/devgo-inventory.sh` (a bash inventory for a typical Linux box: pm2 and docker processes, nginx sites, git, the lockfile), `server/devgo-actions.example.json` (the actions above, with placeholders, a local tunnel and the *New site…* form, to copy and edit) and `server/site-new.sh` (the script that form calls). The app carries them: right-click the server, *Set up this box…*, and one ssh puts the ones the box lacks into `~/scripts/` and lists its apps. A file already there that differs is yours and is left alone. Or `scp` them by hand, `chmod +x`, press ↻ on the row. Every key of both JSON documents is documented there, with what the app does with it.
+## Install
 
-## 📎 Attach
+Download from the [Releases page](https://github.com/joyahmed/devgo/releases/latest).
 
-A row with a live session gets *Attach here* (`Ctrl+Shift+A`, the row menu, the palette): the session opens in a pane under the lanes, the list still in view above it. The pane is an **attach view, not a terminal**: what runs in it is the multiplexer client — `psmux attach` for a Windows project, `tmux attach` inside the distro for a WSL one, `ssh -t … tmux new-session -A` for a server — and *Detach* ends that client while the session keeps running where it was, exactly as it would in a real terminal. Kill the session elsewhere and the pane says *detached*. One pane at a time; opening another replaces it. Keys typed into the pane are the shell's, `Ctrl+L` and `Ctrl+R` included; only the palette and the attach key stay DevGo's. It follows the theme and the transparency knob. DevGo still is not a terminal: the pane has no shell of its own and cannot open one.
+| System | File | First launch |
+|---|---|---|
+| **Windows** | `DevGo_<version>_x64-setup.exe` | Installs for your user, no admin. Windows warns you: click **More info**, then **Run anyway**. |
+| **Mac** (Apple silicon) | `DevGo_<version>_aarch64.dmg` | Drag DevGo to Applications. macOS blocks it the first time: open **System Settings › Privacy & Security**, click **Open Anyway**. On macOS 14 and older, right-click › **Open**. |
+| **Linux** (built on Ubuntu 24.04) | `DevGo_<version>_amd64.deb` | `sudo dpkg -i DevGo_<version>_amd64.deb`, then run `DevGo`. |
 
-## ⚙️ Settings
+DevGo isn't signed by a known publisher, which is why your system warns you. If a Mac ever says DevGo **is damaged**, that is a bug on my side, not your Mac: please [open an issue](https://github.com/joyahmed/devgo/issues).
 
-`Ctrl+,` or the gear. One page per concern: Workspaces, Editors & Terminals, tmux / psmux, GitHub, Shortcuts, Scanning, Appearance, Config, Servers, then Help and About.
+Optional, for the lanes that use them: `gh` for GitHub, `ssh` for Servers, `tmux` (or `psmux` on Windows) for sessions that survive.
 
-- **Appearance**: five themes (DevGo Neon, Matrix, Nord, Dracula, Pure Black), a transparency knob from 0 to 60 percent (it needs the OS transparency effects on, and says so when they are off), text size from 85 to 150 percent (`Ctrl+=`, `Ctrl+-`, `Ctrl+0`), and whether the footer shows its key hints.
-- **Shortcuts**: every key DevGo binds, listed once, read from the same table the handler uses. The summon hotkey (`Ctrl+Alt+Space` by default) brings the window up from anywhere and can be rebound here.
-- **Config**: export your workspaces, targets and settings as one JSON file and import them on another machine. Import is additive; the project cache is not exported because its paths are machine-local.
+## Watch it
 
-Everything lives as JSON in the app-data folder (`%APPDATA%\app.zetta.devgo` on Windows, `~/Library/Application Support/app.zetta.devgo` on a Mac). A file that cannot be parsed is backed up as `.bak`, never overwritten. Help › *Reveal in Explorer* opens the folder.
+See DevGo in use, and more of what I build: [youtube.com/@joysbuilds](https://www.youtube.com/@joysbuilds).
 
-Closing the window hides it; the summon hotkey or the tray icon brings it back, and Quit lives in the tray menu and `Ctrl+Q`. DevGo keeps one instance: launching it again shows the window you already have.
+## Privacy
 
-## ⌨️ Keyboard
+- No telemetry, no analytics, no automatic updates.
+- No GitHub token of its own: it uses your `gh` login. `gh auth logout` signs it out too.
+- No passwords: a server is an alias, a host and a key path.
+- GitHub is only asked when you ask. Live search is off until you turn it on.
+- Your settings stay in a JSON file on your machine. Settings › Help has a button that opens the folder.
 
-Every binding is declared once in `src/shortcuts.ts`; the handler, the footer hints and Settings › Shortcuts all read that table. On a Mac, `Ctrl` reads `Cmd` and `Alt` reads `Opt`. The main ones:
+## Build from source
 
-| Keys | Does |
-|---|---|
-| `Ctrl+Shift+P` | Command palette (runs anything DevGo can do) |
-| `Ctrl+K` / `Ctrl+G` | Focus search / focus GitHub search |
-| `Ctrl+L` | Clear search |
-| `F5` (or `Ctrl+R`) | Refresh projects |
-| `↑` `↓` `Home` `End` | Move the selection |
-| `→` `←` | Expand / collapse a workspace |
-| `Ctrl+Space` | Toggle a workspace |
-| `Enter` | Open the selected project |
-| `Ctrl+Enter` | Open in editor |
-| `Shift+Enter` | Open terminal |
-| `Alt+Enter` | Open both |
-| `Ctrl+Alt+Enter` | Open in agent |
-| `Ctrl+Alt+Shift+Enter` | Open in the other agent (the first one that is not the default) |
-| `Ctrl+S` | Pin / unpin |
-| `Ctrl+Shift+D` | Run dev script… |
-| `Ctrl+Shift+A` | Attach the session here / detach |
-| `Ctrl+Shift+G` | Open remote in browser |
-| `Ctrl+Shift+E` | Reveal in Explorer (Finder) |
-| `Ctrl+Shift+C` | Copy Windows path (copy path on a Mac) |
-| `Ctrl+Shift+W` | Copy WSL path (Windows only) |
-| `Ctrl+N` / `Delete` | Add / remove a workspace |
-| `Alt+↑` `Alt+↓` | Move a workspace up / down |
-| `Ctrl+Alt+E` | Reveal the workspace in Explorer (Finder) |
-| `Ctrl+,` | Settings |
-| `Ctrl+=` `Ctrl+-` `Ctrl+0` | Text bigger / smaller / 100 % |
-| `Ctrl+Q` | Quit |
-| `Ctrl+Alt+Space` | Summon (global, rebindable) |
-
-## 📦 Install
-
-Builds are unsigned on every platform. I hold no code-signing certificate, so Windows and macOS both stop the first launch and say they do not know who made it. Each has a way through, written under its own heading below. Download from [Releases](https://github.com/joyahmed/devgo/releases); each one is built by GitHub Actions from a `v*` tag (`.github/workflows/release.yml`), so the installer on the page is the tag's tree, nothing more.
-
-**Windows**: `DevGo_<version>_x64-setup.exe` (3 MB) installs per user into `%LOCALAPPDATA%\DevGo`, no admin. SmartScreen will say the publisher is unknown: *More info* › *Run anyway*. WebView2 is already on Windows 10 and 11; the installer fetches it if it is missing.
-
-**macOS**: `DevGo_<version>_aarch64.dmg` (3.7 MB). Drag `DevGo.app` to Applications. Gatekeeper will refuse the first launch, because nothing identifies the developer. Open it once and let the refusal come up, then System Settings › Privacy & Security › *Open Anyway*; on macOS 14 and older, right-click › Open. Copied straight out of the build tree it needs none of that on the machine that built it.
-
-If macOS instead says DevGo **is damaged and can't be opened**, that is a different thing and there is no *Open Anyway* on it. It means the bundle that shipped is malformed, not that anything is wrong with your Mac, and it is a bug I want to know about: please [open an issue](https://github.com/joyahmed/devgo/issues) with the release version and your macOS version. I used to tell people to clear the app's quarantine attribute when they saw it. That advice is gone: it skips the check rather than answering it, so the app opens and the bad bundle stays.
-
-**Linux**: `DevGo_<version>_amd64.deb`. `sudo dpkg -i DevGo_<version>_amd64.deb`, then run `DevGo`. The `.deb` is unsigned too and `dpkg -i` does not check signatures, so there is nothing here for you to click past. It depends on `libwebkit2gtk-4.1-0`, `libgtk-3-0` and `libayatana-appindicator3-1`, which a desktop Ubuntu already has. Built on 24.04. The terminal row is seeded with the first emulator on PATH, in the order ghostty, wezterm, kitty, alacritty, gnome-terminal, konsole, xfce4-terminal, tilix, foot, terminator, xterm, and Scan finds the others. A box with none of them installed gets no terminal row at all.
-
-Optional, for the lanes that want them: `gh` (GitHub), `ssh` (Servers), `psmux` on Windows or `tmux` in the distro and on the Mac.
-
-**From source**: Rust stable and bun.
+You need Rust (stable) and [Bun](https://bun.sh).
 
 ```
 bun install
-bun tauri dev      # dev build with hot reload
-bun tauri build    # release; the bundles land in src-tauri/target/release/bundle/
+bun tauri dev      # run it while you work on it
+bun tauri build    # installers land in src-tauri/target/release/bundle/
 ```
 
-On **Linux** those two lines are not enough on their own: tauri links against webkit2gtk and gtk, and a box without their `-dev` packages fails deep in a cargo build with a pkg-config error that names a `.pc` file rather than a package. `scripts/build-linux.sh` carries the list and checks it first - it prints the exact `apt install` line and builds nothing when something is missing, or takes `--deps` to install them itself and `--install` to `dpkg -i` the result.
+On Linux, Tauri needs the WebKitGTK and GTK `-dev` packages. `scripts/build-linux.sh --deps --install` installs them, builds, and installs the `.deb`.
 
-```bash
-scripts/build-linux.sh --deps --install
+`bun run build` runs the contrast check, the type check and the build. `cargo test` in `src-tauri` runs the Rust tests. CI runs both on every push.
+
+## Built in chapters
+
+I built DevGo in the open, one chapter at a time, and every chapter is a branch that builds and runs on its own. The chapter text sits beside the code in [`docs/chapters/`](docs/chapters/README.md).
+
+```
+git checkout 05.launcher    # chapter 05's app, and its text
 ```
 
-`bun run build` runs the contrast gate, `tsc` and Vite; `cargo test` in `src-tauri` runs the Rust tests. CI runs both on every push and pull request, and the tag build runs them on each platform before it bundles.
+## Found a bug?
 
-`bun run install:local` replaces the four manual steps of a local reinstall — build, stop the running DevGo, install, relaunch — with one, and prints the commit it was built at. On **Windows** it builds the NSIS installer and runs it with `/S` (`scripts/install-local.ps1`). On **macOS** it builds the `.app`, quits DevGo, replaces `/Applications/DevGo.app`, strips the quarantine flag and opens it. On **Linux** it builds the `.deb`, stops DevGo and runs `sudo apt install` on it — sudo asks for your password in the terminal — then starts `DevGo` detached. `--skip-build`, `--no-launch` and `--dry-run` work on all three; see `scripts/install-local.mjs`.
+Check [docs/KNOWN-ISSUES.md](docs/KNOWN-ISSUES.md) first. Anything else, [open an issue](https://github.com/joyahmed/devgo/issues/new/choose). The form asks for the version and build sha from Settings › About, your OS, and the last lines of the log. That turns a report into a fix much faster.
 
-`bun run smoke` then proves this box works with no window driven: the last DevGo started is HEAD's build (the sha in `devgo.log`'s start line), `targets.json` has no migration left, and the dev menu's `dev` and Install lines — built by the app itself via `DevGo --smoke-probe` — find the user's node (on WSL, nvm's, not `/mnt/c`) and end in their login shell; `--full` adds the repo gates, `--json` is for agents.
+I build DevGo alone, so answers take a few days. Windows is what I use most, so I catch things there fastest.
 
-## 🧭 Platform notes
+## License
 
-- **WSL never boots on launch.** Reading a WSL workspace whose distro is off would start the VM, so DevGo does not: it shows the cached list and marks it. Only Refresh and opening a project are allowed to start a distro, because you asked. Runtime detection (which distros exist, whether `wsl.exe` is there) runs on the first launch and on Refresh, never on every start.
-- **The Mac's PATH.** An app launched from the Dock inherits `launchd`'s four directories, not your shell's PATH. DevGo asks your login shell for its PATH once and hands it to every child, so `code`, `tmux`, `gh` and the nvm node are found where your terminal finds them.
-- **Nothing runs on the UI thread that can block**: `gh`, `git`, `ssh` and the scan are spawned quietly (no console window on Windows) and reported when they return.
+MIT. See [LICENSE](LICENSE).
 
-## 🗺️ Next
+---
 
-- **More server actions** in the example set, as people ask for them.
+<div align="center">
 
-What it gets wrong today is written down rather than left to be discovered: [`docs/KNOWN-ISSUES.md`](docs/KNOWN-ISSUES.md) lists the rough edges in the current release, what you will see when you hit one, and the way round it. Issues are welcome — anything that is not on that list especially.
+I build tools I use myself, from Bangladesh. If DevGo gets you to your work a little faster, that makes me happy.<br>
+Found a bug or want something? [Open an issue](https://github.com/joyahmed/devgo/issues).
 
-## 🐞 Feedback and bug reports
+**Joy**
 
-One person builds DevGo — there is no team behind it and no queue triaging reports before they
-reach me. That is a fact about how this gets made, not an apology for it: a solo project still owes
-you a real answer, it just takes a few days to land rather than a few hours, and Windows is what I
-use every day, so that is where I catch things fastest — other platforms wait longer behind it.
-
-A bug report and a suggestion get the same welcome here. I would rather hear about a rough edge
-than have you work around it in silence, and an idea from someone who actually runs this launcher
-day to day is worth as much to me as a bug — I only see DevGo the way I use it, and you may not.
-
-This release carries real automated coverage — 939 frontend tests, 422 Rust tests — but no
-systematic click-through of the UI yet; a harness for that exists and has not been run. So there is
-a real chance something slipped through that the tests do not reach.
-
-Check [`docs/KNOWN-ISSUES.md`](docs/KNOWN-ISSUES.md) first — a report of something already listed
-there costs you a write-up for nothing. Anything else, [open an issue](https://github.com/joyahmed/devgo/issues/new/choose);
-the bug report form asks for the handful of things that make a report fixable on arrival rather
-than a round trip of follow-up questions — a well-formed report gets fixed far faster than a vague
-one, because I am not chasing the details down myself first:
-
-- **Version and build sha**, from Settings › About (`vX.Y.Z · <sha>`). The sha is the important
-  half — it pins a report to the exact revision the build came from, which the version number
-  alone cannot: before it was added, every build reported the same version string and an install
-  could not be traced back to a commit at all.
-- **Platform and OS version** — DevGo behaves differently enough per platform that this is not a
-  formality.
-- **Which editor, terminal and agent you had configured** (Settings › Editors & Terminals) —
-  launching into one of them is the most platform-fragile path in the app.
-- **The WSL distro and whether it was running**, when it's relevant — a stopped distro changes
-  behaviour on purpose, and a reporter would not otherwise know that is expected.
-- **The last 20 to 40 lines of the log**, timestamps in UTC: `%APPDATA%\app.zetta.devgo\devgo.log`
-  on Windows, `~/Library/Application Support/app.zetta.devgo/devgo.log` on a Mac,
-  `~/.local/share/app.zetta.devgo/devgo.log` on Linux. A launch or dev-script bug is usually
-  diagnosable from those lines alone.
-
-Feature ideas and general feedback use the same door — the same
-[new issue](https://github.com/joyahmed/devgo/issues/new/choose) page has a lighter template for
-those, or a blank issue if neither fits.
-
-## 📖 Chapters
-
-DevGo was built one chapter at a time, and every chapter is a branch: the tree at `NN.name` builds and runs exactly as chapter `NN` leaves it, with the chapter's own text at `docs/chapters/NN-name.md` beside the code it describes. The full set — 76 chapters, the prerequisites and the Rust and Tauri appendices — is in [`docs/chapters/`](docs/chapters/README.md).
-
-```powershell
-git checkout NN.name    # e.g. git checkout 05.launcher — chapter 05's app, and its text
-```
-
-## 📜 History
-
-DevGo was not designed from a feature list. It is the layer that grew on top of how I already worked, and it has two roots.
-
-**The launcher line.** For a long time my "launcher" was a right-click. A few PowerShell scripts put *Open Ubuntu here* and *Open VS Code WSL here* on every folder in Explorer, and a profile of shortcuts — `dev`, `build`, `killdev`, `runpkg` — knew what to do inside a project. It worked until it didn't: a right-click needs you to find the folder first, and a shell function needs you already in it. Neither answers the actual question, *which project, and where does it live* — on the local disk, in a WSL distro, in a tmux session, in an editor. So in May 2026 I wrote [DevGo v1](https://github.com/joyahmed/devgo-winforms) in C# and WinForms: one window, every project, one keystroke. Two weeks later I started this rewrite in Tauri and Rust, partly to learn Rust properly, partly because the WinForms app could never be the Mac's launcher too.
-
-**The servers line.** Since 2023 I have run the systems I build. That means the boxes as well as the code: nginx, PM2, ports, Postgres, TLS, backups — first by hand, per site, then, when repeating it had become stupid, as scripts: provision a box, create a site, secure it, back the database up, find which process actually holds a port. That knowledge lived in a terminal and a folder of shell scripts, with nothing above it.
-
-**Where they meet.** In September 2026 the launcher learned the servers — every host in the ssh config became a row, Enter opened a tmux session on the box, the folders drilled down — and the same week the scripts learned to describe the box back to it: one script that prints the apps, ports and sites as JSON, one file that declares what can be done to them. That contract is in [`server/`](server/), and the app can install it on a box for you. DevGo is the layer above both lines: what you have, where it is, and the door to it.
-
-**How it was built.** In the open, one feature per commit, one branch per chapter, from 15 September 2026 on. Every chapter builds and runs on its own; the tree at any stage is a working app, and the commit log is the tutorial. Nothing in it was invented for the log — the rebuild compressed a workflow that already existed.
-
-## 📄 Licence
-
-MIT — see [LICENSE](LICENSE).
+</div>
