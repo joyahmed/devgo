@@ -13,6 +13,10 @@ Every project you have, one keystroke to where you work on it.
 
 Free · No tracking · Rust + Tauri 2 + React 19
 
+<br>
+
+<img src="docs/media/devgo-demo.gif" alt="DevGo: press Cmd K, type wth, press Cmd Enter, and weather-cli opens in VS Code" width="900">
+
 </div>
 
 <br>
@@ -24,6 +28,31 @@ For a long time my "launcher" was a right-click. A few PowerShell scripts put *O
 So in May 2026 I wrote the first DevGo in C# and WinForms ([devgo-winforms](https://github.com/joyahmed/devgo-winforms)): one window, every project, one keystroke. It only ran on Windows, and I also work on a Mac and on Ubuntu. Two weeks later I started this rewrite in Tauri and Rust, partly to learn Rust properly.
 
 I also run the servers my apps live on, and that knowledge sat in a folder of shell scripts. Now the servers are a lane in DevGo too. It is not an editor, a terminal or a git client. It opens the door and gets out of the way. I use it every day.
+
+## A quick look
+
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="docs/media/screens/launcher.png" alt="The DevGo project list with two workspaces and 12 projects"><br>
+      <b>Every project in one list.</b> Each row shows the language, the package manager and the git branch it found.
+    </td>
+    <td width="50%" valign="top">
+      <img src="docs/media/screens/palette.png" alt="Typing ser in the search box leaves two matching projects"><br>
+      <b>Search as you type.</b> <kbd>Cmd</kbd>+<kbd>K</kbd> jumps to the box, and the list narrows to the projects that match.
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="docs/media/screens/open.png" alt="The weather-cli project open in VS Code"><br>
+      <b>One key to your editor.</b> <kbd>Cmd</kbd>+<kbd>Enter</kbd> opens the highlighted project in VS Code, ready to work.
+    </td>
+    <td width="50%" valign="top">
+      <img src="docs/media/screens/settings.png" alt="The Appearance settings with five themes, text size and transparency"><br>
+      <b>Make it yours.</b> Five themes, text size and window transparency live in Settings.
+    </td>
+  </tr>
+</table>
 
 ## Highlights
 
