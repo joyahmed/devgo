@@ -2833,6 +2833,32 @@ pub fn quit_app(app: tauri::AppHandle, state: State<AppState>) {
     app.exit(0);
 }
 
+/// A folder named on the command line, waiting for the window to act on
+/// it: the first launch's own, or the last one a second launch forwarded.
+pub struct PendingOpen(
+    pub Mutex<Option<crate::services::launch_args::OpenRequest>>,
+);
+
+pub fn set_pending_open(
+    app: &tauri::AppHandle,
+    req: crate::services::launch_args::OpenRequest,
+) {
+    if let Some(p) = app.try_state::<PendingOpen>() {
+        if let Ok(mut slot) = p.0.lock() {
+            *slot = Some(req);
+        }
+    }
+}
+
+/// The waiting folder, once: a second call returns `None`, so a remount or
+/// a second listener never opens it twice.
+#[tauri::command]
+pub fn take_open_request(
+    pending: State<PendingOpen>,
+) -> Option<crate::services::launch_args::OpenRequest> {
+    pending.0.lock().ok().and_then(|mut s| s.take())
+}
+
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct LastProject {
     pub full_path: String,

@@ -11,10 +11,10 @@ use services::platform::detection;
 use services::preferences::{Screen, WindowState};
 use services::runtime_log;
 use services::runtime_log::log_line;
-use services::single_instance;
 use services::workspace::WorkspaceStore;
+use services::{launch_args, single_instance};
 use tauri::tray::TrayIconBuilder;
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 
 /// The taskbar button's identity and icon, which tauri leaves half done.
 /// The nsis installer stamps the shortcuts with the bundle identifier as
@@ -371,11 +371,31 @@ pub fn run() {
             runtime_log::init(&app_data_dir);
             runtime_log::session_header(&app.package_info().version.to_string());
 
-            // One instance. A second launch hands "restore" to the first over
-            // the port in instance.lock and exits before creating anything.
+            // a folder on the command line (`devgo <folder>`, `devgo --open
+            // <folder>`), resolved here, against THIS process's cwd: a
+            // second launch forwards it, and the running instance's cwd is
+            // not the one the user typed the relative path in
+            let open_request = launch_args::OpenRequest::from_invocation(
+                launch_args::parse(
+                    &std::env::args().skip(1).collect::<Vec<_>>(),
+                    cfg!(windows),
+                ),
+                &std::env::current_dir().unwrap_or_default(),
+            );
+            if let Some(e) = open_request.as_ref().and_then(|r| r.error.as_ref()) {
+                log_line!("DevGo: {e}");
+            }
+            let handoff = match &open_request {
+                Some(r) => launch_args::Handoff::Open(r.clone()),
+                None => launch_args::Handoff::Restore,
+            };
+
+            // One instance. A second launch hands "restore" - or "open" and
+            // its folder - to the first over the port in instance.lock and
+            // exits before creating anything.
             let lock_file = app_data_dir.join("instance.lock");
             let (listener, lock_path) =
-                match single_instance::try_acquire(lock_file) {
+                match single_instance::try_acquire(lock_file, &handoff) {
                     Ok((listener, path)) => {
                         // which of the two instances this one turned out to
                         // be is the first thing any "it did not come up"
@@ -397,16 +417,30 @@ pub fn run() {
                 };
 
             commands::mark_startup("lock".into());
+            // the first launch's own folder waits here until the window
+            // asks for it: the webview is not loaded yet, so an event sent
+            // now would reach nobody
+            app.manage(commands::PendingOpen(std::sync::Mutex::new(open_request)));
             let app_handle = app.handle().clone();
-            single_instance::start_restore_listener(listener, move || {
+            single_instance::start_restore_listener(listener, move |handoff| {
                 let h = app_handle.clone();
                 let h2 = h.clone();
+                // a second launch's folder replaces any not yet taken; the
+                // event only says "ask", so a window that loads late still
+                // finds it with take_open_request on mount
+                let open = matches!(handoff, launch_args::Handoff::Open(_));
+                if let launch_args::Handoff::Open(req) = handoff {
+                    commands::set_pending_open(&h, req);
+                }
                 // the same raise the summon hotkey uses. this used to be its
                 // own two-call copy, and the copy had drifted: no unminimize,
                 // no app-level unhide, so the second copy printed its line
                 // and nothing came up
                 let _ = h.run_on_main_thread(move || {
                     summon::raise_main(&h2);
+                    if open {
+                        let _ = h2.emit("devgo://open-request", ());
+                    }
                 });
             });
 
@@ -735,6 +769,7 @@ fn command_dispatch(
         commands::startup_ms,
         commands::mark_startup,
         commands::quit_app,
+        commands::take_open_request,
         commands::toggle_pin,
         commands::get_summon_hotkey,
         commands::get_window_transparency,

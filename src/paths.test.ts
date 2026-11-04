@@ -5,6 +5,7 @@ import {
 	namesOf,
 	normalizePath,
 	parentOf,
+	projectForPath,
 	wslDistroOf
 } from './paths';
 
@@ -214,5 +215,51 @@ describe('wslDistroOf and missingFromDistro', () => {
 		expect(missingFromDistro({ wsl_distros: [] }, 'Debian')).toBe(false);
 		expect(missingFromDistro({}, 'Debian')).toBe(false);
 		expect(missingFromDistro({ wsl_distros: ['Ubuntu'] }, null)).toBe(false);
+	});
+});
+
+describe('projectForPath — the row `devgo <folder>` means', () => {
+	const rows = [
+		{ full_path: '/home/alex/projects/devgo' },
+		{ full_path: '/home/alex/projects/devgo/packages/core' },
+		{ full_path: 'C:\\Users\\alex\\work\\trove' },
+		{ full_path: '\\\\wsl.localhost\\Ubuntu\\home\\alex\\api' }
+	];
+
+	it('finds the row itself, trailing separator or not', () => {
+		expect(projectForPath(rows, '/home/alex/projects/devgo/')).toBe(rows[0]);
+	});
+
+	it('picks the deepest project a folder sits inside', () => {
+		expect(projectForPath(rows, '/home/alex/projects/devgo/src')).toBe(rows[0]);
+		expect(
+			projectForPath(rows, '/home/alex/projects/devgo/packages/core/src')
+		).toBe(rows[1]);
+	});
+
+	it('does not take a sibling that only shares a prefix', () => {
+		expect(projectForPath(rows, '/home/alex/projects/devgo-old')).toBeUndefined();
+	});
+
+	it('compares a windows path without case and with either separator', () => {
+		expect(projectForPath(rows, 'c:/users/ALEX/work/trove')).toBe(rows[2]);
+		expect(projectForPath(rows, 'C:\\Users\\alex\\work\\trove\\src')).toBe(
+			rows[2]
+		);
+	});
+
+	it('compares a unix path exactly', () => {
+		expect(projectForPath(rows, '/home/alex/Projects/devgo')).toBeUndefined();
+	});
+
+	it('matches a wsl row only under its own name', () => {
+		expect(
+			projectForPath(rows, '\\\\wsl.localhost\\Ubuntu\\home\\alex\\api')
+		).toBe(rows[3]);
+		expect(projectForPath(rows, '/home/alex/api')).toBeUndefined();
+	});
+
+	it('finds nothing in an empty list', () => {
+		expect(projectForPath([], '/x')).toBeUndefined();
 	});
 });

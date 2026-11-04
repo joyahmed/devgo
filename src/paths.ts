@@ -39,3 +39,33 @@ export const namesOf = (paths: string[]) => {
 	if (names.length === 2) return `${names[0]} and ${names[1]}`;
 	return `${names[0]}, ${names[1]} +${names.length - 2} more`;
 };
+
+// `devgo <folder>`: the project row a folder on the command line means. the
+// row itself, or else the deepest project the folder sits inside, so
+// `devgo src` from inside a repo still lands on that repo. a windows path
+// (a drive, or \\server) compares without case, as windows does; a unix
+// path compares exactly. no wsl mapping here: a \\wsl.localhost path
+// matches a row stored under that same name, nothing more
+const windowsish = (p: string) => /^[a-z]:\//i.test(p) || p.startsWith('//');
+const pathKey = (p: string) => {
+	const n = normalizePath(p);
+	return windowsish(n) ? n.toLowerCase() : n;
+};
+export const projectForPath = <T extends { full_path: string }>(
+	projects: T[],
+	path: string
+): T | undefined => {
+	const want = pathKey(path);
+	let best: T | undefined;
+	let bestLen = -1;
+	for (const p of projects) {
+		const key = pathKey(p.full_path);
+		const inside =
+			want === key || want.startsWith(key.endsWith('/') ? key : `${key}/`);
+		if (inside && key.length > bestLen) {
+			best = p;
+			bestLen = key.length;
+		}
+	}
+	return best;
+};

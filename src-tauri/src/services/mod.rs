@@ -7,6 +7,7 @@ pub mod frecency;
 pub mod git;
 pub mod github;
 pub mod groups;
+pub mod launch_args;
 pub mod launcher;
 pub mod platform;
 pub mod preferences;
