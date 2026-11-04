@@ -426,6 +426,16 @@ src/
 - **✕ means hide, and that needs a second way out.** A resident app must be quittable from somewhere the user will actually look — the tray menu and a shortcut, not just one of them.
 - **A lock file with a port in it is a single-instance protocol.** `create_new` for atomicity, an ephemeral port so nothing is reserved, a dead port as the stale-lock signal.
 
+### Extension: the second launch can carry a folder
+
+`devgo <folder>` and `devgo --open <folder>` ask DevGo to select that project. The request is parsed in `services/launch_args.rs` before the lock is taken, so both outcomes use it:
+
+- **First launch:** the request is held (`PendingOpen`) and the frontend takes it once with `take_open_request`. A pick made before the first scan answers is not overwritten by the "last project" restore.
+- **Second launch:** the process sends the request to the running instance over the lock-file port (64 KiB cap, 2 s read timeout; a bare `restore` is still accepted), the window is raised, `devgo://open-request` is emitted, and the second process exits 0.
+- **Refusals:** a file, a missing path or an unknown project gets a toast, never a silent no-op.
+
+Not done: mapping `\\wsl.localhost\...` paths to a WSL workspace.
+
 → Next: [08 — Remembering Between Launches](./08-last-project.md)
 
 → Appendix: [Tauri Concepts](./appendix/tauri-concepts.md)

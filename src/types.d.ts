@@ -12,6 +12,14 @@ interface Project {
 	file_system: string;
 }
 
+/// `devgo <folder>`: the folder a launch named, resolved by the launching
+/// process (launch_args::OpenRequest). `error` set means it was refused, and
+/// says why; `path` is then what was typed
+interface OpenRequest {
+	path: string;
+	error: string | null;
+}
+
 /// The WSL chip's state: the watcher's event and `get_wsl_state` share it.
 /// `up` is the VM's process being in the process table; `distros` is what
 /// `wsl -l -q --running` last said. Up with an empty list is a VM that has

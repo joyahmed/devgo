@@ -242,6 +242,9 @@ export const useProjects = () => {
 		};
 	}, []);
 
+	// set by the first selection made on this launch, by any route
+	const picked = useRef(false);
+
 	// First-launch restore: scan, then re-select the project saved last time if
 	// it still exists. Runs exactly once — re-running it after a rescan would
 	// steal the selection the user just made.
@@ -264,7 +267,10 @@ export const useProjects = () => {
 			.then(payload =>
 				invoke<LastProject | null>('get_last_project')
 					.then(last => {
-						if (!last) return;
+						// a pick made while the pass ran - a click on the
+						// cached list, or `devgo <folder>` - is newer than
+						// last time's, and the restore must not undo it
+						if (!last || picked.current) return;
 						const match = payload.projects.find(
 							p => p.full_path === last.full_path
 						);
@@ -277,6 +283,7 @@ export const useProjects = () => {
 
 	// Every selection is persisted, so the next launch can land on it.
 	const selectAndSave = (proj: Project | null) => {
+		picked.current = true;
 		setSelected(proj);
 		if (proj) {
 			invoke('set_last_project', {

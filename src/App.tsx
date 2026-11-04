@@ -47,6 +47,7 @@ import { useGithub } from './hooks/useGithub';
 import { useLaunchActions } from './hooks/useLaunchActions';
 import { useMaximized } from './hooks/useMaximized';
 import { useMediaQuery } from './hooks/useMediaQuery';
+import { useOpenRequest } from './hooks/useOpenRequest';
 import { useProjects } from './hooks/useProjects';
 import { useServers } from './hooks/useServers';
 import { useServerSetup } from './hooks/useServerSetup';
@@ -577,6 +578,13 @@ const AppInner = () => {
 		if (match) setSelected(match);
 		else toast('That clone is not in a workspace DevGo scans', 'info');
 	};
+
+	// `devgo <folder>`: select the project it names, or say why not
+	useOpenRequest(projects, loading, o => {
+		if (o.kind !== 'select') return toast(o.message, o.kind === 'refused' ? 'error' : 'info');
+		setQuery('');
+		setSelected(o.project);
+	});
 
 	const [repoMenu, setRepoMenu] = useState<RepoMenu | null>(null);
 

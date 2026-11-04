@@ -331,6 +331,31 @@ describe('useProjects — the selection that survives a restart', () => {
 		});
 	});
 
+	// `devgo <folder>` picks a project while the first scan is still running;
+	// the restore that follows the scan is older news and must not undo it
+	it('keeps a pick made before the scan answered over the saved one', async () => {
+		wire({
+			list: payload([proj('devgo'), proj('zetta')]),
+			last: { full_path: 'C:/dev/zetta', workspace: 'C:/dev' }
+		});
+		const scan = deferred<ProjectsPayload>();
+		const base = invoke.getMockImplementation()!;
+		invoke.mockImplementation((cmd: string, args?: unknown) =>
+			cmd === 'get_projects' ? scan.promise : base(cmd, args)
+		);
+		const { result } = await mounted();
+
+		await act(async () => {
+			result.current.setSelected(proj('devgo'));
+		});
+		await act(async () => {
+			scan.resolve(fresh(payload([proj('devgo'), proj('zetta')])));
+		});
+		await settle();
+
+		expect(result.current.selected?.name).toBe('devgo');
+	});
+
 	it('writes nothing when the selection is cleared', async () => {
 		wire({ list: payload([proj('devgo')]) });
 		const { result } = await mounted();
