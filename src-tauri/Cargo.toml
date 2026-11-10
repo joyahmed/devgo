@@ -35,6 +35,11 @@ portable-pty = "0.9.0"
 # nothing in it is hot enough for opt-level 3 to matter. no panic = "abort":
 # keep the unwind so a panicking command surfaces as an error the frontend
 # can toast, not a dead process
+# reads `App Paths\<exe>` (services/editors.rs app_paths_lookup): where an installer that puts
+# nothing on PATH said its exe is. Already in the tree through tauri, so no new crate is built.
+[target.'cfg(windows)'.dependencies]
+winreg = "0.55"
+
 [profile.release]
 codegen-units = 1
 lto = true

@@ -1096,6 +1096,7 @@ pub(crate) fn wayland_session() -> bool {
 fn locate(
     c: &Candidate,
     found: &HashMap<String, String>,
+    apps: &HashMap<String, String>,
     lnks: &HashMap<String, String>,
 ) -> Option<DetectedTarget> {
     if !c.exe.is_empty() {
@@ -1107,6 +1108,21 @@ fn locate(
                 extends_saved: false,
             });
         }
+    }
+
+    // App Paths before the shortcut: it is the installer's own record of
+    // the exe and survives a deleted Start Menu entry. only a row that
+    // names a shortcut asks, the same rows the second door is for
+    if let Some(path) = c.win_lnk.and_then(|_| apps.get(&c.exe.to_lowercase()))
+    {
+        let mut target = to_target(c);
+        target.executable = path.clone();
+        return Some(DetectedTarget {
+            target,
+            source: "app-paths".to_string(),
+            detail: path.clone(),
+            extends_saved: false,
+        });
     }
 
     if let Some(path) = c.win_lnk.and_then(|n| lnks.get(&n.to_lowercase())) {
@@ -1229,7 +1245,12 @@ pub fn detect(running: &[String], installed: &[String]) -> Vec<DetectedTarget> {
         .filter(|e| !e.is_empty())
         .collect();
     let found = path_lookup(&names);
-    let lnks = shortcut_lookup(&found);
+    let apps = app_paths_lookup(&found);
+    // a row App Paths answered needs no shortcut, so powershell is not
+    // started for it
+    let mut known = found.clone();
+    known.extend(apps.iter().map(|(k, v)| (k.clone(), v.clone())));
+    let lnks = shortcut_lookup(&known);
     // a distro's console editor opens in wt too when there is one
     let has_wt = found.contains_key("wt");
 
@@ -1237,7 +1258,7 @@ pub fn detect(running: &[String], installed: &[String]) -> Vec<DetectedTarget> {
     let mut out: Vec<DetectedTarget> = CANDIDATES
         .iter()
         .filter(|c| usable_in_session(c, wayland))
-        .filter_map(|c| locate(c, &found, &lnks))
+        .filter_map(|c| locate(c, &found, &apps, &lnks))
         .collect();
 
     // console editors: on PATH, else (Neovim's msi) under Program Files.
@@ -1848,6 +1869,58 @@ fn shortcut_lookup(found: &HashMap<String, String>) -> HashMap<String, String> {
         }
     }
     out
+}
+
+/// `HKCU` then `HKLM` `...\CurrentVersion\App Paths\<exe>.exe`, default
+/// value: the exe an installer registered (trove's NSIS writes it). Only
+/// for rows that name a shortcut and missed PATH; a value whose file is
+/// gone is no answer. Keyed by the lowercased exe, as `found` is.
+#[cfg(windows)]
+fn app_paths_lookup(
+    found: &HashMap<String, String>,
+) -> HashMap<String, String> {
+    use winreg::enums::{HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE};
+    use winreg::RegKey;
+    let mut out = HashMap::new();
+    for c in CANDIDATES {
+        let key = c.exe.to_lowercase();
+        if c.win_lnk.is_none() || key.is_empty() || found.contains_key(&key) {
+            continue;
+        }
+        let sub = format!(
+            r"Software\Microsoft\Windows\CurrentVersion\App Paths\{key}.exe"
+        );
+        let hit =
+            [HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE]
+                .iter()
+                .find_map(|h| {
+                    let raw: String = RegKey::predef(*h)
+                        .open_subkey(&sub)
+                        .ok()?
+                        .get_value("")
+                        .ok()?;
+                    let exe = app_path_value(&raw)?;
+                    std::path::Path::new(&exe).is_file().then_some(exe)
+                });
+        if let Some(exe) = hit {
+            out.insert(key, exe);
+        }
+    }
+    out
+}
+
+#[cfg(not(windows))]
+fn app_paths_lookup(
+    _found: &HashMap<String, String>,
+) -> HashMap<String, String> {
+    HashMap::new()
+}
+
+/// An App Paths default value as an exe path: trimmed, outer quotes off,
+/// None when empty. Pure, so every OS tests it.
+fn app_path_value(raw: &str) -> Option<String> {
+    let v = raw.trim().trim_matches('"').trim();
+    (!v.is_empty()).then(|| v.to_string())
 }
 
 // off windows there are no shortcuts, so the map is empty and locate's
@@ -3018,7 +3091,8 @@ mod tests {
         let code = CANDIDATES.iter().find(|c| c.id == "vscode").unwrap();
         let mut found = HashMap::new();
         found.insert("code".to_string(), "/opt/homebrew/bin/code".to_string());
-        let d = locate(code, &found, &HashMap::new()).expect("on PATH");
+        let d = locate(code, &found, &HashMap::new(), &HashMap::new())
+            .expect("on PATH");
         assert_eq!(d.source, "path");
         assert_eq!(d.target.executable, "code");
         assert_eq!(d.target.args_template, "\"{path}\"");
@@ -3036,7 +3110,13 @@ mod tests {
             app: Some("DevGo Ghost Editor That Does Not Exist"),
             win_lnk: None,
         };
-        assert!(locate(&ghost, &HashMap::new(), &HashMap::new()).is_none());
+        assert!(locate(
+            &ghost,
+            &HashMap::new(),
+            &HashMap::new(),
+            &HashMap::new()
+        )
+        .is_none());
 
         let root = std::env::temp_dir().join("devgo-editors-bundle-test");
         let _ = std::fs::remove_dir_all(&root);
@@ -3089,7 +3169,8 @@ mod tests {
         // none of these fakes is in /Applications, so locate itself says no
         for c in [&term, &editor, &no_cli] {
             assert!(
-                locate(c, &HashMap::new(), &HashMap::new()).is_none(),
+                locate(c, &HashMap::new(), &HashMap::new(), &HashMap::new())
+                    .is_none(),
                 "{}",
                 c.id
             );
@@ -3528,15 +3609,22 @@ mod tests {
         let explorer = CANDIDATES.iter().find(|c| c.id == "explorer").unwrap();
         assert!(explorer.win_lnk.is_none());
         assert!(
-            locate(explorer, &HashMap::new(), &lnks).is_none(),
+            locate(explorer, &HashMap::new(), &HashMap::new(), &lnks).is_none(),
             "a row with no win_lnk is untouched by the map"
         );
 
         let trove = CANDIDATES.iter().find(|c| c.id == "trove").unwrap();
         // nothing resolved, nothing offered
-        assert!(locate(trove, &HashMap::new(), &HashMap::new()).is_none());
+        assert!(locate(
+            trove,
+            &HashMap::new(),
+            &HashMap::new(),
+            &HashMap::new()
+        )
+        .is_none());
 
-        let d = locate(trove, &HashMap::new(), &lnks).expect("resolved");
+        let d = locate(trove, &HashMap::new(), &HashMap::new(), &lnks)
+            .expect("resolved");
         assert_eq!(d.source, "shortcut");
         assert_eq!(d.target.executable, r"E:\Apps\Trove\trove.exe");
         assert_eq!(d.detail, r"E:\Apps\Trove\trove.exe");
@@ -3549,9 +3637,63 @@ mod tests {
         // PATH still wins when both could answer
         let mut found = HashMap::new();
         found.insert("trove".to_string(), r"C:\bin\trove.exe".to_string());
-        let d = locate(trove, &found, &lnks).expect("on PATH");
+        let d = locate(trove, &found, &HashMap::new(), &lnks).expect("on PATH");
         assert_eq!(d.source, "path");
         assert_eq!(d.target.executable, "trove");
+    }
+
+    /// App Paths answers before the shortcut and after PATH, and only for
+    /// a row that names a shortcut: an installer's registered exe beats a
+    /// Start Menu entry that may be gone, but never a command on PATH.
+    #[cfg(windows)]
+    #[test]
+    fn app_paths_beats_the_shortcut_and_loses_to_path() {
+        let mut apps = HashMap::new();
+        apps.insert("trove".to_string(), r"D:\Trove\trove.exe".to_string());
+        let mut lnks = HashMap::new();
+        lnks.insert("trove".to_string(), r"E:\Apps\Trove\trove.exe".into());
+
+        let trove = CANDIDATES.iter().find(|c| c.id == "trove").unwrap();
+        let d =
+            locate(trove, &HashMap::new(), &apps, &lnks).expect("app paths");
+        assert_eq!(d.source, "app-paths");
+        assert_eq!(d.target.executable, r"D:\Trove\trove.exe");
+        assert_eq!(d.detail, r"D:\Trove\trove.exe");
+        assert_eq!(d.target.args_template, "\"{path}\"");
+
+        // PATH still wins over App Paths
+        let mut found = HashMap::new();
+        found.insert("trove".to_string(), r"C:\bin\trove.exe".to_string());
+        let d = locate(trove, &found, &apps, &lnks).expect("on PATH");
+        assert_eq!(d.source, "path");
+        assert_eq!(d.target.executable, "trove");
+
+        // a row with no win_lnk never reads the App Paths map
+        let explorer = CANDIDATES.iter().find(|c| c.id == "explorer").unwrap();
+        let mut apps = HashMap::new();
+        apps.insert(explorer.exe.to_lowercase(), r"C:\x\explorer.exe".into());
+        assert!(
+            locate(explorer, &HashMap::new(), &apps, &HashMap::new()).is_none(),
+            "a row with no win_lnk ignores App Paths"
+        );
+    }
+
+    /// An App Paths default value is often quoted and padded; the path
+    /// comes back bare, and a blank value is no answer.
+    #[test]
+    fn an_app_paths_value_loses_its_quotes_and_blanks() {
+        assert_eq!(
+            app_path_value("  \"C:\\Program Files\\Trove\\trove.exe\"  ")
+                .as_deref(),
+            Some("C:\\Program Files\\Trove\\trove.exe")
+        );
+        assert_eq!(
+            app_path_value(r"D:\Trove\trove.exe").as_deref(),
+            Some(r"D:\Trove\trove.exe")
+        );
+        assert_eq!(app_path_value(""), None);
+        assert_eq!(app_path_value("   "), None);
+        assert_eq!(app_path_value("\"\""), None);
     }
 
     /// Nothing is spawned and nothing is walked for a table whose rows are
