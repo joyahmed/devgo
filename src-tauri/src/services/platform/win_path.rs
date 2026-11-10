@@ -176,11 +176,9 @@ mod tests {
     #[cfg(windows)]
     #[test]
     fn the_fresh_path_still_finds_cmd() {
+        use std::path::Path;
         let path = fresh_path();
-        assert!(
-            path.split(';')
-                .any(|e| std::path::Path::new(e).join("cmd.exe").is_file()),
-            "no cmd.exe on {path}"
-        );
+        let has_cmd = |e: &str| Path::new(e).join("cmd.exe").is_file();
+        assert!(path.split(';').any(has_cmd), "no cmd.exe on {path}");
     }
 }

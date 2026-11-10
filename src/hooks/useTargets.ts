@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { useEffect, useState } from 'react';
 
 /// The registry of editors, terminals, agents and file managers, plus
@@ -20,8 +21,16 @@ export const useTargets = (): TargetRegistry => {
 		setDefaults(Object.fromEntries(pairs));
 	};
 
+	// the startup scan adds agents installed since the last run from its own
+	// thread, after this first read; it says so with an event
 	useEffect(() => {
 		reload().catch(() => {});
+		const unlisten = listen('devgo://targets-changed', () => {
+			reload().catch(() => {});
+		}).catch(() => undefined);
+		return () => {
+			unlisten.then(f => f?.()).catch(() => {});
+		};
 	}, []);
 
 	const editors = targets.filter(t => t.kind === 'editor');

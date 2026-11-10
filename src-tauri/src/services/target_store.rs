@@ -719,6 +719,41 @@ impl TargetStore {
         self.save()
     }
 
+    /// Agents installed since DevGo last looked join the registry on their
+    /// own. defaults() carries none and is read once, on first run, so
+    /// Claude Code installed a day later stayed a scan-list offer nobody
+    /// knew to open. Each detected agent id is offered once, ever: the ids
+    /// already seen live in `agents-seen.json` beside targets.json, so an
+    /// agent the user removed stays removed, and a saved row is never
+    /// touched. Returns the ids added; targets.json is written only when
+    /// that is not empty.
+    pub fn adopt_new_agents(
+        &mut self,
+        detected: Vec<LaunchTarget>,
+    ) -> Result<Vec<String>, AppError> {
+        let seen_path = self.file_path.with_file_name(AGENTS_SEEN_FILE);
+        let seen: Vec<String> = fs::read_to_string(&seen_path)
+            .ok()
+            .and_then(|d| serde_json::from_str(&d).ok())
+            .unwrap_or_default();
+        let (added, seen_now) = new_agents(&self.targets, &seen, detected);
+        let ids: Vec<String> = added.iter().map(|t| t.id.clone()).collect();
+        if !added.is_empty() {
+            let before = self.targets.len();
+            self.targets.extend(added);
+            if let Err(e) = self.save() {
+                self.targets.truncate(before);
+                return Err(e);
+            }
+        }
+        // after the rows: a failed write here leaves added rows that the
+        // next start marks seen from targets.json, never a second add
+        if seen_now != seen {
+            fs::write(&seen_path, serde_json::to_string_pretty(&seen_now)?)?;
+        }
+        Ok(ids)
+    }
+
     fn save(&self) -> Result<(), AppError> {
         let data = serde_json::to_string_pretty(&self.targets)?;
         fs::write(&self.file_path, data)?;
@@ -812,6 +847,41 @@ fn is_a_program_there(exe: &str) -> bool {
     !path.is_absolute() || path.is_file()
 }
 
+/// Where the ids of every agent DevGo has ever offered are kept.
+const AGENTS_SEEN_FILE: &str = "agents-seen.json";
+
+/// The agents to add on this start, and the seen list after it. A
+/// detected agent is added only when its id was never seen and no saved
+/// row is the same program (editors::already_saved: the same id, or a
+/// WSL row kept under its distro id). Every detected agent and every
+/// saved agent row is marked seen, so a row the user removes is not
+/// offered again. Rows that are not agents are left out: an editor or a
+/// terminal is the user's choice, made in the scan list. Pure, so the
+/// merge is tested without a registry or a PATH.
+pub(crate) fn new_agents(
+    existing: &[LaunchTarget],
+    seen: &[String],
+    detected: Vec<LaunchTarget>,
+) -> (Vec<LaunchTarget>, Vec<String>) {
+    let mut seen_now = seen.to_vec();
+    for t in existing.iter().filter(|t| t.kind == TargetKind::Agent) {
+        if !seen_now.contains(&t.id) {
+            seen_now.push(t.id.clone());
+        }
+    }
+    let mut added: Vec<LaunchTarget> = Vec::new();
+    for t in detected {
+        if t.kind != TargetKind::Agent || seen_now.contains(&t.id) {
+            continue;
+        }
+        seen_now.push(t.id.clone());
+        if !crate::services::editors::already_saved(existing, &t) {
+            added.push(t);
+        }
+    }
+    (added, seen_now)
+}
+
 /// Derive an id from a display name, disambiguating against what exists.
 fn slug(name: &str, existing: &[LaunchTarget]) -> String {
     let base: String = name
@@ -864,6 +934,76 @@ mod tests {
             wsl_distros: Vec::new(),
             wsl_run_args_template: None,
         }
+    }
+
+    fn agent(id: &str) -> LaunchTarget {
+        let mut t = editor(id);
+        t.id = id.into();
+        t.kind = TargetKind::Agent;
+        t.executable = String::new();
+        t
+    }
+
+    fn ids(rows: &[LaunchTarget]) -> Vec<&str> {
+        rows.iter().map(|t| t.id.as_str()).collect()
+    }
+
+    #[test]
+    fn an_agent_never_seen_is_added_and_marked_seen() {
+        let (added, seen) = new_agents(&[], &[], vec![agent("claude")]);
+        assert_eq!(ids(&added), ["claude"]);
+        assert_eq!(seen, ["claude"]);
+    }
+
+    #[test]
+    fn an_agent_seen_before_is_not_added_again() {
+        // seen and absent from the registry: the user removed it
+        let seen = vec!["claude".to_string()];
+        let (added, after) = new_agents(&[], &seen, vec![agent("claude")]);
+        assert!(added.is_empty(), "{added:?}");
+        assert_eq!(after, seen);
+    }
+
+    #[test]
+    fn a_saved_row_is_left_alone_and_its_id_marked_seen() {
+        let mut mine = agent("claude");
+        mine.name = "My Claude".into();
+        let existing = vec![mine, editor("Cursor")];
+        let (added, seen) =
+            new_agents(&existing, &[], vec![agent("claude"), agent("codex")]);
+        assert_eq!(ids(&added), ["codex"]);
+        assert_eq!(seen, ["claude", "codex"]);
+        assert_eq!(existing[0].name, "My Claude");
+    }
+
+    #[test]
+    fn only_agents_are_added_or_remembered() {
+        let mut nvim = editor("nvim");
+        nvim.id = "nvim".into();
+        let (added, seen) = new_agents(&[], &[], vec![nvim]);
+        assert!(added.is_empty(), "{added:?}");
+        assert!(seen.is_empty(), "{seen:?}");
+    }
+
+    #[test]
+    fn a_removed_agent_stays_removed_across_starts() {
+        let dir = std::env::temp_dir().join("devgo-targets-agents-seen");
+        let _ = fs::remove_dir_all(&dir);
+        let mut s = TargetStore::new(dir.clone()).unwrap();
+        let added = s.adopt_new_agents(vec![agent("claude")]).unwrap();
+        assert_eq!(added, ["claude"]);
+        assert!(s.get("claude").is_some());
+
+        s.remove("claude").unwrap();
+        let mut s = TargetStore::new(dir.clone()).unwrap();
+        let again = s.adopt_new_agents(vec![agent("claude")]).unwrap();
+        assert!(again.is_empty(), "{again:?}");
+        assert!(s.get("claude").is_none());
+
+        // one installed later is still news
+        let later = s.adopt_new_agents(vec![agent("gemini")]).unwrap();
+        assert_eq!(later, ["gemini"]);
+        let _ = fs::remove_dir_all(&dir);
     }
 
     fn count_of(s: &TargetStore, kind: TargetKind) -> usize {
