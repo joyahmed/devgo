@@ -766,6 +766,36 @@ impl TargetStore {
         Ok(ids)
     }
 
+    /// Saved agent rows with only a Windows half gain the WSL half when the
+    /// agent was found in a running distro (editors::heal_agent_wsl_halves
+    /// says which). Only saved rows change, so agents-seen.json is not read:
+    /// a removed agent has no row to heal. Returns the ids healed;
+    /// targets.json is written only when that is not empty, and a failed
+    /// write puts the rows back.
+    pub fn heal_agent_wsl_halves(
+        &mut self,
+        found: &[LaunchTarget],
+    ) -> Result<Vec<String>, AppError> {
+        let healed = crate::services::editors::heal_agent_wsl_halves(
+            &self.targets,
+            found,
+        );
+        if healed.is_empty() {
+            return Ok(Vec::new());
+        }
+        let before = self.targets.clone();
+        for h in &healed {
+            if let Some(t) = self.targets.iter_mut().find(|t| t.id == h.id) {
+                *t = h.clone();
+            }
+        }
+        if let Err(e) = self.save() {
+            self.targets = before;
+            return Err(e);
+        }
+        Ok(healed.into_iter().map(|t| t.id).collect())
+    }
+
     /// The seen file could not be read: every detected agent is marked
     /// seen and none is added, so the damage costs a missed new agent and
     /// not a registry full of ones the user had removed.
@@ -1053,6 +1083,40 @@ mod tests {
         // one installed later is still news
         let later = s.adopt_new_agents(vec![agent("gemini")]).unwrap();
         assert_eq!(later, ["gemini"]);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    // the store saves the healed row, survives a restart, and a removed
+    // agent found in a distro does not come back
+    #[test]
+    fn a_saved_agent_gains_its_wsl_half_and_a_removed_one_stays_gone() {
+        let dir = std::env::temp_dir().join("devgo-targets-agents-heal");
+        let _ = fs::remove_dir_all(&dir);
+        let mut s = TargetStore::new(dir.clone()).unwrap();
+        let mut claude = agent("claude");
+        claude.executable = "claude".into();
+        s.adopt_new_agents(vec![claude, agent("codex")]).unwrap();
+        s.remove("codex").unwrap();
+
+        let mut in_wsl = Vec::new();
+        for id in ["claude", "codex"] {
+            let mut t = agent(id);
+            t.wsl_executable = Some(id.into());
+            t.wsl_args_template = Some(String::new());
+            t.wsl_distros = vec!["Ubuntu".into()];
+            in_wsl.push(t);
+        }
+        let healed = s.heal_agent_wsl_halves(&in_wsl).unwrap();
+        assert_eq!(healed, ["claude"]);
+        assert!(s.get("codex").is_none());
+
+        let mut s = TargetStore::new(dir.clone()).unwrap();
+        let t = s.get("claude").unwrap();
+        assert_eq!(t.executable, "claude");
+        assert_eq!(t.wsl_executable.as_deref(), Some("claude"));
+        assert_eq!(t.wsl_distros, ["Ubuntu"]);
+        // healed once, nothing left to do
+        assert!(s.heal_agent_wsl_halves(&in_wsl).unwrap().is_empty());
         let _ = fs::remove_dir_all(&dir);
     }
 

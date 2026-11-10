@@ -538,7 +538,10 @@ pub fn run() {
             // agents installed since the last start join the registry on
             // their own (TargetStore::adopt_new_agents). off the setup
             // thread: detection spawns where.exe, and startup does not wait
-            // on it. no distro is asked, so no wsl.exe either
+            // on it. then a saved agent with only its windows half gains
+            // its wsl half when a RUNNING distro has it - a stopped distro
+            // is never asked, since waking the vm on every start costs
+            // seconds and its ram
             let scan = app.handle().clone();
             std::thread::spawn(move || {
                 let found = services::editors::detect(&[], &[])
@@ -550,13 +553,39 @@ pub fn run() {
                     Ok(mut store) => store.adopt_new_agents(found),
                     Err(_) => return,
                 };
+                let mut changed = false;
                 match added {
                     Ok(ids) if ids.is_empty() => {}
                     Ok(ids) => {
                         log_line!("[DevGo] new agents: {}", ids.join(", "));
-                        let _ = scan.emit("devgo://targets-changed", ());
+                        changed = true;
                     }
                     Err(e) => log_line!("[DevGo] new agents: {e}"),
+                }
+                // the probe runs without the store lock held
+                let running = services::platform::wsl::running_distros();
+                if !running.is_empty() {
+                    let in_wsl =
+                        services::editors::agents_in_distros(&running);
+                    let healed = match state.target_store.lock() {
+                        Ok(mut store) => store.heal_agent_wsl_halves(&in_wsl),
+                        Err(_) => Ok(Vec::new()),
+                    };
+                    match healed {
+                        Ok(ids) if ids.is_empty() => {}
+                        Ok(ids) => {
+                            log_line!(
+                                "[DevGo] agents given their wsl half ({}): {}",
+                                running.join(", "),
+                                ids.join(", ")
+                            );
+                            changed = true;
+                        }
+                        Err(e) => log_line!("[DevGo] wsl agent heal: {e}"),
+                    }
+                }
+                if changed {
+                    let _ = scan.emit("devgo://targets-changed", ());
                 }
             });
 

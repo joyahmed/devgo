@@ -1490,6 +1490,57 @@ pub(crate) fn offer(
         .collect()
 }
 
+/// The agents each running distro has, as WSL-only agent rows (one per
+/// agent, every distro it was found in). Only the distros passed are
+/// asked, and the caller passes the running ones: a startup that woke a
+/// stopped VM to look would cost seconds and its RAM on every launch.
+/// Editors are not asked, so this is one `bash -lic` per distro.
+pub fn agents_in_distros(running: &[String]) -> Vec<LaunchTarget> {
+    let mut seen: Vec<InDistros> = Vec::new();
+    for distro in running {
+        for (exe, name) in present_in_distro(distro, AGENTS) {
+            note_in_distro(&mut seen, exe, name, TargetKind::Agent, distro);
+        }
+    }
+    seen.into_iter()
+        .map(|(exe, name, kind, distros)| {
+            wsl_only_target(exe, name, kind, distros, false)
+        })
+        .collect()
+}
+
+/// Saved agent rows that have no WSL form, filled in from `found` (agents
+/// detected in running distros). A row is healed only when it is an agent,
+/// has no WSL form yet, and an agent of the same id was found in at least
+/// one distro; the fill is extend_saved's, so id, name and the Windows side
+/// stay as saved. A row that already has a WSL form, an editor or terminal,
+/// and an agent not found are all left alone. Only saved rows are read, so
+/// an agent the user removed is never brought back. Returns the healed
+/// rows, each to replace the saved row of the same id.
+pub(crate) fn heal_agent_wsl_halves(
+    saved: &[LaunchTarget],
+    found: &[LaunchTarget],
+) -> Vec<LaunchTarget> {
+    saved
+        .iter()
+        .filter(|s| s.kind == TargetKind::Agent && !has_wsl_form(s))
+        .filter_map(|s| {
+            let f = found.iter().find(|f| {
+                f.id == s.id
+                    && f.kind == TargetKind::Agent
+                    && has_wsl_form(f)
+                    && !f.wsl_distros.is_empty()
+            })?;
+            // only the WSL half is taken: a found row with a windows form
+            // must not rewrite one the user saved without it
+            let mut wsl_only = f.clone();
+            wsl_only.executable = String::new();
+            wsl_only.args_template = String::new();
+            extend_saved(s, &wsl_only)
+        })
+        .collect()
+}
+
 /// Whether a detected row is already registered, so the scan list does not
 /// offer it again. The same id is the plain case: a saved `nvim` is the
 /// detected `nvim` (offer still lists it when it adds a side, see
@@ -2574,6 +2625,83 @@ mod tests {
             wsl_distros: Vec::new(),
             wsl_run_args_template: None,
         }
+    }
+
+    fn claude_in(names: &[&str]) -> LaunchTarget {
+        wsl_only_target(
+            "claude",
+            "Claude Code",
+            TargetKind::Agent,
+            distros(names),
+            false,
+        )
+    }
+
+    /// The row Joy had: claude saved with only its Windows half. Found in a
+    /// running distro, it gains the WSL half and keeps everything saved.
+    #[test]
+    fn a_windows_only_agent_found_in_a_running_distro_is_healed() {
+        let mut saved = windows_claude();
+        saved.name = "My Claude".into();
+        let healed = heal_agent_wsl_halves(
+            std::slice::from_ref(&saved),
+            &[claude_in(&["Ubuntu"])],
+        );
+        assert_eq!(healed.len(), 1);
+        let t = &healed[0];
+        assert_eq!((t.id.as_str(), t.name.as_str()), ("claude", "My Claude"));
+        assert_eq!(t.executable, "claude");
+        assert_eq!(t.wsl_executable.as_deref(), Some("claude"));
+        assert_eq!(t.wsl_args_template.as_deref(), Some(""));
+        assert_eq!(t.wsl_distros, distros(&["Ubuntu"]));
+    }
+
+    #[test]
+    fn an_agent_that_already_has_a_wsl_form_is_not_healed() {
+        let mut saved = windows_claude();
+        saved.wsl_executable = Some("claude".into());
+        saved.wsl_args_template = Some(String::new());
+        saved.wsl_distros = distros(&["Debian"]);
+        let healed = heal_agent_wsl_halves(&[saved], &[claude_in(&["Ubuntu"])]);
+        assert!(healed.is_empty(), "{healed:?}");
+    }
+
+    #[test]
+    fn a_row_that_is_not_an_agent_is_not_healed() {
+        let mut saved = windows_claude();
+        saved.kind = TargetKind::Editor;
+        saved.args_template = ".".into();
+        let healed = heal_agent_wsl_halves(&[saved], &[claude_in(&["Ubuntu"])]);
+        assert!(healed.is_empty(), "{healed:?}");
+    }
+
+    #[test]
+    fn an_agent_not_found_in_any_distro_is_not_healed() {
+        let saved = vec![windows_claude()];
+        assert!(heal_agent_wsl_halves(&saved, &[]).is_empty());
+        let codex = wsl_only_target(
+            "codex",
+            "Codex",
+            TargetKind::Agent,
+            distros(&["Ubuntu"]),
+            false,
+        );
+        assert!(heal_agent_wsl_halves(&saved, &[codex]).is_empty());
+        // found with no distro is not found
+        assert!(heal_agent_wsl_halves(&saved, &[claude_in(&[])]).is_empty());
+    }
+
+    // a found row's windows form never lands on a saved row without one
+    #[test]
+    fn healing_takes_only_the_wsl_half() {
+        let mut saved = windows_claude();
+        saved.executable = String::new();
+        let mut found = claude_in(&["Ubuntu"]);
+        found.executable = "claude".into();
+        let healed = heal_agent_wsl_halves(&[saved], &[found]);
+        assert_eq!(healed.len(), 1);
+        assert_eq!(healed[0].executable, "");
+        assert_eq!(healed[0].wsl_distros, distros(&["Ubuntu"]));
     }
 
     // what detect gives a box with neovim and claude on windows and in two
