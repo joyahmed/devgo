@@ -24,10 +24,13 @@ export const useTargets = (): TargetRegistry => {
 	// the startup scan adds agents installed since the last run from its own
 	// thread, after this first read; it says so with an event
 	useEffect(() => {
-		reload().catch(() => {});
+		// listen first, read after: an event fired between the read and the
+		// listener would otherwise be lost. a missing runtime (tests, a
+		// plain browser) rejects listen; the read still happens
 		const unlisten = listen('devgo://targets-changed', () => {
 			reload().catch(() => {});
 		}).catch(() => undefined);
+		unlisten.then(() => reload().catch(() => {}));
 		return () => {
 			unlisten.then(f => f?.()).catch(() => {});
 		};

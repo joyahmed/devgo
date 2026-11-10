@@ -10,6 +10,7 @@ use crate::models::target::{
     WT_ARGS_PRE_PSMUX, WT_RUN_ARGS, WT_RUN_ARGS_PRE, WT_WSL_RUN_ARGS,
     WT_WSL_RUN_ARGS_PRE,
 };
+use crate::services::runtime_log::log_line;
 
 /// Editors and terminals, persisted together.
 ///
@@ -732,10 +733,21 @@ impl TargetStore {
         detected: Vec<LaunchTarget>,
     ) -> Result<Vec<String>, AppError> {
         let seen_path = self.file_path.with_file_name(AGENTS_SEEN_FILE);
-        let seen: Vec<String> = fs::read_to_string(&seen_path)
-            .ok()
-            .and_then(|d| serde_json::from_str(&d).ok())
-            .unwrap_or_default();
+        // missing is a first run; present but unreadable is damage, and
+        // adding every detected agent then would resurrect each one the
+        // user removed
+        let seen: Vec<String> = match fs::read_to_string(&seen_path) {
+            Ok(d) => match serde_json::from_str(&d) {
+                Ok(list) => list,
+                Err(e) => {
+                    return Ok(self.mark_all_seen(&seen_path, &detected, &e));
+                }
+            },
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Vec::new(),
+            Err(e) => {
+                return Ok(self.mark_all_seen(&seen_path, &detected, &e));
+            }
+        };
         let (added, seen_now) = new_agents(&self.targets, &seen, detected);
         let ids: Vec<String> = added.iter().map(|t| t.id.clone()).collect();
         if !added.is_empty() {
@@ -749,9 +761,36 @@ impl TargetStore {
         // after the rows: a failed write here leaves added rows that the
         // next start marks seen from targets.json, never a second add
         if seen_now != seen {
-            fs::write(&seen_path, serde_json::to_string_pretty(&seen_now)?)?;
+            write_seen(&seen_path, &seen_now);
         }
         Ok(ids)
+    }
+
+    /// The seen file could not be read: every detected agent is marked
+    /// seen and none is added, so the damage costs a missed new agent and
+    /// not a registry full of ones the user had removed.
+    fn mark_all_seen(
+        &self,
+        seen_path: &std::path::Path,
+        detected: &[LaunchTarget],
+        why: &dyn std::fmt::Display,
+    ) -> Vec<String> {
+        log_line!(
+            "[DevGo] {AGENTS_SEEN_FILE} unreadable ({why}); no agents adopted"
+        );
+        let mut all: Vec<String> = self
+            .targets
+            .iter()
+            .filter(|t| t.kind == TargetKind::Agent)
+            .map(|t| t.id.clone())
+            .collect();
+        for t in detected.iter().filter(|t| t.kind == TargetKind::Agent) {
+            if !all.contains(&t.id) {
+                all.push(t.id.clone());
+            }
+        }
+        write_seen(seen_path, &all);
+        Vec::new()
     }
 
     fn save(&self) -> Result<(), AppError> {
@@ -849,6 +888,17 @@ fn is_a_program_there(exe: &str) -> bool {
 
 /// Where the ids of every agent DevGo has ever offered are kept.
 const AGENTS_SEEN_FILE: &str = "agents-seen.json";
+
+/// A failed write is logged, not swallowed and not fatal: the worst case
+/// is the next start re-deriving the list.
+fn write_seen(path: &std::path::Path, seen: &[String]) {
+    let result = serde_json::to_string_pretty(seen)
+        .map_err(|e| e.to_string())
+        .and_then(|d| fs::write(path, d).map_err(|e| e.to_string()));
+    if let Err(e) = result {
+        log_line!("[DevGo] could not write {AGENTS_SEEN_FILE}: {e}");
+    }
+}
 
 /// The agents to add on this start, and the seen list after it. A
 /// detected agent is added only when its id was never seen and no saved
@@ -1003,6 +1053,23 @@ mod tests {
         // one installed later is still news
         let later = s.adopt_new_agents(vec![agent("gemini")]).unwrap();
         assert_eq!(later, ["gemini"]);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_corrupt_seen_file_adds_nothing_and_marks_all_seen() {
+        let dir = std::env::temp_dir().join("devgo-targets-agents-corrupt");
+        let _ = fs::remove_dir_all(&dir);
+        let mut s = TargetStore::new(dir.clone()).unwrap();
+        fs::write(dir.join(AGENTS_SEEN_FILE), "{ not json").unwrap();
+        let added = s.adopt_new_agents(vec![agent("claude")]).unwrap();
+        assert!(added.is_empty(), "{added:?}");
+        assert!(s.get("claude").is_none());
+        let after: Vec<String> = serde_json::from_str(
+            &fs::read_to_string(dir.join(AGENTS_SEEN_FILE)).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(after, ["claude"]);
         let _ = fs::remove_dir_all(&dir);
     }
 

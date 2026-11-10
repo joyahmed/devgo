@@ -13,6 +13,11 @@
 /// entries dropped. With no registry value at all, the process PATH as it
 /// was. Pure: the registry is read by `fresh_path`, and a test hands this
 /// strings of its own.
+///
+/// Registry entries come before anything the launching shell prepended
+/// (a venv's bin, a version manager's shims). That is intentional: the
+/// registry is what a fresh terminal would see, and the shell's extras
+/// still follow, just no longer first.
 #[cfg_attr(not(windows), allow(dead_code))]
 pub(crate) fn merge_path(
     machine: Option<&str>,
@@ -83,11 +88,39 @@ pub(crate) fn expand_vars(
 pub fn fresh_path() -> String {
     use winreg::enums::{HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE};
     use winreg::RegKey;
-    let machine = read_path(
-        &RegKey::predef(HKEY_LOCAL_MACHINE),
-        r"SYSTEM\CurrentControlSet\Control\Session Manager\Environment",
-    );
-    let user = read_path(&RegKey::predef(HKEY_CURRENT_USER), "Environment");
+    const MACHINE_ENV: &str =
+        r"SYSTEM\CurrentControlSet\Control\Session Manager\Environment";
+    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+    let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
+    // what a fresh terminal would see for %NAME%: the user's value, then
+    // the machine's, then DevGo's own (stale) environment as a last resort
+    let raw = |name: &str| -> Option<String> {
+        let reg = |hive: &RegKey, sub: &str| {
+            hive.open_subkey(sub)
+                .ok()?
+                .get_value::<String, _>(name)
+                .ok()
+                .map(|v| v.trim_end_matches('\0').to_string())
+        };
+        reg(&hkcu, "Environment")
+            .or_else(|| reg(&hklm, MACHINE_ENV))
+            .or_else(|| std::env::var(name).ok())
+    };
+    // a looked-up value is expanded once more and no further, so a value
+    // that names itself cannot loop
+    let lookup = |name: &str| -> Option<String> {
+        raw(name).map(|v| {
+            expand_vars(&v, |inner| {
+                if inner.eq_ignore_ascii_case(name) {
+                    None
+                } else {
+                    raw(inner)
+                }
+            })
+        })
+    };
+    let machine = read_path(&hklm, MACHINE_ENV, &lookup);
+    let user = read_path(&hkcu, "Environment", &lookup);
     let process = std::env::var("PATH").ok();
     merge_path(machine.as_deref(), user.as_deref(), process.as_deref())
 }
@@ -96,7 +129,11 @@ pub fn fresh_path() -> String {
 // REG_EXPAND_SZ (the user's usually is: %USERPROFILE%\.local\bin) and
 // left alone when it is a plain REG_SZ, as Windows leaves it
 #[cfg(windows)]
-fn read_path(hive: &winreg::RegKey, sub: &str) -> Option<String> {
+fn read_path(
+    hive: &winreg::RegKey,
+    sub: &str,
+    lookup: &dyn Fn(&str) -> Option<String>,
+) -> Option<String> {
     use winreg::enums::RegType;
     let key = hive.open_subkey(sub).ok()?;
     let expandable = matches!(
@@ -106,7 +143,7 @@ fn read_path(hive: &winreg::RegKey, sub: &str) -> Option<String> {
     let raw: String = key.get_value("Path").ok()?;
     let raw = raw.trim_end_matches('\0');
     Some(if expandable {
-        expand_vars(raw, |name| std::env::var(name).ok())
+        expand_vars(raw, lookup)
     } else {
         raw.to_string()
     })
@@ -171,6 +208,24 @@ mod tests {
         assert_eq!(expand_vars("100% sure", lookup), "100% sure");
         assert_eq!(expand_vars("a%%b", lookup), "a%%b");
         assert_eq!(expand_vars("plain", lookup), "plain");
+    }
+
+    #[test]
+    fn a_var_only_the_registry_knows_expands_to_the_real_folder() {
+        // FOO is in the "registry" map and not in the process env, which
+        // is the stale snapshot DevGo started with
+        let registry: std::collections::HashMap<&str, &str> =
+            [("FOO", r"D:\real")].into_iter().collect();
+        let process: std::collections::HashMap<&str, &str> =
+            [("BAR", r"E:\old")].into_iter().collect();
+        let lookup = |n: &str| {
+            registry
+                .get(n)
+                .or_else(|| process.get(n))
+                .map(|v| v.to_string())
+        };
+        assert_eq!(expand_vars(r"%FOO%\bin", lookup), r"D:\real\bin");
+        assert_eq!(expand_vars(r"%BAR%\bin", lookup), r"E:\old\bin");
     }
 
     #[cfg(windows)]
