@@ -104,39 +104,6 @@ fn marked_paths(lines: &[String]) -> Vec<String> {
         .collect()
 }
 
-#[cfg(test)]
-mod marker_tests {
-    use super::*;
-
-    fn lines(items: &[&str]) -> Vec<String> {
-        items.iter().map(|s| s.to_string()).collect()
-    }
-
-    #[test]
-    fn banner_text_is_not_taken_for_a_folder() {
-        let out = lines(&[
-            "To run a command as administrator, use \"sudo <command>\".",
-            "This message is shown once a day. To disable it please create the",
-            "/home/joy/.hushlogin file.",
-            "***  Welcome to /home/joy/x  ***",
-            "DEVGO:/home/joy/projects",
-            "DEVGO:/home/joy/code",
-        ]);
-        assert_eq!(marked_paths(&out), ["/home/joy/projects", "/home/joy/code"]);
-    }
-
-    #[test]
-    fn a_marked_line_that_is_not_absolute_is_dropped() {
-        let out = lines(&["DEVGO:relative/dir", "DEVGO:", "DEVGO:  /home/joy/src  "]);
-        assert_eq!(marked_paths(&out), ["/home/joy/src"]);
-    }
-
-    #[test]
-    fn unmarked_output_gives_nothing() {
-        assert!(marked_paths(&lines(&["/home/joy/.hushlogin file."])).is_empty());
-    }
-}
-
 // where a mac keeps its code, most likely first: ~/Projects, ~/Developer
 // (the folder finder gives a hammer icon), then the names the windows and
 // wsl lists check
@@ -211,5 +178,44 @@ mod tests {
         assert_eq!(roots[0].path, home.join("Projects").to_string_lossy());
 
         let _ = std::fs::remove_dir_all(&home);
+    }
+}
+
+#[cfg(test)]
+mod marker_tests {
+    use super::*;
+
+    fn lines(items: &[&str]) -> Vec<String> {
+        items.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn banner_text_is_not_taken_for_a_folder() {
+        let out = lines(&[
+            "To run a command as administrator, use \"sudo <command>\".",
+            "This message is shown once a day. To disable it please create the",
+            "/home/joy/.hushlogin file.",
+            "***  Welcome to /home/joy/x  ***",
+            "DEVGO:/home/joy/projects",
+            "DEVGO:/home/joy/code",
+        ]);
+        assert_eq!(
+            marked_paths(&out),
+            ["/home/joy/projects", "/home/joy/code"]
+        );
+    }
+
+    #[test]
+    fn a_marked_line_that_is_not_absolute_is_dropped() {
+        let out =
+            lines(&["DEVGO:relative/dir", "DEVGO:", "DEVGO:  /home/joy/src  "]);
+        assert_eq!(marked_paths(&out), ["/home/joy/src"]);
+    }
+
+    #[test]
+    fn unmarked_output_gives_nothing() {
+        assert!(
+            marked_paths(&lines(&["/home/joy/.hushlogin file."])).is_empty()
+        );
     }
 }
