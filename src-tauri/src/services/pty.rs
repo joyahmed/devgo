@@ -179,6 +179,10 @@ impl Registry {
         let mut cmd = CommandBuilder::new(&line.exe);
         cmd.args(&line.args);
         cmd.env("TERM", "xterm-256color");
+        // the registry's PATH, read now: DevGo's own is the one Explorer
+        // gave it at start, and an agent installed since is not on it
+        #[cfg(windows)]
+        cmd.env("PATH", super::platform::login_path());
         let mut child = pair.slave.spawn_command(cmd).map_err(failed)?;
         // the slave is the child's end; ours is the master
         drop(pair.slave);

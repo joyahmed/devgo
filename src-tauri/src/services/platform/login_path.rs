@@ -10,31 +10,29 @@
 //! not a guess anyone can make; the shell knows.
 
 use std::process::Command;
-use std::sync::OnceLock;
 
-/// The user's login-shell PATH, resolved once per process. On Windows the
-/// process PATH, which is already the user's; elsewhere what `$SHELL -ilc`
-/// ends up with, or a fallback when the shell cannot be asked.
-#[cfg_attr(windows, allow(dead_code))]
+/// The PATH a child gets. Elsewhere: what `$SHELL -ilc` ends up with,
+/// resolved once per process, or a fallback when the shell cannot be
+/// asked. On Windows: machine and user PATH read from the registry on
+/// every call (`win_path`), so a tool installed after DevGo started is
+/// found without a restart or a re-login.
 pub fn login_path() -> String {
-    static PATH: OnceLock<String> = OnceLock::new();
-    PATH.get_or_init(resolve).clone()
-}
-
-/// Give a child the login-shell PATH. A no-op on Windows.
-#[cfg_attr(windows, allow(dead_code))]
-pub fn with_login_path(cmd: &mut Command) -> &mut Command {
+    #[cfg(windows)]
+    {
+        super::win_path::fresh_path()
+    }
     #[cfg(not(windows))]
     {
-        cmd.env("PATH", login_path());
+        use std::sync::OnceLock;
+        static PATH: OnceLock<String> = OnceLock::new();
+        PATH.get_or_init(resolve).clone()
     }
-    cmd
 }
 
-#[cfg(windows)]
-#[allow(dead_code)]
-fn resolve() -> String {
-    std::env::var("PATH").unwrap_or_default()
+/// Give a child that PATH.
+pub fn with_login_path(cmd: &mut Command) -> &mut Command {
+    cmd.env("PATH", login_path());
+    cmd
 }
 
 // -l so ~/.zprofile runs (brew shellenv lives there on a stock mac), -i so
