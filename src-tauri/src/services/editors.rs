@@ -1917,7 +1917,8 @@ fn app_paths_lookup(
 }
 
 /// An App Paths default value as an exe path: trimmed, outer quotes off,
-/// None when empty. Pure, so every OS tests it.
+/// None when empty. Pure, so every OS tests it; only windows calls it
+#[cfg_attr(not(windows), allow(dead_code))]
 fn app_path_value(raw: &str) -> Option<String> {
     let v = raw.trim().trim_matches('"').trim();
     (!v.is_empty()).then(|| v.to_string())
