@@ -535,6 +535,31 @@ pub fn run() {
                 ptys: std::sync::Mutex::new(Default::default()),
             });
 
+            // agents installed since the last start join the registry on
+            // their own (TargetStore::adopt_new_agents). off the setup
+            // thread: detection spawns where.exe, and startup does not wait
+            // on it. no distro is asked, so no wsl.exe either
+            let scan = app.handle().clone();
+            std::thread::spawn(move || {
+                let found = services::editors::detect(&[], &[])
+                    .into_iter()
+                    .map(|d| d.target)
+                    .collect();
+                let state = scan.state::<AppState>();
+                let added = match state.target_store.lock() {
+                    Ok(mut store) => store.adopt_new_agents(found),
+                    Err(_) => return,
+                };
+                match added {
+                    Ok(ids) if ids.is_empty() => {}
+                    Ok(ids) => {
+                        log_line!("[DevGo] new agents: {}", ids.join(", "));
+                        let _ = scan.emit("devgo://targets-changed", ());
+                    }
+                    Err(e) => log_line!("[DevGo] new agents: {e}"),
+                }
+            });
+
             // the window is built here, not by the config: transparent is
             // decided at creation and it is not free. a window born
             // see-through holds one screen-sized alpha surface (about 13 mb

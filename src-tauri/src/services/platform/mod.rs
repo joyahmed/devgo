@@ -2,12 +2,13 @@ pub mod detection;
 pub mod login_path;
 pub mod paths;
 pub mod runtime;
+pub mod win_path;
 pub mod wsl;
 pub mod wsl_watch;
 
 pub use detection::RuntimeInfo;
-// off windows every spawn reaches these through quiet(); on windows the
-// process PATH is already the user's and nothing calls them
+// every spawn reaches these through quiet(); off windows the login-shell
+// PATH, on windows the registry's, read fresh. some callers are mac-only
 #[cfg_attr(windows, allow(unused_imports))]
 pub use login_path::{login_path, with_login_path};
 
@@ -22,10 +23,11 @@ use std::process::Command;
 pub trait Quiet {
     // no console window for the child. on windows a spawned console
     // program otherwise flashes a black window over the app; elsewhere
-    // there is no such window, and instead the child gets the login-shell
-    // PATH. same seam, opposite direction: on windows the app inherits the
-    // user's environment and must hide a window; on a mac it inherits
-    // launchd's bare PATH and must be handed the user's. done here because
+    // there is no such window. on every platform the child gets the
+    // user's PATH as it is now: on a mac the app inherits launchd's bare
+    // PATH and must be handed the login shell's; on windows it inherits
+    // the snapshot Explorer gave it at start, which misses anything
+    // installed since, so the registry's is read fresh. done here because
     // every spawn in the crate already calls this: a first cut wired only
     // the launcher and the editor probe, and gh, git, ssh and tmux were
     // still spawned with no /opt/homebrew/bin in reach
@@ -50,10 +52,7 @@ impl Quiet for Command {
             const CREATE_NO_WINDOW: u32 = 0x0800_0000;
             self.creation_flags(CREATE_NO_WINDOW);
         }
-        #[cfg(not(windows))]
-        {
-            login_path::with_login_path(self);
-        }
+        login_path::with_login_path(self);
         self
     }
 

@@ -10,6 +10,14 @@ vi.mock('@tauri-apps/api/core', () => ({
 	invoke: (...a: unknown[]) => invoke(...(a as []))
 }));
 
+let onChanged: (() => void) | null = null;
+vi.mock('@tauri-apps/api/event', () => ({
+	listen: (name: string, cb: () => void) => {
+		if (name === 'devgo://targets-changed') onChanged = cb;
+		return Promise.resolve(() => {});
+	}
+}));
+
 const target = (
 	id: string,
 	kind: TargetKind,
@@ -334,5 +342,24 @@ describe('useTargets — removing and defaulting', () => {
 		expect(argsOf('set_default_target')).toEqual({ kind: 'agent', id: 'codex' });
 		expect(result.current.defaults.agent).toBe('codex');
 		expect(result.current.otherAgent?.id).toBe('claude');
+	});
+});
+
+describe('useTargets — rows added behind its back', () => {
+	it('reads the registry again when the startup scan says it added agents', async () => {
+		wire({
+			targets: [target('code', 'editor')],
+			then: [target('code', 'editor'), target('claude', 'agent')]
+		});
+		const { result } = await mounted();
+		expect(onChanged).not.toBeNull();
+
+		await act(async () => {
+			onChanged?.();
+		});
+		await settle();
+
+		expect(called('get_targets')).toBe(2);
+		expect(result.current.agents.map(t => t.id)).toEqual(['claude']);
 	});
 });
