@@ -76,13 +76,65 @@ fn wsl_project_dirs(distro: &str) -> Vec<String> {
         .map(|s| format!("\"$HOME/{s}\""))
         .collect::<Vec<_>>()
         .join(" ");
-    let script =
-        format!("for d in {list}; do [ -d \"$d\" ] && echo \"$d\"; done");
+    let script = format!(
+        "for d in {list}; do [ -d \"$d\" ] && echo \"{PATH_MARK}$d\"; done"
+    );
 
     // this gated on status.success() and so found nothing whenever the last
     // candidate ($HOME/work) was missing: the loop had printed the roots that
     // exist, then exited 1
-    wsl::probe_lines(distro, &script)
+    marked_paths(&wsl::probe_lines(distro, &script))
+}
+
+// the probe runs in an interactive login shell, so the distro's motd and any
+// custom banner come back on stdout beside the answer ("...create the
+// /home/joy/.hushlogin file." was once taken for a folder). only lines the
+// script marked count, and only when what follows is an absolute path
+#[cfg_attr(not(windows), allow(dead_code))]
+const PATH_MARK: &str = "DEVGO:";
+
+#[cfg_attr(not(windows), allow(dead_code))]
+fn marked_paths(lines: &[String]) -> Vec<String> {
+    lines
+        .iter()
+        .filter_map(|l| l.trim().strip_prefix(PATH_MARK))
+        .map(str::trim)
+        .filter(|p| p.starts_with('/'))
+        .map(str::to_string)
+        .collect()
+}
+
+#[cfg(test)]
+mod marker_tests {
+    use super::*;
+
+    fn lines(items: &[&str]) -> Vec<String> {
+        items.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn banner_text_is_not_taken_for_a_folder() {
+        let out = lines(&[
+            "To run a command as administrator, use \"sudo <command>\".",
+            "This message is shown once a day. To disable it please create the",
+            "/home/joy/.hushlogin file.",
+            "***  Welcome to /home/joy/x  ***",
+            "DEVGO:/home/joy/projects",
+            "DEVGO:/home/joy/code",
+        ]);
+        assert_eq!(marked_paths(&out), ["/home/joy/projects", "/home/joy/code"]);
+    }
+
+    #[test]
+    fn a_marked_line_that_is_not_absolute_is_dropped() {
+        let out = lines(&["DEVGO:relative/dir", "DEVGO:", "DEVGO:  /home/joy/src  "]);
+        assert_eq!(marked_paths(&out), ["/home/joy/src"]);
+    }
+
+    #[test]
+    fn unmarked_output_gives_nothing() {
+        assert!(marked_paths(&lines(&["/home/joy/.hushlogin file."])).is_empty());
+    }
 }
 
 // where a mac keeps its code, most likely first: ~/Projects, ~/Developer
