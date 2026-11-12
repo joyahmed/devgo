@@ -144,6 +144,41 @@ pub fn wsl_open(distro: &str, linux_dir: &str, agent: &str) -> Invocation {
     }
 }
 
+/// What a zorkyn.exe from before WSL tabs prints (exit 2) for `--host`.
+pub const NO_HOST_FLAG: &str = "unknown flag --host";
+
+/// WSL project, Windows zorkyn.exe found: the tab opens in the ONE Windows
+/// session, its shell running in the distro (`--host wsl:<distro>`), so
+/// Windows and WSL projects share a window. `--attach-window` as on Windows.
+pub fn wsl_host_open(
+    zorkyn: &str,
+    distro: &str,
+    linux_dir: &str,
+    agent: &str,
+) -> Invocation {
+    Invocation {
+        exe: zorkyn.to_string(),
+        args: [
+            "open",
+            "--host",
+            &format!("wsl:{distro}"),
+            "--cwd",
+            linux_dir,
+            "--attach-window",
+            "--",
+            agent,
+        ]
+        .map(String::from)
+        .to_vec(),
+    }
+}
+
+/// The zorkyn.exe is too old for `--host`: only then does a WSL project go
+/// to the zorkyn inside the distro instead.
+pub fn predates_host(code: Option<i32>, stderr: &str) -> bool {
+    code == Some(2) && stderr.contains(NO_HOST_FLAG)
+}
+
 /// WSL project with no zorkyn client attached: one new Windows Terminal
 /// window running zorkyn in the distro, which attaches to the session the
 /// tab was just made in. Through a login bash for the same PATH reason.
@@ -344,11 +379,30 @@ pub fn open_agent(
             };
             (inv, Some(z))
         }
-        Host::Wsl { distro, linux_dir } => {
-            (wsl_open(distro, linux_dir, agent), None)
-        }
+        // The Windows zorkyn.exe first (one window for every project); the
+        // zorkyn inside the distro when there is none.
+        Host::Wsl { distro, linux_dir } => match find() {
+            Some(z) => {
+                let z = z.to_string_lossy().into_owned();
+                (wsl_host_open(&z, distro, linux_dir, agent), Some(z))
+            }
+            None => (wsl_open(distro, linux_dir, agent), None),
+        },
     };
-    let outcome = match run(&inv) {
+    let mut ran = run(&inv);
+    // Set while the WSL tab went to the Windows session: --attach-window
+    // already handled the window, as for a Windows project.
+    let mut wsl_in_windows =
+        matches!(host, Host::Wsl { .. }) && zorkyn.is_some();
+    if let (Host::Wsl { distro, linux_dir }, Ok((code, _, err))) = (host, &ran)
+    {
+        if wsl_in_windows && predates_host(*code, err) {
+            log_line!("multiplexer: zorkyn.exe has no --host; trying WSL's");
+            wsl_in_windows = false;
+            ran = run(&wsl_open(distro, linux_dir, agent));
+        }
+    }
+    let outcome = match ran {
         Ok((code, out, err)) => interpret(code, &out, &err),
         Err(e) => Outcome::Failed(e),
     };
@@ -359,6 +413,9 @@ pub fn open_agent(
         Outcome::Opened { needs_window, .. } => match host {
             // --attach-window already opened one when it was needed
             Host::Windows { .. } => Next::Done { attach_unix: None },
+            Host::Wsl { .. } if wsl_in_windows => {
+                Next::Done { attach_unix: None }
+            }
             Host::Wsl { distro, .. } => {
                 if needs_window {
                     // the tab is there either way; a window that will not
@@ -680,13 +737,129 @@ mod tests {
                 linux_dir: "/home/u/p",
             },
             "claude",
-            || unreachable!("WSL looks inside the distro, not on Windows"),
+            || None,
             |i| {
                 assert_eq!(i.exe, "wsl.exe");
                 Ok((Some(127), String::new(), String::new()))
             },
         );
         assert_eq!(next, Next::Fallback(fallback_notice(NOT_IN_WSL)));
+    }
+
+    #[test]
+    fn wsl_host_line_asks_the_windows_session_for_a_wsl_tab() {
+        let i = wsl_host_open(
+            r"C:\tools\zorkyn.exe",
+            "Ubuntu",
+            "/home/u/my app",
+            "claude",
+        );
+        assert_eq!(i.exe, r"C:\tools\zorkyn.exe");
+        assert_eq!(
+            i.args,
+            v(&[
+                "open",
+                "--host",
+                "wsl:Ubuntu",
+                "--cwd",
+                "/home/u/my app",
+                "--attach-window",
+                "--",
+                "claude"
+            ])
+        );
+    }
+
+    #[test]
+    fn wsl_opens_in_the_windows_session_when_zorkyn_exe_is_found() {
+        let seen = RefCell::new(Vec::new());
+        let next = open_agent(
+            &Host::Wsl {
+                distro: "Ubuntu",
+                linux_dir: "/home/u/p",
+            },
+            "claude",
+            || Some(PathBuf::from(r"C:\z\zorkyn.exe")),
+            |i| {
+                seen.borrow_mut().push(i.clone());
+                // no window yet: --attach-window opens it, DevGo must not
+                Ok((
+                    Some(0),
+                    "tab=2 pane=2 created\n".into(),
+                    format!("zorkyn open: {NO_WINDOW_HINT}\n"),
+                ))
+            },
+        );
+        assert_eq!(next, Next::Done { attach_unix: None });
+        assert_eq!(
+            seen.into_inner(),
+            vec![wsl_host_open(
+                r"C:\z\zorkyn.exe",
+                "Ubuntu",
+                "/home/u/p",
+                "claude"
+            )]
+        );
+    }
+
+    #[test]
+    fn an_old_zorkyn_exe_hands_the_wsl_tab_to_the_distro() {
+        let seen = RefCell::new(Vec::new());
+        let next = open_agent(
+            &Host::Wsl {
+                distro: "Ubuntu",
+                linux_dir: "/home/u/p",
+            },
+            "claude",
+            || Some(PathBuf::from(r"C:\z\zorkyn.exe")),
+            |i| {
+                seen.borrow_mut().push(i.clone());
+                if i.exe == "wsl.exe" {
+                    Ok((Some(127), String::new(), String::new()))
+                } else {
+                    Ok((
+                        Some(2),
+                        String::new(),
+                        "zorkyn open: unknown flag --host\nusage: ...\n".into(),
+                    ))
+                }
+            },
+        );
+        let seen = seen.into_inner();
+        assert_eq!(seen.len(), 2);
+        assert_eq!(seen[1], wsl_open("Ubuntu", "/home/u/p", "claude"));
+        // the distro's own chain still ends in the usual notice
+        assert_eq!(next, Next::Fallback(fallback_notice(NOT_IN_WSL)));
+    }
+
+    #[test]
+    fn other_zorkyn_exe_failures_do_not_try_the_distro() {
+        let runs = RefCell::new(0);
+        let wsl = Host::Wsl {
+            distro: "Ubuntu",
+            linux_dir: "/home/u/p",
+        };
+        let fail = |code: i32, err: &'static str| {
+            *runs.borrow_mut() = 0;
+            open_agent(
+                &wsl,
+                "claude",
+                || Some(PathBuf::from("z")),
+                |_| {
+                    *runs.borrow_mut() += 1;
+                    Ok((Some(code), String::new(), err.into()))
+                },
+            )
+        };
+        // exit 2 for another flag, and exit 1 naming --host: no second try
+        let a = fail(2, "zorkyn open: unknown flag --split\n");
+        assert_eq!(*runs.borrow(), 1);
+        assert!(matches!(a, Next::Fallback(_)));
+        let b = fail(1, "zorkyn open: unknown flag --host\n");
+        assert_eq!(*runs.borrow(), 1);
+        assert_eq!(b, Next::Fallback(fallback_notice("unknown flag --host")));
+        assert!(predates_host(Some(2), "zorkyn open: unknown flag --host"));
+        assert!(!predates_host(None, "unknown flag --host"));
     }
 
     #[test]
