@@ -320,6 +320,11 @@ pub struct Preferences {
     /// is not a list of where you ssh. `serde(default)`, as above.
     #[serde(default)]
     pub show_server_details: bool,
+    /// Whether an agent launch opens a tab in a running multiplexer
+    /// instead of a new terminal window. Absent, as in every prefs.json
+    /// before this field, is `none`: the window per launch it always was.
+    #[serde(default)]
+    pub multiplexer: super::multiplexer::Multiplexer,
 }
 
 // bare names, not globs: a cheap comparison on the listing the scan already has
@@ -512,6 +517,18 @@ impl PreferencesStore {
 
     pub fn set_show_server_details(&mut self, on: bool) -> Result<(), String> {
         self.prefs.show_server_details = on;
+        self.save()
+    }
+
+    pub fn multiplexer(&self) -> super::multiplexer::Multiplexer {
+        self.prefs.multiplexer
+    }
+
+    pub fn set_multiplexer(
+        &mut self,
+        m: super::multiplexer::Multiplexer,
+    ) -> Result<(), String> {
+        self.prefs.multiplexer = m;
         self.save()
     }
 
@@ -857,6 +874,27 @@ mod tests {
         let again = PreferencesStore::new(dir).unwrap();
         assert!(again.show_server_details());
         assert_eq!(again.window_transparency(), 30, "the rest untouched");
+    }
+
+    #[test]
+    fn multiplexer_is_none_until_chosen_and_persists() {
+        use crate::services::multiplexer::Multiplexer;
+        let dir = std::env::temp_dir().join("devgo-prefs-test-multiplexer");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        // a prefs.json from before the field
+        fs::write(dir.join("prefs.json"), r#"{"window_transparency":30}"#)
+            .unwrap();
+
+        let mut s = PreferencesStore::new(dir.clone()).unwrap();
+        assert_eq!(s.multiplexer(), Multiplexer::None, "today's behaviour");
+        s.set_multiplexer(Multiplexer::Zorkyn).unwrap();
+
+        let again = PreferencesStore::new(dir.clone()).unwrap();
+        assert_eq!(again.multiplexer(), Multiplexer::Zorkyn);
+        assert_eq!(again.window_transparency(), 30, "the rest untouched");
+        let raw = fs::read_to_string(dir.join("prefs.json")).unwrap();
+        assert!(raw.contains(r#""multiplexer": "zorkyn""#), "{raw}");
     }
 
     #[test]

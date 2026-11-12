@@ -958,13 +958,15 @@ pub fn run_script(
 // a coding agent in the default terminal, in the project directory. the
 // agent is a command; the terminal's run template, the dev-script path,
 // launches it, so it lands in a real terminal with its own clipboard,
-// scrollback and focus. it must exist on the project's side
+// scrollback and focus. it must exist on the project's side.
+// with a multiplexer chosen, the agent opens as a tab in it instead, and
+// the Some(note) that comes back says when that fell back to a window
 #[tauri::command]
 pub fn open_agent(
     project: Project,
     target_id: Option<String>,
     state: State<AppState>,
-) -> Result<(), AppError> {
+) -> Result<Option<String>, AppError> {
     require_project_dir(&project)?;
     let agent = resolve_target(&state, TargetKind::Agent, target_id)?;
     let distro = crate::services::scanner::distro_of(&project.full_path);
@@ -992,6 +994,23 @@ pub fn open_agent(
     })?;
     let info = state.runtime_info.lock().map_err(lock_err)?.clone();
     let terminal = resolve_target(&state, TargetKind::Terminal, None)?;
+    let mux = state.pref_store.lock().map_err(lock_err)?.multiplexer();
+    let note = match open_agent_tab(mux, &project, distro.as_deref(), &command)
+    {
+        Some(Next::Done { attach_unix }) => {
+            // off windows zorkyn opens no window: the default terminal
+            // shows the session, the same way any command is run in it
+            if let Some(zorkyn) = attach_unix {
+                crate::services::scripts::run(
+                    &project, &zorkyn, &terminal, &info,
+                )?;
+            }
+            record_launch(&state, &project)?;
+            return Ok(None);
+        }
+        Some(Next::Fallback(note)) => Some(note),
+        None => None,
+    };
     // Windows only: the terminal starts claude itself, no shell wrapper
     // runs to name the window, so DevGo adds --name. the name file is read
     // here, per launch, so an edit to it counts without a restart
@@ -1015,7 +1034,56 @@ pub fn open_agent(
         command
     };
     crate::services::scripts::run(&project, &command, &terminal, &info)?;
-    record_launch(&state, &project)
+    record_launch(&state, &project)?;
+    Ok(note)
+}
+
+use crate::services::multiplexer::{self, Multiplexer, Next};
+
+/// The multiplexer half of `open_agent`: None for `none` (the window per
+/// launch it always was), else what zorkyn made of the request. The
+/// Windows title logic below it is for the window path only; inside
+/// zorkyn the default shell's profile names the tab.
+fn open_agent_tab(
+    mux: Multiplexer,
+    project: &Project,
+    distro: Option<&str>,
+    command: &str,
+) -> Option<Next> {
+    match mux {
+        Multiplexer::None => None,
+        Multiplexer::Tmux => Some(Next::Fallback(
+            multiplexer::fallback_notice(multiplexer::TMUX_NOT_BUILT),
+        )),
+        Multiplexer::Zorkyn => {
+            let linux_dir;
+            let host = match distro {
+                Some(d) => {
+                    linux_dir =
+                        crate::services::platform::paths::windows_to_wsl_path(
+                            &project.full_path,
+                            d,
+                        );
+                    multiplexer::Host::Wsl {
+                        distro: d,
+                        linux_dir: &linux_dir,
+                    }
+                }
+                None if cfg!(windows) => multiplexer::Host::Windows {
+                    dir: &project.full_path,
+                },
+                None => multiplexer::Host::Unix {
+                    dir: &project.full_path,
+                },
+            };
+            Some(multiplexer::open_agent(
+                &host,
+                command,
+                multiplexer::find_here,
+                multiplexer::run_default,
+            ))
+        }
+    }
 }
 
 /// Same liveness gate the scanner uses: neither git state nor a stack badge is
@@ -2460,6 +2528,25 @@ pub fn set_show_server_details(
     let mut prefs = state.pref_store.lock().map_err(lock_err)?;
     prefs.set_show_server_details(on).map_err(AppError::Lock)?;
     Ok(prefs.show_server_details())
+}
+
+#[tauri::command]
+pub fn get_multiplexer(
+    state: State<AppState>,
+) -> Result<Multiplexer, AppError> {
+    Ok(state.pref_store.lock().map_err(lock_err)?.multiplexer())
+}
+
+// the stored value comes back, like the flag above, so the panel shows
+// what the file says
+#[tauri::command]
+pub fn set_multiplexer(
+    multiplexer: Multiplexer,
+    state: State<AppState>,
+) -> Result<Multiplexer, AppError> {
+    let mut prefs = state.pref_store.lock().map_err(lock_err)?;
+    prefs.set_multiplexer(multiplexer).map_err(AppError::Lock)?;
+    Ok(prefs.multiplexer())
 }
 
 /// What one live search answers: the hits, and the generation the

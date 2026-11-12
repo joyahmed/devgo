@@ -834,7 +834,7 @@ const AppInner = () => {
 	};
 	const handleOpenAgent = (targetId?: string) => {
 		flash('agent');
-		openAgent(undefined, targetId).catch(e => toast(showError(e)));
+		openAgent(undefined, targetId).then(sayStandIn, e => toast(showError(e)));
 	};
 	// a target with no WSL form cannot open a WSL project; the row disables
 	// it instead of letting the launch fail after the click
@@ -1878,7 +1878,8 @@ const AppInner = () => {
 									: 'not found on this machine'
 						: agentHint(t.id),
 					disabled: missing,
-					onClick: () => openAgent(p, t.id).catch(e => toast(showError(e)))
+					onClick: () =>
+						openAgent(p, t.id).then(sayStandIn, e => toast(showError(e)))
 				};
 			}),
 			// the row that says live gets the kill beside the reattach; the

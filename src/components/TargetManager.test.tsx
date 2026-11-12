@@ -792,3 +792,52 @@ describe('TargetManager — one row per program', () => {
 		expect(await screen.findByText('adds Windows')).not.toBeNull();
 	});
 });
+
+describe('TargetManager — the multiplexer choice', () => {
+	// where an agent opens: a window per launch, or a tab in a running zorkyn.
+	// the choice draws only when the panel is handed both halves of it
+	const choice = (label: string) =>
+		within(section('Multiplexer')).getByRole('button', { name: label });
+
+	it('draws nothing when no setter is given', () => {
+		manager();
+		expect(screen.queryByRole('heading', { name: 'Multiplexer' })).toBeNull();
+	});
+
+	it('marks the stored choice and hands a click to onSetMultiplexer, once', async () => {
+		const user = userEvent.setup();
+		const onSetMultiplexer = vi.fn().mockResolvedValue(undefined);
+		manager({ multiplexer: 'none', onSetMultiplexer });
+
+		expect(choice('None').getAttribute('aria-current')).toBe('true');
+		expect(choice('Zorkyn').hasAttribute('aria-current')).toBe(false);
+
+		await user.click(choice('Zorkyn'));
+		expect(onSetMultiplexer).toHaveBeenCalledTimes(1);
+		expect(onSetMultiplexer).toHaveBeenCalledWith('zorkyn');
+	});
+
+	it('marks Zorkyn when that is what prefs.json holds', () => {
+		manager({ multiplexer: 'zorkyn', onSetMultiplexer: vi.fn() });
+		expect(choice('Zorkyn').getAttribute('aria-current')).toBe('true');
+		expect(choice('None').hasAttribute('aria-current')).toBe(false);
+	});
+
+	it('disables both choices until the stored value is read', () => {
+		manager({ onSetMultiplexer: vi.fn() });
+		expect((choice('None') as HTMLButtonElement).disabled).toBe(true);
+		expect((choice('Zorkyn') as HTMLButtonElement).disabled).toBe(true);
+	});
+
+	it('reports a refused write through onError', async () => {
+		const user = userEvent.setup();
+		const onError = vi.fn();
+		manager({
+			multiplexer: 'none',
+			onSetMultiplexer: vi.fn().mockRejectedValue('prefs locked'),
+			onError
+		});
+		await user.click(choice('Zorkyn'));
+		await waitFor(() => expect(onError).toHaveBeenCalledTimes(1));
+	});
+});

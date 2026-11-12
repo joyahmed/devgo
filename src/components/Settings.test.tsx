@@ -128,6 +128,7 @@ const wire = (over: { scan?: ScanConfig; tmux?: TmuxConfig }) =>
 	invoke.mockImplementation((cmd: string) => {
 		if (cmd === 'get_scan_config')
 			return Promise.resolve(over.scan ?? { ignore: [], depth: 1 });
+		if (cmd === 'get_multiplexer') return Promise.resolve('none');
 		if (cmd === 'get_tmux_config')
 			return Promise.resolve(
 				over.tmux ?? { enabled: true, window_names: [] }

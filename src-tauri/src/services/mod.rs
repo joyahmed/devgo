@@ -9,6 +9,7 @@ pub mod github;
 pub mod groups;
 pub mod launch_args;
 pub mod launcher;
+pub mod multiplexer;
 pub mod platform;
 pub mod preferences;
 pub mod project_cache;
