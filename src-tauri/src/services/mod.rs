@@ -24,6 +24,7 @@ pub mod sessions;
 pub mod single_instance;
 pub mod ssh_config;
 pub mod target_store;
+pub mod window_title;
 pub mod workspace;
 pub mod wsl_doctor;
 
