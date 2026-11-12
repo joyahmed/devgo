@@ -998,12 +998,18 @@ pub fn open_agent(
     let command = if cfg!(windows) && !on_wsl {
         use crate::services::window_title;
         let home = std::path::PathBuf::from(home_dir());
+        // wt's default profile, so the tab keeps that profile's icon
+        let profile = std::env::var_os("LOCALAPPDATA")
+            .and_then(|d| window_title::read_wt_settings(d.as_ref()))
+            .and_then(|s| window_title::default_profile(&s));
         window_title::agent_command(
             &command,
             &terminal.executable,
             window_title::read_name_file(&home),
             &project.full_path,
             window_title::git_root(std::path::Path::new(&project.full_path)),
+            profile.as_deref(),
+            window_title::shell_on_path(std::env::var_os("PATH")),
         )
     } else {
         command
