@@ -992,6 +992,22 @@ pub fn open_agent(
     })?;
     let info = state.runtime_info.lock().map_err(lock_err)?.clone();
     let terminal = resolve_target(&state, TargetKind::Terminal, None)?;
+    // Windows only: the terminal starts claude itself, no shell wrapper
+    // runs to name the window, so DevGo adds --name. the name file is read
+    // here, per launch, so an edit to it counts without a restart
+    let command = if cfg!(windows) && !on_wsl {
+        use crate::services::window_title;
+        let home = std::path::PathBuf::from(home_dir());
+        window_title::agent_command(
+            &command,
+            &terminal.executable,
+            window_title::read_name_file(&home),
+            &project.full_path,
+            window_title::git_root(std::path::Path::new(&project.full_path)),
+        )
+    } else {
+        command
+    };
     crate::services::scripts::run(&project, &command, &terminal, &info)?;
     record_launch(&state, &project)
 }
