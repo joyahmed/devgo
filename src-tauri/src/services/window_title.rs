@@ -81,18 +81,90 @@ pub fn with_window_name(command: &str, title: &str, for_wt: bool) -> String {
 
 /// The agent command a Windows launch hands the terminal: Claude Code gets
 /// its window name, every other agent goes out exactly as configured.
+///
+/// `wt_profile`: Windows Terminal's default profile GUID. A tab whose
+/// command line is replaced shows the program's own icon (claude.exe has
+/// none, so a bare console icon). Naming the profile with `-p` keeps the
+/// profile's icon, so in wt Claude runs inside `shell` under that profile.
+/// The text lands after `-d "{path}"` in WT_RUN_ARGS, where wt still reads
+/// new-tab options.
 pub fn agent_command(
     command: &str,
     terminal_exe: &str,
     name_file: Option<String>,
     project_path: &str,
     git_root: Option<PathBuf>,
+    wt_profile: Option<&str>,
+    shell: &str,
 ) -> String {
     if !is_claude(command) {
         return command.to_string();
     }
     let title = claude_title(name_file, project_path, git_root);
-    with_window_name(command, &title, is_wt(terminal_exe))
+    if !is_wt(terminal_exe) {
+        return with_window_name(command, &title, false);
+    }
+    match wt_profile.filter(|p| !p.is_empty() && !p.contains('"')) {
+        // a quote in the user's command cannot nest inside -Command "..."
+        Some(profile) if !command.contains('"') => {
+            wt_profile_command(command, &title, profile, shell)
+        }
+        _ => with_window_name(command, &title, true),
+    }
+}
+
+// `-p "<profile>" <shell> -NoLogo -NoExit -Command "<claude --name '<title>'>"`.
+// the title is single-quoted for PowerShell (a literal, '' for a quote), and
+// every `;` goes out as `\;` because wt splits commands on it before
+// PowerShell ever sees the line
+fn wt_profile_command(
+    command: &str,
+    title: &str,
+    profile: &str,
+    shell: &str,
+) -> String {
+    let inner = if has_name_flag(command) || title.is_empty() {
+        command.to_string()
+    } else {
+        format!("{command} --name '{}'", title.replace('\'', "''"))
+    };
+    let inner = inner.replace(';', "\\;");
+    format!("-p \"{profile}\" {shell} -NoLogo -NoExit -Command \"{inner}\"")
+}
+
+/// The `defaultProfile` GUID out of Windows Terminal's settings.json text.
+/// The file is JSON with comments, so this looks for the key and takes the
+/// string after it rather than parsing the whole thing.
+pub fn default_profile(settings: &str) -> Option<String> {
+    let after = settings.split("\"defaultProfile\"").nth(1)?;
+    let after = after.trim_start().strip_prefix(':')?.trim_start();
+    let value = after.strip_prefix('"')?.split('"').next()?;
+    (!value.is_empty()).then(|| value.to_string())
+}
+
+/// Windows Terminal's settings, read now: the store install, then Preview,
+/// then the unpackaged one. `None` when none is there.
+pub fn read_wt_settings(local_app_data: &Path) -> Option<String> {
+    [
+        r"Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json",
+        r"Packages\Microsoft.WindowsTerminalPreview_8wekyb3d8bbwe\LocalState\settings.json",
+        r"Microsoft\Windows Terminal\settings.json",
+    ]
+    .iter()
+    .find_map(|rel| std::fs::read_to_string(local_app_data.join(rel)).ok())
+}
+
+/// PowerShell 7 when it is on PATH, else Windows PowerShell, which every
+/// Windows has.
+pub fn shell_on_path(path_var: Option<std::ffi::OsString>) -> &'static str {
+    let found = path_var.is_some_and(|p| {
+        std::env::split_paths(&p).any(|d| d.join("pwsh.exe").is_file())
+    });
+    if found {
+        "pwsh"
+    } else {
+        "powershell"
+    }
 }
 
 /// Is this terminal Windows Terminal? Its executable, not its label, says.
@@ -230,22 +302,121 @@ mod tests {
     #[test]
     fn other_agents_go_out_untouched() {
         for c in ["codex", "gemini --yolo", "aider"] {
-            let out =
-                agent_command(c, "wt", Some("Box".into()), r"D:\x\app", None);
-            assert_eq!(out, c);
+            for profile in [None, Some(GUID)] {
+                let out = agent_command(
+                    c,
+                    "wt",
+                    Some("Box".into()),
+                    r"D:\x\app",
+                    None,
+                    profile,
+                    "pwsh",
+                );
+                assert_eq!(out, c);
+            }
         }
     }
 
-    #[test]
-    fn claude_in_windows_terminal_end_to_end() {
-        let out = agent_command(
-            "claude",
-            "wt",
+    const GUID: &str = "{00000000-1111-2222-3333-444444444444}";
+
+    fn claude_in(
+        command: &str,
+        terminal: &str,
+        profile: Option<&str>,
+    ) -> String {
+        agent_command(
+            command,
+            terminal,
             Some("Box\n".into()),
             r"D:\code\devgo",
             Some(PathBuf::from(r"D:\code\devgo")),
+            profile,
+            "pwsh",
+        )
+    }
+
+    #[test]
+    fn claude_in_windows_terminal_without_a_profile() {
+        assert_eq!(
+            claude_in("claude", "wt", None),
+            "claude --name \"Box/devgo\""
         );
-        assert_eq!(out, "claude --name \"Box/devgo\"");
+    }
+
+    #[test]
+    fn claude_in_windows_terminal_runs_under_the_default_profile() {
+        assert_eq!(
+            claude_in("claude", "wt", Some(GUID)),
+            format!(
+                "-p \"{GUID}\" pwsh -NoLogo -NoExit \
+                 -Command \"claude --name 'Box/devgo'\""
+            )
+        );
+    }
+
+    #[test]
+    fn the_profile_form_keeps_an_explicit_name_and_escapes_for_both() {
+        assert_eq!(
+            claude_in("claude -n mine", "wt", Some(GUID)),
+            format!("-p \"{GUID}\" pwsh -NoLogo -NoExit -Command \"claude -n mine\"")
+        );
+        let out = agent_command(
+            "claude",
+            "wt",
+            Some("it's;x".into()),
+            r"D:\x\app",
+            None,
+            Some(GUID),
+            "powershell",
+        );
+        assert_eq!(
+            out,
+            format!(
+                "-p \"{GUID}\" powershell -NoLogo -NoExit \
+                 -Command \"claude --name 'it''s\\;x/app'\""
+            )
+        );
+    }
+
+    #[test]
+    fn a_quoted_command_or_another_terminal_skips_the_profile() {
+        let quoted = r#""C:\Program Files\x\claude.cmd""#;
+        assert_eq!(
+            claude_in(quoted, "wt", Some(GUID)),
+            format!("{quoted} --name \"Box/devgo\"")
+        );
+        assert_eq!(
+            claude_in("claude", "alacritty", Some(GUID)),
+            "claude --name \"Box/devgo\""
+        );
+    }
+
+    #[test]
+    fn the_default_profile_is_read_from_settings_with_comments() {
+        let s = "{\n  // a comment\n  \"$help\": \"x\",\n  \"defaultProfile\" : \
+                 \"{574e775e-4f2a-5b96-ac1e-a2962a402336}\",\n  \"profiles\": {}\n}";
+        assert_eq!(
+            default_profile(s).as_deref(),
+            Some("{574e775e-4f2a-5b96-ac1e-a2962a402336}")
+        );
+        assert_eq!(default_profile("{ \"profiles\": {} }"), None);
+        assert_eq!(default_profile("{ \"defaultProfile\": \"\" }"), None);
+    }
+
+    #[test]
+    fn powershell_is_the_shell_when_pwsh_is_not_on_path() {
+        assert_eq!(shell_on_path(None), "powershell");
+        let empty = std::env::temp_dir().join(format!(
+            "devgo-title-{}-{}",
+            std::process::id(),
+            line!()
+        ));
+        std::fs::create_dir_all(&empty).unwrap();
+        let path = std::env::join_paths([&empty]).unwrap();
+        assert_eq!(shell_on_path(Some(path.clone())), "powershell");
+        std::fs::write(empty.join("pwsh.exe"), b"").unwrap();
+        assert_eq!(shell_on_path(Some(path)), "pwsh");
+        let _ = std::fs::remove_dir_all(&empty);
     }
 
     #[test]
