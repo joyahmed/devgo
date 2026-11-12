@@ -1167,7 +1167,13 @@ interface TargetManagerProps {
 	onRemove: (id: string) => Promise<void>;
 	onSetDefault: (kind: TargetKind, id: string) => Promise<void>;
 	onError: (message: string) => void;
+	/// Where an agent opens; drawn under the terminals when both are given.
+	multiplexer?: Multiplexer;
+	onSetMultiplexer?: (m: Multiplexer) => Promise<void>;
 }
+
+/// prefs.json's multiplexer. tmux is reserved on the Rust side and not offered.
+type Multiplexer = 'none' | 'zorkyn' | 'tmux';
 
 interface CommandPaletteProps {
 	commands: PaletteCommand[];

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import { isMac, isWindows } from '../platform';
 import Button from './Button';
@@ -141,6 +141,12 @@ const PLACEHOLDERS = [
 		: []),
 	{ code: '{command}', note: 'in the run templates, and' },
 	{ code: '{script}', note: '— terminals only — the generated tmux session script' }
+];
+
+// where an agent opens. tmux is reserved in rust and not offered here
+const MULTIPLEXERS: { value: Multiplexer; label: string }[] = [
+	{ value: 'none', label: 'None' },
+	{ value: 'zorkyn', label: 'Zorkyn' }
 ];
 
 const heading = 'text-15 font-semibold text-text-primary mb-2';
@@ -296,7 +302,9 @@ const TargetManager = ({
 	onAddDetected,
 	onRemove,
 	onSetDefault,
-	onError
+	onError,
+	multiplexer,
+	onSetMultiplexer
 }: TargetManagerProps) => {
 	const [kind, setKind] = useState<TargetKind>('editor');
 	const [draft, setDraft] = useState(BLANK);
@@ -410,19 +418,47 @@ const TargetManager = ({
 	return (
 		<div className='flex flex-col gap-5'>
 			{lists.map(({ kind, label, items }) => (
-				<div key={kind}>
-					<h4 className={heading}>{label}</h4>
-					<TargetList
-						{...{
-							kind,
-							items,
-							defaultId: defaults[kind],
-							onRemove: (id: string) => guard(onRemove(id)),
-							onSetDefault: (k: TargetKind, id: string) =>
-								guard(onSetDefault(k, id))
-						}}
-					/>
-				</div>
+				<Fragment key={kind}>
+					<div>
+						<h4 className={heading}>{label}</h4>
+						<TargetList
+							{...{
+								kind,
+								items,
+								defaultId: defaults[kind],
+								onRemove: (id: string) => guard(onRemove(id)),
+								onSetDefault: (k: TargetKind, id: string) =>
+									guard(onSetDefault(k, id))
+							}}
+						/>
+					</div>
+					{/* beside the terminal it replaces for agents: a tab in one
+					    running multiplexer instead of that terminal's new window */}
+					{kind === 'terminal' && onSetMultiplexer ? (
+						<div>
+							<h4 className={heading}>Multiplexer</h4>
+							<p className={`${hint} mb-2`}>
+								Where an agent opens. None: a new terminal window for each
+								project. Zorkyn: a tab per project in one running Zorkyn
+								window. If Zorkyn is not installed, the agent opens in a
+								window and DevGo says so.
+							</p>
+							<div className='flex items-center gap-2'>
+								{MULTIPLEXERS.map(m => (
+									<Button
+										key={m.value}
+										variant='target'
+										aria-current={multiplexer === m.value ? 'true' : undefined}
+										onClick={() => guard(onSetMultiplexer(m.value))}
+										disabled={multiplexer == null}
+									>
+										{m.label}
+									</Button>
+								))}
+							</div>
+						</div>
+					) : null}
+				</Fragment>
 			))}
 
 			{/* detection proposes; nothing is written until a specific Add */}

@@ -26,6 +26,7 @@ import Kbd from './Kbd';
 import TargetManager from './TargetManager';
 import WorkspaceManager from './WorkspaceManager';
 import WslDoctor from './WslDoctor';
+import { useMultiplexer } from '../hooks/useMultiplexer';
 
 // Which panel you last looked at is frontend-only UI state, like sortMode:
 // nothing in Rust reads it, so it never goes near prefs.json.
@@ -260,6 +261,19 @@ const ScanningPanel = ({ onSaved, onError }: ScanningPanelProps) => {
 				{saving ? 'Saving…' : 'Save & rescan'}
 			</Button>
 		</div>
+	);
+};
+
+// the targets panel plus the multiplexer choice drawn under its terminals.
+// the read is here, not in Settings, so it only happens when this panel shows
+const TargetsPanel = (props: TargetManagerProps) => {
+	const { multiplexer, setMultiplexer } = useMultiplexer(props.onError);
+	return (
+		<TargetManager
+			{...props}
+			multiplexer={multiplexer ?? undefined}
+			onSetMultiplexer={setMultiplexer}
+		/>
 	);
 };
 
@@ -1101,7 +1115,7 @@ const Settings = ({
 			id: 'targets',
 			label: 'Launch targets',
 			render: () => (
-				<TargetManager
+				<TargetsPanel
 					{...{
 						editors: targets.editors,
 						terminals: targets.terminals,
