@@ -203,7 +203,8 @@ pub fn wsl_attach_window(distro: &str) -> Invocation {
 
 /// Where zorkyn is on Windows: the PATH first, then `%USERPROFILE%\bin`,
 /// where its installer puts it. Nothing user-specific is hard-coded: the
-/// home comes from the caller.
+/// home comes from the caller. Called only on Windows; the tests run it everywhere.
+#[cfg_attr(not(windows), allow(dead_code))]
 pub fn find_windows(path_var: &str, home: Option<&Path>) -> Option<PathBuf> {
     find_in(path_var, home, "zorkyn.exe", &["bin"])
 }
