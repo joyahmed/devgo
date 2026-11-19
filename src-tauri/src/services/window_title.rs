@@ -132,6 +132,21 @@ fn wt_profile_command(
     format!("-p \"{profile}\" {shell} -NoLogo -NoExit -Command \"{inner}\"")
 }
 
+/// wt arguments that open under `profile`: `-p "<profile>"` in front, so a
+/// tab DevGo opens for a project wears the same icon and colour as one the
+/// user opens by hand. Left alone when there is no profile, when the profile
+/// cannot sit inside quotes, or when the user's own template already picks
+/// one with -p/--profile (theirs wins).
+pub fn with_wt_profile(args: &str, profile: Option<&str>) -> String {
+    let picks_own = args
+        .split_whitespace()
+        .any(|t| t == "-p" || t == "--profile" || t.starts_with("--profile="));
+    match profile.filter(|p| !p.is_empty() && !p.contains('"')) {
+        Some(profile) if !picks_own => format!("-p \"{profile}\" {args}"),
+        _ => args.to_string(),
+    }
+}
+
 /// The `defaultProfile` GUID out of Windows Terminal's settings.json text.
 /// The file is JSON with comments, so this looks for the key and takes the
 /// string after it rather than parsing the whole thing.
@@ -389,6 +404,28 @@ mod tests {
             claude_in("claude", "alacritty", Some(GUID)),
             "claude --name \"Box/devgo\""
         );
+    }
+
+    #[test]
+    fn a_project_opened_in_windows_terminal_wears_the_default_profile() {
+        let guid = "{574e775e-4f2a-5b96-ac1e-a2962a402336}";
+        let wt = crate::models::target::WT_ARGS;
+        assert_eq!(
+            with_wt_profile(wt, Some(guid)),
+            format!("-p \"{guid}\" {wt}")
+        );
+        // no profile, or one that cannot be quoted: the args as they were
+        assert_eq!(with_wt_profile(wt, None), wt);
+        assert_eq!(with_wt_profile(wt, Some("")), wt);
+        assert_eq!(with_wt_profile(wt, Some("a\"b")), wt);
+        // the user's template already picks a profile: theirs wins
+        for own in [
+            "-p \"Ubuntu\" -d \"{path}\"",
+            "--profile Ubuntu -d \"{path}\"",
+            "--profile=Ubuntu -d \"{path}\"",
+        ] {
+            assert_eq!(with_wt_profile(own, Some(guid)), own);
+        }
     }
 
     #[test]
