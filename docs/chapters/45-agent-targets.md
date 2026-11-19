@@ -79,6 +79,12 @@ The context menu lists *Open in &lt;agent&gt;* per agent after *Open both*, the 
 
 > `✅STAGE: 45 agent-targets`; ff-merge; push.
 
+Later addition (v1.3.0): an agent no longer has to open a window of its own. Settings › Launch targets has a **Multiplexer** choice under Terminals (None or Zorkyn, stored as `multiplexer` in prefs.json, default None). With Zorkyn chosen, `open_agent` asks Zorkyn for a tab in its one window (`zorkyn open --cwd <dir> [--attach-window] -- <agent>`); on Windows a WSL project goes to the same Windows window through `zorkyn.exe open --host wsl:<distro>`, and only an older zorkyn.exe without `--host` hands it to the zorkyn inside the distro. Any Zorkyn failure opens the agent in a normal terminal and a toast says why. The code is `services/multiplexer.rs`.
+
+Later addition (v1.3.0): on Windows a Claude Code window is named after its project. `open_agent` adds `--name "<box>/<repo>"` unless the command already carries `-n`/`--name` (repo is the git root folder, else the project folder); in Windows Terminal with a default profile the command runs inside that profile, so the tab keeps its icon. WSL, macOS and Linux launches already went through a login shell and are unchanged. The code is `services/window_title.rs`.
+
+Also since v1.2.9: agents installed after DevGo's first run join the list on their own (`adopt_new_agents`, tracked in `agents-seen.json`), and on Windows the PATH is read fresh from the registry on each launch, so a tool installed while DevGo runs is found without a restart.
+
 ---
 
 ## What you built
