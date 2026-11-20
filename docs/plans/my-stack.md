@@ -137,6 +137,25 @@ floating window becomes a **pill** for glancing. The 300x340 panel (`StackPanel`
       CPU-s/min: BOTH TARGETS MISSED (<= +60 MB, <= +0.2 CPU-s/min). CPU is down from the
       old panel's +2.5 CPU-s/min; the memory is the second webview itself. Not ticked:
       needs a decision (accept the cost, or draw the pill without its own webview).
+      Decided: draw it without a webview (S10, S11).
+- [ ] **S10 - the native pill (Windows).** No webview: a Win32 layered window
+      (`WS_EX_LAYERED` + `UpdateLayeredWindow`, per-pixel alpha, so the rounded ends are
+      the window's shape), its own thread and message loop, drawn by `tiny-skia`, text by
+      `fontdue` from a system font read at run time (no font file committed). Same
+      behaviour as S8: grip, one dot per app (green running, red stopped, grey ring not
+      installed, colours from the active palette, which the main window hands to Rust on
+      every theme change and Rust keeps in `stack-pill-palette.json`), ✕; dot click =
+      start/stop (own dot inert, not-installed opens the tab); hover = card (icon, name,
+      state, what a click does), above the bar at the bottom of a screen; bar click =
+      the Stack tab; press-and-move > 3 px = drag; position kept in `stack-window.json`.
+      Status: `services::stack` called directly every 5 s, redraw only on a change.
+      `--stack`, the tray and the tab's button open it. macOS/Linux keep the webview pill.
+      Gate: verify --full 6/6; unit tests for the layout (width fit, dot hit-test, card
+      above/below), the hex parse and the dot colours, the click-action mapping. Looked at:
+      real screen grabs, idle + hover, neon + nord, no jagged edges, no clipped text.
+- [ ] **S11 - measured again.** Release build, installed DevGo stopped (`Stop-Process`)
+      and restarted after. Pill open vs closed, 60 s, DevGo + its WebView2 children.
+      Gate: <= +60 MB working set, <= +0.2 CPU-s/min (expected ~3-8 MB, ~0 CPU idle).
 
 ## Not in v1 (say so, do not half-build)
 
