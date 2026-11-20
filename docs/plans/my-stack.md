@@ -80,3 +80,8 @@ script outside DevGo reads that same file.
 ## Results
 
 (filled in by S5)
+
+S5 so far: `bun run tauri build` green (msi + nsis). Release `DevGo.exe` 10.8 MB, nsis setup
+3.25 MB. Baseline, installed 1.2.9 with no stack window: 7 processes, 424.1 MB working set,
+0.08 CPU-seconds over 30 s. Still open: the new build with the stack window open vs closed, and
+the screenshots. Both need the installed DevGo closed (one instance only).
