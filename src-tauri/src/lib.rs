@@ -3,6 +3,7 @@ mod error;
 mod models;
 mod services;
 mod smoke_probe;
+mod stack;
 mod summon;
 mod tray;
 
@@ -916,6 +917,13 @@ fn command_dispatch(
         commands::set_last_project,
         commands::get_log_path,
         commands::log_ui_line,
+        stack::stack_list,
+        stack::stack_save,
+        stack::stack_status,
+        stack::stack_start,
+        stack::stack_stop,
+        stack::stack_restart,
+        stack::stack_start_all,
     ]
 }
 
