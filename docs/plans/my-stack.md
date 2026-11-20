@@ -64,7 +64,7 @@ script outside DevGo reads that same file.
       "already running" x3 and starts nothing; process count per app unchanged.
       Done: 2 of 3 were running -> 2 "already running" lines, the third (not running) started
       once; process counts before 1/0/1, after 1/1/1; task result 0.
-- [ ] **S5 - measured on the real build.** Release build, run with the installed DevGo
+- [x] **S5 - measured on the real build.** Release build, run with the installed DevGo
       closed: RAM (working set, all DevGo + WebView2 children) and CPU over 60 s with the
       stack window open vs closed. Screenshots of the stack window at real size in two
       palettes (`scripts/cdp.mjs` with `DEVGO_CDP_MATCH=stack`). Gate: numbers in this file.
@@ -79,9 +79,28 @@ script outside DevGo reads that same file.
 
 ## Results
 
-(filled in by S5)
+Measured 2026-11-20, release `DevGo.exe` (10.8 MB), installed DevGo closed, 60 s each, all
+DevGo + msedgewebview2 children:
 
-S5 so far: `bun run tauri build` green (msi + nsis). Release `DevGo.exe` 10.8 MB, nsis setup
-3.25 MB. Baseline, installed 1.2.9 with no stack window: 7 processes, 424.1 MB working set,
-0.08 CPU-seconds over 30 s. Still open: the new build with the stack window open vs closed, and
-the screenshots. Both need the installed DevGo closed (one instance only).
+| state | procs | working set | private | CPU-s over 60 s |
+|---|---|---|---|---|
+| stack window closed | 7 | 419.0 MB | 203.7 MB | 0.63 |
+| stack window open | 8 | 523.3 MB | 284.8 MB | 3.13 |
+
+The stack window costs about +104 MB working set, +81 MB private, +1 process. CPU is the
+number to watch: 3.13 s per 60 s is roughly 5% of one core while open (closed 0.63 s; the
+installed 1.2.9 baseline was 0.08 s over 30 s). The open run began about 10 s after the window
+opened, so some of that may be startup; not re-measured later.
+
+`DevGo.exe --stack` launched while DevGo was running: printed "DevGo is already running;
+focusing the existing window", the running instance opened the "My stack" window (still one
+DevGo process id). Single-instance `--stack` path works.
+
+Screenshots at real size (333 x 377 CSS px), neon and dracula: no clipping, no overflow
+(scrollWidth = clientWidth, scrollHeight = clientHeight), text readable, Stop/Restart/Start
+buttons aligned. Kept in the gitignored `docs/walk/s5-stack/`.
+One oddity: a first stack window vanished by itself within about a minute of opening; not
+reproduced on the second open, cause not found.
+
+Baseline, installed 1.2.9 with no stack window: 7 processes, 424.1 MB working set, 0.08
+CPU-seconds over 30 s.
