@@ -2885,7 +2885,13 @@ const App = () => {
 	// painted, so a cold start never flashes a white rectangle; the ground's
 	// alpha is read first, so a see-through install never flashes opaque
 	useEffect(() => {
-		loadGroundAlpha().finally(() => getCurrentWindow().show());
+		// `DevGo --stack` as the first launch opens only the stack window
+		loadGroundAlpha().finally(async () => {
+			const stackOnly = await invoke<boolean>('stack_launch_hides_main').catch(
+				() => false
+			);
+			if (!stackOnly) getCurrentWindow().show();
+		});
 	}, []);
 
 	return (

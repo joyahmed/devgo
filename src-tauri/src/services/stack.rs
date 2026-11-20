@@ -397,7 +397,7 @@ mod tests {
             (2, "devgo".to_string()),
             (3, "voice-app".to_string()),
         ];
-        assert_eq!(pids_of(&snap, "Zetta-Voice.exe"), vec![1, 3]);
+        assert_eq!(pids_of(&snap, "Voice-App.exe"), vec![1, 3]);
         assert!(pids_of(&snap, "desk-monitor").is_empty());
     }
 

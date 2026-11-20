@@ -45,12 +45,13 @@ script outside DevGo reads that same file.
       Commands `stack_list`, `stack_status`, `stack_start`, `stack_stop`, `stack_restart`,
       `stack_start_all`, `stack_save`. Unit tests for parse, expansion, name matching, save.
       Gate: `sh scripts/verify.sh --full` green (fmt, clippy -D warnings, cargo test, vitest, build).
-- [ ] **S2 - the window.** `--stack` flag in `launch_args` (+ `Handoff::Stack`, bytes `stack`;
+- [x] **S2 - the window.** `--stack` flag in `launch_args` (+ `Handoff::Stack`, bytes `stack`;
       an older DevGo ignores them as a stray connection), tray item "My stack", window
-      create/focus/destroy in `stack_window.rs`, window events split by label (the main
+      create/focus/destroy in `stack.rs` (300x340, frameless, always on top), window events split by label (the main
       window's hide-on-close and geometry memory must not touch the stack window), its own
       saved position (`stack-window.json`), capability for label `stack`.
       Gate: verify --full; cargo tests for the flag and the handoff round trip.
+      Done: verify --full 6/6 green; cargo test 569 passed, 2 ignored.
 - [ ] **S3 - the screen (React).** `main.tsx` renders `StackApp` when the window label is
       `stack`; `useStack` hook holds the list, the 2 s poll (paused when hidden) and the
       actions; `StackPanel` holds the markup, rows mapped from data. Add / remove / move

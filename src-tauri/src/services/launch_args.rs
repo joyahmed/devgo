@@ -24,7 +24,7 @@ use std::path::{Component, Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-pub const USAGE: &str = "usage: devgo [--open] <folder>";
+pub const USAGE: &str = "usage: devgo [--open] <folder> | devgo --stack";
 
 /// What argv asked for.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -35,12 +35,15 @@ pub enum Invocation {
     Open(String),
     /// argv named something DevGo cannot act on; the reason is the notice
     Invalid(String),
+    /// `--stack`: open the "My stack" window, not the main one
+    Stack,
 }
 
 /// argv, without the program name. `--smoke-probe` never reaches here:
 /// `main` handles it before tauri starts.
 pub fn parse<S: AsRef<str>>(args: &[S], windows: bool) -> Invocation {
     let mut folder: Option<String> = None;
+    let mut stack = false;
     let mut it = args.iter().map(AsRef::as_ref);
     let take = |raw: &str, folder: &mut Option<String>| {
         if folder.is_some() {
@@ -55,6 +58,10 @@ pub fn parse<S: AsRef<str>>(args: &[S], windows: bool) -> Invocation {
     };
     while let Some(arg) = it.next() {
         let step = match arg {
+            "--stack" => {
+                stack = true;
+                Ok(())
+            }
             "--open" => match it.next() {
                 Some(p) => take(p, &mut folder),
                 None => Err(format!("--open needs a folder. {USAGE}")),
@@ -81,9 +88,13 @@ pub fn parse<S: AsRef<str>>(args: &[S], windows: bool) -> Invocation {
             return Invocation::Invalid(e);
         }
     }
-    match folder {
-        Some(f) => Invocation::Open(f),
-        None => Invocation::Plain,
+    match (folder, stack) {
+        (Some(_), true) => {
+            Invocation::Invalid(format!("--stack takes no folder. {USAGE}"))
+        }
+        (None, true) => Invocation::Stack,
+        (Some(f), false) => Invocation::Open(f),
+        (None, false) => Invocation::Plain,
     }
 }
 
@@ -158,7 +169,7 @@ impl OpenRequest {
     /// argv to the request the window acts on. `None` for a plain launch.
     pub fn from_invocation(inv: Invocation, cwd: &Path) -> Option<Self> {
         match inv {
-            Invocation::Plain => None,
+            Invocation::Plain | Invocation::Stack => None,
             Invocation::Invalid(error) => Some(Self {
                 path: String::new(),
                 error: Some(error),
@@ -182,6 +193,9 @@ impl OpenRequest {
 pub enum Handoff {
     Restore,
     Open(OpenRequest),
+    /// show the "My stack" window. An older DevGo reads `stack` as a stray
+    /// connection and ignores it, which is the right failure
+    Stack,
 }
 
 /// The listener reads at most this much; a path is far shorter.
@@ -191,6 +205,7 @@ impl Handoff {
     pub fn encode(&self) -> Vec<u8> {
         match self {
             Self::Restore => b"restore".to_vec(),
+            Self::Stack => b"stack".to_vec(),
             Self::Open(req) => {
                 let mut v = b"open ".to_vec();
                 // a struct of two strings always serializes
@@ -205,6 +220,9 @@ impl Handoff {
     pub fn decode(bytes: &[u8]) -> Option<Self> {
         if bytes == b"restore" {
             return Some(Self::Restore);
+        }
+        if bytes == b"stack" {
+            return Some(Self::Stack);
         }
         let json = bytes.strip_prefix(b"open ")?;
         serde_json::from_slice(json).ok().map(Self::Open)
@@ -371,6 +389,24 @@ mod tests {
             let h = Handoff::Open(req);
             assert_eq!(Handoff::decode(&h.encode()), Some(h));
         }
+    }
+
+    #[test]
+    fn stack_flag_opens_the_stack_and_takes_no_folder() {
+        assert_eq!(parse(&["--stack"], true), Invocation::Stack);
+        assert!(matches!(
+            parse(&["--stack", r"C:\work"], true),
+            Invocation::Invalid(e) if e.contains("--stack takes no folder")
+        ));
+        assert_eq!(
+            OpenRequest::from_invocation(Invocation::Stack, Path::new("/")),
+            None
+        );
+        assert_eq!(
+            Handoff::decode(&Handoff::Stack.encode()),
+            Some(Handoff::Stack)
+        );
+        assert_eq!(Handoff::Stack.encode(), b"stack");
     }
 
     #[test]
