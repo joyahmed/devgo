@@ -4,6 +4,7 @@ mod models;
 mod services;
 mod smoke_probe;
 mod stack;
+mod stack_pill;
 mod summon;
 mod tray;
 
@@ -953,6 +954,7 @@ fn command_dispatch(
         stack::stack_pill_fit,
         stack::stack_pill_hover,
         stack::stack_show_tab,
+        stack_pill::stack_pill_palette,
     ]
 }
 

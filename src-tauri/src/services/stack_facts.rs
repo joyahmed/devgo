@@ -141,8 +141,14 @@ pub fn describe_text(path: &str) -> (String, String) {
 
 /// The exe's icon as a PNG data URL, `None` when it has none or is gone.
 pub fn icon(path: &str) -> Option<String> {
-    let (w, h, rgba) = imp::icon_rgba(Path::new(path))?;
+    let (w, h, rgba) = icon_rgba(path)?;
     png_data_url(w, h, &rgba)
+}
+
+/// The exe's icon as straight RGBA pixels (width, height, pixels): the
+/// native pill draws them without a PNG round trip.
+pub fn icon_rgba(path: &str) -> Option<(u32, u32, Vec<u8>)> {
+    imp::icon_rgba(Path::new(path))
 }
 
 /// (uptime in seconds, working set in bytes) for an app's processes and

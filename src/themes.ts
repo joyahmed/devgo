@@ -1,3 +1,5 @@
+import { invoke } from '@tauri-apps/api/core';
+
 // every colour is a --color-* variable, so a theme is an override on :root
 //
 // the contract a palette has to meet (scripts/check-contrast.mjs runs it):
@@ -219,6 +221,9 @@ export const applyTheme = (id: string) => {
 	}
 	// the red as a fill is derived the same way, from the palette's danger
 	root.style.setProperty('--solid-danger-bg', theme.colors.danger);
+	// the Windows pill is drawn by Rust, not a webview: it gets the hex
+	// values here, on every theme change, and keeps them for the next run
+	invoke('stack_pill_palette', { colors: theme.colors }).catch(() => {});
 };
 
 // the variables are live: the whole window recolours as they change

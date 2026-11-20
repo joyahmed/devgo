@@ -43,6 +43,11 @@ base64 = "0.22"
 # nothing on PATH said its exe is. Already in the tree through tauri, so no new crate is built.
 [target.'cfg(windows)'.dependencies]
 winreg = "0.55"
+# the native stack pill (stack_pill/): no webview, so it draws itself. tiny-skia
+# for the anti-aliased shapes, ab_glyph for the text: a system font read at run time,
+# its outlines parsed only for the letters drawn
+tiny-skia = { version = "0.11", default-features = false, features = ["std", "simd"] }
+ab_glyph = "0.2"
 
 [profile.release]
 codegen-units = 1

@@ -243,13 +243,30 @@ struct Position {
     y: i32,
 }
 
+#[cfg_attr(windows, allow(dead_code))]
 fn saved_position(app: &AppHandle) -> Option<Position> {
-    let path = data_dir(app).ok()?.join(POSITION_FILE);
-    serde_json::from_str(&std::fs::read_to_string(path).ok()?).ok()
+    let p = saved_position_in(&data_dir(app).ok()?)?;
+    Some(Position { x: p.0, y: p.1 })
+}
+
+/// The pill's saved top-left (physical px), from the data folder.
+pub(crate) fn saved_position_in(dir: &std::path::Path) -> Option<(i32, i32)> {
+    let path = dir.join(POSITION_FILE);
+    let p: Position =
+        serde_json::from_str(&std::fs::read_to_string(path).ok()?).ok()?;
+    Some((p.x, p.y))
+}
+
+/// Keep the pill's top-left for the next open.
+pub(crate) fn save_position(dir: &std::path::Path, x: i32, y: i32) {
+    if let Ok(json) = serde_json::to_string(&Position { x, y }) {
+        let _ = std::fs::write(dir.join(POSITION_FILE), json);
+    }
 }
 
 /// A saved spot is used only if its top-left corner is on a screen now: a
 /// monitor that was unplugged must not leave the window out of reach.
+#[cfg_attr(windows, allow(dead_code))]
 fn on_a_screen(app: &AppHandle, p: Position) -> bool {
     app.available_monitors()
         .unwrap_or_default()
@@ -263,8 +280,19 @@ fn on_a_screen(app: &AppHandle, p: Position) -> bool {
         })
 }
 
-/// Show the stack window, building it if it is closed. Main thread only.
+/// Show the stack pill, building it if it is closed. On Windows it is the
+/// native pill (`stack_pill`, no webview: S9 measured the webview one at
+/// +113 MB); elsewhere the webview pill.
 pub fn open_window(app: &AppHandle) {
+    #[cfg(windows)]
+    crate::stack_pill::open(app);
+    #[cfg(not(windows))]
+    open_webview_window(app);
+}
+
+/// The webview pill. Main thread only.
+#[cfg_attr(windows, allow(dead_code))]
+fn open_webview_window(app: &AppHandle) {
     if let Some(w) = app.get_webview_window(WINDOW) {
         let _ = w.show();
         let _ = w.unminimize();
