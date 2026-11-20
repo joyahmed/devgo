@@ -1,6 +1,6 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { POLL_MS, processFromPath, useStack } from './useStack';
+import { POLL_MS, clearIconCache, processFromPath, useStack } from './useStack';
 
 const invoke = vi.fn();
 vi.mock('@tauri-apps/api/core', () => ({
@@ -28,8 +28,10 @@ beforeEach(() => {
 		if (cmd === 'stack_save') return Promise.resolve(args?.file);
 		if (cmd === 'stack_status')
 			return Promise.resolve([{ name: 'voice', running: true, isSelf: false, missing: false }]);
+		if (cmd === 'stack_icon') return Promise.resolve(`data:image/png;base64,${args ? 'x' : ''}`);
 		return Promise.resolve(true);
 	});
+	clearIconCache();
 });
 afterEach(() => vi.useRealTimers());
 
@@ -123,5 +125,100 @@ describe('useStack', () => {
 			await result.current.close();
 		});
 		expect(invoke).toHaveBeenCalledWith('log_ui_line', { line: 'stack: close pressed' });
+	});
+
+	it('does not poll or read the list while not active, and starts when it is', async () => {
+		const { rerender, result } = renderHook(({ active }) => useStack({ active }), {
+			initialProps: { active: false }
+		});
+		await act(() => vi.advanceTimersByTimeAsync(POLL_MS * 3));
+		expect(statusCalls()).toBe(0);
+		expect(invoke).not.toHaveBeenCalledWith('stack_list');
+		rerender({ active: true });
+		await waitFor(() => expect(result.current.apps).toHaveLength(2));
+		await waitFor(() => expect(statusCalls()).toBe(1));
+		rerender({ active: false });
+		const off = statusCalls();
+		await act(() => vi.advanceTimersByTimeAsync(POLL_MS * 3));
+		expect(statusCalls()).toBe(off);
+	});
+
+	it('asks for uptime and memory only with detail', async () => {
+		renderHook(() => useStack({ detail: true }));
+		await waitFor(() => expect(invoke).toHaveBeenCalledWith('stack_status', { detail: true }));
+		expect(invoke).not.toHaveBeenCalledWith('stack_status', { detail: false });
+	});
+
+	it('re-renders when the printed uptime moves, not on every poll', async () => {
+		let secs = 3600;
+		invoke.mockImplementation((cmd: string) => {
+			if (cmd === 'stack_list') return Promise.resolve({ apps });
+			if (cmd === 'stack_status') {
+				secs += 5;
+				return Promise.resolve([
+					{ name: 'voice', running: true, isSelf: false, missing: false, uptimeSecs: secs, memBytes: 1 << 20 }
+				]);
+			}
+			return Promise.resolve(null);
+		});
+		const { result } = renderHook(() => useStack({ detail: true }));
+		await waitFor(() => expect(result.current.status.voice?.uptimeSecs).toBeDefined());
+		const first = result.current.status;
+		// 3605 s -> 3610 s: both print "1 h", nothing to repaint
+		await act(() => vi.advanceTimersByTimeAsync(POLL_MS));
+		expect(result.current.status).toBe(first);
+		// eleven more polls cross a minute: "1 h 1 min"
+		await act(() => vi.advanceTimersByTimeAsync(POLL_MS * 11));
+		expect(result.current.status).not.toBe(first);
+	});
+
+	it('reads each icon once, and keeps it across mounts', async () => {
+		const first = renderHook(() => useStack());
+		await waitFor(() => expect(first.result.current.icons[apps[0].path]).toBeTruthy());
+		const iconCalls = () => invoke.mock.calls.filter(c => c[0] === 'stack_icon').length;
+		expect(iconCalls()).toBe(2);
+		first.unmount();
+		const second = renderHook(() => useStack());
+		await waitFor(() => expect(second.result.current.icons[apps[0].path]).toBeTruthy());
+		expect(iconCalls()).toBe(2);
+	});
+
+	it('update patches one row, and a new path brings its process name', async () => {
+		const { result } = renderHook(() => useStack());
+		await waitFor(() => expect(result.current.apps).toHaveLength(2));
+		await act(async () => {
+			await result.current.update(0, { delay: 15 });
+		});
+		expect(result.current.apps[0]).toMatchObject({ name: 'voice', process: 'voice-app', delay: 15 });
+		await act(async () => {
+			await result.current.update(0, { path: 'D:\\x\\Talk.exe' });
+		});
+		expect(result.current.apps[0]).toMatchObject({ path: 'D:\\x\\Talk.exe', process: 'Talk' });
+		await act(async () => {
+			await result.current.update(0, { path: 'D:\\y\\t.exe', process: 'talk-core' });
+		});
+		expect(result.current.apps[0].process).toBe('talk-core');
+		expect(result.current.apps[1].name).toBe('DevGo');
+	});
+
+	it('stop all goes through stack_stop_all and marks the header busy', async () => {
+		let release: (v: unknown) => void = () => {};
+		invoke.mockImplementation((cmd: string) => {
+			if (cmd === 'stack_list') return Promise.resolve({ apps });
+			if (cmd === 'stack_stop_all') return new Promise(r => (release = r));
+			return Promise.resolve([]);
+		});
+		const { result } = renderHook(() => useStack());
+		let done: Promise<void> | undefined;
+		act(() => {
+			done = result.current.stopAll();
+		});
+		expect(result.current.busy['*']).toBe(true);
+		await act(async () => {
+			release(['voice']);
+			await done;
+		});
+		expect(result.current.busy['*']).toBe(false);
+		expect(invoke).toHaveBeenCalledWith('stack_stop_all', undefined);
 	});
 });
