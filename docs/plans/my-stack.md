@@ -130,6 +130,13 @@ floating window becomes a **pill** for glancing. The 300x340 panel (`StackPanel`
       (`Stop-Process`) and restarted after. Pill open vs closed, 60 s: target <= +60 MB
       working set, <= +0.2 CPU-s/min. Screenshots of the tab and the pill, neon + one more
       palette, real sizes, in the gitignored `docs/walk/`; design-critic loop, verdicts here.
+      Measured (pill, release `DevGo.exe` 11.5 MB, installed DevGo stopped, one run each,
+      60 s, DevGo + its webview children; open = 20 s after `--stack` opened the pill):
+      closed 7 procs 424.0 MB working set, 211.3 MB private, 0.39 CPU-s; open 8 procs
+      536.9 MB, 283.5 MB, 1.00 CPU-s. Pill = +113 MB working set, +72 MB private, +0.61
+      CPU-s/min: BOTH TARGETS MISSED (<= +60 MB, <= +0.2 CPU-s/min). CPU is down from the
+      old panel's +2.5 CPU-s/min; the memory is the second webview itself. Not ticked:
+      needs a decision (accept the cost, or draw the pill without its own webview).
 
 ## Not in v1 (say so, do not half-build)
 
