@@ -52,11 +52,12 @@ script outside DevGo reads that same file.
       saved position (`stack-window.json`), capability for label `stack`.
       Gate: verify --full; cargo tests for the flag and the handoff round trip.
       Done: verify --full 6/6 green; cargo test 569 passed, 2 ignored.
-- [ ] **S3 - the screen (React).** `main.tsx` renders `StackApp` when the window label is
+- [x] **S3 - the screen (React).** `main.tsx` renders `StackPanel` when the window label is
       `stack`; `useStack` hook holds the list, the 2 s poll (paused when hidden) and the
       actions; `StackPanel` holds the markup, rows mapped from data. Add / remove / move
       up-down with a small inline form. Vitest for the hook's poll pause and the rows.
       Gate: verify --full.
+      Done: verify --full 6/6 green; vitest 997 passed in 42 files (useStack 5/5).
 - [ ] **S4 - the startup script reads the list.** The machine's sign-in script (outside this
       repo, run by a scheduled task) reads `stack.json` (logs "no stack.json" and exits when it
       is missing); the three apps it listed inline move into `stack.json`. Gate: `Start-ScheduledTask` on that task with everything running logs

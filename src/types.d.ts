@@ -719,7 +719,8 @@ type ButtonVariant =
 	| 'choice'
 	| 'add'
 	| 'menu'
-	| 'segment';
+	| 'segment'
+	| 'mini';
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
 	variant?: ButtonVariant;
