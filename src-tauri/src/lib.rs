@@ -947,6 +947,12 @@ fn command_dispatch(
         stack::stack_start_all,
         stack::stack_launch_hides_main,
         stack::stack_open_window,
+        stack::stack_icon,
+        stack::stack_describe,
+        stack::stack_stop_all,
+        stack::stack_pill_fit,
+        stack::stack_pill_hover,
+        stack::stack_show_tab,
     ]
 }
 

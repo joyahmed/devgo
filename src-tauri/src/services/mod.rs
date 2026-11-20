@@ -25,6 +25,7 @@ pub mod sessions;
 pub mod single_instance;
 pub mod ssh_config;
 pub mod stack;
+pub mod stack_facts;
 pub mod target_store;
 pub mod window_title;
 pub mod workspace;

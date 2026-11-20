@@ -53,6 +53,19 @@ pub struct AppStatus {
     pub is_self: bool,
     /// the expanded path does not exist, so Start cannot work
     pub missing: bool,
+    /// seconds since its oldest process started; only when asked for detail
+    pub uptime_secs: Option<u64>,
+    /// working set of its processes and their children; only with detail
+    pub mem_bytes: Option<u64>,
+}
+
+/// One process in a snapshot.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Proc {
+    pub pid: u32,
+    pub parent: u32,
+    /// normalized: lower case, no `.exe`
+    pub name: String,
 }
 
 pub fn file_in(dir: &Path) -> PathBuf {
@@ -142,29 +155,41 @@ pub fn own_name() -> String {
         .unwrap_or_default()
 }
 
-/// Every running process as (pid, normalized name). One snapshot call on
-/// Windows, so a 2 s poll spawns nothing.
-pub fn snapshot() -> Vec<(u32, String)> {
+/// Every running process. One snapshot call on Windows, so a poll spawns
+/// nothing.
+pub fn snapshot() -> Vec<Proc> {
     imp::snapshot()
 }
 
-pub fn pids_of(snap: &[(u32, String)], process: &str) -> Vec<u32> {
+pub fn pids_of(snap: &[Proc], process: &str) -> Vec<u32> {
     let want = normalize(process);
     snap.iter()
-        .filter(|(_, n)| *n == want)
-        .map(|(pid, _)| *pid)
+        .filter(|p| p.name == want)
+        .map(|p| p.pid)
         .collect()
 }
 
-pub fn status(file: &StackFile, snap: &[(u32, String)]) -> Vec<AppStatus> {
+/// One row per app. `detail` adds uptime and memory, which open each
+/// running process; the pill does not show them, so it does not ask.
+pub fn status(file: &StackFile, snap: &[Proc], detail: bool) -> Vec<AppStatus> {
     let me = own_name();
     file.apps
         .iter()
-        .map(|a| AppStatus {
-            name: a.name.clone(),
-            running: !pids_of(snap, &a.process).is_empty(),
-            is_self: !me.is_empty() && normalize(&a.process) == me,
-            missing: !Path::new(&expand(&a.path)).exists(),
+        .map(|a| {
+            let pids = pids_of(snap, &a.process);
+            let (uptime_secs, mem_bytes) = if detail {
+                super::stack_facts::usage(snap, &pids)
+            } else {
+                (None, None)
+            };
+            AppStatus {
+                name: a.name.clone(),
+                running: !pids.is_empty(),
+                is_self: !me.is_empty() && normalize(&a.process) == me,
+                missing: !Path::new(&expand(&a.path)).exists(),
+                uptime_secs,
+                mem_bytes,
+            }
         })
         .collect()
 }
@@ -234,12 +259,44 @@ pub fn start_all(file: &StackFile) -> (Vec<String>, Vec<String>) {
     (started, failed)
 }
 
+/// Stop every running app except DevGo, all at once (each has its own
+/// grace period, so three apps take 5 s, not 15). Returns the names that
+/// were stopped and the errors.
+pub fn stop_all(file: &StackFile) -> (Vec<String>, Vec<String>) {
+    let me = own_name();
+    let snap = snapshot();
+    let targets: Vec<&StackApp> = file
+        .apps
+        .iter()
+        .rev()
+        .filter(|a| normalize(&a.process) != me)
+        .filter(|a| !pids_of(&snap, &a.process).is_empty())
+        .collect();
+    let results: Vec<(String, Result<bool, String>)> =
+        std::thread::scope(|s| {
+            let handles: Vec<_> = targets
+                .iter()
+                .map(|a| s.spawn(move || (a.name.clone(), stop(a))))
+                .collect();
+            handles.into_iter().filter_map(|h| h.join().ok()).collect()
+        });
+    let mut stopped = Vec::new();
+    let mut failed = Vec::new();
+    for (name, r) in results {
+        match r {
+            Ok(_) => stopped.push(name),
+            Err(e) => failed.push(e),
+        }
+    }
+    (stopped, failed)
+}
+
 #[cfg(windows)]
 mod imp {
     use std::ffi::c_void;
     use std::process::Command;
 
-    use super::normalize;
+    use super::{normalize, Proc};
     use crate::services::platform::Quiet;
 
     #[repr(C)]
@@ -272,7 +329,7 @@ mod imp {
 
     const TH32CS_SNAPPROCESS: u32 = 0x2;
 
-    pub fn snapshot() -> Vec<(u32, String)> {
+    pub fn snapshot() -> Vec<Proc> {
         let mut out = Vec::new();
         unsafe {
             let snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
@@ -286,7 +343,11 @@ mod imp {
                 let len =
                     e.exe_file.iter().position(|&c| c == 0).unwrap_or(260);
                 let name = String::from_utf16_lossy(&e.exe_file[..len]);
-                out.push((e.pid, normalize(&name)));
+                out.push(Proc {
+                    pid: e.pid,
+                    parent: e.parent_pid,
+                    name: normalize(&name),
+                });
                 ok = Process32NextW(snap, &mut e);
             }
             CloseHandle(snap);
@@ -314,12 +375,12 @@ mod imp {
 mod imp {
     use std::process::Command;
 
-    use super::normalize;
+    use super::{normalize, Proc};
     use crate::services::platform::Quiet;
 
-    pub fn snapshot() -> Vec<(u32, String)> {
+    pub fn snapshot() -> Vec<Proc> {
         let Ok(out) = Command::new("ps")
-            .args(["-axo", "pid=,comm="])
+            .args(["-axo", "pid=,ppid=,comm="])
             .quiet()
             .output()
         else {
@@ -328,8 +389,13 @@ mod imp {
         String::from_utf8_lossy(&out.stdout)
             .lines()
             .filter_map(|l| {
-                let (pid, name) = l.trim().split_once(' ')?;
-                Some((pid.parse().ok()?, normalize(name)))
+                let (pid, rest) = l.trim().split_once(' ')?;
+                let (parent, name) = rest.trim_start().split_once(' ')?;
+                Some(Proc {
+                    pid: pid.parse().ok()?,
+                    parent: parent.parse().ok()?,
+                    name: normalize(name.trim_start()),
+                })
             })
             .collect()
     }
@@ -392,11 +458,12 @@ mod tests {
         assert_eq!(normalize("DevGo.exe"), "devgo");
         assert_eq!(normalize(r"C:\x\Desk-Monitor.EXE"), "desk-monitor");
         assert_eq!(normalize("/usr/bin/devgo"), "devgo");
-        let snap = vec![
-            (1, "voice-app".to_string()),
-            (2, "devgo".to_string()),
-            (3, "voice-app".to_string()),
-        ];
+        let p = |pid, name: &str| Proc {
+            pid,
+            parent: 0,
+            name: name.into(),
+        };
+        let snap = vec![p(1, "voice-app"), p(2, "devgo"), p(3, "voice-app")];
         assert_eq!(pids_of(&snap, "Voice-App.exe"), vec![1, 3]);
         assert!(pids_of(&snap, "desk-monitor").is_empty());
     }
@@ -466,9 +533,31 @@ mod tests {
                 app("x", "no-such-proc-xyz", "/nope"),
             ],
         };
-        let s = status(&f, &snapshot());
+        let s = status(&f, &snapshot(), false);
         assert!(s[0].running && s[0].is_self && s[0].missing);
         assert!(!s[1].running && !s[1].is_self);
+        assert_eq!((s[0].uptime_secs, s[0].mem_bytes), (None, None));
+        #[cfg(windows)]
+        {
+            let s = status(&f, &snapshot(), true);
+            assert!(s[0].uptime_secs.is_some() && s[0].mem_bytes.is_some());
+            assert_eq!((s[1].uptime_secs, s[1].mem_bytes), (None, None));
+        }
+    }
+
+    #[test]
+    fn stop_all_never_touches_devgo_itself() {
+        let f = StackFile {
+            apps: vec![
+                app("me", &own_name(), "/x"),
+                app("x", "no-such-proc-xyz", "/x"),
+            ],
+        };
+        let (stopped, failed) = stop_all(&f);
+        assert!(
+            stopped.is_empty() && failed.is_empty(),
+            "{stopped:?} {failed:?}"
+        );
     }
 
     #[test]

@@ -69,6 +69,56 @@ script outside DevGo reads that same file.
       stack window open vs closed. Screenshots of the stack window at real size in two
       palettes (`scripts/cdp.mjs` with `DEVGO_CDP_MATCH=stack`). Gate: numbers in this file.
 
+## v2 - a Stack tab and a pill
+
+Review of the 300x340 window: rows showed bare process names, and the screen was too plain.
+Decided: managing moves into a **Stack tab in the main window** (no extra webview); the
+floating window becomes a **pill** for glancing. The 300x340 panel (`StackPanel`,
+`StackRow`, `StackAddForm`, `useStackAddForm`) is removed.
+
+- **The tab.** A `Projects | Stack` switch in the title bar. One row per app: its real
+  icon (from the exe; a letter tile when there is none), its display name (`name` in
+  `stack.json`), a state word (running / stopped / not installed), uptime and memory when
+  running, and its place on the sign-in timeline ("starts at 10 s") on a rail down the
+  left: the rail IS the start order. Start / Stop / Restart; up / down; Edit opens the row
+  in place (delay, path); Remove. "Add app" picks an `.exe`; the name comes from the
+  exe's FileDescription (then ProductName, then the file name), the icon with it.
+  "Start all in order" and "Stop all except DevGo". Empty and not-installed states say
+  what to do. The project keyboard shortcuts do not fire while the tab is open.
+- **The pill.** Label `stack`, the same window code (position memory, `--stack`, the
+  tray item, the single-instance handoff). A rounded bar, transparent corners: a grip
+  mark, one dot per app (emerald running, red not installed, hollow stopped), a ✕.
+  Click a dot = start or stop it (DevGo's own dot does neither; a not-installed dot opens
+  the tab). Hover a dot = a card with the icon, name, state, uptime (the window grows to
+  hold it, down, or up when the pill sits at the bottom of a screen). Click the body =
+  the main window on the Stack tab. Drag = move. ✕ destroys the window.
+- **Cost.** One poll, 5 s, while the tab is open or the pill is visible; the pill polls
+  without uptime and memory (no per-process open), the tab with them. Icons are read
+  once per path and cached in Rust.
+
+- [x] **S6 - the facts in Rust.** `stack_status { detail }` adds `uptimeSecs`,
+      `memBytes` (sum over the app's processes; `OpenProcess` limited, `GetProcessTimes`,
+      `K32GetProcessMemoryInfo`) only when `detail`. `stack_icon(path)`: `ExtractIconExW`
+      -> `GetIconInfo` + `GetDIBits` -> PNG (`png` crate, already in the lock) -> data URL,
+      cached. `stack_describe(path)` -> `{ name, process, icon }` from version info.
+      `stack_stop_all` (every running app but DevGo, last first). `stack_pill_fit`,
+      `stack_pill_hover`, `stack_show_tab` (shows main, emits `stack-tab`).
+      Gate: verify --full 6/6; unit tests for the name pick, the FILETIME uptime, the
+      BGRA->PNG round trip and the alpha fix; Windows tests that notepad's description
+      and icon come back.
+      Done: verify --full 6/6 green; cargo test --lib stack: 23 passed (9 new).
+- [ ] **S7 - the tab.** `useStack({ active, detail })`, `useStackEditor` (edit/add in
+      place), `StackTab` + `stack-parts/` (row, rail, add panel, empty state), the title-bar
+      switch, the `stack-tab` event, shortcuts paused on the tab. Vitest: poll only when
+      active, add from a described exe, edit/save. Gate: verify --full 6/6.
+- [ ] **S8 - the pill.** `StackPill` + `useStackPill`; the window becomes the pill size;
+      old panel files deleted. Vitest: dot click start/stop, self dot inert, body click
+      opens the tab. Gate: verify --full 6/6.
+- [ ] **S9 - measured and looked at.** Release build, installed DevGo stopped
+      (`Stop-Process`) and restarted after. Pill open vs closed, 60 s: target <= +60 MB
+      working set, <= +0.2 CPU-s/min. Screenshots of the tab and the pill, neon + one more
+      palette, real sizes, in the gitignored `docs/walk/`; design-critic loop, verdicts here.
+
 ## Not in v1 (say so, do not half-build)
 
 - DevGo itself starting the stack at sign-in (the scheduled task does that today).

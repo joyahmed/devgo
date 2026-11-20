@@ -2,14 +2,20 @@
 //! Anything that can wait (Stop's grace period, Start all's gaps) runs on a
 //! blocking thread, so the window never freezes on a click.
 
+use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
+use std::sync::{Mutex, OnceLock};
 
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
+use tauri::{
+    AppHandle, Emitter, LogicalSize, Manager, PhysicalPosition, WebviewUrl,
+    WebviewWindowBuilder,
+};
 
 use crate::services::runtime_log::log_line;
 use crate::services::stack::{self, AppStatus, StackApp, StackFile};
+use crate::services::stack_facts;
 
 fn data_dir(app: &AppHandle) -> Result<PathBuf, String> {
     app.path().app_data_dir().map_err(|e| e.to_string())
@@ -47,12 +53,71 @@ pub fn stack_save(
     Ok(stack::load(&dir))
 }
 
-/// The poll: one process snapshot, one row per app.
+/// The poll: one process snapshot, one row per app. `detail` (the tab)
+/// adds uptime and memory; the pill leaves it off.
 #[tauri::command]
-pub async fn stack_status(app: AppHandle) -> Result<Vec<AppStatus>, String> {
+pub async fn stack_status(
+    app: AppHandle,
+    detail: Option<bool>,
+) -> Result<Vec<AppStatus>, String> {
     let dir = data_dir(&app)?;
-    blocking(move || Ok(stack::status(&stack::load(&dir), &stack::snapshot())))
-        .await
+    let detail = detail.unwrap_or(false);
+    blocking(move || {
+        Ok(stack::status(
+            &stack::load(&dir),
+            &stack::snapshot(),
+            detail,
+        ))
+    })
+    .await
+}
+
+/// icons by expanded path: read once, an exe's icon does not change while
+/// DevGo runs (a reinstall that changes it shows after a restart)
+fn icon_cache() -> &'static Mutex<HashMap<String, Option<String>>> {
+    static CACHE: OnceLock<Mutex<HashMap<String, Option<String>>>> =
+        OnceLock::new();
+    CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn cached_icon(path: &str) -> Option<String> {
+    let path = stack::expand(path);
+    if let Some(hit) = icon_cache().lock().ok()?.get(&path) {
+        return hit.clone();
+    }
+    let icon = stack_facts::icon(&path);
+    if let Ok(mut c) = icon_cache().lock() {
+        c.insert(path, icon.clone());
+    }
+    icon
+}
+
+/// The exe's icon as a PNG data URL; `None` = draw the letter tile.
+#[tauri::command]
+pub async fn stack_icon(path: String) -> Result<Option<String>, String> {
+    blocking(move || Ok(cached_icon(&path))).await
+}
+
+#[derive(Debug, Serialize)]
+pub struct Described {
+    name: String,
+    process: String,
+    icon: Option<String>,
+}
+
+/// What an exe the user just picked is called, and its icon.
+#[tauri::command]
+pub async fn stack_describe(path: String) -> Result<Described, String> {
+    blocking(move || {
+        let expanded = stack::expand(&path);
+        let (name, process) = stack_facts::describe_text(&expanded);
+        Ok(Described {
+            name,
+            process,
+            icon: cached_icon(&path),
+        })
+    })
+    .await
 }
 
 #[tauri::command]
@@ -108,6 +173,25 @@ pub async fn stack_restart(
     .await
 }
 
+/// Stops every running app but DevGo; returns their names.
+#[tauri::command]
+pub async fn stack_stop_all(app: AppHandle) -> Result<Vec<String>, String> {
+    let file = stack::load(&data_dir(&app)?);
+    blocking(move || {
+        let (stopped, failed) = stack::stop_all(&file);
+        log_line!(
+            "[DevGo] stack: stop all - stopped {}, failed {}",
+            stopped.len(),
+            failed.len()
+        );
+        if !failed.is_empty() {
+            return Err(failed.join("; "));
+        }
+        Ok(stopped)
+    })
+    .await
+}
+
 /// Starts the stopped apps in order; returns their names. Failures are
 /// joined into the error only when nothing at all could start.
 #[tauri::command]
@@ -132,8 +216,13 @@ pub async fn stack_start_all(app: AppHandle) -> Result<Vec<String>, String> {
 
 pub const WINDOW: &str = "stack";
 const POSITION_FILE: &str = "stack-window.json";
-const WIDTH: f64 = 300.0;
-const HEIGHT: f64 = 340.0;
+/// the pill: the frontend measures its dots and asks for its width
+const WIDTH: f64 = 160.0;
+const HEIGHT: f64 = 40.0;
+
+/// while a hover card is open ABOVE the pill, the window has moved up by
+/// this many physical px; a Moved event then saves the pill's own spot
+static HOVER_LIFT: AtomicI32 = AtomicI32::new(0);
 
 static LAUNCHED_FOR_STACK: AtomicBool = AtomicBool::new(false);
 
@@ -189,11 +278,12 @@ pub fn open_window(app: &AppHandle) {
     )
     .title("My stack")
     .inner_size(WIDTH, HEIGHT)
-    .min_inner_size(240.0, 160.0)
     .decorations(false)
+    .transparent(true)
+    .shadow(false)
     .always_on_top(true)
     .skip_taskbar(true)
-    .resizable(true)
+    .resizable(false)
     .visible(false)
     .build();
     let window = match built {
@@ -203,9 +293,10 @@ pub fn open_window(app: &AppHandle) {
             return;
         }
     };
+    HOVER_LIFT.store(0, Ordering::SeqCst);
     match saved_position(app).filter(|p| on_a_screen(app, *p)) {
         Some(p) => {
-            let _ = window.set_position(tauri::PhysicalPosition::new(p.x, p.y));
+            let _ = window.set_position(PhysicalPosition::new(p.x, p.y));
         }
         None => {
             let _ = window.center();
@@ -223,6 +314,74 @@ pub fn stack_open_window(app: AppHandle) {
     let _ = app.run_on_main_thread(move || open_window(&h));
 }
 
+/// The pill asks for the width its dots need (logical px).
+#[tauri::command]
+pub fn stack_pill_fit(window: tauri::WebviewWindow, width: f64) {
+    if HOVER_LIFT.load(Ordering::SeqCst) != 0 {
+        return;
+    }
+    let width = width.clamp(80.0, 480.0);
+    let _ = window.set_size(LogicalSize::new(width, HEIGHT));
+}
+
+/// Grow the window by `extra` logical px for a hover card, below the pill,
+/// or above it when below would leave the screen. Returns where the card
+/// goes: "below" or "above". `open: false` puts the pill back.
+#[tauri::command]
+pub fn stack_pill_hover(
+    window: tauri::WebviewWindow,
+    open: bool,
+    extra: f64,
+) -> String {
+    let scale = window.scale_factor().unwrap_or(1.0);
+    let width = window
+        .inner_size()
+        .map(|s| s.width as f64 / scale)
+        .unwrap_or(WIDTH);
+    let Ok(pos) = window.outer_position() else {
+        return "below".into();
+    };
+    let lifted = HOVER_LIFT.load(Ordering::SeqCst);
+    if !open {
+        let _ = window.set_size(LogicalSize::new(width, HEIGHT));
+        if lifted != 0 {
+            let _ = window
+                .set_position(PhysicalPosition::new(pos.x, pos.y + lifted));
+            HOVER_LIFT.store(0, Ordering::SeqCst);
+        }
+        return "below".into();
+    }
+    if lifted != 0 {
+        return "above".into();
+    }
+    let extra_px = (extra * scale).round() as i32;
+    let full = ((HEIGHT * scale).round() as i32) + extra_px;
+    let bottom = window
+        .current_monitor()
+        .ok()
+        .flatten()
+        .map(|m| m.position().y + m.size().height as i32)
+        .unwrap_or(i32::MAX);
+    let _ = window.set_size(LogicalSize::new(width, HEIGHT + extra));
+    if pos.y + full > bottom {
+        HOVER_LIFT.store(extra_px, Ordering::SeqCst);
+        let _ =
+            window.set_position(PhysicalPosition::new(pos.x, pos.y - extra_px));
+        return "above".into();
+    }
+    "below".into()
+}
+
+/// The pill's body: the main window, on the Stack tab.
+#[tauri::command]
+pub fn stack_show_tab(app: AppHandle) {
+    let h = app.clone();
+    let _ = app.run_on_main_thread(move || {
+        crate::summon::raise_main(&h);
+        let _ = h.emit_to("main", "devgo://stack-tab", ());
+    });
+}
+
 /// The stack window's events. Closing destroys it (no hidden webview, no
 /// polling left behind); moving it saves the spot.
 pub fn on_window_event(window: &tauri::Window, event: &tauri::WindowEvent) {
@@ -234,7 +393,12 @@ pub fn on_window_event(window: &tauri::Window, event: &tauri::WindowEvent) {
             let Ok(dir) = data_dir(window.app_handle()) else {
                 return;
             };
-            let p = Position { x: pos.x, y: pos.y };
+            // a card open above the pill lifts the window; the spot to keep
+            // is the pill's own
+            let p = Position {
+                x: pos.x,
+                y: pos.y + HOVER_LIFT.load(Ordering::SeqCst),
+            };
             if let Ok(json) = serde_json::to_string(&p) {
                 let _ = std::fs::write(dir.join(POSITION_FILE), json);
             }
