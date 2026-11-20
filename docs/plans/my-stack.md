@@ -87,7 +87,7 @@ floating window becomes a **pill** for glancing. The 300x340 panel (`StackPanel`
   what to do. The project keyboard shortcuts do not fire while the tab is open.
 - **The pill.** Label `stack`, the same window code (position memory, `--stack`, the
   tray item, the single-instance handoff). A rounded bar, transparent corners: a grip
-  mark, one dot per app (emerald running, red not installed, hollow stopped), a ✕.
+  mark, one dot per app (green running, red stopped, grey ring not installed), a ✕.
   Click a dot = start or stop it (DevGo's own dot does neither; a not-installed dot opens
   the tab). Hover a dot = a card with the icon, name, state, uptime (the window grows to
   hold it, down, or up when the pill sits at the bottom of a screen). Click the body =
