@@ -58,10 +58,12 @@ script outside DevGo reads that same file.
       up-down with a small inline form. Vitest for the hook's poll pause and the rows.
       Gate: verify --full.
       Done: verify --full 6/6 green; vitest 997 passed in 42 files (useStack 5/5).
-- [ ] **S4 - the startup script reads the list.** The machine's sign-in script (outside this
+- [x] **S4 - the startup script reads the list.** The machine's sign-in script (outside this
       repo, run by a scheduled task) reads `stack.json` (logs "no stack.json" and exits when it
       is missing); the three apps it listed inline move into `stack.json`. Gate: `Start-ScheduledTask` on that task with everything running logs
       "already running" x3 and starts nothing; process count per app unchanged.
+      Done: 2 of 3 were running -> 2 "already running" lines, the third (not running) started
+      once; process counts before 1/0/1, after 1/1/1; task result 0.
 - [ ] **S5 - measured on the real build.** Release build, run with the installed DevGo
       closed: RAM (working set, all DevGo + WebView2 children) and CPU over 60 s with the
       stack window open vs closed. Screenshots of the stack window at real size in two
