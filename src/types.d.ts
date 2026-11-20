@@ -720,7 +720,6 @@ type ButtonVariant =
 	| 'add'
 	| 'menu'
 	| 'segment'
-	| 'mini'
 	| 'solid'
 	| 'quiet';
 

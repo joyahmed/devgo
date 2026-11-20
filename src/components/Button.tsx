@@ -87,9 +87,6 @@ const VARIANT: Record<ButtonVariant, string> = {
 	// the chosen cell says so with aria-current
 	segment:
 		'px-3 h-full text-13 rounded-none bg-transparent border-none text-text-secondary hover:text-text-primary aria-[current=true]:text-text-primary aria-[current=true]:bg-bg-hover/40',
-	// the stack window's row actions: a word in a 300px window, so the
-	// smallest type and a hairline edge; same hover pair as menu and card
-	mini: 'px-2 py-0.5 text-11 border border-border-strong bg-bg-panel text-text-secondary hover:not-disabled:text-text-primary hover:not-disabled:border-text-muted hover:not-disabled:bg-bg-hover disabled:border-border disabled:text-text-muted',
 	// the Stack tab's verbs, one height (h-9) so a header of four and a row
 	// of two stay level: solid is the one action a row or header leads with
 	// (Start), quiet the rest. primary/secondary are 42 and 38 px tall, and

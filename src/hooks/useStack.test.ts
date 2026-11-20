@@ -6,9 +6,6 @@ const invoke = vi.fn();
 vi.mock('@tauri-apps/api/core', () => ({
 	invoke: (...a: unknown[]) => invoke(...(a as []))
 }));
-vi.mock('@tauri-apps/api/window', () => ({
-	getCurrentWindow: () => ({ close: vi.fn() })
-}));
 
 const apps = [
 	{ name: 'voice', process: 'voice-app', path: 'C:\\v\\voice-app.exe', args: [], delay: 10 },
@@ -117,14 +114,6 @@ describe('useStack', () => {
 		expect(statusCalls()).toBeGreaterThanOrEqual(4);
 		expect(renders).toBe(before);
 		expect(result.current.status).toBe(status);
-	});
-
-	it('the close button logs itself, so an outside close can be told apart', async () => {
-		const { result } = renderHook(() => useStack());
-		await act(async () => {
-			await result.current.close();
-		});
-		expect(invoke).toHaveBeenCalledWith('log_ui_line', { line: 'stack: close pressed' });
 	});
 
 	it('does not poll or read the list while not active, and starts when it is', async () => {

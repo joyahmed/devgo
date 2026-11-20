@@ -114,9 +114,18 @@ floating window becomes a **pill** for glancing. The 300x340 panel (`StackPanel`
       Looked at (docs/walk/s7-tab): pass 1 flat grey state words -> fixed (coloured words,
       timeline rail); pass 2 OK in neon 1280/900, nord 1280 and the edit state. Add and empty
       states not shot (file picker; stack.json untouched).
-- [ ] **S8 - the pill.** `StackPill` + `useStackPill`; the window becomes the pill size;
+- [x] **S8 - the pill.** `StackPill` + `useStackPill`; the window becomes the pill size;
       old panel files deleted. Vitest: dot click start/stop, self dot inert, body click
       opens the tab. Gate: verify --full 6/6.
+      Done: verify --full 6/6; useStackPill 8 tests. The bar measures itself (187 px for four
+      apps) and the window follows; hover grows it 44 px, above when the pill sits at the
+      bottom of a screen, and puts it back on leave. Found and fixed: `stack_open_window`
+      (the tab's "open the pill") hung the whole IPC when it was a sync command; now async.
+      Looked at (docs/walk/s8-pill, real screen grabs, dev build): pass 1 the hover card
+      was 200 px under a 187 px bar, edges off by 13 px -> card minimum 160, so it takes the
+      bar's width; pass 2 OK, neon + nord, idle + hover. Not observed: a dot click
+      starting/stopping a real app (would stop the user's own apps), the drag by hand.
+      Debug build: the window took 1.5-3 s to show the grown size.
 - [ ] **S9 - measured and looked at.** Release build, installed DevGo stopped
       (`Stop-Process`) and restarted after. Pill open vs closed, 60 s: target <= +60 MB
       working set, <= +0.2 CPU-s/min. Screenshots of the tab and the pill, neon + one more

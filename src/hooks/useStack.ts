@@ -1,8 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
-import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useEffect, useRef, useState } from 'react';
 import { statusLine, type StackStatus } from '../stackFormat';
-import { logLine } from '../uiLog';
 
 // "My stack": the user's own apps, from stack.json in DevGo's data folder.
 // The poll is the only running cost, so it runs only while the caller says
@@ -56,8 +54,6 @@ export const useStack = ({ active = true, detail = false }: Options = {}) => {
 	const [busy, setBusy] = useState<Record<string, boolean>>({});
 	const [error, setError] = useState<string | null>(null);
 	const [loaded, setLoaded] = useState(false);
-	// the old stack window's Edit mode; S8 removes it with the window
-	const [editing, setEditing] = useState(false);
 
 	const lastKey = useRef('');
 	const refresh = async () => {
@@ -181,15 +177,6 @@ export const useStack = ({ active = true, detail = false }: Options = {}) => {
 	const add = ({ process, ...entry }: NewStackEntry) =>
 		save([...apps, { ...entry, process: process || processFromPath(entry.path), args: [] }]);
 
-	// the old stack window's ✕: destroys the window, its webview and poll go
-	// with it. the log line tells this close apart from one sent from outside,
-	// and a click (detail >= 1) from a key press on the focused button
-	const close = (e?: { detail?: number }) => {
-		const how = e?.detail === undefined ? '' : e.detail === 0 ? ' (key)' : ' (click)';
-		logLine(`stack: close pressed${how}`);
-		return getCurrentWindow().close();
-	};
-
 	return {
 		apps,
 		status,
@@ -198,16 +185,13 @@ export const useStack = ({ active = true, detail = false }: Options = {}) => {
 		error,
 		setError,
 		loaded,
-		editing,
-		setEditing,
 		act,
 		startAll,
 		stopAll,
 		move,
 		remove,
 		update,
-		add,
-		close
+		add
 	};
 };
 

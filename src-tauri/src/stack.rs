@@ -307,9 +307,12 @@ pub fn open_window(app: &AppHandle) {
     log_line!("[DevGo] stack window opened");
 }
 
-/// For the main window's own "My stack" entry points.
+/// For the main window's own "My stack" entry points. `async` on purpose:
+/// a sync command runs on the main thread, and building the window from
+/// there (even via run_on_main_thread) left the IPC hung on Windows, the
+/// new webview stuck at about:blank. The tray and `--stack` never hit it.
 #[tauri::command]
-pub fn stack_open_window(app: AppHandle) {
+pub async fn stack_open_window(app: AppHandle) {
     let h = app.clone();
     let _ = app.run_on_main_thread(move || open_window(&h));
 }
