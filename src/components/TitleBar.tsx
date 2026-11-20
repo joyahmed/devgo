@@ -1,6 +1,8 @@
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useFullscreen } from '../hooks/useFullscreen';
+import { MAIN_TABS } from '../hooks/useMainTab';
 import { isMac } from '../platform';
+import Button from './Button';
 import TitleBarButton, { TITLE_BAR_BUTTONS } from './TitleBarButton';
 
 const appWindow = getCurrentWindow();
@@ -13,7 +15,7 @@ const appWindow = getCurrentWindow();
 // unchanged; startDragging works under overlay. native full screen hides
 // the lights, and the brand steps back: an inset with nothing to clear
 // read as a stray gap next to the windows build
-const TitleBar = ({ children }: TitleBarProps) => {
+const TitleBar = ({ children, tab, onTab }: TitleBarProps) => {
 	const fullscreen = useFullscreen();
 	const brandInset = isMac && !fullscreen ? 'pl-[84px]' : 'pl-4';
 	return (
@@ -21,7 +23,7 @@ const TitleBar = ({ children }: TitleBarProps) => {
 			className={`flex items-center justify-between h-12 ${brandInset} pr-4 ground-chrome border-b border-border shrink-0 select-none`}
 		>
 			<div
-				className='flex flex-1 items-center gap-2 cursor-grab'
+				className='flex items-center gap-2 cursor-grab'
 				onMouseDown={() => appWindow.startDragging()}
 			>
 				{/* an svg, not the ✦ text glyph (U+2726): the symbol font renders
@@ -43,6 +45,26 @@ const TitleBar = ({ children }: TitleBarProps) => {
 					DevGo
 				</span>
 			</div>
+			{/* the switch sits right after the brand, outside the drag area: a
+			    press on a tab must not start a window drag */}
+			{tab && onTab && (
+				<nav aria-label='Main view' className='flex items-center gap-1 ml-5'>
+					{MAIN_TABS.map(t => (
+						<Button
+							key={t.id}
+							variant='tab'
+							aria-current={tab === t.id ? 'page' : undefined}
+							onClick={() => onTab(t.id)}
+						>
+							{t.label}
+						</Button>
+					))}
+				</nav>
+			)}
+			<div
+				className='flex-1 self-stretch cursor-grab'
+				onMouseDown={() => appWindow.startDragging()}
+			/>
 			<div className='flex items-center gap-1 shrink-0'>
 				{children}
 				{!isMac &&

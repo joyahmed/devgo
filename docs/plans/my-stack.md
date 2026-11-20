@@ -107,10 +107,13 @@ floating window becomes a **pill** for glancing. The 300x340 panel (`StackPanel`
       BGRA->PNG round trip and the alpha fix; Windows tests that notepad's description
       and icon come back.
       Done: verify --full 6/6 green; cargo test --lib stack: 23 passed (9 new).
-- [ ] **S7 - the tab.** `useStack({ active, detail })`, `useStackEditor` (edit/add in
+- [x] **S7 - the tab.** `useStack({ active, detail })`, `useStackEditor` (edit/add in
       place), `StackTab` + `stack-parts/` (row, rail, add panel, empty state), the title-bar
       switch, the `stack-tab` event, shortcuts paused on the tab. Vitest: poll only when
       active, add from a described exe, edit/save. Gate: verify --full 6/6.
+      Looked at (docs/walk/s7-tab): pass 1 flat grey state words -> fixed (coloured words,
+      timeline rail); pass 2 OK in neon 1280/900, nord 1280 and the edit state. Add and empty
+      states not shot (file picker; stack.json untouched).
 - [ ] **S8 - the pill.** `StackPill` + `useStackPill`; the window becomes the pill size;
       old panel files deleted. Vitest: dot click start/stop, self dot inert, body click
       opens the tab. Gate: verify --full 6/6.
