@@ -239,6 +239,14 @@ pub fn on_window_event(window: &tauri::Window, event: &tauri::WindowEvent) {
                 let _ = std::fs::write(dir.join(POSITION_FILE), json);
             }
         }
+        // logged so a close can be told apart afterwards: the window's own
+        // ✕ logs "stack: close pressed" first; a close request with no such
+        // line came from outside (Alt+F4, taskkill without /F, or .NET
+        // CloseMainWindow, which picks this window when the main one is
+        // hidden)
+        tauri::WindowEvent::CloseRequested { .. } => {
+            log_line!("[DevGo] stack window: close requested");
+        }
         tauri::WindowEvent::Destroyed => {
             log_line!("[DevGo] stack window closed");
         }

@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { logLine } from '../uiLog';
 
 // "My stack": the user's own apps, from stack.json in DevGo's data folder.
 // The poll is the only running cost of this window, so it runs only while
@@ -23,7 +24,15 @@ export type StackStatus = {
 
 export type StackAction = 'start' | 'stop' | 'restart';
 
-export const POLL_MS = 2000;
+// 5 s, not 2: every poll is an IPC round trip, a process snapshot and (when
+// anything changed) a repaint of a second webview. At 2 s the open window
+// cost ~2.5 CPU-s a minute on the release build; see docs/plans/my-stack.md
+export const POLL_MS = 5000;
+
+// the rows as one comparable string: a poll that changes nothing must not
+// hand react a new object (a new object is a re-render and a repaint)
+const statusKey = (rows: StackStatus[]) =>
+	rows.map(r => `${r.name}:${+r.running}${+r.isSelf}${+r.missing}`).join('|');
 
 // `C:\x\Desk Monitor\desk-monitor.exe` -> `desk-monitor`
 export const processFromPath = (path: string) =>
@@ -38,9 +47,13 @@ export const useStack = () => {
 	const [error, setError] = useState<string | null>(null);
 	const [editing, setEditing] = useState(false);
 
+	const lastKey = useRef('');
 	const refresh = async () => {
 		try {
 			const rows = await invoke<StackStatus[]>('stack_status');
+			const key = statusKey(rows);
+			if (key === lastKey.current) return;
+			lastKey.current = key;
 			setStatus(Object.fromEntries(rows.map(r => [r.name, r])));
 		} catch (e) {
 			setError(errorText(e));
@@ -114,7 +127,13 @@ export const useStack = () => {
 		]);
 
 	// destroys the window: its webview and this poll go with it
-	const close = () => getCurrentWindow().close();
+	// the log line tells this close apart from one sent from outside, and a
+	// click (detail >= 1) from a key press on the focused button (detail 0)
+	const close = (e?: { detail?: number }) => {
+		const how = e?.detail === undefined ? '' : e.detail === 0 ? ' (key)' : ' (click)';
+		logLine(`stack: close pressed${how}`);
+		return getCurrentWindow().close();
+	};
 
 	return {
 		apps,

@@ -100,7 +100,53 @@ Screenshots at real size (333 x 377 CSS px), neon and dracula: no clipping, no o
 (scrollWidth = clientWidth, scrollHeight = clientHeight), text readable, Stop/Restart/Start
 buttons aligned. Kept in the gitignored `docs/walk/s5-stack/`.
 One oddity: a first stack window vanished by itself within about a minute of opening; not
-reproduced on the second open, cause not found.
+reproduced on the second open, cause not found. (Found later: see "The vanish" below.)
+
+### Follow-up: the vanish and the CPU number (same day)
+
+**The vanish was the measuring script, not DevGo.** The S5 close script called .NET
+`Process.CloseMainWindow()` on every DevGo process. .NET picks the first visible unowned
+top-level window as a process's "main window", and with the stack window open that is
+"My stack", even with the main window visible (measured: `MainWindowTitle` = `My stack`).
+So the WM_CLOSE went to the stack window and destroyed it, and DevGo kept running
+("graceful close does not quit it"). Reproduced on the old build: one `CloseMainWindow()`
+removed the stack window, DevGo stayed up. Rule for measuring: `Stop-Process`, never
+`CloseMainWindow` or `taskkill` without `/F`.
+
+The other closes seen during the watches were a person at the desktop: with the new log
+lines (below) they read `stack: close pressed (click)` (a real mouse click on the window's
+own close button, no CDP port open), once followed 8 s later by the main window being
+minimized by hand. No DevGo code path closes or hides the stack window: the event routing
+in `lib.rs` sends label `stack` only to `stack::on_window_event`, which handles Moved and
+Destroyed, and nothing in the frontend hides or closes windows on blur.
+
+So a close is attributable from now on: the stack window logs `stack window: close
+requested`, and its close button logs `[DevGo/ui] stack: close pressed (click|key)` first.
+A close request without that ui line came from outside (Alt+F4, taskkill, CloseMainWindow).
+
+Watches, 200 s each, window state sampled every 2 s:
+
+| build | main window | result |
+|---|---|---|
+| old | hidden | closed at 187 s, unattributed (old build had no close log); `stack.json` was rewritten from outside 24 s before |
+| old | visible | stayed 200 s |
+| new | hidden | closed at 20 s: `close pressed`, a person |
+| new | visible | closed at 155 s: `close pressed (click)`, then main minimized by hand |
+| new | hidden | closed at 36 s: `close pressed (click)`, a person |
+
+**CPU.** The 3.13 above was measured starting 10 s after the window opened. Measured again,
+60 s each, all DevGo + WebView2 processes:
+
+| build | main window | stack closed | stack open | open minus closed |
+|---|---|---|---|---|
+| old (2 s poll) | hidden | 0.30 | 0.63 (from +60 s) | +0.33 |
+| old (2 s poll) | visible | 0.30 | 0.42 (from +30 s) | +0.12 |
+| new (5 s poll, no re-render when nothing changed) | visible | 0.23 | 0.27 (from +8 s), 0.27 (from +68 s) | +0.04 |
+
+The poll is now every 5 s and a poll whose answer did not change does not touch React state
+(no re-render, no repaint). The Rust side was already one ToolHelp snapshot per poll.
+Target (open <= closed + 1.0 CPU-s per 60 s) is met by both builds in steady state; the
+new one also meets it from the first minute.
 
 Baseline, installed 1.2.9 with no stack window: 7 processes, 424.1 MB working set, 0.08
 CPU-seconds over 30 s.

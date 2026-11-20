@@ -97,4 +97,31 @@ describe('useStack', () => {
 		expect(result.current.error).toBe('voice: still running');
 		expect(invoke).toHaveBeenCalledWith('stack_stop', { name: 'voice' });
 	});
+
+	it('polls no faster than every 5 s', () => {
+		expect(POLL_MS).toBeGreaterThanOrEqual(5000);
+	});
+
+	it('a poll that changes nothing does not re-render', async () => {
+		let renders = 0;
+		const { result } = renderHook(() => {
+			renders++;
+			return useStack();
+		});
+		await waitFor(() => expect(result.current.status.voice?.running).toBe(true));
+		const before = renders;
+		const status = result.current.status;
+		await act(() => vi.advanceTimersByTimeAsync(POLL_MS * 3));
+		expect(statusCalls()).toBeGreaterThanOrEqual(4);
+		expect(renders).toBe(before);
+		expect(result.current.status).toBe(status);
+	});
+
+	it('the close button logs itself, so an outside close can be told apart', async () => {
+		const { result } = renderHook(() => useStack());
+		await act(async () => {
+			await result.current.close();
+		});
+		expect(invoke).toHaveBeenCalledWith('log_ui_line', { line: 'stack: close pressed' });
+	});
 });
