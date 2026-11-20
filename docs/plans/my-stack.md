@@ -138,7 +138,7 @@ floating window becomes a **pill** for glancing. The 300x340 panel (`StackPanel`
       old panel's +2.5 CPU-s/min; the memory is the second webview itself. Not ticked:
       needs a decision (accept the cost, or draw the pill without its own webview).
       Decided: draw it without a webview (S10, S11).
-- [ ] **S10 - the native pill (Windows).** No webview: a Win32 layered window
+- [x] **S10 - the native pill (Windows).** No webview: a Win32 layered window
       (`WS_EX_LAYERED` + `UpdateLayeredWindow`, per-pixel alpha, so the rounded ends are
       the window's shape), its own thread and message loop, drawn by `tiny-skia`, text by
       `fontdue` from a system font read at run time (no font file committed). Same
@@ -153,7 +153,7 @@ floating window becomes a **pill** for glancing. The 300x340 panel (`StackPanel`
       Gate: verify --full 6/6; unit tests for the layout (width fit, dot hit-test, card
       above/below), the hex parse and the dot colours, the click-action mapping. Looked at:
       real screen grabs, idle + hover, neon + nord, no jagged edges, no clipped text.
-- [ ] **S11 - measured again.** Release build, installed DevGo stopped (`Stop-Process`)
+- [x] **S11 - measured again.** Release build, installed DevGo stopped (`Stop-Process`)
       and restarted after. Pill open vs closed, 60 s, DevGo + its WebView2 children.
       Gate: <= +60 MB working set, <= +0.2 CPU-s/min (expected ~3-8 MB, ~0 CPU idle).
 
@@ -238,3 +238,18 @@ new one also meets it from the first minute.
 
 Baseline, installed 1.2.9 with no stack window: 7 processes, 424.1 MB working set, 0.08
 CPU-seconds over 30 s.
+
+### S10/S11: native pill (2026-11-20)
+
+Release `DevGo.exe`, installed DevGo stopped and restarted after, 60 s each, DevGo + 6
+msedgewebview2 children (7 procs both times; the native pill adds no process):
+
+| state | procs | working set | CPU-s over 60 s |
+|---|---|---|---|
+| native pill open | 7 | 420.3 -> 419.9 MB | 0.41 |
+| native pill closed (via its own x) | 7 | 419.9 -> 420.0 MB | 0.36 |
+
+Difference: about 0 MB (target <= +60 MB), +0.05 CPU-s/min (target <= +0.2). Both pass. The
+main window was open in both runs, so the baseline is the whole app. The x was clicked with a
+synthetic mouse click on the pill; the pill window disappeared (observed), `stack.json`
+unchanged. Real screen grabs looked at: neon idle + hover, nord idle + hover, no clipping.
