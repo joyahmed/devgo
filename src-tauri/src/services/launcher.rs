@@ -7,6 +7,7 @@ use super::platform::Quiet;
 use super::platform::RuntimeInfo;
 use super::preferences::TmuxConfig;
 use super::runtime_log::log_line;
+use super::window_title;
 use crate::error::AppError;
 use crate::models::target::LaunchTarget;
 use crate::models::Project;
@@ -572,6 +573,19 @@ pub fn launch_target(
             (args.replace("{script}", &script), Some(script))
         }
         _ => (args, None),
+    };
+
+    // a windows project in windows terminal opens under the user's default
+    // profile, read per launch, so the tab gets that profile's icon and
+    // colour instead of wt's bare fallback. the agent path does the same in
+    // window_title::agent_command
+    let args = if cfg!(windows) && wsl.is_none() && window_title::is_wt(&exe) {
+        let profile = std::env::var_os("LOCALAPPDATA")
+            .and_then(|d| window_title::read_wt_settings(d.as_ref()))
+            .and_then(|s| window_title::default_profile(&s));
+        window_title::with_wt_profile(&args, profile.as_deref())
+    } else {
+        args
     };
 
     let note = LaunchNote::of("open", target, &project.name)
