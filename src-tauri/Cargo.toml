@@ -29,6 +29,10 @@ tauri-plugin-shell = "2"
 thiserror = "2.0.20"
 tauri-plugin-global-shortcut = "2"
 portable-pty = "0.9.0"
+# the Stack tab's app icons: PNG-encode the exe icon and hand it over as a
+# data URL. Both were already in the lock through tauri's own dependencies
+png = "0.18"
+base64 = "0.22"
 
 
 # size leaning: a launcher's exe is read from disk on every cold start and
@@ -39,6 +43,11 @@ portable-pty = "0.9.0"
 # nothing on PATH said its exe is. Already in the tree through tauri, so no new crate is built.
 [target.'cfg(windows)'.dependencies]
 winreg = "0.55"
+# the native stack pill (stack_pill/): no webview, so it draws itself. tiny-skia
+# for the anti-aliased shapes, ab_glyph for the text: a system font read at run time,
+# its outlines parsed only for the letters drawn
+tiny-skia = { version = "0.11", default-features = false, features = ["std", "simd"] }
+ab_glyph = "0.2"
 
 [profile.release]
 codegen-units = 1

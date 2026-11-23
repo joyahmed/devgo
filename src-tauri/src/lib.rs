@@ -3,6 +3,8 @@ mod error;
 mod models;
 mod services;
 mod smoke_probe;
+mod stack;
+mod stack_pill;
 mod summon;
 mod tray;
 
@@ -375,11 +377,14 @@ pub fn run() {
             // <folder>`), resolved here, against THIS process's cwd: a
             // second launch forwards it, and the running instance's cwd is
             // not the one the user typed the relative path in
+            let invocation = launch_args::parse(
+                &std::env::args().skip(1).collect::<Vec<_>>(),
+                cfg!(windows),
+            );
+            let wants_stack = invocation == launch_args::Invocation::Stack;
+            stack::set_launched_for_stack(wants_stack);
             let open_request = launch_args::OpenRequest::from_invocation(
-                launch_args::parse(
-                    &std::env::args().skip(1).collect::<Vec<_>>(),
-                    cfg!(windows),
-                ),
+                invocation,
                 &std::env::current_dir().unwrap_or_default(),
             );
             if let Some(e) = open_request.as_ref().and_then(|r| r.error.as_ref()) {
@@ -387,6 +392,7 @@ pub fn run() {
             }
             let handoff = match &open_request {
                 Some(r) => launch_args::Handoff::Open(r.clone()),
+                None if wants_stack => launch_args::Handoff::Stack,
                 None => launch_args::Handoff::Restore,
             };
 
@@ -428,6 +434,10 @@ pub fn run() {
                 // a second launch's folder replaces any not yet taken; the
                 // event only says "ask", so a window that loads late still
                 // finds it with take_open_request on mount
+                if handoff == launch_args::Handoff::Stack {
+                    let _ = h.run_on_main_thread(move || stack::open_window(&h2));
+                    return;
+                }
                 let open = matches!(handoff, launch_args::Handoff::Open(_));
                 if let launch_args::Handoff::Open(req) = handoff {
                     commands::set_pending_open(&h, req);
@@ -723,68 +733,21 @@ pub fn run() {
             // wsl.exe on its own clock, so it is not the timer the core
             // rule forbids
             services::platform::wsl_watch::start(app.handle().clone());
+            if wants_stack {
+                stack::open_window(app.handle());
+            }
             commands::mark_startup("setup-end".into());
 
             Ok(())
         })
-        .on_window_event(|window, event| match event {
-            // ✕ hides. A launcher that takes two seconds to cold-start is a
-            // launcher you stop using; Quit lives in the tray menu and Ctrl+Q.
-            tauri::WindowEvent::CloseRequested { api, .. } => {
-                api.prevent_close();
-                // on macos a window in native full screen must leave it
-                // before it hides: hidden in place, its full-screen space
-                // stays on screen with nothing in it and the whole display
-                // goes black until the app is shown again. the exit is an
-                // animated transition, so the hide happens on the Resized
-                // that ends it, not here; a thread polling is_fullscreen
-                // mid-transition never saw it end
-                #[cfg(target_os = "macos")]
-                if window.is_fullscreen().unwrap_or(false) {
-                    HIDE_AFTER_FULLSCREEN
-                        .store(true, std::sync::atomic::Ordering::SeqCst);
-                    let _ = window.set_fullscreen(false);
-                    return;
-                }
-                let _ = window.hide();
+        .on_window_event(|window, event| {
+            // the stack window closes for real and keeps its own position;
+            // none of the main window's handling below applies to it
+            if window.label() == stack::WINDOW {
+                stack::on_window_event(window, event);
+                return;
             }
-            tauri::WindowEvent::Resized(_) => {
-                // the first Resized after set_fullscreen(false) already
-                // reports is_fullscreen false, but the exit animation is
-                // still running, and hiding right here stranded a blank
-                // white window on the desktop. so: note it, and hide on
-                // the main thread once the transition has had time to end
-                #[cfg(target_os = "macos")]
-                if HIDE_AFTER_FULLSCREEN
-                    .swap(false, std::sync::atomic::Ordering::SeqCst)
-                {
-                    let handle = window.app_handle().clone();
-                    std::thread::spawn(move || {
-                        std::thread::sleep(std::time::Duration::from_millis(
-                            900,
-                        ));
-                        let h = handle.clone();
-                        let _ = handle.run_on_main_thread(move || {
-                            if let Some(w) = h.get_webview_window("main") {
-                                let _ = w.hide();
-                            }
-                        });
-                    });
-                    return;
-                }
-                remember_geometry(window);
-            }
-            tauri::WindowEvent::Moved(_) => {
-                remember_geometry(window);
-            }
-            // every path that shows the window ends in an activation: the
-            // frontend's show(), the tray, the summon hotkey, the
-            // single-instance restore. one hook sees all four, and the
-            // resend is what un-blanks a button explorer painted generic
-            tauri::WindowEvent::Focused(true) => {
-                win_taskbar::apply_window_icon(window);
-            }
-            _ => {}
+            on_main_window_event(window, event)
         })
         // ⭐ every command is logged by name here rather than by a line
         // added to each command body: `generate_handler!` expands to a
@@ -804,6 +767,66 @@ pub fn run() {
         .build(context)
         .expect("error while building tauri application")
         .run(on_run_event);
+}
+
+fn on_main_window_event(window: &tauri::Window, event: &tauri::WindowEvent) {
+    match event {
+        // ✕ hides. A launcher that takes two seconds to cold-start is a
+        // launcher you stop using; Quit lives in the tray menu and Ctrl+Q.
+        tauri::WindowEvent::CloseRequested { api, .. } => {
+            api.prevent_close();
+            // on macos a window in native full screen must leave it
+            // before it hides: hidden in place, its full-screen space
+            // stays on screen with nothing in it and the whole display
+            // goes black until the app is shown again. the exit is an
+            // animated transition, so the hide happens on the Resized
+            // that ends it, not here; a thread polling is_fullscreen
+            // mid-transition never saw it end
+            #[cfg(target_os = "macos")]
+            if window.is_fullscreen().unwrap_or(false) {
+                HIDE_AFTER_FULLSCREEN
+                    .store(true, std::sync::atomic::Ordering::SeqCst);
+                let _ = window.set_fullscreen(false);
+                return;
+            }
+            let _ = window.hide();
+        }
+        tauri::WindowEvent::Resized(_) => {
+            // the first Resized after set_fullscreen(false) already
+            // reports is_fullscreen false, but the exit animation is
+            // still running, and hiding right here stranded a blank
+            // white window on the desktop. so: note it, and hide on
+            // the main thread once the transition has had time to end
+            #[cfg(target_os = "macos")]
+            if HIDE_AFTER_FULLSCREEN
+                .swap(false, std::sync::atomic::Ordering::SeqCst)
+            {
+                let handle = window.app_handle().clone();
+                std::thread::spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_millis(900));
+                    let h = handle.clone();
+                    let _ = handle.run_on_main_thread(move || {
+                        if let Some(w) = h.get_webview_window("main") {
+                            let _ = w.hide();
+                        }
+                    });
+                });
+                return;
+            }
+            remember_geometry(window);
+        }
+        tauri::WindowEvent::Moved(_) => {
+            remember_geometry(window);
+        }
+        // every path that shows the window ends in an activation: the
+        // frontend's show(), the tray, the summon hotkey, the
+        // single-instance restore. one hook sees all four, and the
+        // resend is what un-blanks a button explorer painted generic
+        tauri::WindowEvent::Focused(true) => {
+            win_taskbar::apply_window_icon(window);
+        }
+        _ => {}
+    }
 }
 
 /// The command table. Split out of `run` only so the invoke-logging
@@ -916,6 +939,22 @@ fn command_dispatch(
         commands::set_last_project,
         commands::get_log_path,
         commands::log_ui_line,
+        stack::stack_list,
+        stack::stack_save,
+        stack::stack_status,
+        stack::stack_start,
+        stack::stack_stop,
+        stack::stack_restart,
+        stack::stack_start_all,
+        stack::stack_launch_hides_main,
+        stack::stack_open_window,
+        stack::stack_icon,
+        stack::stack_describe,
+        stack::stack_stop_all,
+        stack::stack_pill_fit,
+        stack::stack_pill_hover,
+        stack::stack_show_tab,
+        stack_pill::stack_pill_palette,
     ]
 }
 

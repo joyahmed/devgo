@@ -45,6 +45,7 @@ import { useAttach } from './hooks/useAttach';
 import { useClone } from './hooks/useClone';
 import { useGithub } from './hooks/useGithub';
 import { useLaunchActions } from './hooks/useLaunchActions';
+import { useMainTab } from './hooks/useMainTab';
 import { useMaximized } from './hooks/useMaximized';
 import { useMediaQuery } from './hooks/useMediaQuery';
 import { useOpenRequest } from './hooks/useOpenRequest';
@@ -82,6 +83,8 @@ import { loadGroundAlpha } from './transparency';
 // launcher needs to start. The split used to sit on WorkspaceManager; now that
 // Settings imports it, the split moves up to Settings or it silently vanishes.
 const Settings = lazy(() => import('./components/Settings'));
+// off screen until the Stack tab is picked
+const StackTab = lazy(() => import('./components/StackTab'));
 
 const showError = (e: unknown): string => {
 	if (typeof e === 'string') return e;
@@ -123,6 +126,7 @@ const HINTS_KEY = 'devgo.hints';
 
 const AppInner = () => {
 	const maximized = useMaximized();
+	const { tab, setTab } = useMainTab();
 	const {
 		workspaces,
 		refresh: refreshWorkspaces,
@@ -1967,6 +1971,8 @@ const AppInner = () => {
 	// the bindings that work with nothing selected, then the ones that need one.
 	useEffect(() => {
 		const handler = (e: KeyboardEvent) => {
+			// the project shortcuts act on the lanes; on the Stack tab there are none
+			if (tab === 'stack') return;
 			// a key typed into the attach pane is the shell's
 			if (paneOwns(e)) return;
 			const fire = (id: ShortcutId, run: () => void) => {
@@ -2053,7 +2059,7 @@ const AppInner = () => {
 		};
 		window.addEventListener('keydown', handler);
 		return () => window.removeEventListener('keydown', handler);
-	}, [selected, workspaces, git, serverSel, sessions, tmuxOn, attach.pane]);
+	}, [selected, workspaces, git, serverSel, sessions, tmuxOn, attach.pane, tab]);
 
 	return (
 		// the radius belongs to a floating window; flush with the screen it
@@ -2063,7 +2069,7 @@ const AppInner = () => {
 				maximized ? '' : 'rounded-panel'
 			}`}
 		>
-			<TitleBar>
+			<TitleBar tab={tab} onTab={setTab}>
 				<div className='flex items-center gap-2'>
 					<FileSystems
 						{...{
@@ -2609,9 +2615,19 @@ const AppInner = () => {
 				}}
 			/>
 
+			{tab === 'stack' && (
+				<Suspense>
+					<StackTab />
+				</Suspense>
+			)}
+
 			{/* no horizontal padding here: the lanes and the command row carry
-			    their own, and a pinned row's ground reaches both edges */}
-			<div className='flex-1 flex flex-col w-full pt-5 gap-3 overflow-hidden'>
+			    their own, and a pinned row's ground reaches both edges.
+			    hidden, not unmounted, on the Stack tab: the lanes keep their
+			    scroll, selection and search */}
+			<div
+				className={`flex-1 flex flex-col w-full pt-5 gap-3 overflow-hidden ${tab === 'stack' ? 'hidden' : ''}`}
+			>
 				{workspaces.length === 0 && !loading ? (
 					<Onboarding
 						{...{
@@ -2845,33 +2861,35 @@ const AppInner = () => {
 			<AttachPane {...{ attach }} />
 			<TrafficPopover {...{ traffic }} />
 
-			<StatusBar
-				{...{
-					hasSelection: selected !== null,
-					selectionIsWsl,
-					selectionDistro,
-					editors: targets.editors,
-					terminals: targets.terminals,
-					agents: targets.agents,
-					defaults: targets.defaults,
-					otherAgentId: targets.otherAgent?.id,
-					onEditor: handleOpenEditor,
-					onTerminal: handleOpenTerminal,
-					onAgent: handleOpenAgent,
-					onBoth: handleOpenBoth,
-					onOpenPalette: () => setPaletteOpen(true),
-					summonHotkey,
-					onOpenShortcuts: () => openSettings('shortcuts'),
-					onOpenHelp: () => openSettings('help'),
-					reattach: selectedLive && tmuxOn,
-					pulse: launching?.kind ?? null,
-					server: serverSel,
-					serverHosts,
-					onServerHost: (h: ServerHost) => serverSel && openServer(serverSel, h),
-					onServerTmux: setServerTmux,
-					onServerAttach: attachServer
-				}}
-			/>
+			{tab === 'projects' && (
+				<StatusBar
+					{...{
+						hasSelection: selected !== null,
+						selectionIsWsl,
+						selectionDistro,
+						editors: targets.editors,
+						terminals: targets.terminals,
+						agents: targets.agents,
+						defaults: targets.defaults,
+						otherAgentId: targets.otherAgent?.id,
+						onEditor: handleOpenEditor,
+						onTerminal: handleOpenTerminal,
+						onAgent: handleOpenAgent,
+						onBoth: handleOpenBoth,
+						onOpenPalette: () => setPaletteOpen(true),
+						summonHotkey,
+						onOpenShortcuts: () => openSettings('shortcuts'),
+						onOpenHelp: () => openSettings('help'),
+						reattach: selectedLive && tmuxOn,
+						pulse: launching?.kind ?? null,
+						server: serverSel,
+						serverHosts,
+						onServerHost: (h: ServerHost) => serverSel && openServer(serverSel, h),
+						onServerTmux: setServerTmux,
+						onServerAttach: attachServer
+					}}
+				/>
+			)}
 
 			{/* last in the tree, and on linux only: the eight edge and corner
 			    grabs that are the window's ONLY way to be resized there. on
@@ -2889,7 +2907,13 @@ const App = () => {
 	// painted, so a cold start never flashes a white rectangle; the ground's
 	// alpha is read first, so a see-through install never flashes opaque
 	useEffect(() => {
-		loadGroundAlpha().finally(() => getCurrentWindow().show());
+		// `DevGo --stack` as the first launch opens only the stack window
+		loadGroundAlpha().finally(async () => {
+			const stackOnly = await invoke<boolean>('stack_launch_hides_main').catch(
+				() => false
+			);
+			if (!stackOnly) getCurrentWindow().show();
+		});
 	}, []);
 
 	return (

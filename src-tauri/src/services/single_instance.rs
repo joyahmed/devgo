@@ -98,6 +98,7 @@ pub fn start_restore_listener(
                     runtime_log::append(match h {
                         Handoff::Restore => "[DevGo] single instance: a second launch asked for the window",
                         Handoff::Open(_) => "[DevGo] single instance: a second launch asked for the window and a folder",
+                        Handoff::Stack => "[DevGo] single instance: a second launch asked for the stack window",
                     });
                     on_handoff(h);
                 }

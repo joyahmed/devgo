@@ -719,7 +719,9 @@ type ButtonVariant =
 	| 'choice'
 	| 'add'
 	| 'menu'
-	| 'segment';
+	| 'segment'
+	| 'solid'
+	| 'quiet';
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
 	variant?: ButtonVariant;
@@ -796,6 +798,9 @@ interface StatusBarProps {
 
 interface TitleBarProps {
 	children?: React.ReactNode;
+	// the Projects | Stack switch; absent = no switch (tests, other shells)
+	tab?: import('./hooks/useMainTab').MainTab;
+	onTab?: (tab: import('./hooks/useMainTab').MainTab) => void;
 }
 
 interface KbdProps {

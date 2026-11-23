@@ -58,7 +58,8 @@ pub(crate) fn build_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
     let show = MenuItemBuilder::with_id("show", "Show DevGo").build(app)?;
     let quit = MenuItemBuilder::with_id("quit", "Quit").build(app)?;
 
-    let mut b = MenuBuilder::new(app).item(&show);
+    let stack = MenuItemBuilder::with_id("stack", "My stack").build(app)?;
+    let mut b = MenuBuilder::new(app).item(&show).item(&stack);
 
     if let Some(last) = last_project(&state) {
         let item = MenuItemBuilder::with_id(
@@ -130,6 +131,7 @@ fn launch(app: &AppHandle, project: &Project) {
 pub fn handle_event(app: &AppHandle, id: &str) {
     match id {
         "show" => show_window(app),
+        "stack" => crate::stack::open_window(app),
         "quit" => {
             let state = app.state::<AppState>();
             single_instance::release_lock(&state.lock_path);
