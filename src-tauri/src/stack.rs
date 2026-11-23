@@ -258,6 +258,7 @@ pub(crate) fn saved_position_in(dir: &std::path::Path) -> Option<(i32, i32)> {
 }
 
 /// Keep the pill's top-left for the next open.
+#[cfg_attr(not(windows), allow(dead_code))]
 pub(crate) fn save_position(dir: &std::path::Path, x: i32, y: i32) {
     if let Ok(json) = serde_json::to_string(&Position { x, y }) {
         let _ = std::fs::write(dir.join(POSITION_FILE), json);
