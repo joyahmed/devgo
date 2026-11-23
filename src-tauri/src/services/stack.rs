@@ -391,13 +391,46 @@ mod imp {
             .filter_map(|l| {
                 let (pid, rest) = l.trim().split_once(' ')?;
                 let (parent, name) = rest.trim_start().split_once(' ')?;
+                let pid = pid.parse().ok()?;
                 Some(Proc {
-                    pid: pid.parse().ok()?,
+                    pid,
                     parent: parent.parse().ok()?,
-                    name: normalize(name.trim_start()),
+                    name: normalize(&full_name(pid, name.trim_start())),
                 })
             })
             .collect()
+    }
+
+    /// Linux `comm` is cut to 15 bytes (`devgo_lib-639e7`), so a longer
+    /// process name would never match. When it is exactly that long, read
+    /// the real file name from `/proc/<pid>/exe`, or else argv[0] when it
+    /// starts with the cut name. Anything unreadable keeps `comm`.
+    #[cfg(target_os = "linux")]
+    fn full_name(pid: u32, comm: &str) -> String {
+        const COMM_MAX: usize = 15;
+        if comm.len() != COMM_MAX {
+            return comm.to_string();
+        }
+        let base = |s: &str| s.rsplit('/').next().unwrap_or("").to_string();
+        let exe = std::fs::read_link(format!("/proc/{pid}/exe"))
+            .ok()
+            .map(|p| p.to_string_lossy().into_owned())
+            .map(|p| base(p.strip_suffix(" (deleted)").unwrap_or(&p)));
+        let argv0 = || {
+            std::fs::read(format!("/proc/{pid}/cmdline")).ok().map(|b| {
+                let first = b.split(|&c| c == 0).next().unwrap_or(&[]);
+                base(&String::from_utf8_lossy(first))
+            })
+        };
+        exe.into_iter()
+            .chain(argv0())
+            .find(|n| n.len() > COMM_MAX && n.starts_with(comm))
+            .unwrap_or_else(|| comm.to_string())
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    fn full_name(_pid: u32, comm: &str) -> String {
+        comm.to_string()
     }
 
     pub fn ask_to_close(pid: u32) {
@@ -522,6 +555,35 @@ mod tests {
             "{me} not in a snapshot of {} processes",
             snap.len()
         );
+    }
+
+    /// A process whose file name is longer than Linux's 15-byte `comm`
+    /// is still found by its full name.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_process_name_longer_than_15_chars_is_found_on_linux() {
+        let name = "devgo-a-very-long-sleeper";
+        let dir = tmp("long-name");
+        let bin = dir.join(name);
+        // a shell, not `sleep`: a multi-call `sleep` (uutils) exits when
+        // renamed; the trailing `:` keeps the shell from exec-ing sleep
+        let sh = std::fs::canonicalize("/bin/sh").unwrap();
+        std::fs::copy(sh, &bin).unwrap();
+        let mut child = std::process::Command::new(&bin)
+            .args(["-c", "sleep 30; :"])
+            .spawn()
+            .unwrap();
+        let found = (0..20).any(|_| {
+            let hit = pids_of(&snapshot(), name).contains(&child.id());
+            if !hit {
+                std::thread::sleep(Duration::from_millis(50));
+            }
+            hit
+        });
+        let _ = child.kill();
+        let _ = child.wait();
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(found, "{name} (pid {}) not in the snapshot", child.id());
     }
 
     #[test]
