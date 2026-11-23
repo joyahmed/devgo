@@ -37,11 +37,13 @@ pub fn parse_hex(s: &str) -> Option<Rgb> {
 
 /// tailwind emerald-400 / -300: the app's "online" green, the same in
 /// every palette (the webview pill's `bg-emerald-400`, `text-emerald-300`)
+#[cfg_attr(not(windows), allow(dead_code))]
 pub const EMERALD_DOT: Rgb = Rgb {
     r: 0x34,
     g: 0xd3,
     b: 0x99,
 };
+#[cfg_attr(not(windows), allow(dead_code))]
 pub const EMERALD_TEXT: Rgb = Rgb {
     r: 0x6e,
     g: 0xe7,
@@ -137,6 +139,7 @@ static CURRENT: Mutex<Option<Palette>> = Mutex::new(None);
 
 /// The saved map, or neon. Read once per process; later changes arrive
 /// through `set`.
+#[cfg_attr(not(windows), allow(dead_code))]
 pub fn current(dir: &Path) -> Palette {
     let mut cur = CURRENT.lock().unwrap_or_else(|e| e.into_inner());
     if let Some(p) = *cur {

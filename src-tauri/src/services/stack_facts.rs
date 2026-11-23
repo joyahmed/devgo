@@ -89,6 +89,7 @@ pub fn family(snap: &[Proc], roots: &[u32]) -> Vec<u32> {
 /// BGRA rows from GetDIBits -> RGBA. Icons from before alpha channels
 /// carry alpha 0 everywhere and say what is transparent in a separate
 /// mask (white = see-through), so when no pixel has alpha the mask decides.
+#[cfg_attr(not(windows), allow(dead_code))]
 pub fn bgra_to_rgba(bgra: &[u8], mask: Option<&[u8]>) -> Vec<u8> {
     let px = bgra.as_chunks::<4>().0;
     let has_alpha = px.iter().any(|p| p[3] != 0);
