@@ -56,6 +56,7 @@ import { useTraffic } from './hooks/useTraffic';
 import { useWorkspaces } from './hooks/useWorkspaces';
 import { useRuntime } from './hooks/useRuntime';
 import { useWsl } from './hooks/useWsl';
+import { useWslRescan } from './hooks/useWslRescan';
 import { lastSegment, missingFromDistro, namesOf, parentOf, wslDistroOf } from './paths';
 import { isMac, isWindows } from './platform';
 import { closingBecause, logLine } from './uiLog';
@@ -215,6 +216,9 @@ const AppInner = () => {
 	// hook; the passes the app already makes re-read it too, as since 12
 	const { wsl, refreshWsl } = useWsl();
 	useEffect(refreshWsl, [workspaceStates]);
+	// and the other way: wsl up under a lane the last pass read as stopped
+	// re-reads the list, or the lane stays on its cache until a focus pass
+	useWslRescan(workspaceStates, wsl, refresh);
 	// the machine: the forced refresh re-probes it, and lands as a pass
 	const { runtime, refreshRuntime } = useRuntime();
 	useEffect(refreshRuntime, [workspaceStates]);
